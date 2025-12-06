@@ -3,44 +3,11 @@
 #include <EpdRenderer.h>
 #include <Serialization.h>
 
-static bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n'; }
+void TextBlock::addWord(const std::string& word, const bool is_bold, const bool is_italic) {
+  if (word.length() == 0) return;
 
-// move past anything that should be considered part of a work
-static int skipWord(const std::string& text, int index, const int length) {
-  while (index < length && !isWhitespace(text[index])) {
-    index++;
-  }
-  return index;
-}
-
-// skip past any white space characters
-static int skipWhitespace(const std::string& html, int index, const int length) {
-  while (index < length && isWhitespace(html[index])) {
-    index++;
-  }
-  return index;
-}
-
-void TextBlock::addSpan(const std::string& span, const bool is_bold, const bool is_italic) {
-  // adding a span to text block
-  // make a copy of the text as we'll modify it
-  const int length = span.length();
-  // const auto text = new char[length + 1];
-  // strcpy(text, span);
-  // work out where each word is in the span
-  int index = 0;
-  while (index < length) {
-    // skip past any whitespace to the start of a word
-    index = skipWhitespace(span, index, length);
-    const int wordStart = index;
-    // find the end of the word
-    index = skipWord(span, index, length);
-    const int wordLength = index - wordStart;
-    if (wordLength > 0) {
-      words.push_back(span.substr(wordStart, wordLength));
-      wordStyles.push_back((is_bold ? BOLD_SPAN : 0) | (is_italic ? ITALIC_SPAN : 0));
-    }
-  }
+  words.push_back(word);
+  wordStyles.push_back((is_bold ? BOLD_SPAN : 0) | (is_italic ? ITALIC_SPAN : 0));
 }
 
 std::list<TextBlock*> TextBlock::splitIntoLines(const EpdRenderer& renderer) {
@@ -189,17 +156,12 @@ std::list<TextBlock*> TextBlock::splitIntoLines(const EpdRenderer& renderer) {
 
 void TextBlock::render(const EpdRenderer& renderer, const int x, const int y) const {
   for (int i = 0; i < words.size(); i++) {
-    // get the style
-    const uint8_t wordStyle = wordStyles[i];
     // render the word
     EpdFontStyle fontStyle = REGULAR;
-    if (wordStyles[i] & BOLD_SPAN) {
-      if (wordStyles[i] & ITALIC_SPAN) {
-        fontStyle = BOLD_ITALIC;
-      } else {
-        fontStyle = BOLD;
-      }
-
+    if (wordStyles[i] & BOLD_SPAN && wordStyles[i] & ITALIC_SPAN) {
+      fontStyle = BOLD_ITALIC;
+    } else if (wordStyles[i] & BOLD_SPAN) {
+      fontStyle = BOLD;
     } else if (wordStyles[i] & ITALIC_SPAN) {
       fontStyle = ITALIC;
     }
