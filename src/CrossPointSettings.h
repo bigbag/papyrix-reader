@@ -44,8 +44,8 @@ class CrossPointSettings {
   // 0 = portrait (default), 1 = landscape clockwise, 2 = inverted, 3 = landscape counter-clockwise
   uint8_t orientation = PORTRAIT;
   // Font size for reading
-  // 0 = small (14pt), 1 = medium (16pt), 2 = large (18pt)
-  uint8_t fontSize = FONT_SMALL;
+  // 0 = small (14pt), 1 = normal (16pt, default), 2 = large (18pt)
+  uint8_t fontSize = FONT_MEDIUM;
 
   ~CrossPointSettings() = default;
 

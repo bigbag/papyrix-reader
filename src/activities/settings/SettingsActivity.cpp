@@ -16,7 +16,7 @@ const SettingInfo settingsList[settingsCount] = {
     {"Status Bar", SettingType::ENUM, &CrossPointSettings::statusBar, {"None", "No Progress", "Full"}},
     {"Extra Paragraph Spacing", SettingType::TOGGLE, &CrossPointSettings::extraParagraphSpacing, {}},
     // Should match with FONT_SIZE
-    {"Font Size", SettingType::ENUM, &CrossPointSettings::fontSize, {"Small", "Medium", "Large"}},
+    {"Font Size", SettingType::ENUM, &CrossPointSettings::fontSize, {"Small", "Normal", "Large"}},
     {"Short Power Button Click", SettingType::TOGGLE, &CrossPointSettings::shortPwrBtn, {}},
     {"Reading Orientation",
      SettingType::ENUM,
