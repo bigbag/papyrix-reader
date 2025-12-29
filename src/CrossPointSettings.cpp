@@ -33,6 +33,7 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, orientation);
   serialization::writePod(outputFile, fontSize);
   serialization::writePod(outputFile, frontButtonLayout);
+  serialization::writePod(outputFile, sideButtonLayout);
   outputFile.close();
 
   Serial.printf("[%lu] [CPS] Settings saved to file\n", millis());
@@ -72,6 +73,8 @@ bool CrossPointSettings::loadFromFile() {
     serialization::readPod(inputFile, fontSize);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, frontButtonLayout);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, sideButtonLayout);
     if (++settingsRead >= fileSettingsCount) break;
   } while (false);
 

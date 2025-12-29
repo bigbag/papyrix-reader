@@ -122,7 +122,26 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   // LUTs complete
   // Loop through spines from spine file matching up TOC indexes, calculating cumulative size and writing to book.bin
 
-  const ZipFile zip("/sd" + epubPath);
+  ZipFile zip(epubPath);
+  // Pre-open zip file to speed up size calculations
+  if (!zip.open()) {
+    Serial.printf("[%lu] [BMC] Could not open EPUB zip for size calculations\n", millis());
+    bookFile.close();
+    spineFile.close();
+    tocFile.close();
+    return false;
+  }
+  // TODO: For large ZIPs loading the all localHeaderOffsets will crash.
+  //       However not having them loaded is extremely slow. Need a better solution here.
+  //       Perhaps only a cache of spine items or a better way to speedup lookups?
+  if (!zip.loadAllFileStatSlims()) {
+    Serial.printf("[%lu] [BMC] Could not load zip local header offsets for size calculations\n", millis());
+    bookFile.close();
+    spineFile.close();
+    tocFile.close();
+    zip.close();
+    return false;
+  }
   size_t cumSize = 0;
   spineFile.seek(0);
   for (int i = 0; i < spineCount; i++) {
@@ -157,6 +176,8 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     // Write out spine data to book.bin
     writeSpineEntry(bookFile, spineEntry);
   }
+  // Close opened zip file
+  zip.close();
 
   // Loop through toc entries from toc file writing to book.bin
   tocFile.seek(0);
@@ -223,6 +244,8 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
 
   int spineIndex = -1;
   // find spine index
+  // TODO: This lookup is slow as need to scan through all items each time. We can't hold it all in memory due to size.
+  //       But perhaps we can load just the hrefs in a vector/list to do an index lookup?
   spineFile.seek(0);
   for (int i = 0; i < spineCount; i++) {
     auto spineEntry = readSpineEntry(spineFile);
