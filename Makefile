@@ -2,7 +2,7 @@
 # Wraps PlatformIO commands for convenience
 
 .PHONY: all build build-release release upload upload-release flash flash-release \
-        clean format check monitor size erase build-fs upload-fs sleep-screen help
+        clean format check monitor size erase build-fs upload-fs sleep-screen gh-release help
 
 # Default target
 all: help
@@ -67,6 +67,22 @@ tag: ## Create and push a version tag (triggers GitHub release)
 		echo "Invalid tag format. Please use X.Y.Z (e.g., 1.0.0)"; \
 		exit 1; \
 	fi
+
+gh-release: build-release ## Create GitHub release with firmware
+ifndef VERSION
+	$(error VERSION is required. Usage: make gh-release VERSION=0.1.1 [NOTES="..."])
+endif
+ifdef NOTES
+	gh release create v$(VERSION) .pio/build/gh_release/firmware.bin \
+		--repo bigbag/papyrix-reader \
+		--title "Papyrix v$(VERSION)" \
+		--notes "$(NOTES)"
+else
+	gh release create v$(VERSION) .pio/build/gh_release/firmware.bin \
+		--repo bigbag/papyrix-reader \
+		--title "Papyrix v$(VERSION)" \
+		--generate-notes
+endif
 
 # Image conversion
 sleep-screen: ## Convert image to sleep screen BMP

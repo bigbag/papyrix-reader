@@ -140,6 +140,16 @@ Options:
 
 Copy the output BMP to `/sleep/` directory or as `/sleep.bmp` on the SD card.
 
+### Creating a GitHub release
+
+```sh
+# With auto-generated notes from commits
+make gh-release VERSION=0.1.1
+
+# With custom notes
+make gh-release VERSION=0.1.1 NOTES="Release notes here"
+```
+
 ## Internals
 
 Papyrix is pretty aggressive about caching data down to the SD card to minimise RAM usage. The ESP32-C3 only has ~380KB of usable RAM, so we have to be careful. A lot of the decisions made in the design of the firmware were based on this constraint.
