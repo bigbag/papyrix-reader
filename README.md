@@ -179,6 +179,25 @@ Due the way it's currently implemented, the cache is not automatically cleared w
 
 For more details on the internal file structures, see the [file formats document](./docs/file-formats.md).
 
+## Related Tools
+
+### EPUB Optimizer
+
+[xteink-epub-optimizer](https://github.com/bigbag/xteink-epub-optimizer) optimizes EPUB files for the Xteink X4's constraints (480×800 display, limited RAM):
+
+- **CSS Sanitization** - Removes complex layouts (floats, flexbox, grid)
+- **Font Removal** - Strips embedded fonts to reduce file size
+- **Image Optimization** - Grayscale conversion, resizing to 480px max width
+- **XTC/XTCH Conversion** - Convert EPUBs to Xteink's native format
+
+```bash
+# Optimize EPUB
+python src/optimizer.py ./ebooks ./optimized
+
+# Convert to XTCH format
+python src/converter.py book.epub book.xtch --font fonts/Bookerly.ttf
+```
+
 ## Contributing
 
 Contributions are very welcome!
