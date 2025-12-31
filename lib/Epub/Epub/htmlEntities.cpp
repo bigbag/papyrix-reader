@@ -143,6 +143,7 @@ std::string replaceHtmlEntities(const char* text) {
       if (j - i > 2) {
         char entity[j - i + 1];
         strncpy(entity, text + i, j - i);
+        entity[j - i] = '\0';
         // is it a numeric code?
         if (entity[1] == '#') {
           flag = process_numeric_entity(entity, res);

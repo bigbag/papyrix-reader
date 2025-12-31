@@ -121,11 +121,9 @@ void SettingsActivity::loop() {
     updateRequired = true;
   } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
              mappedInput.wasPressed(MappedInputManager::Button::Right)) {
-    // Move selection down
-    if (selectedSettingIndex < settingsCount - 1) {
-      selectedSettingIndex++;
-      updateRequired = true;
-    }
+    // Move selection down (with wrap-around)
+    selectedSettingIndex = (selectedSettingIndex + 1) % settingsCount;
+    updateRequired = true;
   }
 }
 

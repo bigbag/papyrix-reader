@@ -103,7 +103,10 @@ bool Epub::parseTocNcxFile() const {
   if (!SdMan.openFileForWrite("EBP", tmpNcxPath, tempNcxFile)) {
     return false;
   }
-  readItemContentsToStream(tocNcxItem, tempNcxFile, 1024);
+  if (!readItemContentsToStream(tocNcxItem, tempNcxFile, 1024)) {
+    tempNcxFile.close();
+    return false;
+  }
   tempNcxFile.close();
   if (!SdMan.openFileForRead("EBP", tmpNcxPath, tempNcxFile)) {
     return false;
@@ -157,7 +160,10 @@ bool Epub::parseTocNavFile() const {
   if (!SdMan.openFileForWrite("EBP", tmpNavPath, tempNavFile)) {
     return false;
   }
-  readItemContentsToStream(tocNavItem, tempNavFile, 1024);
+  if (!readItemContentsToStream(tocNavItem, tempNavFile, 1024)) {
+    tempNavFile.close();
+    return false;
+  }
   tempNavFile.close();
   if (!SdMan.openFileForRead("EBP", tmpNavPath, tempNavFile)) {
     return false;
@@ -370,7 +376,10 @@ bool Epub::generateCoverBmp() const {
     if (!SdMan.openFileForWrite("EBP", coverJpgTempPath, coverJpg)) {
       return false;
     }
-    readItemContentsToStream(coverImageHref, coverJpg, 1024);
+    if (!readItemContentsToStream(coverImageHref, coverJpg, 1024)) {
+      coverJpg.close();
+      return false;
+    }
     coverJpg.close();
 
     if (!SdMan.openFileForRead("EBP", coverJpgTempPath, coverJpg)) {
