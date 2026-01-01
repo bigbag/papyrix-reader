@@ -330,9 +330,9 @@ void KeyboardEntryActivity::render() const {
     }
   }
 
-  // Draw help text at absolute bottom of screen (consistent with other screens)
-  const auto pageHeight = renderer.getScreenHeight();
-  renderer.drawText(THEME.smallFontId, 10, pageHeight - 30, "Navigate: D-pad | Select: OK | Cancel: BACK", THEME.primaryTextBlack);
+  // Draw button hints at bottom of screen (consistent with other screens)
+  const auto labels = mappedInput.mapLabels("Back", "Confirm", "Left", "Right");
+  renderer.drawButtonHints(THEME.uiFontId, labels.btn1, labels.btn2, labels.btn3, labels.btn4, THEME.primaryTextBlack);
   renderer.displayBuffer();
 }
 
