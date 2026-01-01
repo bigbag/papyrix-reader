@@ -53,11 +53,6 @@ void KeyboardEntryActivity::onExit() {
   renderingMutex = nullptr;
 }
 
-int KeyboardEntryActivity::getRowLength(const int row) const {
-  if (row < 0 || row >= NUM_ROWS) return 0;
-  return KEYS_PER_ROW;  // All rows have 10 columns
-}
-
 char KeyboardEntryActivity::getSelectedChar() const {
   if (selectedRow < 0 || selectedRow >= NUM_ROWS) return '\0';
   if (selectedCol < 0 || selectedCol >= KEYS_PER_ROW) return '\0';
@@ -181,8 +176,6 @@ void KeyboardEntryActivity::loop() {
 }
 
 void KeyboardEntryActivity::render() const {
-  const auto pageWidth = renderer.getScreenWidth();
-
   renderer.clearScreen(THEME.backgroundColor);
 
   // Draw title (bold, same style as WiFi Networks screen)
