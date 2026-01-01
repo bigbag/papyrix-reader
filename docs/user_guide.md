@@ -61,6 +61,8 @@ The Files screen acts as a folder and file browser.
 
 > **Note:** Both EPUB (.epub) and XTC (.xtc, .xtch) file formats are supported. EPUB 2 and EPUB 3 formats are fully supported. The device supports both FAT32 and exFAT formatted SD cards.
 
+> **Note:** System folders (LOST.DIR, $RECYCLE.BIN, etc.) are automatically hidden from the file browser.
+
 ### 3.3 Reading Screen
 
 See [4. Reading Mode](#4-reading-mode) below for more information.

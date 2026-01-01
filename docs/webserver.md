@@ -48,12 +48,16 @@ Once the scan completes, you'll see a list of available WiFi networks with the f
 
 If the network requires a password:
 
-1. An on-screen keyboard will appear
-2. Use the navigation buttons to select characters
-3. Press **Confirm** to enter each character
-4. When complete, select the **Done** option on the keyboard
-
-<img src="./images/wifi/wifi_password.jpeg" height="500">
+1. An on-screen keyboard will appear with a full character grid
+2. The keyboard is organized in zones:
+   - **Rows 1-3:** Lowercase letters (a-z) and common symbols (. - _ @)
+   - **Rows 4-6:** Uppercase letters (A-Z) and symbols (! # $ %)
+   - **Row 7:** Numbers (0-9)
+   - **Row 8:** Additional symbols (^ & * ( ) + [ ] \)
+   - **Bottom row:** SPACE and BACKSPACE controls
+3. Use **Up/Down/Left/Right** to navigate the grid
+4. Press **Confirm** to enter the selected character
+5. Press **Back** to cancel and return
 
 **Note:** If you've previously connected to this network, the saved password will be used automatically.
 
