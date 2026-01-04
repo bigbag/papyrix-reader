@@ -5,6 +5,7 @@
 [![Customization](https://img.shields.io/badge/docs-Customization-green)](docs/customization.md)
 [![File Formats](https://img.shields.io/badge/docs-File_Formats-green)](docs/file-formats.md)
 [![Webserver](https://img.shields.io/badge/docs-Webserver-green)](docs/webserver.md)
+[![Calibre](https://img.shields.io/badge/docs-Calibre_Wireless-green)](docs/calibre.md)
 
 A lightweight, user-friendly firmware fork for the **Xteink X4** e-paper display reader.
 Built using **PlatformIO** and targeting the **ESP32-C3** microcontroller.
@@ -33,6 +34,7 @@ Papyrix is a fork of [CrossPoint Reader](https://github.com/daveallie/crosspoint
 - **EPUB 3 support** - Native navigation document (nav.xhtml) parsing with NCX fallback
 - **Hidden system folders** - Filters LOST.DIR, $RECYCLE.BIN, etc. from file browser
 - **Net Library (OPDS)** - Browse and download books from OPDS-compatible servers over WiFi (Project Gutenberg preconfigured; add more via `/opds.ini`)
+- **Calibre Wireless Device** - Send books directly from Calibre desktop via WiFi using the wireless device connection feature
 
 ## Motivation
 
@@ -63,6 +65,7 @@ This project is **not affiliated with Xteink**; it's built as a community projec
 - [x] Wifi book upload
 - [x] Wifi OTA updates
 - [x] Net Library (OPDS) - Browse and download from OPDS servers
+- [x] Calibre Wireless Device - Send books from Calibre desktop
 - [x] Configurable font size options
 - [x] Configurable paragraph alignment
 - [x] Configurable pages per refresh

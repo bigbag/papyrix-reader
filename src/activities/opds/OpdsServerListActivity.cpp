@@ -1,5 +1,7 @@
 #include "OpdsServerListActivity.h"
 
+#include <algorithm>
+
 #include <GfxRenderer.h>
 
 #include "MappedInputManager.h"
@@ -32,9 +34,8 @@ void OpdsServerListActivity::onEnter() {
   serverNames.clear();
   OPDS_STORE.loadFromFile();
   const auto& servers = OPDS_STORE.getServers();
-  for (const auto& server : servers) {
-    serverNames.push_back(server.name);
-  }
+  std::transform(servers.begin(), servers.end(), std::back_inserter(serverNames),
+                 [](const OpdsServerConfig& server) { return server.name; });
 
   selectedIndex = 0;
 

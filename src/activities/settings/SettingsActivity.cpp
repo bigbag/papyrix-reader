@@ -19,7 +19,7 @@ constexpr const char* orientationValues[] = {"Portrait", "Landscape CW", "Invert
 constexpr const char* sleepTimeoutValues[] = {"5 min", "10 min", "15 min", "30 min"};
 constexpr const char* paragraphAlignmentValues[] = {"Justified", "Left", "Center", "Right"};
 
-constexpr int settingsCount = 14;
+constexpr int settingsCount = 15;
 const SettingInfo settingsList[settingsCount] = {
     // Theme
     {"Theme", SettingType::THEME_SELECT, nullptr, nullptr, 0},
@@ -37,6 +37,7 @@ const SettingInfo settingsList[settingsCount] = {
     {"Short Power Button Click", SettingType::TOGGLE, &CrossPointSettings::shortPwrBtn, nullptr, 0},
     // Actions
     {"Net Library", SettingType::ACTION, nullptr, nullptr, 0},
+    {"Calibre Wireless", SettingType::ACTION, nullptr, nullptr, 0},
     {"File transfer", SettingType::ACTION, nullptr, nullptr, 0},
     {"Check for updates", SettingType::ACTION, nullptr, nullptr, 0},
 };
@@ -158,6 +159,10 @@ void SettingsActivity::toggleCurrentSetting() {
     if (std::string(setting.name) == "Net Library") {
       SETTINGS.saveToFile();
       onOpdsLibraryOpen();
+      return;  // Activity has changed, don't continue
+    } else if (std::string(setting.name) == "Calibre Wireless") {
+      SETTINGS.saveToFile();
+      onCalibreWirelessOpen();
       return;  // Activity has changed, don't continue
     } else if (std::string(setting.name) == "File transfer") {
       SETTINGS.saveToFile();

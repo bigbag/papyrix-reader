@@ -30,6 +30,7 @@ class SettingsActivity final : public ActivityWithSubactivity {
   const std::function<void()> onGoHome;
   const std::function<void()> onFileTransferOpen;
   const std::function<void()> onOpdsLibraryOpen;
+  const std::function<void()> onCalibreWirelessOpen;
   const int initialSelectedIndex;
 
   // Theme selection state
@@ -47,11 +48,13 @@ class SettingsActivity final : public ActivityWithSubactivity {
                             const std::function<void()>& onGoHome,
                             const std::function<void()>& onFileTransferOpen,
                             const std::function<void()>& onOpdsLibraryOpen,
+                            const std::function<void()>& onCalibreWirelessOpen,
                             int initialSelectedIndex = 0)
       : ActivityWithSubactivity("Settings", renderer, mappedInput),
         onGoHome(onGoHome),
         onFileTransferOpen(onFileTransferOpen),
         onOpdsLibraryOpen(onOpdsLibraryOpen),
+        onCalibreWirelessOpen(onCalibreWirelessOpen),
         initialSelectedIndex(initialSelectedIndex) {}
   void onEnter() override;
   void onExit() override;

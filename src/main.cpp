@@ -33,6 +33,7 @@
 #include "activities/boot_sleep/BootActivity.h"
 #include "activities/boot_sleep/SleepActivity.h"
 #include "activities/home/HomeActivity.h"
+#include "activities/network/CalibreConnectionActivity.h"
 #include "activities/network/CrossPointWebServerActivity.h"
 #include "activities/opds/OpdsBookBrowserActivity.h"
 #include "activities/opds/OpdsServerListActivity.h"
@@ -188,6 +189,12 @@ void onGoToFileTransfer() {
   enterNewActivity(new CrossPointWebServerActivity(renderer, mappedInputManager, onGoToSettingsFileTransfer));
 }
 
+void onGoToSettingsCalibreWireless();
+void onGoToCalibreWireless() {
+  exitActivity();
+  enterNewActivity(new CalibreConnectionActivity(renderer, mappedInputManager, onGoToSettingsCalibreWireless));
+}
+
 void onGoToSettings();
 void onGoToSettingsNetLibrary();
 void onGoToOpdsServers();
@@ -207,19 +214,25 @@ void onGoToOpdsServers() {
 void onGoToSettings() {
   exitActivity();
   enterNewActivity(
-      new SettingsActivity(renderer, mappedInputManager, onGoHome, onGoToFileTransfer, onGoToOpdsServers));
+      new SettingsActivity(renderer, mappedInputManager, onGoHome, onGoToFileTransfer, onGoToOpdsServers, onGoToCalibreWireless));
 }
 
 void onGoToSettingsNetLibrary() {
   exitActivity();
   enterNewActivity(
-      new SettingsActivity(renderer, mappedInputManager, onGoHome, onGoToFileTransfer, onGoToOpdsServers, 11));
+      new SettingsActivity(renderer, mappedInputManager, onGoHome, onGoToFileTransfer, onGoToOpdsServers, onGoToCalibreWireless, 11));
+}
+
+void onGoToSettingsCalibreWireless() {
+  exitActivity();
+  enterNewActivity(
+      new SettingsActivity(renderer, mappedInputManager, onGoHome, onGoToFileTransfer, onGoToOpdsServers, onGoToCalibreWireless, 12));
 }
 
 void onGoToSettingsFileTransfer() {
   exitActivity();
   enterNewActivity(
-      new SettingsActivity(renderer, mappedInputManager, onGoHome, onGoToFileTransfer, onGoToOpdsServers, 12));
+      new SettingsActivity(renderer, mappedInputManager, onGoHome, onGoToFileTransfer, onGoToOpdsServers, onGoToCalibreWireless, 13));
 }
 
 void onGoHome() {

@@ -440,6 +440,6 @@ void CrossPointWebServerActivity::renderServerRunning() const {
                               REGULAR);
   }
 
-  const auto labels = mappedInput.mapLabels("« Exit", "", "", "");
+  const auto labels = mappedInput.mapLabels("Exit", "", "", "");
   renderer.drawButtonHints(THEME.uiFontId, labels.btn1, labels.btn2, labels.btn3, labels.btn4, THEME.primaryTextBlack);
 }

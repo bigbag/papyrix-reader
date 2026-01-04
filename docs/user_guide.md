@@ -150,6 +150,10 @@ The Settings screen allows you to configure the device's behavior:
   - Browse and download books from OPDS-compatible servers
   - See [3.6 Net Library](#36-net-library) below
 
+- **Calibre Wireless**
+  - Connect directly to Calibre desktop to send/receive books
+  - See [3.7 Calibre Wireless](#37-calibre-wireless) below
+
 ### 3.6 Net Library
 
 Net Library allows you to browse and download books directly from any [OPDS](https://opds.io/)-compatible server running on your local network. OPDS (Open Publication Distribution System) is an open standard supported by many ebook servers including:
@@ -201,7 +205,60 @@ Downloaded books are saved to the `/Books/` folder on your SD card.
 
 > **Note:** When you exit Net Library, the device will automatically restart to reclaim memory used by WiFi.
 
-### 3.7 Sleep Screen
+### 3.7 Calibre Wireless
+
+Calibre Wireless allows you to send books directly from **Calibre** (the popular ebook management software) to your Papyrix Reader over WiFi. This is the fastest way to transfer books if you already use Calibre.
+
+#### Prerequisites
+
+- [Calibre](https://calibre-ebook.com/) installed on your computer
+- Both devices on the same WiFi network
+
+#### Connecting to Calibre
+
+1. Go to **Settings > Calibre Wireless**
+2. Connect to your WiFi network (same as your computer)
+3. The device will show its IP address and port (e.g., `192.168.1.42:9090`)
+4. The screen displays "Waiting for Calibre..."
+
+#### In Calibre Desktop
+
+1. Click **Connect/Share** in the toolbar
+2. Select **Start wireless device connection**
+3. Calibre will automatically discover your Papyrix Reader
+4. Your device appears as "Papyrix Reader" (or your custom name)
+
+#### Sending Books
+
+Once connected:
+1. Right-click any book in Calibre
+2. Select **Send to device > Send to main memory**
+3. The book transfers wirelessly to your reader's `/Books/` folder
+
+#### Bidirectional Sync
+
+Calibre can also:
+- **See your library** - View books already on your device
+- **Delete books** - Remove books from the device remotely
+
+#### Configuration
+
+Customize settings via `/calibre.ini` on your SD card:
+
+```ini
+[Settings]
+device_name = Papyrix Reader
+password =
+```
+
+- **device_name**: How your device appears in Calibre
+- **password**: Optional password (must match Calibre's wireless device password)
+
+For detailed instructions, see the [Calibre Wireless Guide](calibre.md).
+
+> **Note:** When you exit Calibre Wireless, the device will automatically restart to reclaim memory used by WiFi.
+
+### 3.8 Sleep Screen
 
 ![Sleep Screen](images/sleep-screen.jpg)
 
