@@ -233,7 +233,7 @@ struct SectionBin {
     float lineCompression;
     bool extraParagraphSpacing;
     u16 viewportWidth;
-    u16 vieportHeight;
+    u16 viewportHeight;
     u16 pageCount;
     u32 lutOffset;
 

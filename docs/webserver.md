@@ -19,10 +19,10 @@ Papyrix Reader includes a built-in web server that allows you to:
 
 ---
 
-## Step 1: Accessing the WiFi Screen
+## Step 1: Accessing File Transfer
 
 1. From the main menu or file browser, navigate to the **Settings** screen
-2. Select the **WiFi** option
+2. Select the **File transfer** option
 3. The device will automatically start scanning for available networks
 
 ---

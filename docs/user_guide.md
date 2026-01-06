@@ -144,7 +144,7 @@ The Settings screen allows you to configure the device's behavior:
   - Screen orientation for reading
 
 - **Sleep Timeout** (default: 10 min)
-  - Options: 5 min, 10 min, 15 min, 30 min
+  - Options: 5 min, 10 min, 15 min, 30 min, Never
   - Time of inactivity before the device automatically sleeps
 
 - **File transfer**

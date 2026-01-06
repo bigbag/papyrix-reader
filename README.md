@@ -14,10 +14,6 @@ Papyrix is a fork of [CrossPoint Reader](https://github.com/daveallie/crosspoint
 
 ![](./docs/images/cover.jpg)
 
-## Fork Information
-
-**Papyrix** (from "papyrus" - ancient scrolls) is a community fork with the goal of providing a lighter, more user-friendly firmware version while maintaining full compatibility with the original CrossPoint Reader.
-
 ## Motivation
 
 E-paper devices are fantastic for reading, but most commercially available readers are closed systems with limited customisation. The **Xteink X4** is an affordable e-paper device, however the official firmware remains closed.
