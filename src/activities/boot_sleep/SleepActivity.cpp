@@ -14,22 +14,19 @@
 #include "ThemeManager.h"
 #include "config.h"
 #include "images/PapyrixLogo.h"
+#include "util/StringUtils.h"
 
 namespace {
 // Check if path has XTC extension (.xtc or .xtch)
 bool isXtcFile(const std::string& path) {
-  const size_t dotPos = path.find_last_of('.');
-  if (dotPos == std::string::npos) return false;
-  const std::string ext = path.substr(dotPos);
-  return (ext == ".xtc" || ext == ".xtch");
+  return StringUtils::checkFileExtension(path, ".xtc") ||
+         StringUtils::checkFileExtension(path, ".xtch");
 }
 
 // Check if path has TXT extension (.txt or .text)
 bool isTxtFile(const std::string& path) {
-  const size_t dotPos = path.find_last_of('.');
-  if (dotPos == std::string::npos) return false;
-  const std::string ext = path.substr(dotPos);
-  return (ext == ".txt" || ext == ".text");
+  return StringUtils::checkFileExtension(path, ".txt") ||
+         StringUtils::checkFileExtension(path, ".text");
 }
 }  // namespace
 

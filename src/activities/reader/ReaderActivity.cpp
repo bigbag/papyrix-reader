@@ -11,6 +11,7 @@
 #include "Xtc.h"
 #include "XtcReaderActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
+#include "util/StringUtils.h"
 
 std::string ReaderActivity::extractFolderPath(const std::string& filePath) {
   const auto lastSlash = filePath.find_last_of('/');
@@ -21,17 +22,13 @@ std::string ReaderActivity::extractFolderPath(const std::string& filePath) {
 }
 
 bool ReaderActivity::isXtcFile(const std::string& path) {
-  const size_t dotPos = path.find_last_of('.');
-  if (dotPos == std::string::npos) return false;
-  const std::string ext = path.substr(dotPos);
-  return (ext == ".xtc" || ext == ".xtch");
+  return StringUtils::checkFileExtension(path, ".xtc") ||
+         StringUtils::checkFileExtension(path, ".xtch");
 }
 
 bool ReaderActivity::isTxtFile(const std::string& path) {
-  const size_t dotPos = path.find_last_of('.');
-  if (dotPos == std::string::npos) return false;
-  const std::string ext = path.substr(dotPos);
-  return (ext == ".txt" || ext == ".text");
+  return StringUtils::checkFileExtension(path, ".txt") ||
+         StringUtils::checkFileExtension(path, ".text");
 }
 
 std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {

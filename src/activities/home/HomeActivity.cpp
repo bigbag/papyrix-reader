@@ -11,6 +11,7 @@
 #include "ScreenComponents.h"
 #include "ThemeManager.h"
 #include "config.h"
+#include "util/StringUtils.h"
 
 void HomeActivity::taskTrampoline(void* param) {
   auto* self = static_cast<HomeActivity*>(param);
@@ -37,9 +38,7 @@ void HomeActivity::onEnter() {
     }
 
     // Check file extension and try to load metadata
-    const std::string ext5 = lastBookTitle.length() >= 5 ? lastBookTitle.substr(lastBookTitle.length() - 5) : "";
-
-    if (ext5 == ".epub") {
+    if (StringUtils::checkFileExtension(lastBookTitle, ".epub")) {
       // Always try to load EPUB metadata for home screen display
       Epub epub(APP_STATE.openEpubPath, PAPYRIX_DIR);
       if (epub.load(false)) {
@@ -54,8 +53,10 @@ void HomeActivity::onEnter() {
       // Strip known extensions: .xtch, .text, .xtc, .txt
       const size_t dotPos = lastBookTitle.find_last_of('.');
       if (dotPos != std::string::npos) {
-        const std::string ext = lastBookTitle.substr(dotPos);
-        if (ext == ".xtch" || ext == ".text" || ext == ".xtc" || ext == ".txt") {
+        if (StringUtils::checkFileExtension(lastBookTitle, ".xtch") ||
+            StringUtils::checkFileExtension(lastBookTitle, ".text") ||
+            StringUtils::checkFileExtension(lastBookTitle, ".xtc") ||
+            StringUtils::checkFileExtension(lastBookTitle, ".txt")) {
           lastBookTitle.resize(dotPos);
         }
       }
