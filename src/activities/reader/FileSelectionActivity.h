@@ -14,7 +14,7 @@ class FileSelectionActivity final : public Activity {
   SemaphoreHandle_t renderingMutex = nullptr;
   std::string basepath = "/";
   std::vector<std::string> files;
-  int selectorIndex = 0;
+  size_t selectorIndex = 0;
   bool updateRequired = false;
   const std::function<void(const std::string&)> onSelect;
   const std::function<void()> onGoHome;

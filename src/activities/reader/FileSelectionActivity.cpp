@@ -49,7 +49,7 @@ void FileSelectionActivity::loadFiles() {
 
   root.rewindDirectory();
 
-  char name[128];
+  char name[500];
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
     file.getName(name, sizeof(name));
     if (isHiddenName(name)) {
@@ -136,6 +136,7 @@ void FileSelectionActivity::loop() {
     if (files[selectorIndex].back() == '/') {
       basepath += files[selectorIndex].substr(0, files[selectorIndex].length() - 1);
       loadFiles();
+      selectorIndex = 0;
       updateRequired = true;
     } else {
       onSelect(basepath + files[selectorIndex]);
