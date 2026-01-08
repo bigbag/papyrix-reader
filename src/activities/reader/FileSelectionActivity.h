@@ -23,6 +23,7 @@ class FileSelectionActivity final : public Activity {
   [[noreturn]] void displayTaskLoop();
   void render() const;
   void loadFiles();
+  size_t findEntry(const std::string& name) const;
 
  public:
   explicit FileSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
