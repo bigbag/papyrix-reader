@@ -463,7 +463,8 @@ void TxtReaderActivity::renderStatusBar(const int orientedMarginRight, const int
   }
 
   if (showTitle) {
-    const int titleMarginLeft = 20 + percentageTextWidth + 30 + orientedMarginLeft;
+    const int batteryAreaWidth = showBattery ? 20 + percentageTextWidth : 0;
+    const int titleMarginLeft = batteryAreaWidth + 30 + orientedMarginLeft;
     const int titleMarginRight = progressTextWidth + 30 + orientedMarginRight;
     const int availableTextWidth = renderer.getScreenWidth() - titleMarginLeft - titleMarginRight;
 
