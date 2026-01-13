@@ -295,7 +295,6 @@ void EpubReaderActivity::renderScreen() {
       renderer.drawText(fontId, boxX + boxMargin, boxY + boxMargin, "Indexing...", THEME.primaryTextBlack);
       renderer.drawRect(boxX + 5, boxY + 5, boxWidth - 10, boxHeight - 10, THEME.primaryTextBlack);
       renderer.displayBuffer();
-      pagesUntilFullRefresh = 0;
 
       if (!section->createSectionFile(SETTINGS.getReaderFontId(), lineCompression, SETTINGS.extraParagraphSpacing,
                                         SETTINGS.paragraphAlignment, SETTINGS.hyphenation, viewportWidth, viewportHeight,
