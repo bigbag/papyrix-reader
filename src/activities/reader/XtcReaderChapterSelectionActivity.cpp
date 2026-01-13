@@ -4,6 +4,7 @@
 
 #include "MappedInputManager.h"
 #include "config.h"
+#include "ThemeManager.h"
 
 namespace {
 constexpr int SKIP_PAGE_MS = 700;
@@ -11,7 +12,7 @@ constexpr int SKIP_PAGE_MS = 700;
 
 int XtcReaderChapterSelectionActivity::getPageItems() const {
   constexpr int startY = 60;
-  constexpr int lineHeight = 30;
+  const int lineHeight = THEME.itemHeight;
 
   const int screenHeight = renderer.getScreenHeight();
   const int availableHeight = screenHeight - startY;
@@ -140,11 +141,11 @@ void XtcReaderChapterSelectionActivity::renderScreen() {
   }
 
   const auto pageStartIndex = selectorIndex / pageItems * pageItems;
-  renderer.fillRect(0, 60 + (selectorIndex % pageItems) * 30 - 2, pageWidth - 1, 30);
+  renderer.fillRect(0, 60 + (selectorIndex % pageItems) * THEME.itemHeight - 2, pageWidth - 1, THEME.itemHeight);
   for (int i = pageStartIndex; i < static_cast<int>(chapters.size()) && i < pageStartIndex + pageItems; i++) {
     const auto& chapter = chapters[i];
     const char* title = chapter.name.empty() ? "Unnamed" : chapter.name.c_str();
-    renderer.drawText(UI_FONT_ID, 20, 60 + (i % pageItems) * 30, title, i != selectorIndex);
+    renderer.drawText(UI_FONT_ID, 20, 60 + (i % pageItems) * THEME.itemHeight, title, i != selectorIndex);
   }
 
   renderer.displayBuffer();

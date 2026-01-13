@@ -14,7 +14,7 @@ constexpr int SKIP_PAGE_MS = 700;
 int EpubReaderChapterSelectionActivity::getPageItems() const {
   // Layout constants used in renderScreen
   constexpr int startY = 60;
-  constexpr int lineHeight = 30;
+  const int lineHeight = THEME.itemHeight;
 
   const int screenHeight = renderer.getScreenHeight();
   const int availableHeight = screenHeight - startY;

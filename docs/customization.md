@@ -92,6 +92,8 @@ reader_font =             # Reader font family (empty = builtin)
   - Default: `3`
 - **item_height** - Height of menu items in pixels
   - Default: `30`
+  - Minimum: `1` (values of 0 will cause errors)
+  - Affects file browser, TOC lists, and chapter selection navigation (including long-press page skip)
 - **item_spacing** - Vertical space between items in pixels
   - Default: `0`
 - **front_buttons** - Front button mapping

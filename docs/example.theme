@@ -25,7 +25,7 @@ secondary_color = black
 margin_top = 9
 # Side screen margins in pixels
 margin_side = 3
-# Height of menu items in pixels
+# Height of menu items in pixels (min: 1, affects TOC navigation)
 item_height = 30
 # Vertical space between items in pixels
 item_spacing = 0
