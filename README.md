@@ -186,7 +186,7 @@ The ESP32 WiFi stack allocates ~100KB and fragments heap memory in a way that ca
 
 Papyrix includes several performance optimizations for the constrained ESP32-C3 environment:
 
-**EPUB indexing**: TOC-to-spine mapping uses in-memory href caching to avoid repeated SD card reads during book indexing. This reduces indexing time from O(n²) disk operations to O(n) memory lookups.
+**EPUB indexing**: Manifest item lookup uses an in-memory hash map for O(1) resolution of spine itemrefs. TOC-to-spine mapping uses href caching to avoid repeated SD card reads. This reduces indexing time from O(n²) disk operations to O(n) memory lookups.
 
 **XTC rendering**: 1-bit monochrome pages use byte-level processing instead of pixel-by-pixel iteration. All-white bytes (common in margins) are skipped entirely, and all-black bytes are processed in bulk.
 

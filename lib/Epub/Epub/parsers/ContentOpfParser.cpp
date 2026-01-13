@@ -123,19 +123,21 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       Serial.printf(
           "[%lu] [COF] Couldn't open temp items file for reading. This is probably going to be a fatal error.\n",
           millis());
+    } else {
+      std::string itemId;
+      std::string href;
+      while (self->tempItemStore.available()) {
+        serialization::readString(self->tempItemStore, itemId);
+        serialization::readString(self->tempItemStore, href);
+        self->manifestIndex[itemId] = href;
+      }
+      self->tempItemStore.close();
     }
     return;
   }
 
   if (self->state == IN_PACKAGE && (strcmp(name, "guide") == 0 || strcmp(name, "opf:guide") == 0)) {
     self->state = IN_GUIDE;
-    // TODO Remove print
-    Serial.printf("[%lu] [COF] Entering guide state.\n", millis());
-    if (!SdMan.openFileForRead("COF", self->cachePath + itemCacheFile, self->tempItemStore)) {
-      Serial.printf(
-          "[%lu] [COF] Couldn't open temp items file for reading. This is probably going to be a fatal error.\n",
-          millis());
-    }
     return;
   }
 
@@ -210,19 +212,9 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       for (int i = 0; atts[i]; i += 2) {
         if (strcmp(atts[i], "idref") == 0) {
           const std::string idref = atts[i + 1];
-          // Resolve the idref to href using items map
-          // TODO: This lookup is slow as need to scan through all items each time.
-          //       It can take up to 200ms per item when getting to 1500 items.
-          self->tempItemStore.seek(0);
-          std::string itemId;
-          std::string href;
-          while (self->tempItemStore.available()) {
-            serialization::readString(self->tempItemStore, itemId);
-            serialization::readString(self->tempItemStore, href);
-            if (itemId == idref) {
-              self->cache->createSpineEntry(href);
-              break;
-            }
+          auto it = self->manifestIndex.find(idref);
+          if (it != self->manifestIndex.end()) {
+            self->cache->createSpineEntry(it->second);
           }
         }
       }
@@ -274,13 +266,11 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
 
   if (self->state == IN_SPINE && (strcmp(name, "spine") == 0 || strcmp(name, "opf:spine") == 0)) {
     self->state = IN_PACKAGE;
-    self->tempItemStore.close();
     return;
   }
 
   if (self->state == IN_GUIDE && (strcmp(name, "guide") == 0 || strcmp(name, "opf:guide") == 0)) {
     self->state = IN_PACKAGE;
-    self->tempItemStore.close();
     return;
   }
 
