@@ -87,9 +87,32 @@ See [Development](#development) below.
 ### Prerequisites
 
 * **PlatformIO Core** (`pio`) or **VS Code + PlatformIO IDE**
-* Python 3.8+
+* Python 3.12+ with `freetype-py` and `pillow`
 * USB-C cable for flashing the ESP32-C3
 * Xteink X4
+
+### Using Nix (Recommended)
+
+If you have [Nix](https://nixos.org/) installed, all dependencies are provided via `shell.nix`:
+
+```bash
+# Enter development environment
+nix-shell
+
+# Or run commands directly
+nix-shell --run "make build"
+nix-shell --run "make check"
+```
+
+First-time Nix setup:
+```bash
+# Install Nix (if not installed)
+sh <(curl -L https://nixos.org/nix/install) --daemon
+
+# Add nixpkgs channel
+nix-channel --add https://nixos.org/channels/nixos-unstable nixpkgs
+nix-channel --update
+```
 
 ### Checking out the code
 
