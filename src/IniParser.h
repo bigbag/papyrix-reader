@@ -13,7 +13,7 @@
  * Designed for minimal memory usage on ESP32-C3.
  */
 class IniParser {
-public:
+ public:
   /**
    * Callback for each key-value pair found.
    * @param section Current section name (empty if before first section)
@@ -56,7 +56,7 @@ public:
    */
   static uint8_t parseColor(const char* value, uint8_t defaultValue = 0xFF);
 
-private:
+ private:
   static void trimWhitespace(char* str);
   static bool parseLine(char* line, const char* currentSection, const Callback& callback);
 };

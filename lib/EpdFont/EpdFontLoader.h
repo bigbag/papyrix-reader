@@ -1,7 +1,8 @@
 #pragma once
 
-#include "EpdFontData.h"
 #include <cstdint>
+
+#include "EpdFontData.h"
 
 /**
  * Loader for binary .epdfont files from SD card.
@@ -26,7 +27,7 @@
  *   Bitmap: bitmapSize bytes
  */
 class EpdFontLoader {
-public:
+ public:
   static constexpr uint32_t MAGIC = 0x46445045;  // "EPDF" in little-endian
   static constexpr uint16_t VERSION = 1;
 
@@ -52,7 +53,7 @@ public:
    */
   static void freeLoadResult(LoadResult& result);
 
-private:
+ private:
   struct FileHeader {
     uint32_t magic;
     uint16_t version;

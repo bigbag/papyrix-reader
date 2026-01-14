@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <EInkDisplay.h>
-#include <esp_system.h>
 #include <Epub.h>
 #include <GfxRenderer.h>
 #include <InputManager.h>
@@ -10,6 +9,7 @@
 #include <builtinFonts/reader_bold_2b.h>
 #include <builtinFonts/reader_bold_italic_2b.h>
 #include <builtinFonts/reader_italic_2b.h>
+#include <esp_system.h>
 // Medium font (16pt)
 #include <builtinFonts/reader_medium_2b.h>
 #include <builtinFonts/reader_medium_bold_2b.h>
@@ -40,8 +40,8 @@
 #include "activities/reader/ReaderActivity.h"
 #include "activities/settings/SettingsActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
-#include "opds/OpdsServerStore.h"
 #include "config.h"
+#include "opds/OpdsServerStore.h"
 
 #define SPI_FQ 40000000
 // Display SPI pins (custom pins for XteinkX4, not hardware SPI defaults)
@@ -204,39 +204,39 @@ void onGoToSettingsNetLibrary();
 void onGoToOpdsServers();
 void onOpdsServerSelected(const OpdsServerConfig& server) {
   exitActivity();
-  enterNewActivity(new OpdsBookBrowserActivity(
-      renderer, mappedInputManager, server,
-      onGoToOpdsServers  // onGoBack
-  ));
+  enterNewActivity(new OpdsBookBrowserActivity(renderer, mappedInputManager, server,
+                                               onGoToOpdsServers  // onGoBack
+                                               ));
 }
 
 void onGoToOpdsServers() {
   exitActivity();
-  enterNewActivity(new OpdsServerListActivity(renderer, mappedInputManager, onGoToSettingsNetLibrary, onOpdsServerSelected));
+  enterNewActivity(
+      new OpdsServerListActivity(renderer, mappedInputManager, onGoToSettingsNetLibrary, onOpdsServerSelected));
 }
 
 void onGoToSettings() {
   exitActivity();
-  enterNewActivity(
-      new SettingsActivity(renderer, mappedInputManager, onGoHome, onGoToFileTransfer, onGoToOpdsServers, onGoToCalibreWireless));
+  enterNewActivity(new SettingsActivity(renderer, mappedInputManager, onGoHome, onGoToFileTransfer, onGoToOpdsServers,
+                                        onGoToCalibreWireless));
 }
 
 void onGoToSettingsNetLibrary() {
   exitActivity();
-  enterNewActivity(
-      new SettingsActivity(renderer, mappedInputManager, onGoHome, onGoToFileTransfer, onGoToOpdsServers, onGoToCalibreWireless, 11));
+  enterNewActivity(new SettingsActivity(renderer, mappedInputManager, onGoHome, onGoToFileTransfer, onGoToOpdsServers,
+                                        onGoToCalibreWireless, 11));
 }
 
 void onGoToSettingsCalibreWireless() {
   exitActivity();
-  enterNewActivity(
-      new SettingsActivity(renderer, mappedInputManager, onGoHome, onGoToFileTransfer, onGoToOpdsServers, onGoToCalibreWireless, 12));
+  enterNewActivity(new SettingsActivity(renderer, mappedInputManager, onGoHome, onGoToFileTransfer, onGoToOpdsServers,
+                                        onGoToCalibreWireless, 12));
 }
 
 void onGoToSettingsFileTransfer() {
   exitActivity();
-  enterNewActivity(
-      new SettingsActivity(renderer, mappedInputManager, onGoHome, onGoToFileTransfer, onGoToOpdsServers, onGoToCalibreWireless, 13));
+  enterNewActivity(new SettingsActivity(renderer, mappedInputManager, onGoHome, onGoToFileTransfer, onGoToOpdsServers,
+                                        onGoToCalibreWireless, 13));
 }
 
 void onGoHome() {
@@ -263,8 +263,7 @@ void applyThemeFonts() {
     int customUiFontId = FONT_MANAGER.getFontId(theme.uiFontFamily, UI_FONT_ID);
     if (customUiFontId != UI_FONT_ID) {
       theme.uiFontId = customUiFontId;
-      Serial.printf("[%lu] [FONT] UI font: %s (ID: %d)\n", millis(),
-                    theme.uiFontFamily, customUiFontId);
+      Serial.printf("[%lu] [FONT] UI font: %s (ID: %d)\n", millis(), theme.uiFontFamily, customUiFontId);
     }
   }
 
@@ -273,8 +272,8 @@ void applyThemeFonts() {
     int customFontId = FONT_MANAGER.getFontId(theme.readerFontFamilySmall, READER_FONT_ID);
     if (customFontId != READER_FONT_ID) {
       theme.readerFontId = customFontId;
-      Serial.printf("[%lu] [FONT] Reader font (small): %s (ID: %d)\n", millis(),
-                    theme.readerFontFamilySmall, customFontId);
+      Serial.printf("[%lu] [FONT] Reader font (small): %s (ID: %d)\n", millis(), theme.readerFontFamilySmall,
+                    customFontId);
     }
   }
 
@@ -282,8 +281,8 @@ void applyThemeFonts() {
     int customFontId = FONT_MANAGER.getFontId(theme.readerFontFamilyMedium, READER_FONT_ID_MEDIUM);
     if (customFontId != READER_FONT_ID_MEDIUM) {
       theme.readerFontIdMedium = customFontId;
-      Serial.printf("[%lu] [FONT] Reader font (medium): %s (ID: %d)\n", millis(),
-                    theme.readerFontFamilyMedium, customFontId);
+      Serial.printf("[%lu] [FONT] Reader font (medium): %s (ID: %d)\n", millis(), theme.readerFontFamilyMedium,
+                    customFontId);
     }
   }
 
@@ -291,8 +290,8 @@ void applyThemeFonts() {
     int customFontId = FONT_MANAGER.getFontId(theme.readerFontFamilyLarge, READER_FONT_ID_LARGE);
     if (customFontId != READER_FONT_ID_LARGE) {
       theme.readerFontIdLarge = customFontId;
-      Serial.printf("[%lu] [FONT] Reader font (large): %s (ID: %d)\n", millis(),
-                    theme.readerFontFamilyLarge, customFontId);
+      Serial.printf("[%lu] [FONT] Reader font (large): %s (ID: %d)\n", millis(), theme.readerFontFamilyLarge,
+                    customFontId);
     }
   }
 }

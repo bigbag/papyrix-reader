@@ -26,8 +26,7 @@ std::string extractHost(const std::string& url) {
   const size_t protocolEnd = url.find("://");
   if (protocolEnd == std::string::npos) {
     const size_t firstSlash = url.find('/');
-    return firstSlash == std::string::npos ? url
-                                           : url.substr(0, firstSlash);
+    return firstSlash == std::string::npos ? url : url.substr(0, firstSlash);
   }
   const size_t hostStart = protocolEnd + 3;
   const size_t pathStart = url.find('/', hostStart);
@@ -58,8 +57,8 @@ std::string urlEncode(const std::string& input) {
   result.reserve(input.size() * 3);  // Worst case: every char encoded
 
   for (const unsigned char c : input) {
-    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
-        (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~') {
+    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
+        c == '.' || c == '~') {
       result += static_cast<char>(c);
     } else {
       char hex[4];
@@ -160,8 +159,7 @@ void OpdsBookBrowserActivity::onEnter() {
   errorMessage.clear();
   statusMessage = "Connecting...";
 
-  xTaskCreate(&OpdsBookBrowserActivity::taskTrampoline, "OpdsBookBrowserTask",
-              4096, this, 1, &displayTaskHandle);
+  xTaskCreate(&OpdsBookBrowserActivity::taskTrampoline, "OpdsBookBrowserTask", 4096, this, 1, &displayTaskHandle);
 
   // Turn on WiFi
   Serial.printf("[%lu] [OPDS] Turning on WiFi...\n", millis());
@@ -229,12 +227,10 @@ void OpdsBookBrowserActivity::loop() {
   }
 
   if (state == BrowserState::BROWSING) {
-    const bool prevReleased =
-        mappedInput.wasReleased(MappedInputManager::Button::Up) ||
-        mappedInput.wasReleased(MappedInputManager::Button::Left);
-    const bool nextReleased =
-        mappedInput.wasReleased(MappedInputManager::Button::Down) ||
-        mappedInput.wasReleased(MappedInputManager::Button::Right);
+    const bool prevReleased = mappedInput.wasReleased(MappedInputManager::Button::Up) ||
+                              mappedInput.wasReleased(MappedInputManager::Button::Left);
+    const bool nextReleased = mappedInput.wasReleased(MappedInputManager::Button::Down) ||
+                              mappedInput.wasReleased(MappedInputManager::Button::Right);
     const bool skipPage = mappedInput.getHeldTime() > SKIP_PAGE_MS;
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
@@ -250,8 +246,7 @@ void OpdsBookBrowserActivity::loop() {
       navigateBack();
     } else if (prevReleased && !entries.empty()) {
       if (skipPage) {
-        selectorIndex = ((selectorIndex / PAGE_ITEMS - 1) * PAGE_ITEMS +
-                         static_cast<int>(entries.size())) %
+        selectorIndex = ((selectorIndex / PAGE_ITEMS - 1) * PAGE_ITEMS + static_cast<int>(entries.size())) %
                         static_cast<int>(entries.size());
       } else {
         selectorIndex = (selectorIndex + static_cast<int>(entries.size()) - 1) % static_cast<int>(entries.size());
@@ -259,8 +254,7 @@ void OpdsBookBrowserActivity::loop() {
       updateRequired = true;
     } else if (nextReleased && !entries.empty()) {
       if (skipPage) {
-        selectorIndex = ((selectorIndex / PAGE_ITEMS + 1) * PAGE_ITEMS) %
-                        static_cast<int>(entries.size());
+        selectorIndex = ((selectorIndex / PAGE_ITEMS + 1) * PAGE_ITEMS) % static_cast<int>(entries.size());
       } else {
         selectorIndex = (selectorIndex + 1) % static_cast<int>(entries.size());
       }
@@ -298,38 +292,33 @@ void OpdsBookBrowserActivity::render() const {
   renderer.drawCenteredText(THEME.readerFontId, 10, "OPDS Library", THEME.primaryTextBlack, BOLD);
 
   if (state == BrowserState::WIFI_CHECK || state == BrowserState::LOADING) {
-    renderer.drawCenteredText(THEME.uiFontId, pageHeight / 2,
-                              statusMessage.c_str(), THEME.primaryTextBlack);
+    renderer.drawCenteredText(THEME.uiFontId, pageHeight / 2, statusMessage.c_str(), THEME.primaryTextBlack);
     const auto labels = mappedInput.mapLabels("Back", "", "", "");
-    renderer.drawButtonHints(THEME.uiFontId, labels.btn1, labels.btn2,
-                             labels.btn3, labels.btn4, THEME.primaryTextBlack);
+    renderer.drawButtonHints(THEME.uiFontId, labels.btn1, labels.btn2, labels.btn3, labels.btn4,
+                             THEME.primaryTextBlack);
     renderer.displayBuffer();
     return;
   }
 
   if (state == BrowserState::ERROR) {
     renderer.drawCenteredText(THEME.uiFontId, pageHeight / 2 - 20, "Error:", THEME.primaryTextBlack);
-    renderer.drawCenteredText(THEME.uiFontId, pageHeight / 2 + 10,
-                              errorMessage.c_str(), THEME.primaryTextBlack);
+    renderer.drawCenteredText(THEME.uiFontId, pageHeight / 2 + 10, errorMessage.c_str(), THEME.primaryTextBlack);
     const auto labels = mappedInput.mapLabels("Back", "Retry", "", "");
-    renderer.drawButtonHints(THEME.uiFontId, labels.btn1, labels.btn2,
-                             labels.btn3, labels.btn4, THEME.primaryTextBlack);
+    renderer.drawButtonHints(THEME.uiFontId, labels.btn1, labels.btn2, labels.btn3, labels.btn4,
+                             THEME.primaryTextBlack);
     renderer.displayBuffer();
     return;
   }
 
   if (state == BrowserState::DOWNLOADING) {
-    renderer.drawCenteredText(THEME.uiFontId, pageHeight / 2 - 40,
-                              "Downloading...", THEME.primaryTextBlack, BOLD);
+    renderer.drawCenteredText(THEME.uiFontId, pageHeight / 2 - 40, "Downloading...", THEME.primaryTextBlack, BOLD);
     const std::string truncatedTitle = truncateWithEllipsis(statusMessage, 40);
-    renderer.drawCenteredText(THEME.uiFontId, pageHeight / 2 - 10,
-                              truncatedTitle.c_str(), THEME.primaryTextBlack);
+    renderer.drawCenteredText(THEME.uiFontId, pageHeight / 2 - 10, truncatedTitle.c_str(), THEME.primaryTextBlack);
     if (downloadTotal > 0) {
       const int percent = static_cast<int>((downloadProgress * 100) / downloadTotal);
       char progressText[32];
       snprintf(progressText, sizeof(progressText), "%d%%", percent);
-      renderer.drawCenteredText(THEME.uiFontId, pageHeight / 2 + 20,
-                                progressText, THEME.primaryTextBlack);
+      renderer.drawCenteredText(THEME.uiFontId, pageHeight / 2 + 20, progressText, THEME.primaryTextBlack);
       // Draw progress bar
       const int barWidth = 300;
       const int barHeight = 20;
@@ -349,12 +338,10 @@ void OpdsBookBrowserActivity::render() const {
     confirmLabel = "Save";
   }
   const auto labels = mappedInput.mapLabels("Back", confirmLabel, "Up", "Down");
-  renderer.drawButtonHints(THEME.uiFontId, labels.btn1, labels.btn2,
-                           labels.btn3, labels.btn4, THEME.primaryTextBlack);
+  renderer.drawButtonHints(THEME.uiFontId, labels.btn1, labels.btn2, labels.btn3, labels.btn4, THEME.primaryTextBlack);
 
   if (entries.empty()) {
-    renderer.drawCenteredText(THEME.uiFontId, pageHeight / 2,
-                              "No entries found", THEME.primaryTextBlack);
+    renderer.drawCenteredText(THEME.uiFontId, pageHeight / 2, "No entries found", THEME.primaryTextBlack);
     renderer.displayBuffer();
     return;
   }
@@ -365,9 +352,7 @@ void OpdsBookBrowserActivity::render() const {
 
   const int pageStartIndex = (selectorIndex / PAGE_ITEMS) * PAGE_ITEMS;
 
-  for (int i = pageStartIndex;
-       i < static_cast<int>(entries.size()) && i < pageStartIndex + PAGE_ITEMS;
-       i++) {
+  for (int i = pageStartIndex; i < static_cast<int>(entries.size()) && i < pageStartIndex + PAGE_ITEMS; i++) {
     const auto& entry = entries[i];
     const int y = startY + (i % PAGE_ITEMS) * itemHeight;
     const bool isSelected = (i == selectorIndex);
@@ -389,8 +374,7 @@ void OpdsBookBrowserActivity::render() const {
     // Show author for books
     if (entry.type == OpdsEntryType::BOOK && !entry.author.empty()) {
       const std::string displayAuthor = truncateWithEllipsis(entry.author, 45);
-      renderer.drawText(THEME.smallFontId, leftMargin + 10, y + 25,
-                        displayAuthor.c_str(), THEME.primaryTextBlack);
+      renderer.drawText(THEME.smallFontId, leftMargin + 10, y + 25, displayAuthor.c_str(), THEME.primaryTextBlack);
     }
   }
 
@@ -400,8 +384,7 @@ void OpdsBookBrowserActivity::render() const {
   if (totalPages > 1) {
     char pageInfo[32];
     snprintf(pageInfo, sizeof(pageInfo), "%d / %d", currentPage, totalPages);
-    renderer.drawText(THEME.smallFontId, pageWidth - 80, pageHeight - 80,
-                      pageInfo, THEME.primaryTextBlack);
+    renderer.drawText(THEME.smallFontId, pageWidth - 80, pageHeight - 80, pageInfo, THEME.primaryTextBlack);
   }
 
   renderer.displayBuffer();
@@ -439,14 +422,12 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
         }
         // Stop early if we have enough entries
         if (parser.getEntryCount() >= MAX_ENTRIES) {
-          Serial.printf("[%lu] [OPDS] Reached %zu entries, stopping early\n",
-                        millis(), parser.getEntryCount());
+          Serial.printf("[%lu] [OPDS] Reached %zu entries, stopping early\n", millis(), parser.getEntryCount());
           return false;
         }
         return true;
       },
-      serverConfig.username,
-      serverConfig.password);
+      serverConfig.username, serverConfig.password);
 
   if (!fetchOk && !parseError && parser.getEntryCount() == 0) {
     state = BrowserState::ERROR;
@@ -466,8 +447,7 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   currentSearchTemplate = parser.getSearchTemplate();
   if (currentSearchTemplate.empty() && !parser.getOpenSearchUrl().empty()) {
     // Need to fetch OpenSearch description
-    currentSearchTemplate = fetchOpenSearchTemplate(
-        buildUrl(serverConfig.url, parser.getOpenSearchUrl()));
+    currentSearchTemplate = fetchOpenSearchTemplate(buildUrl(serverConfig.url, parser.getOpenSearchUrl()));
   }
 
   // Inject search entry at top if search is available
@@ -540,8 +520,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   std::string downloadUrl = buildUrl(serverConfig.url, book.href);
   std::string filename = "/Books/" + sanitizeFilename(book.title) + ".epub";
 
-  Serial.printf("[%lu] [OPDS] Downloading: %s -> %s\n", millis(),
-                downloadUrl.c_str(), filename.c_str());
+  Serial.printf("[%lu] [OPDS] Downloading: %s -> %s\n", millis(), downloadUrl.c_str(), filename.c_str());
 
   // Ensure /Books directory exists
   if (!SdMan.exists("/Books")) {
@@ -561,12 +540,10 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
         downloadTotal = total;
         updateRequired = true;
       },
-      serverConfig.username,
-      serverConfig.password);
+      serverConfig.username, serverConfig.password);
 
   if (result == HttpDownloader::OK) {
-    Serial.printf("[%lu] [OPDS] Download complete: %s\n", millis(),
-                  filename.c_str());
+    Serial.printf("[%lu] [OPDS] Download complete: %s\n", millis(), filename.c_str());
     state = BrowserState::BROWSING;
     updateRequired = true;
   } else {
@@ -576,15 +553,13 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   }
 }
 
-std::string OpdsBookBrowserActivity::sanitizeFilename(
-    const std::string& title) const {
+std::string OpdsBookBrowserActivity::sanitizeFilename(const std::string& title) const {
   std::string result;
   result.reserve(title.size());
 
   for (const unsigned char c : title) {
     // Replace forbidden filesystem characters
-    if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' ||
-        c == '"' || c == '<' || c == '>' || c == '|') {
+    if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|') {
       result += '_';
     } else if (c >= 32 && c != 127) {
       // Allow printable ASCII (32-126) and UTF-8 continuation bytes (128-255)
@@ -654,11 +629,11 @@ void OpdsBookBrowserActivity::handleSearchEntry() {
 
   enterNewActivity(new KeyboardEntryActivity(
       renderer, mappedInput,
-      "Search",      // title
-      "",            // initialText
-      10,            // startY
-      100,           // maxLength
-      false,         // isPassword
+      "Search",  // title
+      "",        // initialText
+      10,        // startY
+      100,       // maxLength
+      false,     // isPassword
       [this](const std::string& searchTerm) {
         // onComplete callback
         exitActivity();

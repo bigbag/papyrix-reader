@@ -279,7 +279,7 @@ void EpubReaderActivity::renderScreen() {
     const auto viewportHeight = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom;
 
     if (!section->loadSectionFile(SETTINGS.getReaderFontId(), lineCompression, SETTINGS.extraParagraphSpacing,
-                                    SETTINGS.paragraphAlignment, SETTINGS.hyphenation, viewportWidth, viewportHeight)) {
+                                  SETTINGS.paragraphAlignment, SETTINGS.hyphenation, viewportWidth, viewportHeight)) {
       Serial.printf("[%lu] [ERS] Cache not found, building...\n", millis());
 
       // Show static "Indexing..." message
@@ -297,13 +297,14 @@ void EpubReaderActivity::renderScreen() {
       renderer.displayBuffer();
 
       if (!section->createSectionFile(SETTINGS.getReaderFontId(), lineCompression, SETTINGS.extraParagraphSpacing,
-                                        SETTINGS.paragraphAlignment, SETTINGS.hyphenation, viewportWidth, viewportHeight,
-                                        nullptr, nullptr)) {
+                                      SETTINGS.paragraphAlignment, SETTINGS.hyphenation, viewportWidth, viewportHeight,
+                                      nullptr, nullptr)) {
         Serial.printf("[%lu] [ERS] Failed to persist page data to SD\n", millis());
         section.reset();
         // Show error message to user
         renderer.clearScreen(THEME.backgroundColor);
-        renderer.drawCenteredText(SETTINGS.getReaderFontId(), 300, "Failed to load chapter", THEME.primaryTextBlack, BOLD);
+        renderer.drawCenteredText(SETTINGS.getReaderFontId(), 300, "Failed to load chapter", THEME.primaryTextBlack,
+                                  BOLD);
         renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
         renderer.displayBuffer();
         return;
@@ -555,7 +556,8 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
     // Battery end
     renderer.drawLine(x + batteryWidth - 4, y, x + batteryWidth - 4, y + batteryHeight - 1, THEME.primaryTextBlack);
     renderer.drawLine(x + batteryWidth - 3, y + 2, x + batteryWidth - 1, y + 2, THEME.primaryTextBlack);
-    renderer.drawLine(x + batteryWidth - 3, y + batteryHeight - 3, x + batteryWidth - 1, y + batteryHeight - 3, THEME.primaryTextBlack);
+    renderer.drawLine(x + batteryWidth - 3, y + batteryHeight - 3, x + batteryWidth - 1, y + batteryHeight - 3,
+                      THEME.primaryTextBlack);
     renderer.drawLine(x + batteryWidth - 1, y + 2, x + batteryWidth - 1, y + batteryHeight - 3, THEME.primaryTextBlack);
 
     // The +1 is to round up, so that we always fill at least one pixel
@@ -590,6 +592,7 @@ void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const in
       }
     }
 
-    renderer.drawText(THEME.smallFontId, titleMarginLeft + (availableTextWidth - titleWidth) / 2, textY, title.c_str(), THEME.primaryTextBlack);
+    renderer.drawText(THEME.smallFontId, titleMarginLeft + (availableTextWidth - titleWidth) / 2, textY, title.c_str(),
+                      THEME.primaryTextBlack);
   }
 }

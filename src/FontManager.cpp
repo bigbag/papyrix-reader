@@ -1,8 +1,11 @@
 #include "FontManager.h"
-#include "config.h"
+
 #include <EpdFontLoader.h>
 #include <SDCardManager.h>
+
 #include <cstring>
+
+#include "config.h"
 
 FontManager& FontManager::instance() {
   static FontManager instance;
@@ -11,13 +14,9 @@ FontManager& FontManager::instance() {
 
 FontManager::FontManager() = default;
 
-FontManager::~FontManager() {
-  unloadAllFonts();
-}
+FontManager::~FontManager() { unloadAllFonts(); }
 
-void FontManager::init(GfxRenderer& r) {
-  renderer = &r;
-}
+void FontManager::init(GfxRenderer& r) { renderer = &r; }
 
 bool FontManager::loadFontFamily(const char* familyName, int fontId) {
   if (!renderer || !familyName || !*familyName) {

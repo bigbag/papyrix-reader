@@ -39,7 +39,8 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
   }
   static_assert(HEADER_SIZE == sizeof(SECTION_FILE_VERSION) + sizeof(fontId) + sizeof(lineCompression) +
                                    sizeof(extraParagraphSpacing) + sizeof(paragraphAlignment) + sizeof(hyphenation) +
-                                   sizeof(viewportWidth) + sizeof(viewportHeight) + sizeof(pageCount) + sizeof(uint32_t),
+                                   sizeof(viewportWidth) + sizeof(viewportHeight) + sizeof(pageCount) +
+                                   sizeof(uint32_t),
                 "Header size mismatch");
   serialization::writePod(file, SECTION_FILE_VERSION);
   serialization::writePod(file, fontId);
@@ -87,8 +88,7 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
 
     if (fontId != fileFontId || lineCompression != fileLineCompression ||
         extraParagraphSpacing != fileExtraParagraphSpacing || paragraphAlignment != fileParagraphAlignment ||
-        hyphenation != fileHyphenation || viewportWidth != fileViewportWidth ||
-        viewportHeight != fileViewportHeight) {
+        hyphenation != fileHyphenation || viewportWidth != fileViewportWidth || viewportHeight != fileViewportHeight) {
       file.close();
       Serial.printf("[%lu] [SCT] Deserialization failed: Parameters do not match\n", millis());
       clearCache();
@@ -119,9 +119,8 @@ bool Section::clearCache() const {
 }
 
 bool Section::createSectionFile(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
-                                const uint8_t paragraphAlignment, const bool hyphenation,
-                                const uint16_t viewportWidth, const uint16_t viewportHeight,
-                                const std::function<void()>& progressSetupFn,
+                                const uint8_t paragraphAlignment, const bool hyphenation, const uint16_t viewportWidth,
+                                const uint16_t viewportHeight, const std::function<void()>& progressSetupFn,
                                 const std::function<void(int)>& progressFn) {
   constexpr uint32_t MIN_SIZE_FOR_PROGRESS = 50 * 1024;  // 50KB
   const auto localPath = epub->getSpineItem(spineIndex).href;

@@ -270,7 +270,8 @@ void KeyboardEntryActivity::render() const {
 
       // Backspace button (cols 0-2, 3 keys wide)
       const int bsWidth = 3 * keyWidth + 2 * keySpacingH;
-      const bool bsSelected = (selectedRow == CONTROL_ROW && selectedCol >= BACKSPACE_START && selectedCol <= BACKSPACE_END);
+      const bool bsSelected =
+          (selectedRow == CONTROL_ROW && selectedCol >= BACKSPACE_START && selectedCol <= BACKSPACE_END);
       const char* bsLabel = "Backspace";
       const int bsTextWidth = renderer.getTextWidth(THEME.uiFontId, bsLabel);
       const int bsTextX = currentX + (bsWidth - bsTextWidth) / 2;
@@ -288,7 +289,8 @@ void KeyboardEntryActivity::render() const {
 
       // Confirm button (cols 7-9, 3 keys wide)
       const int confirmWidth = 3 * keyWidth + 2 * keySpacingH;
-      const bool confirmSelected = (selectedRow == CONTROL_ROW && selectedCol >= CONFIRM_START && selectedCol <= CONFIRM_END);
+      const bool confirmSelected =
+          (selectedRow == CONTROL_ROW && selectedCol >= CONFIRM_START && selectedCol <= CONFIRM_END);
       const char* confirmLabel = "Confirm";
       const int confirmTextWidth = renderer.getTextWidth(THEME.uiFontId, confirmLabel);
       const int confirmTextX = currentX + (confirmWidth - confirmTextWidth) / 2;

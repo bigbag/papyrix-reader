@@ -221,7 +221,8 @@ void SettingsActivity::render() const {
   renderer.drawCenteredText(THEME.readerFontId, 10, "Settings", THEME.primaryTextBlack, BOLD);
 
   // Draw selection highlight
-  renderer.fillRect(0, 60 + selectedSettingIndex * THEME.itemHeight - 2, pageWidth - 1, THEME.itemHeight, THEME.selectionFillBlack);
+  renderer.fillRect(0, 60 + selectedSettingIndex * THEME.itemHeight - 2, pageWidth - 1, THEME.itemHeight,
+                    THEME.selectionFillBlack);
 
   // Draw all settings
   for (int i = 0; i < settingsCount; i++) {

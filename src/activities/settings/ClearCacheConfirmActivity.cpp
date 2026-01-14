@@ -47,7 +47,8 @@ void ClearCacheConfirmActivity::loop() {
 void ClearCacheConfirmActivity::performClear() {
   // Show clearing message
   renderer.clearScreen(THEME.backgroundColor);
-  renderer.drawCenteredText(THEME.uiFontId, renderer.getScreenHeight() / 2, "Clearing cache...", THEME.primaryTextBlack);
+  renderer.drawCenteredText(THEME.uiFontId, renderer.getScreenHeight() / 2, "Clearing cache...",
+                            THEME.primaryTextBlack);
   renderer.displayBuffer();
 
   // Perform the clear
@@ -66,7 +67,8 @@ void ClearCacheConfirmActivity::performClear() {
     }
     renderer.drawCenteredText(THEME.uiFontId, renderer.getScreenHeight() / 2, msg, THEME.primaryTextBlack);
   } else {
-    renderer.drawCenteredText(THEME.uiFontId, renderer.getScreenHeight() / 2, "Failed to clear cache", THEME.primaryTextBlack);
+    renderer.drawCenteredText(THEME.uiFontId, renderer.getScreenHeight() / 2, "Failed to clear cache",
+                              THEME.primaryTextBlack);
   }
   renderer.displayBuffer();
 

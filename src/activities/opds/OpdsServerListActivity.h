@@ -13,9 +13,7 @@ class OpdsServerListActivity final : public Activity {
   explicit OpdsServerListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                   const std::function<void()>& onGoBack,
                                   const std::function<void(const OpdsServerConfig&)>& onServerSelected)
-      : Activity("OpdsServerList", renderer, mappedInput),
-        onGoBack(onGoBack),
-        onServerSelected(onServerSelected) {}
+      : Activity("OpdsServerList", renderer, mappedInput), onGoBack(onGoBack), onServerSelected(onServerSelected) {}
 
   void onEnter() override;
   void onExit() override;

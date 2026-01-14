@@ -17,9 +17,7 @@ constexpr size_t STREAM_BUFFER_SIZE = 4096;
 
 CalibreDeviceServer::CalibreDeviceServer() : server(9090) {}
 
-CalibreDeviceServer::~CalibreDeviceServer() {
-  stop();
-}
+CalibreDeviceServer::~CalibreDeviceServer() { stop(); }
 
 bool CalibreDeviceServer::begin(uint16_t port) {
   if (running) {
@@ -187,8 +185,7 @@ void CalibreDeviceServer::handleClientMessage() {
     default:
       Serial.printf("[CAL] Unknown opcode: %u\n", opcode);
       // Send error response
-      CalibreProtocol::sendMessage(client, CalibreProtocol::OP_ERROR,
-                                   "{\"message\": \"Unknown opcode\"}");
+      CalibreProtocol::sendMessage(client, CalibreProtocol::OP_ERROR, "{\"message\": \"Unknown opcode\"}");
       break;
   }
 }
@@ -226,9 +223,7 @@ void CalibreDeviceServer::handleGetInitInfo(const std::string& data) {
            "\"currentLibraryUUID\": \"\", "
            "\"ccVersionNumber\": %d"
            "}",
-           CalibreProtocol::MAX_BOOK_PACKET_LEN,
-           deviceName.c_str(),
-           passwordHash.c_str(),
+           CalibreProtocol::MAX_BOOK_PACKET_LEN, deviceName.c_str(), passwordHash.c_str(),
            CalibreProtocol::PROTOCOL_VERSION);
 
   CalibreProtocol::sendMessage(client, CalibreProtocol::OP_OK, response);
@@ -246,8 +241,7 @@ void CalibreDeviceServer::handleTotalSpace() {
   uint64_t total = 4ULL * 1024 * 1024 * 1024;  // 4GB
 
   char response[64];
-  snprintf(response, sizeof(response), "{\"total_space_on_device\": %llu}",
-           static_cast<unsigned long long>(total));
+  snprintf(response, sizeof(response), "{\"total_space_on_device\": %llu}", static_cast<unsigned long long>(total));
   CalibreProtocol::sendMessage(client, CalibreProtocol::OP_OK, response);
 }
 
@@ -257,8 +251,7 @@ void CalibreDeviceServer::handleFreeSpace() {
   uint64_t free = 2ULL * 1024 * 1024 * 1024;  // 2GB free
 
   char response[64];
-  snprintf(response, sizeof(response), "{\"free_space_on_device\": %llu}",
-           static_cast<unsigned long long>(free));
+  snprintf(response, sizeof(response), "{\"free_space_on_device\": %llu}", static_cast<unsigned long long>(free));
   CalibreProtocol::sendMessage(client, CalibreProtocol::OP_OK, response);
 }
 
@@ -332,8 +325,7 @@ void CalibreDeviceServer::handleSendBook(const std::string& data) {
   receiving = true;
 
   // Send OK to indicate we're ready to receive the binary data
-  CalibreProtocol::sendMessage(client, CalibreProtocol::OP_OK,
-                               "{\"willStreamBinary\": true}");
+  CalibreProtocol::sendMessage(client, CalibreProtocol::OP_OK, "{\"willStreamBinary\": true}");
 
   // Stream the book to file
   if (streamBookToFile(currentBookSize, destPath)) {
@@ -347,8 +339,7 @@ void CalibreDeviceServer::handleSendBook(const std::string& data) {
     }
   } else {
     Serial.println("[CAL] Failed to save book");
-    CalibreProtocol::sendMessage(client, CalibreProtocol::OP_ERROR,
-                                 "{\"message\": \"Failed to save book\"}");
+    CalibreProtocol::sendMessage(client, CalibreProtocol::OP_ERROR, "{\"message\": \"Failed to save book\"}");
     reportStatus("Transfer failed");
   }
 
@@ -358,8 +349,7 @@ void CalibreDeviceServer::handleSendBook(const std::string& data) {
 void CalibreDeviceServer::handleDeleteBook(const std::string& data) {
   std::string lpath = CalibreProtocol::extractJsonString(data, "lpath");
   if (lpath.empty()) {
-    CalibreProtocol::sendMessage(client, CalibreProtocol::OP_ERROR,
-                                 "{\"message\": \"No lpath provided\"}");
+    CalibreProtocol::sendMessage(client, CalibreProtocol::OP_ERROR, "{\"message\": \"No lpath provided\"}");
     return;
   }
 
@@ -377,8 +367,7 @@ void CalibreDeviceServer::handleDeleteBook(const std::string& data) {
         onBookDeleted(fullPath.c_str());
       }
     } else {
-      CalibreProtocol::sendMessage(client, CalibreProtocol::OP_ERROR,
-                                   "{\"message\": \"Failed to delete file\"}");
+      CalibreProtocol::sendMessage(client, CalibreProtocol::OP_ERROR, "{\"message\": \"Failed to delete file\"}");
       reportStatus("Delete failed");
     }
   } else {
@@ -455,10 +444,7 @@ std::string CalibreDeviceServer::buildBooklistJson(const std::vector<CalibreBook
              "\"authors\": [\"%s\"], "
              "\"size\": %zu"
              "}",
-             escapedPath.c_str(),
-             escapedTitle.c_str(),
-             escapedAuthor.c_str(),
-             books[i].size);
+             escapedPath.c_str(), escapedTitle.c_str(), escapedAuthor.c_str(), books[i].size);
 
     json += entry;
   }
@@ -473,8 +459,8 @@ std::string CalibreDeviceServer::sanitizeFilename(const std::string& name) {
 
   for (char c : name) {
     // Replace invalid filename characters
-    if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' ||
-        c == '>' || c == '|' || c < 32) {
+    if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|' ||
+        c < 32) {
       result += '_';
     } else {
       result += c;

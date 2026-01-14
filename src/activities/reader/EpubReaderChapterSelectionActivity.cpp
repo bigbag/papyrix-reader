@@ -126,13 +126,14 @@ void EpubReaderChapterSelectionActivity::renderScreen() {
   renderer.drawCenteredText(THEME.readerFontId, 15, title.c_str(), THEME.primaryTextBlack, BOLD);
 
   const auto pageStartIndex = selectorIndex / pageItems * pageItems;
-  renderer.fillRect(0, 60 + (selectorIndex % pageItems) * THEME.itemHeight - 2, pageWidth - 1, THEME.itemHeight, THEME.selectionFillBlack);
+  renderer.fillRect(0, 60 + (selectorIndex % pageItems) * THEME.itemHeight - 2, pageWidth - 1, THEME.itemHeight,
+                    THEME.selectionFillBlack);
   for (int tocIndex = pageStartIndex; tocIndex < epub->getTocItemsCount() && tocIndex < pageStartIndex + pageItems;
        tocIndex++) {
     auto item = epub->getTocItem(tocIndex);
     const bool textColor = (tocIndex == selectorIndex) ? THEME.selectionTextBlack : THEME.primaryTextBlack;
-    renderer.drawText(THEME.uiFontId, 20 + (item.level - 1) * 15, 60 + (tocIndex % pageItems) * THEME.itemHeight, item.title.c_str(),
-                      textColor);
+    renderer.drawText(THEME.uiFontId, 20 + (item.level - 1) * 15, 60 + (tocIndex % pageItems) * THEME.itemHeight,
+                      item.title.c_str(), textColor);
   }
 
   renderer.displayBuffer();

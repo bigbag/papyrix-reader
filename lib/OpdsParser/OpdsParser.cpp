@@ -1,6 +1,7 @@
 #include "OpdsParser.h"
 
 #include <HardwareSerial.h>
+
 #include <cstring>
 
 OpdsParser::~OpdsParser() {
@@ -14,8 +15,7 @@ bool OpdsParser::startParsing() {
   clear();
   parser = XML_ParserCreate(nullptr);
   if (!parser) {
-    Serial.printf("[%lu] [OPDS] Couldn't allocate memory for parser\n",
-                  millis());
+    Serial.printf("[%lu] [OPDS] Couldn't allocate memory for parser\n", millis());
     return false;
   }
 
@@ -33,16 +33,14 @@ bool OpdsParser::feedChunk(const char* data, const size_t len) {
 
   void* const buf = XML_GetBuffer(parser, len);
   if (!buf) {
-    Serial.printf("[%lu] [OPDS] Couldn't allocate memory for buffer\n",
-                  millis());
+    Serial.printf("[%lu] [OPDS] Couldn't allocate memory for buffer\n", millis());
     return false;
   }
 
   memcpy(buf, data, len);
 
   if (XML_ParseBuffer(parser, static_cast<int>(len), 0) == XML_STATUS_ERROR) {
-    Serial.printf("[%lu] [OPDS] Parse error at line %lu: %s\n", millis(),
-                  XML_GetCurrentLineNumber(parser),
+    Serial.printf("[%lu] [OPDS] Parse error at line %lu: %s\n", millis(), XML_GetCurrentLineNumber(parser),
                   XML_ErrorString(XML_GetErrorCode(parser)));
     return false;
   }
@@ -57,8 +55,7 @@ bool OpdsParser::finishParsing() {
 
   // Send final empty buffer to signal end of parsing
   if (XML_ParseBuffer(parser, 0, 1) == XML_STATUS_ERROR) {
-    Serial.printf("[%lu] [OPDS] Parse error at line %lu: %s\n", millis(),
-                  XML_GetCurrentLineNumber(parser),
+    Serial.printf("[%lu] [OPDS] Parse error at line %lu: %s\n", millis(), XML_GetCurrentLineNumber(parser),
                   XML_ErrorString(XML_GetErrorCode(parser)));
     XML_ParserFree(parser);
     parser = nullptr;
@@ -119,8 +116,7 @@ std::vector<OpdsEntry> OpdsParser::getBooks() const {
   return books;
 }
 
-const char* OpdsParser::findAttribute(const XML_Char** atts,
-                                      const char* name) {
+const char* OpdsParser::findAttribute(const XML_Char** atts, const char* name) {
   for (int i = 0; atts[i]; i += 2) {
     if (strcmp(atts[i], name) == 0) {
       return atts[i + 1];
@@ -129,8 +125,7 @@ const char* OpdsParser::findAttribute(const XML_Char** atts,
   return nullptr;
 }
 
-void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name,
-                                      const XML_Char** atts) {
+void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
   auto* self = static_cast<OpdsParser*>(userData);
 
   if (strcmp(name, "entry") == 0 || strstr(name, ":entry") != nullptr) {
@@ -140,8 +135,7 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name,
   }
 
   // Handle feed-level search links (outside entries)
-  if (!self->inEntry &&
-      (strcmp(name, "link") == 0 || strstr(name, ":link") != nullptr)) {
+  if (!self->inEntry && (strcmp(name, "link") == 0 || strstr(name, ":link") != nullptr)) {
     const char* rel = findAttribute(atts, "rel");
     const char* type = findAttribute(atts, "type");
     const char* href = findAttribute(atts, "href");
@@ -173,8 +167,7 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name,
     return;
   }
 
-  if (self->inAuthor && (strcmp(name, "name") == 0 ||
-                         strstr(name, ":name") != nullptr)) {
+  if (self->inAuthor && (strcmp(name, "name") == 0 || strstr(name, ":name") != nullptr)) {
     self->inAuthorName = true;
     self->currentText.clear();
     return;
@@ -212,8 +205,7 @@ void XMLCALL OpdsParser::endElement(void* userData, const XML_Char* name) {
   auto* self = static_cast<OpdsParser*>(userData);
 
   if (strcmp(name, "entry") == 0 || strstr(name, ":entry") != nullptr) {
-    if (!self->currentEntry.title.empty() &&
-        !self->currentEntry.href.empty()) {
+    if (!self->currentEntry.title.empty() && !self->currentEntry.href.empty()) {
       self->entries.push_back(self->currentEntry);
     }
     self->inEntry = false;
@@ -236,8 +228,7 @@ void XMLCALL OpdsParser::endElement(void* userData, const XML_Char* name) {
     return;
   }
 
-  if (self->inAuthor && (strcmp(name, "name") == 0 ||
-                         strstr(name, ":name") != nullptr)) {
+  if (self->inAuthor && (strcmp(name, "name") == 0 || strstr(name, ":name") != nullptr)) {
     if (self->inAuthorName) {
       self->currentEntry.author = self->currentText;
     }
@@ -254,8 +245,7 @@ void XMLCALL OpdsParser::endElement(void* userData, const XML_Char* name) {
   }
 }
 
-void XMLCALL OpdsParser::characterData(void* userData, const XML_Char* s,
-                                       const int len) {
+void XMLCALL OpdsParser::characterData(void* userData, const XML_Char* s, const int len) {
   auto* self = static_cast<OpdsParser*>(userData);
   if (self->inTitle || self->inAuthorName || self->inId) {
     self->currentText.append(s, len);

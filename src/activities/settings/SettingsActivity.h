@@ -45,11 +45,9 @@ class SettingsActivity final : public ActivityWithSubactivity {
 
  public:
   explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                            const std::function<void()>& onGoHome,
-                            const std::function<void()>& onFileTransferOpen,
+                            const std::function<void()>& onGoHome, const std::function<void()>& onFileTransferOpen,
                             const std::function<void()>& onOpdsLibraryOpen,
-                            const std::function<void()>& onCalibreWirelessOpen,
-                            int initialSelectedIndex = 0)
+                            const std::function<void()>& onCalibreWirelessOpen, int initialSelectedIndex = 0)
       : ActivityWithSubactivity("Settings", renderer, mappedInput),
         onGoHome(onGoHome),
         onFileTransferOpen(onFileTransferOpen),

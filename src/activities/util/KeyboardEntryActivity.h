@@ -80,16 +80,16 @@ class KeyboardEntryActivity : public Activity {
   static constexpr int NUM_ROWS = 10;
   static constexpr int KEYS_PER_ROW = 10;
   static constexpr char keyboard[NUM_ROWS][KEYS_PER_ROW] = {
-      {'\x02','\x02','\x02','\x01','\x01','\x01','\x01','\x03','\x03','\x03'},  // row 0: controls
-      {'a','b','c','d','e','f','g','h','i','j'},  // row 1: lowercase
-      {'k','l','m','n','o','p','q','r','s','t'},  // row 2: lowercase
-      {'u','v','w','x','y','z','.','-','_','@'},  // row 3: lowercase + symbols
-      {'A','B','C','D','E','F','G','H','I','J'},  // row 4: uppercase
-      {'K','L','M','N','O','P','Q','R','S','T'},  // row 5: uppercase
-      {'U','V','W','X','Y','Z','!','#','$','%'},  // row 6: uppercase + symbols
-      {'1','2','3','4','5','6','7','8','9','0'},  // row 7: numbers
-      {'^','&','*','(',')','+',' ','[',']','\\'},  // row 8: symbols
-      {'/',':',';','~','?','=','\'','"',',','<'}   // row 9: URL/extra symbols
+      {'\x02', '\x02', '\x02', '\x01', '\x01', '\x01', '\x01', '\x03', '\x03', '\x03'},  // row 0: controls
+      {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'},                                // row 1: lowercase
+      {'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't'},                                // row 2: lowercase
+      {'u', 'v', 'w', 'x', 'y', 'z', '.', '-', '_', '@'},                                // row 3: lowercase + symbols
+      {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'},                                // row 4: uppercase
+      {'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T'},                                // row 5: uppercase
+      {'U', 'V', 'W', 'X', 'Y', 'Z', '!', '#', '$', '%'},                                // row 6: uppercase + symbols
+      {'1', '2', '3', '4', '5', '6', '7', '8', '9', '0'},                                // row 7: numbers
+      {'^', '&', '*', '(', ')', '+', ' ', '[', ']', '\\'},                               // row 8: symbols
+      {'/', ':', ';', '~', '?', '=', '\'', '"', ',', '<'}                                // row 9: URL/extra symbols
   };
   // Control characters: \x01 = SPACE, \x02 = BACKSPACE, \x03 = CONFIRM
 
@@ -98,9 +98,9 @@ class KeyboardEntryActivity : public Activity {
   static constexpr int BACKSPACE_START = 0;
   static constexpr int BACKSPACE_END = 2;  // cols 0-2 (3 keys wide)
   static constexpr int SPACE_START = 3;
-  static constexpr int SPACE_END = 6;      // cols 3-6 (4 keys wide)
+  static constexpr int SPACE_END = 6;  // cols 3-6 (4 keys wide)
   static constexpr int CONFIRM_START = 7;
-  static constexpr int CONFIRM_END = 9;    // cols 7-9 (3 keys wide)
+  static constexpr int CONFIRM_END = 9;  // cols 7-9 (3 keys wide)
 
   static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();

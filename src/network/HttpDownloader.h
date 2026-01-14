@@ -1,5 +1,6 @@
 #pragma once
 #include <SDCardManager.h>
+
 #include <functional>
 #include <string>
 
@@ -16,21 +17,16 @@ class HttpDownloader {
     ABORTED,
   };
 
-  static bool fetchUrl(const std::string& url, std::string& outContent,
-                       const std::string& username = "",
+  static bool fetchUrl(const std::string& url, std::string& outContent, const std::string& username = "",
                        const std::string& password = "");
 
   // Streaming fetch: calls onChunk for each chunk of data received
   // Returns true if completed successfully, false on error or abort
-  static bool fetchUrlStreaming(const std::string& url,
-                                ChunkCallback onChunk,
-                                const std::string& username = "",
+  static bool fetchUrlStreaming(const std::string& url, ChunkCallback onChunk, const std::string& username = "",
                                 const std::string& password = "");
 
-  static DownloadError downloadToFile(const std::string& url,
-                                      const std::string& destPath,
-                                      ProgressCallback progress = nullptr,
-                                      const std::string& username = "",
+  static DownloadError downloadToFile(const std::string& url, const std::string& destPath,
+                                      ProgressCallback progress = nullptr, const std::string& username = "",
                                       const std::string& password = "");
 
  private:

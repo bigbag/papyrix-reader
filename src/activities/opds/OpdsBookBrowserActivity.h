@@ -14,18 +14,10 @@
 
 class OpdsBookBrowserActivity final : public ActivityWithSubactivity {
  public:
-  enum class BrowserState {
-    WIFI_CHECK,
-    LOADING,
-    BROWSING,
-    DOWNLOADING,
-    ERROR
-  };
+  enum class BrowserState { WIFI_CHECK, LOADING, BROWSING, DOWNLOADING, ERROR };
 
-  explicit OpdsBookBrowserActivity(GfxRenderer& renderer,
-                                   MappedInputManager& mappedInput,
-                                   const OpdsServerConfig& serverConfig,
-                                   const std::function<void()>& onGoBack)
+  explicit OpdsBookBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                   const OpdsServerConfig& serverConfig, const std::function<void()>& onGoBack)
       : ActivityWithSubactivity("OpdsBookBrowser", renderer, mappedInput),
         serverConfig(serverConfig),
         onGoBack(onGoBack) {}

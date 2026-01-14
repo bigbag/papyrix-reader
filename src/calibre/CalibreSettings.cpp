@@ -2,6 +2,7 @@
 
 #include <HardwareSerial.h>
 #include <SDCardManager.h>
+
 #include <cstring>
 
 #include "IniParser.h"
@@ -52,21 +53,22 @@ bool CalibreSettings::loadFromFile() {
     createDefaultFile();
   }
 
-  const bool parsed = IniParser::parseFile(CONFIG_CALIBRE_FILE, [&](const char* section, const char* key, const char* value) {
-    if (strcmp(key, "device_name") == 0 && strlen(value) < MAX_NAME_LENGTH && strlen(value) > 0) {
-      strncpy(config.deviceName, value, sizeof(config.deviceName) - 1);
-      config.deviceName[sizeof(config.deviceName) - 1] = '\0';
-    } else if (strcmp(key, "password") == 0 && strlen(value) < MAX_PASSWORD_LENGTH) {
-      strncpy(config.password, value, sizeof(config.password) - 1);
-      config.password[sizeof(config.password) - 1] = '\0';
-    }
+  const bool parsed =
+      IniParser::parseFile(CONFIG_CALIBRE_FILE, [&](const char* section, const char* key, const char* value) {
+        if (strcmp(key, "device_name") == 0 && strlen(value) < MAX_NAME_LENGTH && strlen(value) > 0) {
+          strncpy(config.deviceName, value, sizeof(config.deviceName) - 1);
+          config.deviceName[sizeof(config.deviceName) - 1] = '\0';
+        } else if (strcmp(key, "password") == 0 && strlen(value) < MAX_PASSWORD_LENGTH) {
+          strncpy(config.password, value, sizeof(config.password) - 1);
+          config.password[sizeof(config.password) - 1] = '\0';
+        }
 
-    return true;  // Continue parsing
-  });
+        return true;  // Continue parsing
+      });
 
   loaded = parsed;
-  Serial.printf("[%lu] [CAL] Loaded calibre.ini: device='%s', password=%s\n",
-                millis(), config.deviceName, hasPassword() ? "set" : "none");
+  Serial.printf("[%lu] [CAL] Loaded calibre.ini: device='%s', password=%s\n", millis(), config.deviceName,
+                hasPassword() ? "set" : "none");
   return parsed;
 }
 

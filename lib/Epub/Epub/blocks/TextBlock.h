@@ -29,8 +29,7 @@ class TextBlock final : public Block {
   BLOCK_STYLE style;
 
  public:
-  explicit TextBlock(std::vector<WordData> data, const BLOCK_STYLE style)
-      : wordData(std::move(data)), style(style) {}
+  explicit TextBlock(std::vector<WordData> data, const BLOCK_STYLE style) : wordData(std::move(data)), style(style) {}
   ~TextBlock() override = default;
   void setStyle(const BLOCK_STYLE style) { this->style = style; }
   BLOCK_STYLE getStyle() const { return style; }

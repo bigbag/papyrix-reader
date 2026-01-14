@@ -150,15 +150,16 @@ void OtaUpdateActivity::render() {
   if (state == WAITING_CONFIRMATION) {
     renderer.drawCenteredText(THEME.uiFontId, 200, "New update available!", THEME.primaryTextBlack, BOLD);
     renderer.drawText(THEME.uiFontId, 20, 250, "Current Version: " CROSSPOINT_VERSION, THEME.primaryTextBlack);
-    renderer.drawText(THEME.uiFontId, 20, 270, ("New Version: " + updater.getLatestVersion()).c_str(), THEME.primaryTextBlack);
+    renderer.drawText(THEME.uiFontId, 20, 270, ("New Version: " + updater.getLatestVersion()).c_str(),
+                      THEME.primaryTextBlack);
 
     renderer.drawRect(25, pageHeight - 40, 106, 40, THEME.primaryTextBlack);
     renderer.drawText(THEME.uiFontId, 25 + (105 - renderer.getTextWidth(THEME.uiFontId, "Cancel")) / 2, pageHeight - 35,
                       "Cancel", THEME.primaryTextBlack);
 
     renderer.drawRect(130, pageHeight - 40, 106, 40, THEME.primaryTextBlack);
-    renderer.drawText(THEME.uiFontId, 130 + (105 - renderer.getTextWidth(THEME.uiFontId, "Update")) / 2, pageHeight - 35,
-                      "Update", THEME.primaryTextBlack);
+    renderer.drawText(THEME.uiFontId, 130 + (105 - renderer.getTextWidth(THEME.uiFontId, "Update")) / 2,
+                      pageHeight - 35, "Update", THEME.primaryTextBlack);
     renderer.displayBuffer();
     return;
   }
@@ -166,7 +167,8 @@ void OtaUpdateActivity::render() {
   if (state == UPDATE_IN_PROGRESS) {
     renderer.drawCenteredText(THEME.uiFontId, 310, "Updating...", THEME.primaryTextBlack, BOLD);
     renderer.drawRect(20, 350, pageWidth - 40, 50, THEME.primaryTextBlack);
-    renderer.fillRect(24, 354, static_cast<int>(updaterProgress * static_cast<float>(pageWidth - 44)), 42, THEME.primaryTextBlack);
+    renderer.fillRect(24, 354, static_cast<int>(updaterProgress * static_cast<float>(pageWidth - 44)), 42,
+                      THEME.primaryTextBlack);
     char progressStr[8];
     snprintf(progressStr, sizeof(progressStr), "%d%%", static_cast<int>(updaterProgress * 100));
     renderer.drawCenteredText(THEME.uiFontId, 420, progressStr, THEME.primaryTextBlack);
@@ -191,7 +193,8 @@ void OtaUpdateActivity::render() {
 
   if (state == FINISHED) {
     renderer.drawCenteredText(THEME.uiFontId, 300, "Update complete", THEME.primaryTextBlack, BOLD);
-    renderer.drawCenteredText(THEME.uiFontId, 350, "Press and hold power button to turn back on", THEME.primaryTextBlack);
+    renderer.drawCenteredText(THEME.uiFontId, 350, "Press and hold power button to turn back on",
+                              THEME.primaryTextBlack);
     renderer.displayBuffer();
     state = SHUTTING_DOWN;
     return;

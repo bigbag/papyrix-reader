@@ -1,7 +1,9 @@
 #include "IniParser.h"
+
 #include <SDCardManager.h>
-#include <cstring>
+
 #include <cctype>
+#include <cstring>
 
 bool IniParser::parseFile(const char* path, Callback callback) {
   FsFile file = SdMan.open(path, O_RDONLY);
@@ -137,17 +139,13 @@ bool IniParser::parseBool(const char* value, bool defaultValue) {
   if (!value || !*value) return defaultValue;
 
   // Check true values
-  if (strcasecmp(value, "true") == 0 ||
-      strcasecmp(value, "yes") == 0 ||
-      strcasecmp(value, "on") == 0 ||
+  if (strcasecmp(value, "true") == 0 || strcasecmp(value, "yes") == 0 || strcasecmp(value, "on") == 0 ||
       strcmp(value, "1") == 0) {
     return true;
   }
 
   // Check false values
-  if (strcasecmp(value, "false") == 0 ||
-      strcasecmp(value, "no") == 0 ||
-      strcasecmp(value, "off") == 0 ||
+  if (strcasecmp(value, "false") == 0 || strcasecmp(value, "no") == 0 || strcasecmp(value, "off") == 0 ||
       strcmp(value, "0") == 0) {
     return false;
   }

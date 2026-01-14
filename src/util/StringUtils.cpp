@@ -49,9 +49,7 @@ bool checkFileExtension(const std::string& fileName, const char* extension) {
   return true;
 }
 
-bool isEpubFile(const std::string& path) {
-  return checkFileExtension(path, ".epub");
-}
+bool isEpubFile(const std::string& path) { return checkFileExtension(path, ".epub"); }
 
 bool isXtcFile(const std::string& path) {
   return checkFileExtension(path, ".xtc") || checkFileExtension(path, ".xtch");
@@ -61,8 +59,6 @@ bool isTxtFile(const std::string& path) {
   return checkFileExtension(path, ".txt") || checkFileExtension(path, ".text");
 }
 
-bool isSupportedBookFile(const std::string& path) {
-  return isEpubFile(path) || isXtcFile(path) || isTxtFile(path);
-}
+bool isSupportedBookFile(const std::string& path) { return isEpubFile(path) || isXtcFile(path) || isTxtFile(path); }
 
 }  // namespace StringUtils

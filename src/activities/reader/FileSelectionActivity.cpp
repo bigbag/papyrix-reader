@@ -205,7 +205,8 @@ void FileSelectionActivity::render() const {
   }
 
   const auto pageStartIndex = selectorIndex / PAGE_ITEMS * PAGE_ITEMS;
-  renderer.fillRect(0, 60 + (selectorIndex % PAGE_ITEMS) * THEME.itemHeight - 2, pageWidth - 1, THEME.itemHeight, THEME.selectionFillBlack);
+  renderer.fillRect(0, 60 + (selectorIndex % PAGE_ITEMS) * THEME.itemHeight - 2, pageWidth - 1, THEME.itemHeight,
+                    THEME.selectionFillBlack);
   for (size_t i = pageStartIndex; i < files.size() && i < pageStartIndex + PAGE_ITEMS; i++) {
     auto item = renderer.truncatedText(THEME.uiFontId, files[i].c_str(), renderer.getScreenWidth() - 40);
     const bool textColor = (i == selectorIndex) ? THEME.selectionTextBlack : THEME.primaryTextBlack;

@@ -1,8 +1,9 @@
 #pragma once
 
-#include "Theme.h"
-#include <vector>
 #include <string>
+#include <vector>
+
+#include "Theme.h"
 
 /**
  * Singleton manager for theme loading and application.
@@ -15,7 +16,7 @@
  *   renderer.fillRect(x, y, w, h, THEME.selectionFillBlack);
  */
 class ThemeManager {
-public:
+ public:
   static ThemeManager& instance();
 
   /**
@@ -72,7 +73,7 @@ public:
    */
   const char* currentThemeName() const { return themeName; }
 
-private:
+ private:
   ThemeManager();
   ~ThemeManager() = default;
   ThemeManager(const ThemeManager&) = delete;

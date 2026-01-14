@@ -41,8 +41,8 @@ int clearAllBookCaches() {
     entry.getName(name, sizeof(name));
 
     // Check if this is a book cache directory
-    const bool isBookCache = (strncmp(name, "epub_", 5) == 0) || (strncmp(name, "txt_", 4) == 0) ||
-                             (strncmp(name, "xtc_", 4) == 0);
+    const bool isBookCache =
+        (strncmp(name, "epub_", 5) == 0) || (strncmp(name, "txt_", 4) == 0) || (strncmp(name, "xtc_", 4) == 0);
 
     entry.close();
 

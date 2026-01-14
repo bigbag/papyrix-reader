@@ -3,9 +3,10 @@
 #include <EpdFont.h>
 #include <EpdFontFamily.h>
 #include <GfxRenderer.h>
+
 #include <map>
-#include <vector>
 #include <string>
+#include <vector>
 
 // Forward declaration
 class EpdFontLoader;
@@ -22,7 +23,7 @@ class EpdFontLoader;
  *   renderer.drawText(CUSTOM_FONT_ID, x, y, "Hello");
  */
 class FontManager {
-public:
+ public:
   static FontManager& instance();
 
   /**
@@ -83,7 +84,7 @@ public:
    */
   static int generateFontId(const char* familyName);
 
-private:
+ private:
   FontManager();
   ~FontManager();
   FontManager(const FontManager&) = delete;

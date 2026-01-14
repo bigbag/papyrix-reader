@@ -4,13 +4,12 @@
 #include <HardwareSerial.h>
 #include <WiFiClientSecure.h>
 #include <base64.h>
+
 #include <memory>
 
 #include "config.h"
 
-bool HttpDownloader::fetchUrl(const std::string& url,
-                              std::string& outContent,
-                              const std::string& username,
+bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent, const std::string& username,
                               const std::string& password) {
   const std::unique_ptr<WiFiClientSecure> client(new WiFiClientSecure());
   client->setInsecure();
@@ -40,15 +39,12 @@ bool HttpDownloader::fetchUrl(const std::string& url,
 
   outContent = http.getString().c_str();
   http.end();
-  Serial.printf("[%lu] [HTTP] Fetched %zu bytes\n", millis(),
-                outContent.size());
+  Serial.printf("[%lu] [HTTP] Fetched %zu bytes\n", millis(), outContent.size());
   return true;
 }
 
-bool HttpDownloader::fetchUrlStreaming(const std::string& url,
-                                        ChunkCallback onChunk,
-                                        const std::string& username,
-                                        const std::string& password) {
+bool HttpDownloader::fetchUrlStreaming(const std::string& url, ChunkCallback onChunk, const std::string& username,
+                                       const std::string& password) {
   const std::unique_ptr<WiFiClientSecure> client(new WiFiClientSecure());
   client->setInsecure();
   client->setHandshakeTimeout(30);
@@ -122,11 +118,9 @@ bool HttpDownloader::fetchUrlStreaming(const std::string& url,
   return true;
 }
 
-HttpDownloader::DownloadError HttpDownloader::downloadToFile(
-    const std::string& url, const std::string& destPath,
-    ProgressCallback progress,
-    const std::string& username,
-    const std::string& password) {
+HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
+                                                             ProgressCallback progress, const std::string& username,
+                                                             const std::string& password) {
   const std::unique_ptr<WiFiClientSecure> client(new WiFiClientSecure());
   client->setInsecure();
   client->setHandshakeTimeout(30);  // 30 seconds for slow SSL handshakes
@@ -154,8 +148,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(
   }
 
   const size_t contentLength = http.getSize();
-  Serial.printf("[%lu] [HTTP] Content-Length: %zu\n", millis(),
-                contentLength);
+  Serial.printf("[%lu] [HTTP] Content-Length: %zu\n", millis(), contentLength);
 
   if (SdMan.exists(destPath.c_str())) {
     SdMan.remove(destPath.c_str());
@@ -185,8 +178,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(
   constexpr unsigned long DOWNLOAD_TIMEOUT_MS = 30000;
   unsigned long lastProgressTime = millis();
 
-  while (http.connected() &&
-         (contentLength == 0 || downloaded < contentLength)) {
+  while (http.connected() && (contentLength == 0 || downloaded < contentLength)) {
     const size_t available = stream->available();
     if (available == 0) {
       // Check for timeout
@@ -203,8 +195,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(
 
     lastProgressTime = millis();  // Reset timeout on progress
 
-    const size_t toRead =
-        available < DOWNLOAD_CHUNK_SIZE ? available : DOWNLOAD_CHUNK_SIZE;
+    const size_t toRead = available < DOWNLOAD_CHUNK_SIZE ? available : DOWNLOAD_CHUNK_SIZE;
     const size_t bytesRead = stream->readBytes(buffer, toRead);
 
     if (bytesRead == 0) {
@@ -213,8 +204,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(
 
     const size_t written = file.write(buffer, bytesRead);
     if (written != bytesRead) {
-      Serial.printf("[%lu] [HTTP] Write failed: wrote %zu of %zu bytes\n",
-                    millis(), written, bytesRead);
+      Serial.printf("[%lu] [HTTP] Write failed: wrote %zu of %zu bytes\n", millis(), written, bytesRead);
       file.close();
       SdMan.remove(destPath.c_str());
       http.end();
@@ -233,9 +223,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(
   Serial.printf("[%lu] [HTTP] Downloaded %zu bytes\n", millis(), downloaded);
 
   if (contentLength > 0 && downloaded != contentLength) {
-    Serial.printf(
-        "[%lu] [HTTP] Size mismatch: got %zu, expected %zu\n", millis(),
-        downloaded, contentLength);
+    Serial.printf("[%lu] [HTTP] Size mismatch: got %zu, expected %zu\n", millis(), downloaded, contentLength);
     SdMan.remove(destPath.c_str());
     return HTTP_ERROR;
   }

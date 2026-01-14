@@ -339,10 +339,9 @@ void TxtReaderActivity::renderPage() {
       if (lineEnd > lineStart) {
         size_t renderLen = lineEnd - lineStart;
         // Trim trailing whitespace for rendering
-        while (renderLen > 0 && (buffer[lineStart + renderLen - 1] == ' ' ||
-                                 buffer[lineStart + renderLen - 1] == '\t' ||
-                                 buffer[lineStart + renderLen - 1] == '\r' ||
-                                 buffer[lineStart + renderLen - 1] == '\n')) {
+        while (renderLen > 0 &&
+               (buffer[lineStart + renderLen - 1] == ' ' || buffer[lineStart + renderLen - 1] == '\t' ||
+                buffer[lineStart + renderLen - 1] == '\r' || buffer[lineStart + renderLen - 1] == '\n')) {
           renderLen--;
         }
 
@@ -634,9 +633,12 @@ bool TxtReaderActivity::buildPageIndex() {
         // Check for incomplete UTF-8 at buffer boundary
         uint8_t firstByte = buffer[lineEndInBuffer];
         size_t expectedCharLen = 1;
-        if ((firstByte & 0xE0) == 0xC0) expectedCharLen = 2;
-        else if ((firstByte & 0xF0) == 0xE0) expectedCharLen = 3;
-        else if ((firstByte & 0xF8) == 0xF0) expectedCharLen = 4;
+        if ((firstByte & 0xE0) == 0xC0)
+          expectedCharLen = 2;
+        else if ((firstByte & 0xF0) == 0xE0)
+          expectedCharLen = 3;
+        else if ((firstByte & 0xF8) == 0xF0)
+          expectedCharLen = 4;
 
         if (lineEndInBuffer + expectedCharLen > bytesRead) {
           // Incomplete UTF-8 char - will handle in next chunk read

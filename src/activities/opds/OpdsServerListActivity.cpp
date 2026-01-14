@@ -1,8 +1,8 @@
 #include "OpdsServerListActivity.h"
 
-#include <algorithm>
-
 #include <GfxRenderer.h>
+
+#include <algorithm>
 
 #include "MappedInputManager.h"
 #include "ThemeManager.h"
@@ -85,7 +85,8 @@ void OpdsServerListActivity::render() const {
   }
 
   // Draw selection highlight and list
-  renderer.fillRect(0, 60 + selectedIndex * THEME.itemHeight - 2, pageWidth - 1, THEME.itemHeight, THEME.selectionFillBlack);
+  renderer.fillRect(0, 60 + selectedIndex * THEME.itemHeight - 2, pageWidth - 1, THEME.itemHeight,
+                    THEME.selectionFillBlack);
   for (size_t i = 0; i < serverNames.size(); i++) {
     const int itemY = 60 + static_cast<int>(i) * THEME.itemHeight;
     const bool isSelected = (static_cast<int>(i) == selectedIndex);

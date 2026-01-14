@@ -277,8 +277,8 @@ void CalibreConnectionActivity::render() const {
       renderError();
       break;
     case CalibreActivityState::STARTING_SERVER:
-      renderer.drawCenteredText(THEME.readerFontId, renderer.getScreenHeight() / 2 - 20,
-                                "Starting server...", THEME.primaryTextBlack, BOLD);
+      renderer.drawCenteredText(THEME.readerFontId, renderer.getScreenHeight() / 2 - 20, "Starting server...",
+                                THEME.primaryTextBlack, BOLD);
       break;
     default:
       break;
@@ -293,13 +293,13 @@ void CalibreConnectionActivity::renderWaiting() const {
 
   renderer.drawCenteredText(THEME.readerFontId, startY, "Calibre Wireless", THEME.primaryTextBlack, BOLD);
 
-  renderer.drawCenteredText(THEME.uiFontId, startY + LINE_SPACING * 2, "Waiting for Calibre...",
-                            THEME.primaryTextBlack, REGULAR);
+  renderer.drawCenteredText(THEME.uiFontId, startY + LINE_SPACING * 2, "Waiting for Calibre...", THEME.primaryTextBlack,
+                            REGULAR);
 
   // Show network info
   std::string networkInfo = "Network: " + connectedSSID;
-  renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 4, networkInfo.c_str(),
-                            THEME.primaryTextBlack, REGULAR);
+  renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 4, networkInfo.c_str(), THEME.primaryTextBlack,
+                            REGULAR);
 
   // Show IP and port
   uint16_t port = calibreServer ? calibreServer->getTcpPort() : 9090;
@@ -308,22 +308,21 @@ void CalibreConnectionActivity::renderWaiting() const {
   renderer.drawCenteredText(THEME.uiFontId, startY + LINE_SPACING * 5, ipPort, THEME.primaryTextBlack, BOLD);
 
   // Instructions
-  renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 7,
-                            "In Calibre, click:", THEME.primaryTextBlack, REGULAR);
-  renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 8,
-                            "Connect/Share > Start wireless", THEME.primaryTextBlack, REGULAR);
-  renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 9,
-                            "device connection", THEME.primaryTextBlack, REGULAR);
+  renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 7, "In Calibre, click:", THEME.primaryTextBlack,
+                            REGULAR);
+  renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 8, "Connect/Share > Start wireless",
+                            THEME.primaryTextBlack, REGULAR);
+  renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 9, "device connection", THEME.primaryTextBlack,
+                            REGULAR);
 
   // Device name from settings
   std::string deviceName = std::string("Device: ") + CALIBRE_SETTINGS.getDeviceName();
-  renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 11, deviceName.c_str(),
-                            THEME.primaryTextBlack, REGULAR);
+  renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 11, deviceName.c_str(), THEME.primaryTextBlack,
+                            REGULAR);
 
   // Button hints
   const auto labels = mappedInput.mapLabels("Exit", "", "", "");
-  renderer.drawButtonHints(THEME.uiFontId, labels.btn1, labels.btn2, labels.btn3, labels.btn4,
-                           THEME.primaryTextBlack);
+  renderer.drawButtonHints(THEME.uiFontId, labels.btn1, labels.btn2, labels.btn3, labels.btn4, THEME.primaryTextBlack);
 }
 
 void CalibreConnectionActivity::renderConnected() const {
@@ -332,20 +331,19 @@ void CalibreConnectionActivity::renderConnected() const {
 
   renderer.drawCenteredText(THEME.readerFontId, 40, "Calibre Wireless", THEME.primaryTextBlack, BOLD);
 
-  renderer.drawCenteredText(THEME.uiFontId, startY + LINE_SPACING, "Connected to Calibre",
-                            THEME.primaryTextBlack, BOLD);
+  renderer.drawCenteredText(THEME.uiFontId, startY + LINE_SPACING, "Connected to Calibre", THEME.primaryTextBlack,
+                            BOLD);
 
-  renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 3, currentStatus.c_str(),
+  renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 3, currentStatus.c_str(), THEME.primaryTextBlack,
+                            REGULAR);
+
+  renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 5, "You can now send books from Calibre.",
+                            THEME.primaryTextBlack, REGULAR);
+  renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 6, "Right-click a book > Send to device",
                             THEME.primaryTextBlack, REGULAR);
 
-  renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 5,
-                            "You can now send books from Calibre.", THEME.primaryTextBlack, REGULAR);
-  renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 6,
-                            "Right-click a book > Send to device", THEME.primaryTextBlack, REGULAR);
-
   const auto labels = mappedInput.mapLabels("Exit", "", "", "");
-  renderer.drawButtonHints(THEME.uiFontId, labels.btn1, labels.btn2, labels.btn3, labels.btn4,
-                           THEME.primaryTextBlack);
+  renderer.drawButtonHints(THEME.uiFontId, labels.btn1, labels.btn2, labels.btn3, labels.btn4, THEME.primaryTextBlack);
 }
 
 void CalibreConnectionActivity::renderReceiving() const {
@@ -354,8 +352,8 @@ void CalibreConnectionActivity::renderReceiving() const {
 
   renderer.drawCenteredText(THEME.readerFontId, 40, "Calibre Wireless", THEME.primaryTextBlack, BOLD);
 
-  renderer.drawCenteredText(THEME.uiFontId, startY + LINE_SPACING, "Receiving book...",
-                            THEME.primaryTextBlack, REGULAR);
+  renderer.drawCenteredText(THEME.uiFontId, startY + LINE_SPACING, "Receiving book...", THEME.primaryTextBlack,
+                            REGULAR);
 
   // Book title (truncate if too long)
   std::string displayTitle = currentBookTitle;
@@ -363,8 +361,8 @@ void CalibreConnectionActivity::renderReceiving() const {
     displayTitle.resize(32);
     displayTitle += "...";
   }
-  renderer.drawCenteredText(THEME.uiFontId, startY + LINE_SPACING * 2, displayTitle.c_str(),
-                            THEME.primaryTextBlack, BOLD);
+  renderer.drawCenteredText(THEME.uiFontId, startY + LINE_SPACING * 2, displayTitle.c_str(), THEME.primaryTextBlack,
+                            BOLD);
 
   // Progress bar
   const int pageWidth = renderer.getScreenWidth();
@@ -388,20 +386,17 @@ void CalibreConnectionActivity::renderReceiving() const {
   int percent = currentTotal > 0 ? static_cast<int>((static_cast<uint64_t>(currentProgress) * 100) / currentTotal) : 0;
   char progressText[32];
   snprintf(progressText, sizeof(progressText), "%d%%", percent);
-  renderer.drawCenteredText(THEME.smallFontId, barY + barHeight + 10, progressText,
-                            THEME.primaryTextBlack, REGULAR);
+  renderer.drawCenteredText(THEME.smallFontId, barY + barHeight + 10, progressText, THEME.primaryTextBlack, REGULAR);
 
   // Size info
   char sizeText[64];
   if (currentTotal > 1024 * 1024) {
-    snprintf(sizeText, sizeof(sizeText), "%.1f / %.1f MB",
-             currentProgress / (1024.0 * 1024.0), currentTotal / (1024.0 * 1024.0));
+    snprintf(sizeText, sizeof(sizeText), "%.1f / %.1f MB", currentProgress / (1024.0 * 1024.0),
+             currentTotal / (1024.0 * 1024.0));
   } else {
-    snprintf(sizeText, sizeof(sizeText), "%.1f / %.1f KB",
-             currentProgress / 1024.0, currentTotal / 1024.0);
+    snprintf(sizeText, sizeof(sizeText), "%.1f / %.1f KB", currentProgress / 1024.0, currentTotal / 1024.0);
   }
-  renderer.drawCenteredText(THEME.smallFontId, barY + barHeight + 35, sizeText,
-                            THEME.primaryTextBlack, REGULAR);
+  renderer.drawCenteredText(THEME.smallFontId, barY + barHeight + 35, sizeText, THEME.primaryTextBlack, REGULAR);
 }
 
 void CalibreConnectionActivity::renderComplete() const {
@@ -417,8 +412,8 @@ void CalibreConnectionActivity::renderComplete() const {
     displayTitle.resize(32);
     displayTitle += "...";
   }
-  renderer.drawCenteredText(THEME.smallFontId, centerY + LINE_SPACING, displayTitle.c_str(),
-                            THEME.primaryTextBlack, REGULAR);
+  renderer.drawCenteredText(THEME.smallFontId, centerY + LINE_SPACING, displayTitle.c_str(), THEME.primaryTextBlack,
+                            REGULAR);
 }
 
 void CalibreConnectionActivity::renderError() const {
@@ -428,10 +423,8 @@ void CalibreConnectionActivity::renderError() const {
 
   renderer.drawCenteredText(THEME.uiFontId, centerY, "Error", THEME.primaryTextBlack, BOLD);
 
-  renderer.drawCenteredText(THEME.smallFontId, centerY + 32, currentStatus.c_str(),
-                            THEME.primaryTextBlack, REGULAR);
+  renderer.drawCenteredText(THEME.smallFontId, centerY + 32, currentStatus.c_str(), THEME.primaryTextBlack, REGULAR);
 
   const auto labels = mappedInput.mapLabels("« Back", "", "", "");
-  renderer.drawButtonHints(THEME.uiFontId, labels.btn1, labels.btn2, labels.btn3, labels.btn4,
-                           THEME.primaryTextBlack);
+  renderer.drawButtonHints(THEME.uiFontId, labels.btn1, labels.btn2, labels.btn3, labels.btn4, THEME.primaryTextBlack);
 }

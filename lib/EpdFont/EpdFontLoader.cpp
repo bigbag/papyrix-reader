@@ -1,5 +1,7 @@
 #include "EpdFontLoader.h"
+
 #include <SDCardManager.h>
+
 #include <cstring>
 
 EpdFontLoader::LoadResult EpdFontLoader::loadFromFile(const char* path) {
@@ -42,8 +44,8 @@ EpdFontLoader::LoadResult EpdFontLoader::loadFromFile(const char* path) {
   }
 
   Serial.printf("[FONTLOAD] Font: advanceY=%d, ascender=%d, descender=%d, intervals=%u, glyphs=%u, bitmap=%u\n",
-                metrics.advanceY, metrics.ascender, metrics.descender,
-                metrics.intervalCount, metrics.glyphCount, metrics.bitmapSize);
+                metrics.advanceY, metrics.ascender, metrics.descender, metrics.intervalCount, metrics.glyphCount,
+                metrics.bitmapSize);
 
   // Validate sizes (sanity check for memory)
   if (metrics.intervalCount > 10000 || metrics.glyphCount > 100000 || metrics.bitmapSize > 2000000) {
@@ -91,8 +93,8 @@ EpdFontLoader::LoadResult EpdFontLoader::loadFromFile(const char* path) {
     result.glyphs[i].left = static_cast<int16_t>(glyphData[4] | (glyphData[5] << 8));
     result.glyphs[i].top = static_cast<int16_t>(glyphData[6] | (glyphData[7] << 8));
     result.glyphs[i].dataLength = static_cast<uint16_t>(glyphData[8] | (glyphData[9] << 8));
-    result.glyphs[i].dataOffset = static_cast<uint32_t>(glyphData[10] | (glyphData[11] << 8) |
-                                                        (glyphData[12] << 16) | (glyphData[13] << 24));
+    result.glyphs[i].dataOffset =
+        static_cast<uint32_t>(glyphData[10] | (glyphData[11] << 8) | (glyphData[12] << 16) | (glyphData[13] << 24));
   }
 
   // Read bitmap

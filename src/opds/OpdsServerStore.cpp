@@ -2,6 +2,7 @@
 
 #include <HardwareSerial.h>
 #include <SDCardManager.h>
+
 #include <cstring>
 
 #include "IniParser.h"
@@ -54,32 +55,33 @@ bool OpdsServerStore::loadFromFile() {
   OpdsServerConfig current;
   std::string currentSection;
 
-  const bool parsed = IniParser::parseFile(CONFIG_OPDS_FILE, [&](const char* section, const char* key, const char* value) {
-    // Check if we're in a new section
-    if (currentSection != section) {
-      // Save previous server if it had a URL
-      if (!current.url.empty() && servers.size() < MAX_SERVERS) {
-        servers.push_back(current);
-      }
-      // Start new server config
-      current = OpdsServerConfig();
-      if (strlen(section) < MAX_NAME_LENGTH) {
-        current.name = section;
-      }
-      currentSection = section;
-    }
+  const bool parsed =
+      IniParser::parseFile(CONFIG_OPDS_FILE, [&](const char* section, const char* key, const char* value) {
+        // Check if we're in a new section
+        if (currentSection != section) {
+          // Save previous server if it had a URL
+          if (!current.url.empty() && servers.size() < MAX_SERVERS) {
+            servers.push_back(current);
+          }
+          // Start new server config
+          current = OpdsServerConfig();
+          if (strlen(section) < MAX_NAME_LENGTH) {
+            current.name = section;
+          }
+          currentSection = section;
+        }
 
-    // Parse key-value pairs with length limits
-    if (strcmp(key, "url") == 0 && strlen(value) < MAX_URL_LENGTH) {
-      current.url = value;
-    } else if (strcmp(key, "username") == 0 && strlen(value) < MAX_CREDENTIAL_LENGTH) {
-      current.username = value;
-    } else if (strcmp(key, "password") == 0 && strlen(value) < MAX_CREDENTIAL_LENGTH) {
-      current.password = value;
-    }
+        // Parse key-value pairs with length limits
+        if (strcmp(key, "url") == 0 && strlen(value) < MAX_URL_LENGTH) {
+          current.url = value;
+        } else if (strcmp(key, "username") == 0 && strlen(value) < MAX_CREDENTIAL_LENGTH) {
+          current.username = value;
+        } else if (strcmp(key, "password") == 0 && strlen(value) < MAX_CREDENTIAL_LENGTH) {
+          current.password = value;
+        }
 
-    return servers.size() < MAX_SERVERS;  // Continue parsing if under limit
-  });
+        return servers.size() < MAX_SERVERS;  // Continue parsing if under limit
+      });
 
   // Don't forget the last server
   if (!current.url.empty() && servers.size() < MAX_SERVERS) {

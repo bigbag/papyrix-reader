@@ -2,8 +2,8 @@
 #include <cstdint>
 #include <iosfwd>
 
-#include "config.h"
 #include "ThemeManager.h"
+#include "config.h"
 
 class CrossPointSettings {
  private:
@@ -86,9 +86,7 @@ class CrossPointSettings {
   // Get singleton instance
   static CrossPointSettings& getInstance() { return instance; }
 
-  uint16_t getPowerButtonDuration() const {
-    return (shortPwrBtn == PWRBTN_SLEEP) ? 10 : 400;
-  }
+  uint16_t getPowerButtonDuration() const { return (shortPwrBtn == PWRBTN_SLEEP) ? 10 : 400; }
 
   uint32_t getAutoSleepTimeoutMs() const {
     switch (autoSleepMinutes) {

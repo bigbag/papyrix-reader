@@ -205,8 +205,8 @@ void XtcReaderActivity::renderPage() {
   // Allocate page buffer
   uint8_t* pageBuffer = static_cast<uint8_t*>(malloc(bufferSize));
   if (!pageBuffer) {
-    Serial.printf("[%lu] [XTR] Failed to allocate page buffer (%zu bytes, free heap: %d)\n",
-                  millis(), bufferSize, ESP.getFreeHeap());
+    Serial.printf("[%lu] [XTR] Failed to allocate page buffer (%zu bytes, free heap: %d)\n", millis(), bufferSize,
+                  ESP.getFreeHeap());
     renderer.clearScreen();
     renderer.drawCenteredText(UI_FONT_ID, 300, "Memory error", true, BOLD);
     renderer.displayBuffer();

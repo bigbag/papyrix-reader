@@ -11,7 +11,6 @@
 #include "html/HomePageHtml.generated.h"
 #include "util/StringUtils.h"
 
-
 // Static variables for upload handling (declared early so stop() can clear them)
 static FsFile uploadFile;
 static String uploadFileName;

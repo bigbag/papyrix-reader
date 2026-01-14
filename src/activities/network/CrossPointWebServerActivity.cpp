@@ -346,7 +346,8 @@ void CrossPointWebServerActivity::render() const {
   } else if (state == WebServerActivityState::AP_STARTING) {
     renderer.clearScreen(THEME.backgroundColor);
     const auto pageHeight = renderer.getScreenHeight();
-    renderer.drawCenteredText(THEME.readerFontId, pageHeight / 2 - 20, "Starting Hotspot...", THEME.primaryTextBlack, BOLD);
+    renderer.drawCenteredText(THEME.readerFontId, pageHeight / 2 - 20, "Starting Hotspot...", THEME.primaryTextBlack,
+                              BOLD);
     renderer.displayBuffer();
   }
 }
@@ -400,16 +401,19 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     startY += 6 * 29 + 3 * LINE_SPACING;
     // Show primary URL (hostname)
     std::string hostnameUrl = std::string("http://") + AP_HOSTNAME + ".local/";
-    renderer.drawCenteredText(THEME.uiFontId, startY + LINE_SPACING * 3, hostnameUrl.c_str(), THEME.primaryTextBlack, BOLD);
+    renderer.drawCenteredText(THEME.uiFontId, startY + LINE_SPACING * 3, hostnameUrl.c_str(), THEME.primaryTextBlack,
+                              BOLD);
 
     // Show IP address as fallback
     std::string ipUrl = "or http://" + connectedIP + "/";
-    renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 4, ipUrl.c_str(), THEME.primaryTextBlack, REGULAR);
-    renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 5, "Open this URL in your browser", THEME.primaryTextBlack, REGULAR);
+    renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 4, ipUrl.c_str(), THEME.primaryTextBlack,
+                              REGULAR);
+    renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 5, "Open this URL in your browser",
+                              THEME.primaryTextBlack, REGULAR);
 
     // Show QR code for URL
-    renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 6, "or scan QR code with your phone:", THEME.primaryTextBlack,
-                              REGULAR);
+    renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 6,
+                              "or scan QR code with your phone:", THEME.primaryTextBlack, REGULAR);
     drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 7, hostnameUrl);
   } else {
     // STA mode display (original behavior)
@@ -430,14 +434,16 @@ void CrossPointWebServerActivity::renderServerRunning() const {
 
     // Also show hostname URL
     std::string hostnameUrl = std::string("or http://") + AP_HOSTNAME + ".local/";
-    renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 3, hostnameUrl.c_str(), THEME.primaryTextBlack, REGULAR);
+    renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 3, hostnameUrl.c_str(), THEME.primaryTextBlack,
+                              REGULAR);
 
-    renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 4, "Open this URL in your browser", THEME.primaryTextBlack, REGULAR);
+    renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 4, "Open this URL in your browser",
+                              THEME.primaryTextBlack, REGULAR);
 
     // Show QR code for URL
     drawQRCode(renderer, (480 - 6 * 33) / 2, startY + LINE_SPACING * 6, webInfo);
-    renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 5, "or scan QR code with your phone:", THEME.primaryTextBlack,
-                              REGULAR);
+    renderer.drawCenteredText(THEME.smallFontId, startY + LINE_SPACING * 5,
+                              "or scan QR code with your phone:", THEME.primaryTextBlack, REGULAR);
   }
 
   const auto labels = mappedInput.mapLabels("Exit", "", "", "");

@@ -13,7 +13,7 @@
  * Book metadata for sending to Calibre.
  */
 struct CalibreBookInfo {
-  std::string lpath;    // Logical path on device (e.g., "Books/Title.epub")
+  std::string lpath;  // Logical path on device (e.g., "Books/Title.epub")
   std::string title;
   std::string author;
   size_t size;

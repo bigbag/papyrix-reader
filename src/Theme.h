@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cstring>
+
 #include "config.h"
 
 // Front button layout options
@@ -19,21 +20,21 @@ enum FrontButtonLayout { FRONT_BCLR = 0, FRONT_LRBC = 1 };
  */
 struct Theme {
   // Theme metadata
-  char displayName[32];       // Human-readable name for settings UI
+  char displayName[32];  // Human-readable name for settings UI
 
   // Color scheme
-  bool invertedMode;          // Global dark/light mode (true = dark background)
+  bool invertedMode;  // Global dark/light mode (true = dark background)
 
   // Selection styles
-  bool selectionFillBlack;    // Selection highlight fill color
-  bool selectionTextBlack;    // Text color on selection
+  bool selectionFillBlack;  // Selection highlight fill color
+  bool selectionTextBlack;  // Text color on selection
 
   // Text styles
-  bool primaryTextBlack;      // Normal text color
-  bool secondaryTextBlack;    // Secondary/dimmed text color
+  bool primaryTextBlack;    // Normal text color
+  bool secondaryTextBlack;  // Secondary/dimmed text color
 
   // Background
-  uint8_t backgroundColor;    // Screen clear color (0x00 = black, 0xFF = white)
+  uint8_t backgroundColor;  // Screen clear color (0x00 = black, 0xFF = white)
 
   // Layout margins and spacing
   uint8_t screenMarginTop;

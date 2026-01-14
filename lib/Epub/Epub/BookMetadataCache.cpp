@@ -150,7 +150,8 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   // Check if ZIP has too many entries (would exhaust RAM)
   constexpr uint16_t MAX_ZIP_ENTRIES = 500;
   if (zip.getTotalEntries() > MAX_ZIP_ENTRIES) {
-    Serial.printf("[%lu] [BMC] EPUB too complex (%d files, max %d)\n", millis(), zip.getTotalEntries(), MAX_ZIP_ENTRIES);
+    Serial.printf("[%lu] [BMC] EPUB too complex (%d files, max %d)\n", millis(), zip.getTotalEntries(),
+                  MAX_ZIP_ENTRIES);
     bookFile.close();
     spineFile.close();
     tocFile.close();

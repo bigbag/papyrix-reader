@@ -1,12 +1,10 @@
 #pragma once
 #include <expat.h>
+
 #include <string>
 #include <vector>
 
-enum class OpdsEntryType {
-  NAVIGATION,
-  BOOK
-};
+enum class OpdsEntryType { NAVIGATION, BOOK };
 
 struct OpdsEntry {
   OpdsEntryType type = OpdsEntryType::NAVIGATION;
@@ -42,19 +40,17 @@ class OpdsParser {
   void clear();
 
  private:
-  static void XMLCALL startElement(void* userData, const XML_Char* name,
-                                   const XML_Char** atts);
+  static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** atts);
   static void XMLCALL endElement(void* userData, const XML_Char* name);
-  static void XMLCALL characterData(void* userData, const XML_Char* s,
-                                    int len);
+  static void XMLCALL characterData(void* userData, const XML_Char* s, int len);
   static const char* findAttribute(const XML_Char** atts, const char* name);
 
   XML_Parser parser = nullptr;
   std::vector<OpdsEntry> entries;
   OpdsEntry currentEntry;
   std::string currentText;
-  std::string searchTemplate;   // Direct search URL template (atom+xml)
-  std::string openSearchUrl;    // OpenSearch description URL
+  std::string searchTemplate;  // Direct search URL template (atom+xml)
+  std::string openSearchUrl;   // OpenSearch description URL
   bool inEntry = false;
   bool inTitle = false;
   bool inAuthor = false;

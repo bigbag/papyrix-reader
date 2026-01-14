@@ -111,7 +111,7 @@ void WifiSelectionActivity::processWifiScanResults() {
 
   if (scanResult == WIFI_SCAN_FAILED) {
     state = WifiSelectionState::NETWORK_LIST;
-        updateRequired = true;
+    updateRequired = true;
     return;
   }
 
@@ -160,7 +160,7 @@ void WifiSelectionActivity::processWifiScanResults() {
   WiFi.scanDelete();
   state = WifiSelectionState::NETWORK_LIST;
   selectedNetworkIndex = 0;
-    updateRequired = true;
+  updateRequired = true;
 }
 
 void WifiSelectionActivity::selectNetwork(const int index) {
@@ -203,7 +203,7 @@ void WifiSelectionActivity::selectNetwork(const int index) {
         },
         [this] {
           state = WifiSelectionState::NETWORK_LIST;
-                    updateRequired = true;
+          updateRequired = true;
           exitActivity();
         }));
     updateRequired = true;
@@ -249,7 +249,7 @@ void WifiSelectionActivity::checkConnectionStatus() {
     if (!usedSavedPassword && !enteredPassword.empty()) {
       state = WifiSelectionState::SAVE_PROMPT;
       savePromptSelection = 0;  // Default to "Yes"
-            updateRequired = true;
+      updateRequired = true;
     } else {
       // Using saved password or open network - complete immediately
       Serial.printf("[%lu] [WIFI] Connected with saved/open credentials, completing immediately\n", millis());
@@ -264,7 +264,7 @@ void WifiSelectionActivity::checkConnectionStatus() {
       connectionError = "Network not found";
     }
     state = WifiSelectionState::CONNECTION_FAILED;
-        updateRequired = true;
+    updateRequired = true;
     return;
   }
 
@@ -273,7 +273,7 @@ void WifiSelectionActivity::checkConnectionStatus() {
     WiFi.disconnect();
     connectionError = "Connection timeout";
     state = WifiSelectionState::CONNECTION_FAILED;
-        updateRequired = true;
+    updateRequired = true;
     return;
   }
 }
@@ -361,11 +361,11 @@ void WifiSelectionActivity::loop() {
       }
       // Go back to network list
       state = WifiSelectionState::NETWORK_LIST;
-            updateRequired = true;
+      updateRequired = true;
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       // Skip forgetting, go back to network list
       state = WifiSelectionState::NETWORK_LIST;
-            updateRequired = true;
+      updateRequired = true;
     }
     return;
   }
@@ -384,11 +384,11 @@ void WifiSelectionActivity::loop() {
       // If we used saved credentials, offer to forget the network
       if (usedSavedPassword) {
         state = WifiSelectionState::FORGET_PROMPT;
-                forgetPromptSelection = 0;  // Default to "Yes"
+        forgetPromptSelection = 0;  // Default to "Yes"
       } else {
         // Go back to network list on failure
         state = WifiSelectionState::NETWORK_LIST;
-              }
+      }
       updateRequired = true;
       return;
     }
@@ -513,7 +513,8 @@ void WifiSelectionActivity::renderNetworkList() const {
     const auto height = renderer.getLineHeight(THEME.uiFontId);
     const auto top = (pageHeight - height) / 2;
     renderer.drawCenteredText(THEME.uiFontId, top, "No networks found", THEME.primaryTextBlack, REGULAR);
-    renderer.drawCenteredText(THEME.smallFontId, top + height + 10, "Press OK to scan again", THEME.primaryTextBlack, REGULAR);
+    renderer.drawCenteredText(THEME.smallFontId, top + height + 10, "Press OK to scan again", THEME.primaryTextBlack,
+                              REGULAR);
   } else {
     // Calculate how many networks we can display
     constexpr int startY = 60;
@@ -564,7 +565,8 @@ void WifiSelectionActivity::renderNetworkList() const {
       renderer.drawText(THEME.smallFontId, pageWidth - 15, startY - 10, "^", THEME.primaryTextBlack);
     }
     if (scrollOffset + maxVisibleNetworks < static_cast<int>(networks.size())) {
-      renderer.drawText(THEME.smallFontId, pageWidth - 15, startY + maxVisibleNetworks * lineHeight, "v", THEME.primaryTextBlack);
+      renderer.drawText(THEME.smallFontId, pageWidth - 15, startY + maxVisibleNetworks * lineHeight, "v",
+                        THEME.primaryTextBlack);
     }
 
     // Show network count
@@ -613,7 +615,8 @@ void WifiSelectionActivity::renderConnected() const {
   const std::string ipInfo = "IP Address: " + connectedIP;
   renderer.drawCenteredText(THEME.uiFontId, top + 40, ipInfo.c_str(), THEME.primaryTextBlack, REGULAR);
 
-  renderer.drawCenteredText(THEME.smallFontId, pageHeight - 30, "Press any button to continue", THEME.primaryTextBlack, REGULAR);
+  renderer.drawCenteredText(THEME.smallFontId, pageHeight - 30, "Press any button to continue", THEME.primaryTextBlack,
+                            REGULAR);
 }
 
 void WifiSelectionActivity::renderSavePrompt() const {
@@ -653,7 +656,8 @@ void WifiSelectionActivity::renderSavePrompt() const {
     renderer.drawText(THEME.uiFontId, startX + buttonWidth + buttonSpacing + 4, buttonY, "No", THEME.primaryTextBlack);
   }
 
-  renderer.drawCenteredText(THEME.smallFontId, pageHeight - 30, "LEFT/RIGHT: Select | OK: Confirm", THEME.primaryTextBlack, REGULAR);
+  renderer.drawCenteredText(THEME.smallFontId, pageHeight - 30, "LEFT/RIGHT: Select | OK: Confirm",
+                            THEME.primaryTextBlack, REGULAR);
 }
 
 void WifiSelectionActivity::renderConnectionFailed() const {
@@ -663,7 +667,8 @@ void WifiSelectionActivity::renderConnectionFailed() const {
 
   renderer.drawCenteredText(THEME.readerFontId, top - 20, "Connection Failed", THEME.primaryTextBlack, BOLD);
   renderer.drawCenteredText(THEME.uiFontId, top + 20, connectionError.c_str(), THEME.primaryTextBlack, REGULAR);
-  renderer.drawCenteredText(THEME.smallFontId, pageHeight - 30, "Press any button to continue", THEME.primaryTextBlack, REGULAR);
+  renderer.drawCenteredText(THEME.smallFontId, pageHeight - 30, "Press any button to continue", THEME.primaryTextBlack,
+                            REGULAR);
 }
 
 void WifiSelectionActivity::renderForgetPrompt() const {
@@ -703,5 +708,6 @@ void WifiSelectionActivity::renderForgetPrompt() const {
     renderer.drawText(THEME.uiFontId, startX + buttonWidth + buttonSpacing + 4, buttonY, "No", THEME.primaryTextBlack);
   }
 
-  renderer.drawCenteredText(THEME.smallFontId, pageHeight - 30, "LEFT/RIGHT: Select | OK: Confirm", THEME.primaryTextBlack, REGULAR);
+  renderer.drawCenteredText(THEME.smallFontId, pageHeight - 30, "LEFT/RIGHT: Select | OK: Confirm",
+                            THEME.primaryTextBlack, REGULAR);
 }

@@ -3,6 +3,7 @@
 #include <Epub.h>
 #include <GfxRenderer.h>
 #include <SDCardManager.h>
+
 #include <vector>
 
 #include "CrossPointSettings.h"
@@ -152,7 +153,7 @@ void HomeActivity::render() const {
   ScreenComponents::drawBattery(renderer, batteryX, batteryY);
 
   // Book card constants - larger ratio for more prominent display
-  const int cardWidth = pageWidth * 3 / 5;  // 288px on 480px screen (60%)
+  const int cardWidth = pageWidth * 3 / 5;     // 288px on 480px screen (60%)
   const int cardHeight = pageHeight / 2 + 50;  // 450px on 800px screen
   const int cardX = (pageWidth - cardWidth) / 2;
   constexpr int cardY = 50;  // Below "Papyrix Reader" title
@@ -181,7 +182,8 @@ void HomeActivity::render() const {
   renderer.fillRect(bookmarkX, bookmarkY, bookmarkWidth, bookmarkHeight - 10, bookmarkColor);
   // Draw triangular notch using two small rectangles to simulate
   renderer.fillRect(bookmarkX, bookmarkY + bookmarkHeight - 10, bookmarkWidth / 2 - 2, 10, bookmarkColor);
-  renderer.fillRect(bookmarkX + bookmarkWidth / 2 + 2, bookmarkY + bookmarkHeight - 10, bookmarkWidth / 2 - 2, 10, bookmarkColor);
+  renderer.fillRect(bookmarkX + bookmarkWidth / 2 + 2, bookmarkY + bookmarkHeight - 10, bookmarkWidth / 2 - 2, 10,
+                    bookmarkColor);
 
   // Card text color (already calculated based on selection state)
   const bool textOnCard = cardTextColor;
@@ -251,7 +253,7 @@ void HomeActivity::render() const {
     }
 
     // Vertically center within card (leaving space for bookmark at top and "Continue Reading" at bottom)
-    const int textAreaTop = cardY + 70;  // Below bookmark
+    const int textAreaTop = cardY + 70;                  // Below bookmark
     const int textAreaBottom = cardY + cardHeight - 50;  // Above "Continue Reading"
     int titleY = textAreaTop + (textAreaBottom - textAreaTop - totalTextHeight) / 2;
 
@@ -294,12 +296,12 @@ void HomeActivity::render() const {
   // Grid 2x1 at bottom of page (Files, Setup) - aligned with button hints
   // Button hints use: positions {25, 130, 245, 350} with width 106 each
   constexpr int gridItemHeight = 50;
-  constexpr int buttonHintsY = 50;  // Distance from bottom for button hints
+  constexpr int buttonHintsY = 50;                                    // Distance from bottom for button hints
   const int gridY = pageHeight - buttonHintsY - gridItemHeight - 10;  // 10px above buttons
 
   // Grid positions matching button hint pairs
   constexpr int gridPositions[] = {25, 245};  // Left aligns with btn1, Right aligns with btn3
-  constexpr int gridItemWidth = 211;  // Spans 2 button widths + gap (106 + 106 - 1)
+  constexpr int gridItemWidth = 211;          // Spans 2 button widths + gap (106 + 106 - 1)
 
   // Menu items in 2x1 grid
   const char* menuItems[] = {"Files", "Settings"};

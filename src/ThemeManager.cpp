@@ -1,18 +1,19 @@
 #include "ThemeManager.h"
-#include "IniParser.h"
-#include "config.h"
+
 #include <SDCardManager.h>
+
 #include <algorithm>
 #include <cstring>
+
+#include "IniParser.h"
+#include "config.h"
 
 ThemeManager& ThemeManager::instance() {
   static ThemeManager instance;
   return instance;
 }
 
-ThemeManager::ThemeManager() : activeTheme(BUILTIN_LIGHT_THEME) {
-  strncpy(themeName, "light", sizeof(themeName));
-}
+ThemeManager::ThemeManager() : activeTheme(BUILTIN_LIGHT_THEME) { strncpy(themeName, "light", sizeof(themeName)); }
 
 bool ThemeManager::loadTheme(const char* name) {
   if (!name || !*name) {
@@ -213,8 +214,7 @@ std::vector<std::string> ThemeManager::listAvailableThemes() {
         themeNameBuf[nameLen] = '\0';
 
         // Add if not already in list (avoid duplicating light/dark)
-        if (!std::any_of(themes.begin(), themes.end(),
-                         [&](const std::string& t) { return t == themeNameBuf; })) {
+        if (!std::any_of(themes.begin(), themes.end(), [&](const std::string& t) { return t == themeNameBuf; })) {
           themes.push_back(themeNameBuf);
         }
       }

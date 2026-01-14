@@ -14,9 +14,8 @@ class Section {
   std::string filePath;
   FsFile file;
 
-  void writeSectionFileHeader(int fontId, float lineCompression, bool extraParagraphSpacing,
-                              uint8_t paragraphAlignment, bool hyphenation, uint16_t viewportWidth,
-                              uint16_t viewportHeight);
+  void writeSectionFileHeader(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
+                              bool hyphenation, uint16_t viewportWidth, uint16_t viewportHeight);
   uint32_t onPageComplete(std::unique_ptr<Page> page);
 
  public:

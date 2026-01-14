@@ -7,15 +7,7 @@
 /**
  * Error codes for Calibre protocol operations.
  */
-enum class CalibreError {
-  OK = 0,
-  NETWORK_ERROR,
-  TIMEOUT,
-  PARSE_ERROR,
-  PROTOCOL_ERROR,
-  AUTH_FAILED,
-  DISK_ERROR
-};
+enum class CalibreError { OK = 0, NETWORK_ERROR, TIMEOUT, PARSE_ERROR, PROTOCOL_ERROR, AUTH_FAILED, DISK_ERROR };
 
 /**
  * Get human-readable error message.
