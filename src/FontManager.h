@@ -38,7 +38,6 @@ class FontManager {
    *   - regular.epdfont
    *   - bold.epdfont (optional)
    *   - italic.epdfont (optional)
-   *   - bold_italic.epdfont (optional)
    *
    * @param familyName Directory name under /fonts/
    * @param fontId Unique ID to register with renderer

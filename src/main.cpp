@@ -7,18 +7,15 @@
 #include <SPI.h>
 #include <builtinFonts/reader_2b.h>
 #include <builtinFonts/reader_bold_2b.h>
-#include <builtinFonts/reader_bold_italic_2b.h>
 #include <builtinFonts/reader_italic_2b.h>
 #include <esp_system.h>
 // Medium font (16pt)
 #include <builtinFonts/reader_medium_2b.h>
 #include <builtinFonts/reader_medium_bold_2b.h>
-#include <builtinFonts/reader_medium_bold_italic_2b.h>
 #include <builtinFonts/reader_medium_italic_2b.h>
 // Large font (18pt)
 #include <builtinFonts/reader_large_2b.h>
 #include <builtinFonts/reader_large_bold_2b.h>
-#include <builtinFonts/reader_large_bold_italic_2b.h>
 #include <builtinFonts/reader_large_italic_2b.h>
 #include <builtinFonts/small14.h>
 #include <builtinFonts/ui_12.h>
@@ -66,24 +63,19 @@ Activity* currentActivity;
 EpdFont readerFont(&reader_2b);
 EpdFont readerBoldFont(&reader_bold_2b);
 EpdFont readerItalicFont(&reader_italic_2b);
-EpdFont readerBoldItalicFont(&reader_bold_italic_2b);
-EpdFontFamily readerFontFamily(&readerFont, &readerBoldFont, &readerItalicFont, &readerBoldItalicFont);
+EpdFontFamily readerFontFamily(&readerFont, &readerBoldFont, &readerItalicFont, &readerBoldFont);
 
 // Fonts - Medium (16pt)
 EpdFont readerMediumFont(&reader_medium_2b);
 EpdFont readerMediumBoldFont(&reader_medium_bold_2b);
 EpdFont readerMediumItalicFont(&reader_medium_italic_2b);
-EpdFont readerMediumBoldItalicFont(&reader_medium_bold_italic_2b);
-EpdFontFamily readerMediumFontFamily(&readerMediumFont, &readerMediumBoldFont, &readerMediumItalicFont,
-                                     &readerMediumBoldItalicFont);
+EpdFontFamily readerMediumFontFamily(&readerMediumFont, &readerMediumBoldFont, &readerMediumItalicFont, &readerMediumBoldFont);
 
 // Fonts - Large (18pt)
 EpdFont readerLargeFont(&reader_large_2b);
 EpdFont readerLargeBoldFont(&reader_large_bold_2b);
 EpdFont readerLargeItalicFont(&reader_large_italic_2b);
-EpdFont readerLargeBoldItalicFont(&reader_large_bold_italic_2b);
-EpdFontFamily readerLargeFontFamily(&readerLargeFont, &readerLargeBoldFont, &readerLargeItalicFont,
-                                    &readerLargeBoldItalicFont);
+EpdFontFamily readerLargeFontFamily(&readerLargeFont, &readerLargeBoldFont, &readerLargeItalicFont, &readerLargeBoldFont);
 
 EpdFont smallFont(&small14);
 EpdFontFamily smallFontFamily(&smallFont);

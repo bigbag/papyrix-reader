@@ -5,7 +5,7 @@ Convert TTF/OTF fonts to Papyrix binary format (.epdfont)
 Creates a font family directory with all style variants for use with Papyrix themes.
 
 Usage:
-    python3 convert_theme_fonts.py my-font -r Regular.ttf -b Bold.ttf -i Italic.ttf -bi BoldItalic.ttf
+    python3 convert_theme_fonts.py my-font -r Regular.ttf -b Bold.ttf -i Italic.ttf
     python3 convert_theme_fonts.py my-font -r Regular.ttf --size 16
     python3 convert_theme_fonts.py my-font -r Regular.ttf -o /path/to/sdcard/fonts/
 
@@ -307,7 +307,7 @@ def main():
         epilog="""
 Examples:
   # Convert a complete font family
-  %(prog)s my-font -r MyFont-Regular.ttf -b MyFont-Bold.ttf -i MyFont-Italic.ttf -bi MyFont-BoldItalic.ttf
+  %(prog)s my-font -r MyFont-Regular.ttf -b MyFont-Bold.ttf -i MyFont-Italic.ttf
 
   # Convert only regular style
   %(prog)s my-font -r MyFont-Regular.ttf
@@ -326,8 +326,7 @@ Output structure:
   └── <family-name>/
       ├── regular.epdfont
       ├── bold.epdfont
-      ├── italic.epdfont
-      └── bold_italic.epdfont
+      └── italic.epdfont
         """,
     )
 
@@ -335,7 +334,6 @@ Output structure:
     parser.add_argument("-r", "--regular", required=True, help="Path to regular style TTF/OTF file")
     parser.add_argument("-b", "--bold", help="Path to bold style TTF/OTF file")
     parser.add_argument("-i", "--italic", help="Path to italic style TTF/OTF file")
-    parser.add_argument("-bi", "--bold-italic", help="Path to bold-italic style TTF/OTF file")
     parser.add_argument("-o", "--output", default=".", help="Output directory (default: current directory)")
     parser.add_argument("-s", "--size", type=int, default=16, help="Font size in points (default: 16)")
     parser.add_argument("--2bit", dest="is_2bit", action="store_true", help="Generate 2-bit grayscale (smoother but larger)")
@@ -363,7 +361,6 @@ Output structure:
         ("regular", args.regular),
         ("bold", args.bold),
         ("italic", args.italic),
-        ("bold_italic", args.bold_italic),
     ]
 
     sizes = [14, 16, 18] if args.all_sizes else [args.size]

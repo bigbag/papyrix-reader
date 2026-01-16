@@ -5,7 +5,6 @@
  *  ruby -rdigest -e 'puts [
  *    "./lib/EpdFont/builtinFonts/reader_2b.h",
  *    "./lib/EpdFont/builtinFonts/reader_bold_2b.h",
- *    "./lib/EpdFont/builtinFonts/reader_bold_italic_2b.h",
  *    "./lib/EpdFont/builtinFonts/reader_italic_2b.h",
  *  ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
  */
@@ -16,7 +15,6 @@
  *  ruby -rdigest -e 'puts [
  *    "./lib/EpdFont/builtinFonts/reader_medium_2b.h",
  *    "./lib/EpdFont/builtinFonts/reader_medium_bold_2b.h",
- *    "./lib/EpdFont/builtinFonts/reader_medium_bold_italic_2b.h",
  *    "./lib/EpdFont/builtinFonts/reader_medium_italic_2b.h",
  *  ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
  */
@@ -27,7 +25,6 @@
  *  ruby -rdigest -e 'puts [
  *    "./lib/EpdFont/builtinFonts/reader_large_2b.h",
  *    "./lib/EpdFont/builtinFonts/reader_large_bold_2b.h",
- *    "./lib/EpdFont/builtinFonts/reader_large_bold_italic_2b.h",
  *    "./lib/EpdFont/builtinFonts/reader_large_italic_2b.h",
  *  ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
  */

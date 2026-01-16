@@ -222,8 +222,7 @@ Custom fonts are stored in the `/config/fonts/` directory, organized by font fam
 ├── my-font/
 │   ├── regular.epdfont
 │   ├── bold.epdfont
-│   ├── italic.epdfont
-│   └── bold_italic.epdfont
+│   └── italic.epdfont
 └── another-font/
     └── regular.epdfont
 ```
@@ -247,8 +246,7 @@ Convert a complete font family:
 python3 scripts/convert_theme_fonts.py my-font \
     -r MyFont-Regular.ttf \
     -b MyFont-Bold.ttf \
-    -i MyFont-Italic.ttf \
-    -bi MyFont-BoldItalic.ttf
+    -i MyFont-Italic.ttf
 ```
 
 Convert only the regular style:
@@ -262,7 +260,6 @@ python3 scripts/convert_theme_fonts.py my-font -r MyFont-Regular.ttf
 - **-r, --regular** - Path to regular style font (required)
 - **-b, --bold** - Path to bold style font
 - **-i, --italic** - Path to italic style font
-- **-bi, --bold-italic** - Path to bold-italic style font
 - **-o, --output** - Output directory (default: current directory)
 - **-s, --size** - Font size in points (default: 16)
 - **--2bit** - Generate 2-bit grayscale (smoother but larger)
@@ -290,8 +287,7 @@ The script creates a font family directory structure:
 my-font/
 ├── regular.epdfont
 ├── bold.epdfont
-├── italic.epdfont
-└── bold_italic.epdfont
+└── italic.epdfont
 ```
 
 Copy the entire folder to `/config/fonts/` on your SD card.
@@ -375,8 +371,7 @@ Here's the complete SD card structure for customization:
 │       ├── my-reader-font/
 │       │   ├── regular.epdfont
 │       │   ├── bold.epdfont
-│       │   ├── italic.epdfont
-│       │   └── bold_italic.epdfont
+│       │   └── italic.epdfont
 │       └── my-ui-font/
 │           └── regular.epdfont
 ├── sleep.bmp              # Custom sleep image (optional)
