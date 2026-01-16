@@ -88,9 +88,14 @@ See [Development](#development) below.
 ### Prerequisites
 
 * **PlatformIO Core** (`pio`) or **VS Code + PlatformIO IDE**
-* Python 3.12+ with `freetype-py` and `pillow`
+* Node.js 18+ (for build scripts: font conversion, sleep screen, logo)
 * USB-C cable for flashing the ESP32-C3
 * Xteink X4
+
+Install Node.js dependencies:
+```bash
+cd scripts && npm install
+```
 
 ### Using Nix (Recommended)
 
@@ -159,15 +164,47 @@ esptool.py --chip esp32c3 --port /dev/ttyACM0 --baud 460800 \
 
 Replace `/dev/ttyACM0` with your device port (e.g., `COM3` on Windows, `/dev/tty.usbmodem*` on macOS).
 
-### Creating sleep screen images
+### Build Scripts
 
-Convert any image to a sleep screen format compatible with Papyrix:
+All build scripts are in the `scripts/` directory and require Node.js 18+.
 
-```sh
+```bash
+# Install dependencies (one time)
+cd scripts && npm install
+```
+
+#### Converting fonts
+
+Convert TTF/OTF fonts to Papyrix `.epdfont` format:
+
+```bash
+cd scripts
+
+# Basic conversion
+node convert-fonts.mjs my-font -r MyFont-Regular.ttf
+
+# Full font family with all reader sizes
+node convert-fonts.mjs my-font -r Regular.ttf -b Bold.ttf -i Italic.ttf --all-sizes
+
+# CJK fonts (Japanese, Korean, Chinese)
+node convert-fonts.mjs noto-sans-jp -r NotoSansJP-Regular.ttf --all-sizes --cjk-common
+```
+
+Options: `-r/--regular`, `-b/--bold`, `-i/--italic`, `-o/--output`, `-s/--size`, `--2bit`, `--all-sizes`, `--cjk-common`
+
+See [customization guide](docs/customization.md) for detailed font conversion instructions.
+
+#### Creating sleep screen images
+
+Convert any image to sleep screen BMP format:
+
+```bash
+# Via Makefile
 make sleep-screen INPUT=photo.jpg OUTPUT=sleep.bmp
-
-# With options
 make sleep-screen INPUT=photo.jpg OUTPUT=sleep.bmp ARGS='--dither --bits 8'
+
+# Or directly
+cd scripts && node create-sleep-screen.mjs photo.jpg sleep.bmp --dither --bits 8
 ```
 
 Options:
@@ -177,6 +214,16 @@ Options:
 - `--fit contain|cover|stretch` - Resize mode (default: contain)
 
 Copy the output BMP to `/sleep/` directory or as `/sleep.bmp` on the SD card.
+
+#### Converting logo
+
+Convert image to C header for firmware logo (128x128 monochrome):
+
+```bash
+cd scripts && node convert-logo.mjs logo.png ../src/images/PapyrixLogo.h
+```
+
+Options: `--invert`, `--threshold <0-255>`, `--rotate <0|90|180|270>`
 
 ### Creating a GitHub release
 

@@ -109,7 +109,7 @@ changelog: ## Generate CHANGELOG.md from git history
 sleep-screen: ## Convert image to sleep screen BMP
 ifdef INPUT
 ifdef OUTPUT
-	python3 scripts/create_sleep_screen_image.py $(INPUT) $(OUTPUT) $(ARGS)
+	cd scripts && node create-sleep-screen.mjs ../$(INPUT) ../$(OUTPUT) $(ARGS)
 else
 	@echo "Usage: make sleep-screen INPUT=<image> OUTPUT=<bmp> [ARGS='--dither --bits 8']"
 endif

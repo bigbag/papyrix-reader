@@ -231,19 +231,20 @@ Each font family is a subdirectory containing one or more style variants.
 
 ### Converting Fonts
 
-To create `.epdfont` files from TTF/OTF fonts, use the `convert_theme_fonts.py` script included in the firmware source code (`scripts/convert_theme_fonts.py`).
+To create `.epdfont` files from TTF/OTF fonts, use the `convert-fonts.mjs` script included in the firmware source code (`scripts/convert-fonts.mjs`).
 
 #### Requirements
 
-- Python 3
-- freetype-py library: `pip install freetype-py`
+- Node.js 18+
+- Install dependencies: `cd scripts && npm install`
 
 #### Basic Usage
 
 Convert a complete font family:
 
 ```bash
-python3 scripts/convert_theme_fonts.py my-font \
+cd scripts
+node convert-fonts.mjs my-font \
     -r MyFont-Regular.ttf \
     -b MyFont-Bold.ttf \
     -i MyFont-Italic.ttf
@@ -252,7 +253,7 @@ python3 scripts/convert_theme_fonts.py my-font \
 Convert only the regular style:
 
 ```bash
-python3 scripts/convert_theme_fonts.py my-font -r MyFont-Regular.ttf
+node convert-fonts.mjs my-font -r MyFont-Regular.ttf
 ```
 
 #### Options
@@ -264,21 +265,25 @@ python3 scripts/convert_theme_fonts.py my-font -r MyFont-Regular.ttf
 - **-s, --size** - Font size in points (default: 16)
 - **--2bit** - Generate 2-bit grayscale (smoother but larger)
 - **--all-sizes** - Generate all reader sizes (14, 16, 18pt)
+- **--cjk-common** - Use full CJK (20,992) + Hangul (11,172), reduced fullwidth forms
 
 #### Examples
 
 ```bash
 # Convert with custom size
-python3 scripts/convert_theme_fonts.py my-font -r Font.ttf --size 14
+node convert-fonts.mjs my-font -r Font.ttf --size 14
 
 # Output directly to SD card
-python3 scripts/convert_theme_fonts.py my-font -r Font.ttf -o /Volumes/SDCARD/fonts/
+node convert-fonts.mjs my-font -r Font.ttf -o /Volumes/SDCARD/fonts/
 
 # Generate all sizes for reader font
-python3 scripts/convert_theme_fonts.py my-font -r Font.ttf --all-sizes
+node convert-fonts.mjs my-font -r Font.ttf --all-sizes
 
 # Use 2-bit grayscale for smoother rendering
-python3 scripts/convert_theme_fonts.py my-font -r Font.ttf --2bit
+node convert-fonts.mjs my-font -r Font.ttf --2bit
+
+# Generate CJK fonts (Japanese, Korean, Chinese)
+node convert-fonts.mjs noto-sans-jp -r NotoSansJP-Regular.ttf --all-sizes --cjk-common
 ```
 
 The script creates a font family directory structure:

@@ -6,3 +6,5 @@ lib/EpdFont/fontsrc
 *.generated.h
 CLAUDE.md
 .claude/
+node_modules/
+scripts/node_modules/
