@@ -23,7 +23,7 @@ constexpr const char* autoSleepValues[] = {"5 min", "10 min", "15 min", "30 min"
 constexpr const char* paragraphAlignmentValues[] = {"Justified", "Left", "Center", "Right"};
 constexpr const char* shortPwrBtnValues[] = {"Ignore", "Sleep", "Page Turn"};
 
-constexpr int settingsCount = 19;
+constexpr int settingsCount = 18;
 const SettingInfo settingsList[settingsCount] = {
     // Theme
     {"Theme", SettingType::THEME_SELECT, nullptr, nullptr, 0},
@@ -35,7 +35,6 @@ const SettingInfo settingsList[settingsCount] = {
     {"Text Anti-Aliasing", SettingType::TOGGLE, &CrossPointSettings::textAntiAliasing, nullptr, 0},
     {"Reading Orientation", SettingType::ENUM, &CrossPointSettings::orientation, orientationValues, 4},
     {"Status Bar", SettingType::ENUM, &CrossPointSettings::statusBar, statusBarValues, 3},
-    {"Show Book Details", SettingType::TOGGLE, &CrossPointSettings::showBookDetails, nullptr, 0},
     // Device Settings
     {"Pages Per Refresh", SettingType::ENUM, &CrossPointSettings::pagesPerRefresh, pagesPerRefreshValues, 5},
     {"Auto Sleep Timeout", SettingType::ENUM, &CrossPointSettings::autoSleepMinutes, autoSleepValues, 5},

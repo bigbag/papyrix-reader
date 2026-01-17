@@ -88,3 +88,6 @@ uint8_t quantize(int gray, int x, int y) {
     return quantizeSimple(gray);
   }
 }
+
+// Simple 1-bit quantization (black or white)
+uint8_t quantize1bit(int gray, int x, int y) { return gray < 128 ? 0 : 1; }

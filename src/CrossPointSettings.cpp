@@ -10,10 +10,10 @@
 CrossPointSettings CrossPointSettings::instance;
 
 namespace {
-// Version 2: Removed frontButtonLayout and homeLayout (now in Theme)
-constexpr uint8_t SETTINGS_FILE_VERSION = 2;
+// Version 3: Removed showBookDetails (now always enabled)
+constexpr uint8_t SETTINGS_FILE_VERSION = 3;
 // Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 14;
+constexpr uint8_t SETTINGS_COUNT = 13;
 }  // namespace
 
 bool CrossPointSettings::saveToFile() const {
@@ -35,7 +35,6 @@ bool CrossPointSettings::saveToFile() const {
   serialization::writePod(outputFile, fontSize);
   serialization::writePod(outputFile, pagesPerRefresh);
   serialization::writePod(outputFile, sideButtonLayout);
-  serialization::writePod(outputFile, showBookDetails);
   serialization::writePod(outputFile, autoSleepMinutes);
   serialization::writePod(outputFile, paragraphAlignment);
   serialization::writePod(outputFile, hyphenation);
@@ -83,8 +82,6 @@ bool CrossPointSettings::loadFromFile() {
     serialization::readPod(inputFile, pagesPerRefresh);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, sideButtonLayout);
-    if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPod(inputFile, showBookDetails);
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, autoSleepMinutes);
     if (++settingsRead >= fileSettingsCount) break;

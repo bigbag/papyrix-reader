@@ -68,8 +68,6 @@ class CrossPointSettings {
   uint8_t pagesPerRefresh = PPR_15;
   // Side button layout
   uint8_t sideButtonLayout = PREV_NEXT;
-  // Show book details: cover as first page when reading, and title/author on home screen
-  uint8_t showBookDetails = 1;
   // Auto-sleep timeout setting
   uint8_t autoSleepMinutes = SLEEP_10_MIN;
   // Paragraph alignment for EPUB text

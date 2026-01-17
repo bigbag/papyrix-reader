@@ -35,7 +35,7 @@ This project is **not affiliated with Xteink**; it's built as a community projec
 - [x] XTC/XTCH native format support
 - [x] Plain text (.txt, .text) file support
 - [x] Saved reading position
-- [x] Book cover display (configurable)
+- [x] Book cover display
 - [x] Table of contents navigation
 - [ ] Image support within EPUB
 

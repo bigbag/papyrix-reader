@@ -1,9 +1,11 @@
 #include "HomeActivity.h"
 
+#include <Bitmap.h>
 #include <Epub.h>
 #include <GfxRenderer.h>
 #include <SDCardManager.h>
 
+#include <cstring>
 #include <vector>
 
 #include "CrossPointSettings.h"
@@ -49,6 +51,11 @@ void HomeActivity::onEnter() {
         if (!epub.getAuthor().empty()) {
           lastBookAuthor = std::string(epub.getAuthor());
         }
+        // Try to generate thumbnail image for Continue Reading card
+        if (epub.generateThumbBmp()) {
+          coverBmpPath = epub.getThumbBmpPath();
+          hasCoverImage = true;
+        }
       }
     } else if (StringUtils::isXtcFile(lastBookTitle) || StringUtils::isTxtFile(lastBookTitle)) {
       // Strip known extensions from non-EPUB files
@@ -84,6 +91,51 @@ void HomeActivity::onExit() {
   }
   vSemaphoreDelete(renderingMutex);
   renderingMutex = nullptr;
+
+  // Free the stored cover buffer if any
+  freeCoverBuffer();
+}
+
+bool HomeActivity::storeCoverBuffer() {
+  uint8_t* frameBuffer = renderer.getFrameBuffer();
+  if (!frameBuffer) {
+    return false;
+  }
+
+  // Free any existing buffer first
+  freeCoverBuffer();
+
+  const size_t bufferSize = GfxRenderer::getBufferSize();
+  coverBuffer = static_cast<uint8_t*>(malloc(bufferSize));
+  if (!coverBuffer) {
+    return false;
+  }
+
+  memcpy(coverBuffer, frameBuffer, bufferSize);
+  return true;
+}
+
+bool HomeActivity::restoreCoverBuffer() {
+  if (!coverBuffer) {
+    return false;
+  }
+
+  uint8_t* frameBuffer = renderer.getFrameBuffer();
+  if (!frameBuffer) {
+    return false;
+  }
+
+  const size_t bufferSize = GfxRenderer::getBufferSize();
+  memcpy(frameBuffer, coverBuffer, bufferSize);
+  return true;
+}
+
+void HomeActivity::freeCoverBuffer() {
+  if (coverBuffer) {
+    free(coverBuffer);
+    coverBuffer = nullptr;
+  }
+  coverBufferStored = false;
 }
 
 void HomeActivity::loop() {
@@ -138,8 +190,12 @@ void HomeActivity::displayTaskLoop() {
   }
 }
 
-void HomeActivity::render() const {
-  renderer.clearScreen(THEME.backgroundColor);
+void HomeActivity::render() {
+  // If we have a stored cover buffer, restore it instead of clearing
+  const bool bufferRestored = coverBufferStored && restoreCoverBuffer();
+  if (!bufferRestored) {
+    renderer.clearScreen(THEME.backgroundColor);
+  }
 
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
@@ -161,32 +217,89 @@ void HomeActivity::render() const {
   // Book card selection state
   const bool cardSelected = (selectorIndex == 0) && hasContinueReading;
 
-  // Draw book card - filled when selected, outline when not selected
-  if (cardSelected) {
-    renderer.fillRect(cardX, cardY, cardWidth, cardHeight, THEME.primaryTextBlack);
-  } else {
-    renderer.drawRect(cardX, cardY, cardWidth, cardHeight, THEME.primaryTextBlack);
-  }
-
-  // Text and bookmark color inverts based on selection
-  const bool cardTextColor = !cardSelected ? THEME.primaryTextBlack : !THEME.primaryTextBlack;
-
-  // Draw bookmark icon at top center of card
+  // Bookmark dimensions (used in multiple places)
   const int bookmarkWidth = 30;
   const int bookmarkHeight = 50;
   const int bookmarkX = cardX + cardWidth - bookmarkWidth - 15;  // Right side with padding
   const int bookmarkY = cardY + 15;
 
-  // Bookmark shape: rectangle with triangular notch at bottom
-  const bool bookmarkColor = cardTextColor;  // Same as text color on card
-  renderer.fillRect(bookmarkX, bookmarkY, bookmarkWidth, bookmarkHeight - 10, bookmarkColor);
-  // Draw triangular notch using two small rectangles to simulate
-  renderer.fillRect(bookmarkX, bookmarkY + bookmarkHeight - 10, bookmarkWidth / 2 - 2, 10, bookmarkColor);
-  renderer.fillRect(bookmarkX + bookmarkWidth / 2 + 2, bookmarkY + bookmarkHeight - 10, bookmarkWidth / 2 - 2, 10,
-                    bookmarkColor);
+  // Draw cover image as background if available (inside the box)
+  // Only load from SD on first render, then use stored buffer
+  if (hasContinueReading && hasCoverImage && !coverBmpPath.empty() && !coverRendered) {
+    // First time: load cover from SD and render
+    FsFile file;
+    if (SdMan.openFileForRead("HOME", coverBmpPath, file)) {
+      Bitmap bitmap(file);
+      if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+        // Calculate position to center image within the book card
+        int coverX, coverY;
 
-  // Card text color (already calculated based on selection state)
-  const bool textOnCard = cardTextColor;
+        if (bitmap.getWidth() > cardWidth || bitmap.getHeight() > cardHeight) {
+          const float imgRatio = static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
+          const float boxRatio = static_cast<float>(cardWidth) / static_cast<float>(cardHeight);
+
+          if (imgRatio > boxRatio) {
+            coverX = cardX;
+            coverY = cardY + (cardHeight - static_cast<int>(cardWidth / imgRatio)) / 2;
+          } else {
+            coverX = cardX + (cardWidth - static_cast<int>(cardHeight * imgRatio)) / 2;
+            coverY = cardY;
+          }
+        } else {
+          coverX = cardX + (cardWidth - bitmap.getWidth()) / 2;
+          coverY = cardY + (cardHeight - bitmap.getHeight()) / 2;
+        }
+
+        // Draw the cover image centered within the book card
+        renderer.drawBitmap(bitmap, coverX, coverY, cardWidth, cardHeight);
+
+        // Draw border around the card
+        renderer.drawRect(cardX, cardY, cardWidth, cardHeight, THEME.primaryTextBlack);
+
+        // Store the buffer with cover image for fast navigation
+        coverBufferStored = storeCoverBuffer();
+        coverRendered = true;
+
+        // First render: if selected, draw selection indicators now
+        if (cardSelected) {
+          renderer.drawRect(cardX + 1, cardY + 1, cardWidth - 2, cardHeight - 2, THEME.primaryTextBlack);
+          renderer.drawRect(cardX + 2, cardY + 2, cardWidth - 4, cardHeight - 4, THEME.primaryTextBlack);
+        }
+      }
+      file.close();
+    }
+  } else if (!bufferRestored && !coverRendered) {
+    // No cover image: draw border or fill, plus bookmark as visual flair
+    if (cardSelected) {
+      renderer.fillRect(cardX, cardY, cardWidth, cardHeight, THEME.primaryTextBlack);
+    } else {
+      renderer.drawRect(cardX, cardY, cardWidth, cardHeight, THEME.primaryTextBlack);
+    }
+
+    // Draw bookmark ribbon when no cover image (visual decoration)
+    if (hasContinueReading) {
+      // Text and bookmark color inverts based on selection
+      const bool bookmarkColor = !cardSelected ? THEME.primaryTextBlack : !THEME.primaryTextBlack;
+      // Bookmark shape: rectangle with triangular notch at bottom
+      renderer.fillRect(bookmarkX, bookmarkY, bookmarkWidth, bookmarkHeight - 10, bookmarkColor);
+      // Draw triangular notch using two small rectangles to simulate
+      renderer.fillRect(bookmarkX, bookmarkY + bookmarkHeight - 10, bookmarkWidth / 2 - 2, 10, bookmarkColor);
+      renderer.fillRect(bookmarkX + bookmarkWidth / 2 + 2, bookmarkY + bookmarkHeight - 10, bookmarkWidth / 2 - 2, 10,
+                        bookmarkColor);
+    }
+  }
+
+  // If buffer was restored, draw selection indicators if needed
+  if (bufferRestored && cardSelected && coverRendered) {
+    // Draw selection border
+    renderer.drawRect(cardX + 1, cardY + 1, cardWidth - 2, cardHeight - 2, THEME.primaryTextBlack);
+    renderer.drawRect(cardX + 2, cardY + 2, cardWidth - 4, cardHeight - 4, THEME.primaryTextBlack);
+  }
+
+  // Text and bookmark color inverts based on selection
+  const bool cardTextColor = !cardSelected ? THEME.primaryTextBlack : !THEME.primaryTextBlack;
+  // Card text color (used for text when no cover image)
+  const bool textOnCard = coverRendered ? THEME.primaryTextBlack : cardTextColor;
 
   if (hasContinueReading) {
     // Word wrap title into lines (max 3 lines)
@@ -257,6 +370,40 @@ void HomeActivity::render() const {
     const int textAreaBottom = cardY + cardHeight - 50;  // Above "Continue Reading"
     int titleY = textAreaTop + (textAreaBottom - textAreaTop - totalTextHeight) / 2;
 
+    // If cover image was rendered, draw white box behind title and author
+    if (coverRendered) {
+      constexpr int boxPadding = 8;
+      // Calculate the max text width for the box
+      int maxTextWidth = 0;
+      for (const auto& line : lines) {
+        const int lineWidth = renderer.getTextWidth(THEME.uiFontId, line.c_str());
+        if (lineWidth > maxTextWidth) {
+          maxTextWidth = lineWidth;
+        }
+      }
+      if (!lastBookAuthor.empty()) {
+        std::string trimmedAuthor = lastBookAuthor;
+        while (renderer.getTextWidth(THEME.uiFontId, trimmedAuthor.c_str()) > maxLineWidth && trimmedAuthor.size() > 5) {
+          trimmedAuthor.resize(trimmedAuthor.size() - 5);
+          trimmedAuthor.append("...");
+        }
+        const int authorWidth = renderer.getTextWidth(THEME.uiFontId, trimmedAuthor.c_str());
+        if (authorWidth > maxTextWidth) {
+          maxTextWidth = authorWidth;
+        }
+      }
+
+      const int boxWidth = maxTextWidth + boxPadding * 2;
+      const int boxHeight = totalTextHeight + boxPadding * 2;
+      const int boxX = (pageWidth - boxWidth) / 2;
+      const int boxY = titleY - boxPadding;
+
+      // Draw white filled box
+      renderer.fillRect(boxX, boxY, boxWidth, boxHeight, !THEME.primaryTextBlack);
+      // Draw black border around the box
+      renderer.drawRect(boxX, boxY, boxWidth, boxHeight, THEME.primaryTextBlack);
+    }
+
     // Draw title lines centered
     for (const auto& line : lines) {
       const int lineWidth = renderer.getTextWidth(THEME.uiFontId, line.c_str());
@@ -283,7 +430,20 @@ void HomeActivity::render() const {
     const int continueWidth = renderer.getTextWidth(THEME.uiFontId, continueText);
     const int continueX = cardX + (cardWidth - continueWidth) / 2;
     const int continueY = cardY + cardHeight - 40;
-    renderer.drawText(THEME.uiFontId, continueX, continueY, continueText, textOnCard);
+
+    if (coverRendered) {
+      // Draw white box behind "Continue Reading" text
+      constexpr int continuePadding = 6;
+      const int continueBoxWidth = continueWidth + continuePadding * 2;
+      const int continueBoxHeight = titleLineHeight + continuePadding;
+      const int continueBoxX = (pageWidth - continueBoxWidth) / 2;
+      const int continueBoxY = continueY - continuePadding / 2;
+      renderer.fillRect(continueBoxX, continueBoxY, continueBoxWidth, continueBoxHeight, !THEME.primaryTextBlack);
+      renderer.drawRect(continueBoxX, continueBoxY, continueBoxWidth, continueBoxHeight, THEME.primaryTextBlack);
+      renderer.drawText(THEME.uiFontId, continueX, continueY, continueText, THEME.primaryTextBlack);
+    } else {
+      renderer.drawText(THEME.uiFontId, continueX, continueY, continueText, textOnCard);
+    }
   } else {
     // No book open - show placeholder
     const char* noBookText = "No book open";

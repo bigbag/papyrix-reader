@@ -353,6 +353,92 @@ const std::string& Epub::getAuthor() const {
 
 std::string Epub::getCoverBmpPath() const { return cachePath + "/cover.bmp"; }
 
+std::string Epub::getThumbBmpPath() const { return cachePath + "/thumb.bmp"; }
+
+bool Epub::generateThumbBmp() const {
+  const auto thumbPath = getThumbBmpPath();
+  const auto failedMarkerPath = cachePath + "/.thumb.failed";
+
+  // Already generated, return true
+  if (SdMan.exists(thumbPath.c_str())) {
+    return true;
+  }
+
+  // Previously failed, don't retry
+  if (SdMan.exists(failedMarkerPath.c_str())) {
+    return false;
+  }
+
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    Serial.printf("[%lu] [EBP] Cannot generate thumb BMP, cache not loaded\n", millis());
+    return false;
+  }
+
+  const auto coverImageHref = bookMetadataCache->coreMetadata.coverItemHref;
+  if (coverImageHref.empty()) {
+    Serial.printf("[%lu] [EBP] No known cover image for thumbnail\n", millis());
+    // Create failure marker so we don't retry
+    FsFile marker;
+    if (SdMan.openFileForWrite("EBP", failedMarkerPath, marker)) {
+      marker.close();
+    }
+    return false;
+  }
+
+  if ((coverImageHref.length() >= 4 && coverImageHref.substr(coverImageHref.length() - 4) == ".jpg") ||
+      (coverImageHref.length() >= 5 && coverImageHref.substr(coverImageHref.length() - 5) == ".jpeg")) {
+    Serial.printf("[%lu] [EBP] Generating 1-bit thumb BMP from JPG cover image\n", millis());
+    const auto coverJpgTempPath = getCachePath() + "/.cover.jpg";
+
+    FsFile coverJpg;
+    if (!SdMan.openFileForWrite("EBP", coverJpgTempPath, coverJpg)) {
+      return false;
+    }
+    if (!readItemContentsToStream(coverImageHref, coverJpg, 1024)) {
+      coverJpg.close();
+      return false;
+    }
+    coverJpg.close();
+
+    if (!SdMan.openFileForRead("EBP", coverJpgTempPath, coverJpg)) {
+      return false;
+    }
+
+    FsFile thumbBmp;
+    if (!SdMan.openFileForWrite("EBP", thumbPath, thumbBmp)) {
+      coverJpg.close();
+      return false;
+    }
+    // Use 1-bit conversion at thumbnail size (240x400) for fast home screen rendering
+    const bool success = JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(coverJpg, thumbBmp, 240, 400);
+    coverJpg.close();
+    thumbBmp.close();
+    SdMan.remove(coverJpgTempPath.c_str());
+
+    if (!success) {
+      Serial.printf("[%lu] [EBP] Failed to generate thumb BMP from JPG cover image\n", millis());
+      SdMan.remove(thumbPath.c_str());
+      // Create failure marker so we don't retry
+      FsFile marker;
+      if (SdMan.openFileForWrite("EBP", failedMarkerPath, marker)) {
+        marker.close();
+      }
+    }
+    Serial.printf("[%lu] [EBP] Generated thumb BMP from JPG cover image, success: %s\n", millis(),
+                  success ? "yes" : "no");
+    return success;
+  } else {
+    Serial.printf("[%lu] [EBP] Cover image is not a JPG, skipping thumbnail\n", millis());
+    // Create failure marker so we don't retry
+    FsFile marker;
+    if (SdMan.openFileForWrite("EBP", failedMarkerPath, marker)) {
+      marker.close();
+    }
+  }
+
+  return false;
+}
+
 bool Epub::generateCoverBmp() const {
   // Already generated, return true
   if (SdMan.exists(getCoverBmpPath().c_str())) {
@@ -370,8 +456,8 @@ bool Epub::generateCoverBmp() const {
     return false;
   }
 
-  if (coverImageHref.substr(coverImageHref.length() - 4) == ".jpg" ||
-      coverImageHref.substr(coverImageHref.length() - 5) == ".jpeg") {
+  if ((coverImageHref.length() >= 4 && coverImageHref.substr(coverImageHref.length() - 4) == ".jpg") ||
+      (coverImageHref.length() >= 5 && coverImageHref.substr(coverImageHref.length() - 5) == ".jpeg")) {
     Serial.printf("[%lu] [EBP] Generating BMP from JPG cover image\n", millis());
     const auto coverJpgTempPath = getCachePath() + "/.cover.jpg";
 

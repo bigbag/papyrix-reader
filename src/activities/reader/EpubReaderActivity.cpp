@@ -326,9 +326,14 @@ void EpubReaderActivity::renderScreen() {
     Serial.printf("[%lu] [ERS] No pages to render\n", millis());
 
     // Render cover image if this is spine[0] and cover exists
-    if (currentSpineIndex == 0 && epub->generateCoverBmp()) {
-      Serial.printf("[%lu] [ERS] Rendering cover page from BMP\n", millis());
-      renderCoverPage(orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
+    if (currentSpineIndex == 0) {
+      if (epub->generateCoverBmp()) {
+        Serial.printf("[%lu] [ERS] Rendering cover page from BMP\n", millis());
+        renderCoverPage(orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
+      } else {
+        Serial.printf("[%lu] [ERS] Cover failed, rendering title page\n", millis());
+        renderTitlePage(orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
+      }
       return;
     }
 
@@ -355,11 +360,15 @@ void EpubReaderActivity::renderScreen() {
       return renderScreen();
     }
 
-    // Check if this is an empty cover page (spine[0], page 0, no elements) and setting is enabled
-    if (SETTINGS.showBookDetails && currentSpineIndex == 0 && section->currentPage == 0 && p->elements.empty() &&
-        epub->generateCoverBmp()) {
-      Serial.printf("[%lu] [ERS] Empty cover page detected, rendering cover BMP\n", millis());
-      renderCoverPage(orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
+    // Check if this is an empty cover page (spine[0], page 0, no elements)
+    if (currentSpineIndex == 0 && section->currentPage == 0 && p->elements.empty()) {
+      if (epub->generateCoverBmp()) {
+        Serial.printf("[%lu] [ERS] Empty cover page detected, rendering cover BMP\n", millis());
+        renderCoverPage(orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
+      } else {
+        Serial.printf("[%lu] [ERS] Cover failed, rendering title page\n", millis());
+        renderTitlePage(orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
+      }
     } else {
       const auto start = millis();
       renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
@@ -493,6 +502,34 @@ void EpubReaderActivity::renderCoverPage(const int orientedMarginTop, const int 
   }
 
   coverFile.close();
+}
+
+void EpubReaderActivity::renderTitlePage(const int orientedMarginTop, const int orientedMarginRight,
+                                         const int orientedMarginBottom, const int orientedMarginLeft) {
+  (void)orientedMarginTop;
+  (void)orientedMarginLeft;
+  const int fontId = SETTINGS.getReaderFontId();
+  const int screenHeight = renderer.getScreenHeight();
+
+  const std::string& title = epub->getTitle();
+  if (!title.empty()) {
+    renderer.drawCenteredText(fontId, screenHeight / 3, title.c_str(), THEME.primaryTextBlack, BOLD);
+  }
+
+  const std::string& author = epub->getAuthor();
+  if (!author.empty()) {
+    renderer.drawCenteredText(fontId, screenHeight / 2, author.c_str(), THEME.primaryTextBlack, REGULAR);
+  }
+
+  renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
+
+  if (pagesUntilFullRefresh <= 1) {
+    renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
+    pagesUntilFullRefresh = SETTINGS.getPagesPerRefreshValue();
+  } else {
+    renderer.displayBuffer();
+    pagesUntilFullRefresh--;
+  }
 }
 
 void EpubReaderActivity::renderStatusBar(const int orientedMarginRight, const int orientedMarginBottom,

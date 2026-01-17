@@ -133,9 +133,6 @@ The Settings screen allows you to configure the device's behavior:
   - Options: 1, 5, 10, 15, 30
   - Number of pages to turn before performing a full e-paper refresh (clears ghosting)
 
-- **Show Book Details** (default: ON)
-  - Display book cover as first page when reading, and title/author on home screen
-
 - **Short Power Button** (default: Ignore)
   - Options: Ignore, Sleep, Page Turn
   - **Ignore:** Short press does nothing (long press for sleep)
