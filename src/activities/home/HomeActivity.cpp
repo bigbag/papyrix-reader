@@ -383,7 +383,8 @@ void HomeActivity::render() {
       }
       if (!lastBookAuthor.empty()) {
         std::string trimmedAuthor = lastBookAuthor;
-        while (renderer.getTextWidth(THEME.uiFontId, trimmedAuthor.c_str()) > maxLineWidth && trimmedAuthor.size() > 5) {
+        while (renderer.getTextWidth(THEME.uiFontId, trimmedAuthor.c_str()) > maxLineWidth &&
+               trimmedAuthor.size() > 5) {
           trimmedAuthor.resize(trimmedAuthor.size() - 5);
           trimmedAuthor.append("...");
         }

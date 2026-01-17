@@ -289,6 +289,170 @@ std::string GfxRenderer::truncatedText(const int fontId, const char* text, const
   return item;
 }
 
+std::vector<std::string> GfxRenderer::breakWordWithHyphenation(const int fontId, const char* word, const int maxWidth,
+                                                                const EpdFontFamily::Style style) const {
+  std::vector<std::string> chunks;
+  if (!word || *word == '\0') return chunks;
+
+  std::string remaining = word;
+  while (!remaining.empty()) {
+    const int remainingWidth = getTextWidth(fontId, remaining.c_str(), style);
+    if (remainingWidth <= maxWidth) {
+      chunks.push_back(remaining);
+      break;
+    }
+
+    // Find max chars that fit with hyphen
+    std::string chunk;
+    const char* ptr = remaining.c_str();
+    const char* lastGoodPos = ptr;
+
+    while (*ptr) {
+      const char* nextChar = ptr;
+      utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&nextChar));
+
+      std::string testChunk = chunk;
+      testChunk.append(ptr, nextChar - ptr);
+      const int testWidth = getTextWidth(fontId, (testChunk + "-").c_str(), style);
+
+      if (testWidth > maxWidth && !chunk.empty()) break;
+
+      chunk = testChunk;
+      lastGoodPos = nextChar;
+      ptr = nextChar;
+    }
+
+    if (chunk.empty()) {
+      // Single char too wide - force it
+      const char* nextChar = remaining.c_str();
+      utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&nextChar));
+      chunk.append(remaining.c_str(), nextChar - remaining.c_str());
+      lastGoodPos = nextChar;
+    }
+
+    if (lastGoodPos < remaining.c_str() + remaining.size()) {
+      chunks.push_back(chunk + "-");
+      remaining = remaining.substr(lastGoodPos - remaining.c_str());
+    } else {
+      chunks.push_back(chunk);
+      remaining.clear();
+    }
+  }
+  return chunks;
+}
+
+std::vector<std::string> GfxRenderer::wrapTextWithHyphenation(const int fontId, const char* text, const int maxWidth,
+                                                              const int maxLines,
+                                                              const EpdFontFamily::Style style) const {
+  std::vector<std::string> lines;
+  if (!text || *text == '\0' || maxLines <= 0) {
+    return lines;
+  }
+
+  std::string remaining = text;
+
+  while (!remaining.empty() && static_cast<int>(lines.size()) < maxLines) {
+    const bool isLastLine = static_cast<int>(lines.size()) == maxLines - 1;
+
+    // Check if remaining text fits on current line
+    const int remainingWidth = getTextWidth(fontId, remaining.c_str(), style);
+    if (remainingWidth <= maxWidth) {
+      lines.push_back(remaining);
+      break;
+    }
+
+    // Find where to break the line
+    std::string currentLine;
+    const char* ptr = remaining.c_str();
+    const char* lastBreakPoint = nullptr;
+    std::string lineAtBreak;
+
+    while (*ptr) {
+      // Skip to end of current word
+      const char* wordEnd = ptr;
+      while (*wordEnd && *wordEnd != ' ') {
+        utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&wordEnd));
+      }
+
+      // Build line up to this word
+      std::string testLine = currentLine;
+      if (!testLine.empty()) {
+        testLine += ' ';
+      }
+      testLine.append(ptr, wordEnd - ptr);
+
+      const int testWidth = getTextWidth(fontId, testLine.c_str(), style);
+
+      if (testWidth <= maxWidth) {
+        // Word fits, update current line and remember this as potential break point
+        currentLine = testLine;
+        lastBreakPoint = wordEnd;
+        lineAtBreak = currentLine;
+
+        // Move past the word and any spaces
+        ptr = wordEnd;
+        while (*ptr == ' ') {
+          ptr++;
+        }
+      } else {
+        // Word doesn't fit
+        if (currentLine.empty()) {
+          // Word alone is too long - use helper
+          auto wordChunks = breakWordWithHyphenation(fontId, std::string(ptr, wordEnd - ptr).c_str(), maxWidth, style);
+          for (size_t i = 0; i < wordChunks.size() && static_cast<int>(lines.size()) < maxLines; i++) {
+            lines.push_back(wordChunks[i]);
+          }
+          // Update remaining to skip past the word
+          ptr = wordEnd;
+          while (*ptr == ' ') ptr++;
+          remaining = ptr;
+          break;
+        } else if (lastBreakPoint) {
+          // Line has content, break at last good point
+          lines.push_back(lineAtBreak);
+          // Skip spaces after break point
+          const char* nextStart = lastBreakPoint;
+          while (*nextStart == ' ') {
+            nextStart++;
+          }
+          remaining = nextStart;
+          break;
+        }
+      }
+
+      if (*ptr == '\0') {
+        // Reached end of text
+        if (!currentLine.empty()) {
+          lines.push_back(currentLine);
+        }
+        remaining.clear();
+        break;
+      }
+    }
+
+    // Handle last line truncation
+    if (isLastLine && !remaining.empty() && static_cast<int>(lines.size()) == maxLines) {
+      // Last line but text remains - truncate with "..."
+      std::string& lastLine = lines.back();
+      lastLine = truncatedText(fontId, lastLine.c_str(), maxWidth, style);
+    }
+  }
+
+  // If we have remaining text and hit maxLines, truncate the last line
+  if (!remaining.empty() && static_cast<int>(lines.size()) == maxLines) {
+    std::string& lastLine = lines.back();
+    // Append remaining text and truncate
+    if (getTextWidth(fontId, lastLine.c_str(), style) < maxWidth) {
+      std::string combined = lastLine + " " + remaining;
+      lastLine = truncatedText(fontId, combined.c_str(), maxWidth, style);
+    } else {
+      lastLine = truncatedText(fontId, lastLine.c_str(), maxWidth, style);
+    }
+  }
+
+  return lines;
+}
+
 // Note: Internal driver treats screen in command orientation; this library exposes a logical orientation
 int GfxRenderer::getScreenWidth() const {
   switch (orientation) {

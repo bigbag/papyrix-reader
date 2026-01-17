@@ -12,15 +12,14 @@ constexpr int SKIP_PAGE_MS = 700;
 }  // namespace
 
 int EpubReaderChapterSelectionActivity::getPageItems() const {
-  // Layout constants used in renderScreen
   constexpr int startY = 60;
-  const int lineHeight = THEME.itemHeight;
+  const int textLineHeight = renderer.getLineHeight(THEME.uiFontId) - 4;
+  const int itemHeight = textLineHeight * 2 + 8;  // 2 lines + padding between items
 
   const int screenHeight = renderer.getScreenHeight();
   const int availableHeight = screenHeight - startY;
-  int items = availableHeight / lineHeight;
+  int items = availableHeight / itemHeight;
 
-  // Ensure we always have at least one item per page to avoid division by zero
   if (items < 1) {
     items = 1;
   }
@@ -121,19 +120,32 @@ void EpubReaderChapterSelectionActivity::renderScreen() {
 
   const auto pageWidth = renderer.getScreenWidth();
   const int pageItems = getPageItems();
+  const int textLineHeight = renderer.getLineHeight(THEME.uiFontId) - 4;
+  const int itemHeight = textLineHeight * 2 + 8;  // 2 lines + padding
 
   std::string title = renderer.truncatedText(THEME.readerFontId, epub->getTitle().c_str(), pageWidth - 40, BOLD);
   renderer.drawCenteredText(THEME.readerFontId, 15, title.c_str(), THEME.primaryTextBlack, BOLD);
 
   const auto pageStartIndex = selectorIndex / pageItems * pageItems;
-  renderer.fillRect(0, 60 + (selectorIndex % pageItems) * THEME.itemHeight - 2, pageWidth - 1, THEME.itemHeight,
-                    THEME.selectionFillBlack);
+
   for (int tocIndex = pageStartIndex; tocIndex < epub->getTocItemsCount() && tocIndex < pageStartIndex + pageItems;
        tocIndex++) {
     auto item = epub->getTocItem(tocIndex);
     const bool textColor = (tocIndex == selectorIndex) ? THEME.selectionTextBlack : THEME.primaryTextBlack;
-    renderer.drawText(THEME.uiFontId, 20 + (item.level - 1) * 15, 60 + (tocIndex % pageItems) * THEME.itemHeight,
-                      item.title.c_str(), textColor);
+    const int xPos = 20 + (item.level - 1) * 15;
+    const int maxTextWidth = pageWidth - xPos - 20;
+    const int baseY = 60 + (tocIndex % pageItems) * itemHeight;
+
+    // Draw selection highlight for current item
+    if (tocIndex == selectorIndex) {
+      renderer.fillRect(0, baseY - 2, pageWidth - 1, itemHeight, THEME.selectionFillBlack);
+    }
+
+    // Wrap title to max 2 lines with hyphenation
+    auto lines = renderer.wrapTextWithHyphenation(THEME.uiFontId, item.title.c_str(), maxTextWidth, 2);
+    for (size_t i = 0; i < lines.size(); i++) {
+      renderer.drawText(THEME.uiFontId, xPos, baseY + i * textLineHeight, lines[i].c_str(), textColor);
+    }
   }
 
   renderer.displayBuffer();

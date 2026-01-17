@@ -4,6 +4,7 @@
 #include <EpdFontFamily.h>
 
 #include <map>
+#include <vector>
 
 #include "Bitmap.h"
 
@@ -80,6 +81,11 @@ class GfxRenderer {
   int getLineHeight(int fontId) const;
   std::string truncatedText(const int fontId, const char* text, const int maxWidth,
                             const EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+  // Breaks a single word into chunks that fit within maxWidth, adding "-" where needed
+  std::vector<std::string> breakWordWithHyphenation(int fontId, const char* word, int maxWidth,
+                                                    EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+  std::vector<std::string> wrapTextWithHyphenation(int fontId, const char* text, int maxWidth, int maxLines,
+                                                   EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   bool fontSupportsGrayscale(int fontId) const;
 
   // UI Components

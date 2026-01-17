@@ -12,11 +12,12 @@ constexpr int SKIP_PAGE_MS = 700;
 
 int XtcReaderChapterSelectionActivity::getPageItems() const {
   constexpr int startY = 60;
-  const int lineHeight = THEME.itemHeight;
+  const int textLineHeight = renderer.getLineHeight(UI_FONT_ID) - 4;
+  const int itemHeight = textLineHeight * 2 + 8;  // 2 lines + padding between items
 
   const int screenHeight = renderer.getScreenHeight();
   const int availableHeight = screenHeight - startY;
-  int items = availableHeight / lineHeight;
+  int items = availableHeight / itemHeight;
   if (items < 1) {
     items = 1;
   }
@@ -131,6 +132,9 @@ void XtcReaderChapterSelectionActivity::renderScreen() {
 
   const auto pageWidth = renderer.getScreenWidth();
   const int pageItems = getPageItems();
+  const int textLineHeight = renderer.getLineHeight(UI_FONT_ID) - 4;
+  const int itemHeight = textLineHeight * 2 + 8;  // 2 lines + padding
+
   renderer.drawCenteredText(READER_FONT_ID, 10, "Select Chapter", true, BOLD);
 
   const auto& chapters = xtc->getChapters();
@@ -141,11 +145,24 @@ void XtcReaderChapterSelectionActivity::renderScreen() {
   }
 
   const auto pageStartIndex = selectorIndex / pageItems * pageItems;
-  renderer.fillRect(0, 60 + (selectorIndex % pageItems) * THEME.itemHeight - 2, pageWidth - 1, THEME.itemHeight);
+
   for (int i = pageStartIndex; i < static_cast<int>(chapters.size()) && i < pageStartIndex + pageItems; i++) {
     const auto& chapter = chapters[i];
     const char* title = chapter.name.empty() ? "Unnamed" : chapter.name.c_str();
-    renderer.drawText(UI_FONT_ID, 20, 60 + (i % pageItems) * THEME.itemHeight, title, i != selectorIndex);
+    const int xPos = 20;
+    const int maxTextWidth = pageWidth - xPos - 20;
+    const int baseY = 60 + (i % pageItems) * itemHeight;
+
+    // Draw selection highlight for current item
+    if (i == selectorIndex) {
+      renderer.fillRect(0, baseY - 2, pageWidth - 1, itemHeight);
+    }
+
+    // Wrap title to max 2 lines with hyphenation
+    auto lines = renderer.wrapTextWithHyphenation(UI_FONT_ID, title, maxTextWidth, 2);
+    for (size_t j = 0; j < lines.size(); j++) {
+      renderer.drawText(UI_FONT_ID, xPos, baseY + j * textLineHeight, lines[j].c_str(), i != selectorIndex);
+    }
   }
 
   renderer.displayBuffer();

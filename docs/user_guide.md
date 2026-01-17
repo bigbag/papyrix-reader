@@ -123,6 +123,7 @@ The Settings screen allows you to configure the device's behavior:
 
 - **Hyphenation** (default: ON)
   - Break long words at soft hyphen positions embedded in EPUB content
+  - Words too wide for the line are automatically split with character-level hyphenation
   - Reduces large gaps in justified text and prevents words from overflowing
 
 - **Text Anti-Aliasing** (default: ON)

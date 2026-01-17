@@ -321,6 +321,7 @@ void TxtReaderActivity::renderPage() {
             if (lastWordEnd > lineStart) {
               lineEnd = lastWordEnd;
             }
+            // If no word boundary, lineEnd stays where it is (character-level break)
             break;
           }
 
@@ -350,7 +351,23 @@ void TxtReaderActivity::renderPage() {
           if (lineBuf) {
             memcpy(lineBuf, buffer + lineStart, renderLen);
             lineBuf[renderLen] = '\0';
-            renderer.drawText(fontId, orientedMarginLeft, y, lineBuf, THEME.primaryTextBlack);
+
+            // Safety check: ensure line fits (char-by-char measurement can have kerning errors)
+            int actualLineWidth = renderer.getTextWidth(fontId, lineBuf);
+            if (actualLineWidth > viewportWidth) {
+              // Use hyphenation to break oversized text across multiple lines
+              auto wrappedLines = renderer.wrapTextWithHyphenation(fontId, lineBuf, viewportWidth, 10);
+              for (size_t i = 0; i < wrappedLines.size() &&
+                                 y + lineHeight <= renderer.getScreenHeight() - orientedMarginBottom;
+                   i++) {
+                renderer.drawText(fontId, orientedMarginLeft, y, wrappedLines[i].c_str(), THEME.primaryTextBlack);
+                if (i < wrappedLines.size() - 1) {
+                  y += lineHeight;
+                }
+              }
+            } else {
+              renderer.drawText(fontId, orientedMarginLeft, y, lineBuf, THEME.primaryTextBlack);
+            }
             free(lineBuf);
           }
         }
@@ -661,6 +678,17 @@ bool TxtReaderActivity::buildPageIndex() {
             // Line too long - wrap at word boundary or current position
             if (lastWordEndInBuffer > lineStartInBuffer) {
               lineEndInBuffer = lastWordEndInBuffer;
+            } else {
+              // Single word that's too wide - count wrapped lines from hyphenation
+              char wordBuf[256];
+              size_t wordLen = std::min(lineEndInBuffer - lineStartInBuffer, sizeof(wordBuf) - 1);
+              memcpy(wordBuf, buffer + lineStartInBuffer, wordLen);
+              wordBuf[wordLen] = '\0';
+              auto chunks = renderer.breakWordWithHyphenation(fontId, wordBuf, viewportWidth);
+              // Each chunk beyond the first is an additional line
+              if (chunks.size() > 1) {
+                currentLine += static_cast<int>(chunks.size()) - 1;
+              }
             }
             foundLineEnd = true;
             break;

@@ -95,7 +95,8 @@ reader_font_large =       # Reader font for large size (empty = builtin)
 - **item_height** - Height of menu items in pixels
   - Default: `30`
   - Minimum: `1` (values of 0 will cause errors)
-  - Affects file browser, TOC lists, and chapter selection navigation (including long-press page skip)
+  - Affects file browser and menu navigation (including long-press page skip)
+  - Note: Chapter selection screens use automatic 2-line item heights based on font size
 - **item_spacing** - Vertical space between items in pixels
   - Default: `0`
 - **front_buttons** - Front button mapping

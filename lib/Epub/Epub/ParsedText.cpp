@@ -367,9 +367,12 @@ void ParsedText::preSplitOversizedWords(const GfxRenderer& renderer, const int f
       auto shyPositions = findSoftHyphenPositions(word);
 
       if (shyPositions.empty()) {
-        // No soft hyphens, keep word as-is (will overflow)
-        newWords.push_back(word);
-        newStyles.push_back(wordStyle);
+        // No soft hyphens - use GfxRenderer's hard hyphenation helper
+        auto chunks = renderer.breakWordWithHyphenation(fontId, word.c_str(), pageWidth, wordStyle);
+        for (const auto& chunk : chunks) {
+          newWords.push_back(chunk);
+          newStyles.push_back(wordStyle);
+        }
       } else {
         // Split word at soft hyphen positions
         std::string remaining = word;
