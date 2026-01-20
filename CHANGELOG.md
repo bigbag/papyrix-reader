@@ -1,5 +1,11 @@
 
 
+## v0.16.0 (2026-01-21)
+
+*  Update changelog [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add Group5 compression and ordered dithering from bb_epaper. Xtc: Fix misleading comment about 1-bit polarity [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
 ## v0.15.0 (2026-01-21)
 
 *  Update CHANGELOG [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
