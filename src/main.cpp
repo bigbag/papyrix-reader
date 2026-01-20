@@ -55,6 +55,9 @@
 
 #define SD_SPI_MISO 7
 
+#define SERIAL_INIT_DELAY_MS 10
+#define SERIAL_READY_TIMEOUT_MS 3000
+
 EInkDisplay einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_RST, EPD_BUSY);
 InputManager inputManager;
 MappedInputManager mappedInputManager(inputManager);
@@ -105,6 +108,18 @@ void enterNewActivity(Activity* activity) {
   }
   currentActivity = activity;
   currentActivity->onEnter();
+}
+
+bool isUsbConnected() {
+  return digitalRead(UART0_RXD) == HIGH;
+}
+
+bool isWakeupAfterFlashing() {
+  const auto wakeupCause = esp_sleep_get_wakeup_cause();
+  const auto resetReason = esp_reset_reason();
+  return isUsbConnected() &&
+         (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED) &&
+         (resetReason == ESP_RST_UNKNOWN);
 }
 
 // Verify long press on wake-up from deep sleep
@@ -305,12 +320,19 @@ void applyThemeFonts() {
 void setup() {
   // Only start serial if USB connected
   pinMode(UART0_RXD, INPUT);
-  if (digitalRead(UART0_RXD) == HIGH) {
+  if (isUsbConnected()) {
     Serial.begin(115200);
+    delay(SERIAL_INIT_DELAY_MS);  // Allow USB CDC to initialize
+    unsigned long start = millis();
+    while (!Serial && (millis() - start) < SERIAL_READY_TIMEOUT_MS) {
+      delay(SERIAL_INIT_DELAY_MS);
+    }
   }
 
   inputManager.begin();
-  verifyWakeupLongPress();
+  if (!isWakeupAfterFlashing()) {
+    verifyWakeupLongPress();
+  }
 
   Serial.printf("[%lu] [   ] Starting CrossPoint version " PAPYRIX_VERSION "\n", millis());
 
