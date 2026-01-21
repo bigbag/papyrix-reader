@@ -268,6 +268,8 @@ node convert-fonts.mjs my-font -r MyFont-Regular.ttf
 - **--all-sizes** - Generate all reader sizes (14, 16, 18pt)
 - **--cjk-2500** - Use minimal CJK (~2,500 chars): Jōyō kanji + kana + punctuation (fits in ESP32 RAM, covers 99%+ of Japanese text)
 - **--cjk-common** - Use full CJK (20,992) + Hangul (11,172), reduced fullwidth forms
+- **--var** - Variable font axis value (e.g., `--var wght=700 --var wdth=100`). Can be specified multiple times for different axes
+- **--preview** - Generate HTML preview of rendered glyphs for debugging
 
 #### Examples
 
@@ -283,6 +285,14 @@ node convert-fonts.mjs my-font -r Font.ttf --all-sizes
 
 # Use 2-bit grayscale for smoother rendering
 node convert-fonts.mjs my-font -r Font.ttf --2bit
+
+# Variable font with specific weight (e.g., Roboto, Inter, or other variable fonts)
+node convert-fonts.mjs roboto -r Roboto-VariableFont_wdth,wght.ttf --var wght=400
+node convert-fonts.mjs roboto-bold -r Roboto-VariableFont_wdth,wght.ttf --var wght=700
+node convert-fonts.mjs roboto-condensed -r Roboto-VariableFont_wdth,wght.ttf --var wght=400 --var wdth=75
+
+# Generate HTML preview to verify font rendering
+node convert-fonts.mjs my-font -r Font.ttf --preview
 
 # Generate CJK fonts for device (fits in ESP32 RAM)
 node convert-fonts.mjs noto-sans-jp -r NotoSansJP-Regular.ttf --all-sizes --cjk-2500
@@ -302,7 +312,38 @@ my-font/
 
 Copy the entire folder to `/config/fonts/` on your SD card.
 
-#### Recommended Font Sizes
+#### Variable Fonts
+
+Variable fonts (like Roboto, Inter, or Noto Sans) contain multiple weights and widths in a single file. Use the `--var` option to select specific axis values:
+
+**Common axes:**
+- **wght** (weight): 100 (thin) to 900 (black), with 400 being regular and 700 being bold
+- **wdth** (width): 50 (extra-condensed) to 200 (extra-expanded), with 100 being normal
+
+**Example: Creating a font family from Roboto variable font:**
+
+```bash
+# Regular weight
+node convert-fonts.mjs roboto -r Roboto-VariableFont_wdth,wght.ttf --var wght=400 --all-sizes
+
+# Bold weight
+node convert-fonts.mjs roboto-bold -r Roboto-VariableFont_wdth,wght.ttf --var wght=700 --all-sizes
+
+# Light condensed
+node convert-fonts.mjs roboto-light-condensed -r Roboto-VariableFont_wdth,wght.ttf --var wght=300 --var wdth=75 --all-sizes
+```
+
+**Detecting variable font axes:**
+
+The converter automatically detects and displays available axes when processing a variable font:
+
+```
+Converting: Roboto-VariableFont_wdth,wght.ttf -> regular.epdfont
+  Variable font axes: wdth(75-100-100), wght(100-400-900)
+  Applied variations: wght=700
+```
+
+### Recommended Font Sizes
 
 - **Reader font (Small setting):** 14pt
 - **Reader font (Normal setting):** 16pt

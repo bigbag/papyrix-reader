@@ -2,8 +2,6 @@
 /**
  * Convert TTF/OTF fonts to Papyrix binary format (.epdfont)
  *
- * Creates a font family directory with all style variants for use with Papyrix themes.
- *
  * Usage:
  *   node convert-fonts.mjs my-font -r Regular.ttf -b Bold.ttf -i Italic.ttf
  *   node convert-fonts.mjs my-font -r Regular.ttf --size 16
@@ -22,126 +20,73 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Binary format constants
 const MAGIC = 0x46445045; // "EPDF" in little-endian
 const VERSION = 1;
 const DPI = 150;
 
-// Unicode intervals - base set (Latin, Cyrillic, punctuation)
+// Unicode intervals
 const INTERVALS_BASE = [
-  // Basic Latin (ASCII)
-  [0x0000, 0x007f],
-  // Latin-1 Supplement
-  [0x0080, 0x00ff],
-  // Latin Extended-A
-  [0x0100, 0x017f],
-  // General Punctuation
-  [0x2000, 0x206f],
-  // Dashes, quotes, prime marks
-  [0x2010, 0x203a],
-  // Misc punctuation
-  [0x2040, 0x205f],
-  // Currency symbols
-  [0x20a0, 0x20cf],
-  // Combining Diacritical Marks
-  [0x0300, 0x036f],
-  // Cyrillic
-  [0x0400, 0x04ff],
-  // Math operators
-  [0x2200, 0x22ff],
-  // Arrows
-  [0x2190, 0x21ff],
+  [0x0000, 0x007f], // Basic Latin (ASCII)
+  [0x0080, 0x00ff], // Latin-1 Supplement
+  [0x0100, 0x017f], // Latin Extended-A
+  [0x2000, 0x206f], // General Punctuation
+  [0x2010, 0x203a], // Dashes, quotes, prime marks
+  [0x2040, 0x205f], // Misc punctuation
+  [0x20a0, 0x20cf], // Currency symbols
+  [0x0300, 0x036f], // Combining Diacritical Marks
+  [0x0400, 0x04ff], // Cyrillic
+  [0x2200, 0x22ff], // Math operators
+  [0x2190, 0x21ff], // Arrows
 ];
 
-// CJK intervals - full set (~32,000 chars, results in large files ~4MB+)
-const INTERVALS_CJK_FULL = [
-  // CJK Symbols and Punctuation
-  [0x3000, 0x303f],
-  // Hiragana (Japanese)
-  [0x3040, 0x309f],
-  // Katakana (Japanese)
-  [0x30a0, 0x30ff],
-  // CJK Unified Ideographs - FULL (20,992 chars)
-  [0x4e00, 0x9fff],
-  // Hangul Jamo (Korean)
-  [0x1100, 0x11ff],
-  // Hangul Compatibility Jamo (Korean)
-  [0x3130, 0x318f],
-  // Hangul Syllables - FULL (11,172 chars)
-  [0xac00, 0xd7af],
-  // Halfwidth and Fullwidth Forms
-  [0xff00, 0xffef],
-];
-
-// CJK intervals - full CJK and Hangul, reduced fullwidth forms
-const INTERVALS_CJK_COMMON = [
-  // CJK Symbols and Punctuation
-  [0x3000, 0x303f],
-  // Hiragana (Japanese)
-  [0x3040, 0x309f],
-  // Katakana (Japanese)
-  [0x30a0, 0x30ff],
-  // CJK Unified Ideographs - Full range (20,992 chars)
-  [0x4e00, 0x9fff],
-  // Hangul Jamo (Korean)
-  [0x1100, 0x11ff],
-  // Hangul Compatibility Jamo (Korean)
-  [0x3130, 0x318f],
-  // Hangul Syllables - Full range (11,172 chars)
-  [0xac00, 0xd7af],
-  // Fullwidth ASCII and punctuation
-  [0xff00, 0xff5f],
+const INTERVALS_CJK_BASE = [
+  [0x3000, 0x303f], // CJK Symbols and Punctuation
+  [0x3040, 0x309f], // Hiragana
+  [0x30a0, 0x30ff], // Katakana
+  [0x4e00, 0x9fff], // CJK Unified Ideographs (20,992 chars)
+  [0x1100, 0x11ff], // Hangul Jamo
+  [0x3130, 0x318f], // Hangul Compatibility Jamo
+  [0xac00, 0xd7af], // Hangul Syllables (11,172 chars)
 ];
 
 /**
- * Simple scanline rasterizer for opentype.js paths
- * Renders glyph to 8-bit grayscale with 4x supersampling
+ * Scanline rasterizer for opentype.js paths - renders glyph to 8-bit grayscale with 4x supersampling
  */
 class GlyphRasterizer {
-  constructor(font, fontSize) {
+  constructor(font, fontSize, variations = null) {
     this.font = font;
     this.fontSize = fontSize;
     this.scale = (fontSize * DPI) / (72 * font.unitsPerEm);
+    this.variations = variations;
+
+    if (font.tables.fvar?.axes?.length > 0) {
+      const axisInfo = font.tables.fvar.axes.map(a => `${a.tag}(${a.minValue}-${a.defaultValue}-${a.maxValue})`);
+      console.log(`  Variable font axes: ${axisInfo.join(", ")}`);
+      if (variations) {
+        console.log(`  Applied variations: ${Object.entries(variations).map(([k, v]) => `${k}=${v}`).join(", ")}`);
+      }
+    }
   }
 
-  /**
-   * Render a glyph to 8-bit grayscale bitmap
-   */
   renderGlyph(codePoint) {
-    const char = String.fromCodePoint(codePoint);
-    const glyphIndex = this.font.charToGlyphIndex(char);
-    if (glyphIndex === 0 && codePoint !== 0) {
-      return null; // Glyph not found
-    }
+    const glyphIndex = this.font.charToGlyphIndex(String.fromCodePoint(codePoint));
+    if (glyphIndex === 0 && codePoint !== 0) return null;
 
     const glyph = this.font.glyphs.get(glyphIndex);
     if (!glyph) return null;
 
-    // Get glyph metrics
-    const advanceWidth = Math.round(glyph.advanceWidth * this.scale);
-
-    // Get bounding box
+    const advanceWidth = Math.round((glyph.advanceWidth ?? 0) * this.scale);
     const bbox = glyph.getBoundingBox();
+
     if (!bbox || (bbox.x1 === 0 && bbox.y1 === 0 && bbox.x2 === 0 && bbox.y2 === 0)) {
-      // Empty glyph (space, etc.)
-      return {
-        width: 0,
-        height: 0,
-        advanceX: advanceWidth,
-        left: 0,
-        top: 0,
-        data: Buffer.alloc(0),
-      };
+      return { width: 0, height: 0, advanceX: advanceWidth, left: 0, top: 0, data: Buffer.alloc(0) };
     }
 
-    // Scale bounding box
     const x1 = Math.floor(bbox.x1 * this.scale);
-    const y1 = Math.floor(bbox.y1 * this.scale);
     const x2 = Math.ceil(bbox.x2 * this.scale);
     const y2 = Math.ceil(bbox.y2 * this.scale);
-
     const width = Math.max(1, x2 - x1);
-    const height = Math.max(1, y2 - y1);
+    const height = Math.max(1, Math.ceil(bbox.y2 * this.scale) - Math.floor(bbox.y1 * this.scale));
 
     // 4x supersampling
     const ssScale = 4;
@@ -149,13 +94,11 @@ class GlyphRasterizer {
     const ssHeight = height * ssScale;
     const ssBuffer = new Uint8Array(ssWidth * ssHeight);
 
-    // Get path commands
-    const path = glyph.getPath(0, 0, this.fontSize * DPI / 72);
+    const pathOptions = this.variations ? { variation: this.variations } : {};
+    const glyphPath = glyph.getPath(0, 0, this.fontSize * DPI / 72, pathOptions);
+    this.rasterizePath(glyphPath, ssBuffer, ssWidth, ssHeight, -x1 * ssScale, y2 * ssScale);
 
-    // Rasterize with edge-based coverage
-    this.rasterizePath(path, ssBuffer, ssWidth, ssHeight, -x1 * ssScale, y2 * ssScale);
-
-    // Downsample to final resolution
+    // Downsample
     const buffer = new Uint8Array(width * height);
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
@@ -169,235 +112,106 @@ class GlyphRasterizer {
       }
     }
 
-    return {
-      width,
-      height,
-      advanceX: advanceWidth,
-      left: x1,
-      top: y2, // baseline-relative top
-      data: Buffer.from(buffer),
-    };
+    return { width, height, advanceX: advanceWidth, left: x1, top: y2, data: Buffer.from(buffer) };
   }
 
-  /**
-   * Rasterize an opentype.js path to a buffer using scanline fill
-   */
-  rasterizePath(path, buffer, width, height, offsetX, offsetY) {
-    // Build edge list from path commands
+  rasterizePath(glyphPath, buffer, width, height, offsetX, offsetY) {
     const edges = [];
-    let currentX = 0;
-    let currentY = 0;
-    let startX = 0;
-    let startY = 0;
+    let currentX = 0, currentY = 0, startX = 0, startY = 0;
 
-    for (const cmd of path.commands) {
+    for (const cmd of glyphPath.commands) {
       switch (cmd.type) {
         case "M":
-          currentX = cmd.x + offsetX;
-          currentY = offsetY - cmd.y;
-          startX = currentX;
-          startY = currentY;
+          currentX = startX = cmd.x + offsetX;
+          currentY = startY = offsetY - cmd.y;
           break;
-
-        case "L":
-          {
-            const x = cmd.x + offsetX;
-            const y = offsetY - cmd.y;
-            this.addEdge(edges, currentX, currentY, x, y);
-            currentX = x;
-            currentY = y;
-          }
+        case "L": {
+          const x = cmd.x + offsetX, y = offsetY - cmd.y;
+          this.addEdge(edges, currentX, currentY, x, y);
+          currentX = x; currentY = y;
           break;
-
-        case "Q":
-          {
-            const x = cmd.x + offsetX;
-            const y = offsetY - cmd.y;
-            const x1 = cmd.x1 + offsetX;
-            const y1 = offsetY - cmd.y1;
-            this.addQuadraticCurve(edges, currentX, currentY, x1, y1, x, y);
-            currentX = x;
-            currentY = y;
-          }
+        }
+        case "Q": {
+          const x = cmd.x + offsetX, y = offsetY - cmd.y;
+          this.addCurve(edges, currentX, currentY, cmd.x1 + offsetX, offsetY - cmd.y1, x, y, 8);
+          currentX = x; currentY = y;
           break;
-
-        case "C":
-          {
-            const x = cmd.x + offsetX;
-            const y = offsetY - cmd.y;
-            const x1 = cmd.x1 + offsetX;
-            const y1 = offsetY - cmd.y1;
-            const x2 = cmd.x2 + offsetX;
-            const y2 = offsetY - cmd.y2;
-            this.addCubicCurve(edges, currentX, currentY, x1, y1, x2, y2, x, y);
-            currentX = x;
-            currentY = y;
-          }
+        }
+        case "C": {
+          const x = cmd.x + offsetX, y = offsetY - cmd.y;
+          this.addCubicCurve(edges, currentX, currentY, cmd.x1 + offsetX, offsetY - cmd.y1, cmd.x2 + offsetX, offsetY - cmd.y2, x, y);
+          currentX = x; currentY = y;
           break;
-
+        }
         case "Z":
           this.addEdge(edges, currentX, currentY, startX, startY);
-          currentX = startX;
-          currentY = startY;
+          currentX = startX; currentY = startY;
           break;
       }
     }
 
-    // Sort edges by y-min
     edges.sort((a, b) => a.yMin - b.yMin);
 
-    // Scanline fill
     for (let y = 0; y < height; y++) {
       const scanY = y + 0.5;
-      const intersections = [];
+      const intersections = edges
+        .filter(e => e.yMin <= scanY && e.yMax > scanY)
+        .map(e => e.x1 + ((scanY - e.y1) * (e.x2 - e.x1)) / (e.y2 - e.y1))
+        .sort((a, b) => a - b);
 
-      for (const edge of edges) {
-        if (edge.yMin <= scanY && edge.yMax > scanY) {
-          const x = edge.x1 + ((scanY - edge.y1) * (edge.x2 - edge.x1)) / (edge.y2 - edge.y1);
-          intersections.push(x);
-        }
-      }
-
-      intersections.sort((a, b) => a - b);
-
-      // Fill between pairs of intersections
       for (let i = 0; i < intersections.length - 1; i += 2) {
         const xStart = Math.max(0, Math.floor(intersections[i]));
         const xEnd = Math.min(width, Math.ceil(intersections[i + 1]));
-        for (let x = xStart; x < xEnd; x++) {
-          buffer[y * width + x] = 255;
-        }
+        for (let x = xStart; x < xEnd; x++) buffer[y * width + x] = 255;
       }
     }
   }
 
   addEdge(edges, x1, y1, x2, y2) {
-    if (Math.abs(y2 - y1) < 0.001) return; // Skip horizontal edges
-
-    // Ensure y1 < y2
-    if (y1 > y2) {
-      [x1, x2] = [x2, x1];
-      [y1, y2] = [y2, y1];
-    }
-
-    edges.push({
-      x1,
-      y1,
-      x2,
-      y2,
-      yMin: y1,
-      yMax: y2,
-    });
+    if (Math.abs(y2 - y1) < 0.001) return;
+    if (y1 > y2) { [x1, x2] = [x2, x1]; [y1, y2] = [y2, y1]; }
+    edges.push({ x1, y1, x2, y2, yMin: y1, yMax: y2 });
   }
 
-  addQuadraticCurve(edges, x0, y0, x1, y1, x2, y2) {
-    // Approximate with line segments
-    const steps = 8;
-    let px = x0;
-    let py = y0;
-
+  addCurve(edges, x0, y0, x1, y1, x2, y2, steps) {
+    let px = x0, py = y0;
     for (let i = 1; i <= steps; i++) {
-      const t = i / steps;
-      const mt = 1 - t;
+      const t = i / steps, mt = 1 - t;
       const x = mt * mt * x0 + 2 * mt * t * x1 + t * t * x2;
       const y = mt * mt * y0 + 2 * mt * t * y1 + t * t * y2;
       this.addEdge(edges, px, py, x, y);
-      px = x;
-      py = y;
+      px = x; py = y;
     }
   }
 
   addCubicCurve(edges, x0, y0, x1, y1, x2, y2, x3, y3) {
-    // Approximate with line segments
-    const steps = 12;
-    let px = x0;
-    let py = y0;
-
-    for (let i = 1; i <= steps; i++) {
-      const t = i / steps;
-      const mt = 1 - t;
-      const x =
-        mt * mt * mt * x0 +
-        3 * mt * mt * t * x1 +
-        3 * mt * t * t * x2 +
-        t * t * t * x3;
-      const y =
-        mt * mt * mt * y0 +
-        3 * mt * mt * t * y1 +
-        3 * mt * t * t * y2 +
-        t * t * t * y3;
+    let px = x0, py = y0;
+    for (let i = 1; i <= 12; i++) {
+      const t = i / 12, mt = 1 - t;
+      const x = mt * mt * mt * x0 + 3 * mt * mt * t * x1 + 3 * mt * t * t * x2 + t * t * t * x3;
+      const y = mt * mt * mt * y0 + 3 * mt * mt * t * y1 + 3 * mt * t * t * y2 + t * t * t * y3;
       this.addEdge(edges, px, py, x, y);
-      px = x;
-      py = y;
+      px = x; py = y;
     }
   }
 }
 
-/**
- * Convert 8-bit grayscale to packed 4-bit
- */
-function to4BitGrayscale(data, width, height) {
-  const result = [];
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x += 2) {
-      const i = y * width + x;
-      const low = data[i] >> 4;
-      const high = x + 1 < width ? (data[i + 1] >> 4) << 4 : 0;
-      result.push(low | high);
-    }
-  }
-  return Buffer.from(result);
-}
-
-/**
- * Quantize a 4-bit pixel to 2-bit or 1-bit
- */
-function quantizePixel(value, is2Bit) {
-  if (is2Bit) {
-    if (value >= 12) return 3;
-    if (value >= 8) return 2;
-    if (value >= 4) return 1;
-    return 0;
-  }
-  return value >= 2 ? 1 : 0;
-}
-
-/**
- * Get a 4-bit pixel from packed buffer
- */
-function getPixel4Bit(pixels4g, pitch, x, y) {
-  if (pitch === 0 || !pixels4g.length) return 0;
-  const idx = y * pitch + Math.floor(x / 2);
-  if (idx >= pixels4g.length) return 0;
-  const byte = pixels4g[idx];
-  return (byte >> ((x % 2) * 4)) & 0xf;
-}
-
-/**
- * Downsample 4-bit grayscale to 2-bit or 1-bit packed bitmap
- */
 function renderDownsampled(data, width, height, is2Bit) {
-  const pixels4g = to4BitGrayscale(data, width, height);
-  const pitch = Math.ceil(width / 2);
   const bitsPerPixel = is2Bit ? 2 : 1;
   const pixelsPerByte = 8 / bitsPerPixel;
-  const totalPixels = width * height;
-
   const pixels = [];
   let px = 0;
 
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      px = (px << bitsPerPixel) | quantizePixel(getPixel4Bit(pixels4g, pitch, x, y), is2Bit);
-      const pixelIdx = y * width + x;
-      if (pixelIdx % pixelsPerByte === pixelsPerByte - 1) {
-        pixels.push(px);
-        px = 0;
-      }
-    }
+  for (let i = 0; i < width * height; i++) {
+    const value = data[i] >> 4; // Convert 8-bit to 4-bit
+    const quantized = is2Bit
+      ? (value >= 12 ? 3 : value >= 8 ? 2 : value >= 4 ? 1 : 0)
+      : (value >= 2 ? 1 : 0);
+    px = (px << bitsPerPixel) | quantized;
+    if (i % pixelsPerByte === pixelsPerByte - 1) { pixels.push(px); px = 0; }
   }
 
-  const remainder = totalPixels % pixelsPerByte;
+  const remainder = (width * height) % pixelsPerByte;
   if (remainder !== 0) {
     px <<= (pixelsPerByte - remainder) * bitsPerPixel;
     pixels.push(px);
@@ -406,194 +220,149 @@ function renderDownsampled(data, width, height, is2Bit) {
   return Buffer.from(pixels);
 }
 
-/**
- * Validate intervals to only include code points present in font
- */
 function validateIntervals(font, intervals) {
   const validIntervals = [];
-
   for (const [iStart, iEnd] of intervals) {
     let start = iStart;
-    for (let codePoint = iStart; codePoint <= iEnd; codePoint++) {
-      const glyphIndex = font.charToGlyphIndex(String.fromCodePoint(codePoint));
-      if (glyphIndex === 0 && codePoint !== 0) {
-        if (start < codePoint) {
-          validIntervals.push([start, codePoint - 1]);
-        }
-        start = codePoint + 1;
+    for (let cp = iStart; cp <= iEnd; cp++) {
+      if (font.charToGlyphIndex(String.fromCodePoint(cp)) === 0 && cp !== 0) {
+        if (start < cp) validIntervals.push([start, cp - 1]);
+        start = cp + 1;
       }
     }
-    if (start <= iEnd) {
-      validIntervals.push([start, iEnd]);
-    }
+    if (start <= iEnd) validIntervals.push([start, iEnd]);
   }
-
   return validIntervals;
 }
 
 /**
- * Convert a single font file to .epdfont binary format
+ * Render all glyphs from a font - shared by binary and header output
  */
-function convertFont(fontPath, outputPath, size, is2Bit, intervals) {
+function renderAllGlyphs(font, rasterizer, intervals, is2Bit, progressLabel) {
+  const validIntervals = validateIntervals(font, [...intervals].sort((a, b) => a[0] - b[0]));
+  if (!validIntervals.length) return null;
+
+  const totalGlyphs = validIntervals.reduce((sum, [s, e]) => sum + (e - s + 1), 0);
+  const allGlyphs = [];
+  let totalBitmapSize = 0;
+  let processed = 0;
+  let lastPercent = -1;
+
+  for (const [iStart, iEnd] of validIntervals) {
+    for (let codePoint = iStart; codePoint <= iEnd; codePoint++) {
+      const glyph = rasterizer.renderGlyph(codePoint);
+      const width = glyph?.width ?? 0;
+      const height = glyph?.height ?? 0;
+      const pixelData = (width > 0 && height > 0 && glyph?.data)
+        ? renderDownsampled(glyph.data, width, height, is2Bit)
+        : Buffer.alloc(0);
+
+      allGlyphs.push({
+        width, height,
+        advanceX: glyph?.advanceX ?? 0,
+        left: glyph?.left ?? 0,
+        top: glyph?.top ?? 0,
+        dataLength: pixelData.length,
+        dataOffset: totalBitmapSize,
+        codePoint,
+        pixelData,
+      });
+
+      totalBitmapSize += pixelData.length;
+      processed++;
+
+      const percent = Math.floor((processed / totalGlyphs) * 100);
+      if (percent !== lastPercent && percent % 10 === 0) {
+        process.stdout.write(`\r  ${progressLabel} (${percent}%)`);
+        lastPercent = percent;
+      }
+    }
+  }
+  process.stdout.write("\r" + " ".repeat(80) + "\r");
+
+  const scale = rasterizer.scale;
+  return {
+    glyphs: allGlyphs,
+    validIntervals,
+    totalBitmapSize,
+    metrics: {
+      advanceY: Math.ceil((font.ascender - font.descender) * scale),
+      ascender: Math.ceil(font.ascender * scale),
+      descender: Math.floor(font.descender * scale),
+    },
+  };
+}
+
+function convertFont(fontPath, outputPath, size, is2Bit, intervals, variations = null) {
   if (!fs.existsSync(fontPath)) {
     console.error(`  Warning: Font file not found: ${fontPath}`);
     return false;
   }
 
-  console.log(`  Converting: ${path.basename(fontPath)} -> ${path.basename(outputPath)}`);
+  const label = `Converting: ${path.basename(fontPath)} -> ${path.basename(outputPath)}`;
+  console.log(`  ${label}`);
 
   try {
     const font = opentype.loadSync(fontPath);
-    const rasterizer = new GlyphRasterizer(font, size);
+    const rasterizer = new GlyphRasterizer(font, size, variations);
+    const result = renderAllGlyphs(font, rasterizer, intervals, is2Bit, label);
 
-    // Validate intervals
-    const validIntervals = validateIntervals(
-      font,
-      [...intervals].sort((a, b) => a[0] - b[0])
-    );
-    if (!validIntervals.length) {
+    if (!result) {
       console.error("  Error: No valid glyphs found");
       return false;
     }
 
-    // Render all glyphs
-    const allGlyphs = [];
-    let totalBitmapSize = 0;
-
-    let totalGlyphs = 0;
-    for (const [iStart, iEnd] of validIntervals) {
-      totalGlyphs += iEnd - iStart + 1;
-    }
-
-    let processed = 0;
-    let lastPercent = -1;
-
-    for (const [iStart, iEnd] of validIntervals) {
-      for (let codePoint = iStart; codePoint <= iEnd; codePoint++) {
-        const glyph = rasterizer.renderGlyph(codePoint);
-
-        // MUST write a glyph for every codepoint in interval - never skip!
-        // If glyph is null/empty, write an empty placeholder to maintain
-        // correct offsets for firmware's getGlyph() calculation.
-        const width = glyph?.width ?? 0;
-        const height = glyph?.height ?? 0;
-        const advanceX = glyph?.advanceX ?? 0;
-        const left = glyph?.left ?? 0;
-        const top = glyph?.top ?? 0;
-
-        const pixelData =
-          width > 0 && height > 0 && glyph?.data
-            ? renderDownsampled(glyph.data, width, height, is2Bit)
-            : Buffer.alloc(0);
-
-        allGlyphs.push({
-          width,
-          height,
-          advanceX,
-          left,
-          top,
-          dataLength: pixelData.length,
-          dataOffset: totalBitmapSize,
-          codePoint,
-          pixelData,
-        });
-
-        totalBitmapSize += pixelData.length;
-        processed++;
-
-        // Progress indicator
-        const percent = Math.floor((processed / totalGlyphs) * 100);
-        if (percent !== lastPercent && percent % 10 === 0) {
-          process.stdout.write(`\r  Converting: ${path.basename(fontPath)} -> ${path.basename(outputPath)} (${percent}%)`);
-          lastPercent = percent;
-        }
-      }
-    }
-    process.stdout.write("\r" + " ".repeat(80) + "\r");
-
-    // Get font metrics
-    const scale = (size * DPI) / (72 * font.unitsPerEm);
-    const advanceY = Math.ceil((font.ascender - font.descender) * scale);
-    const ascender = Math.ceil(font.ascender * scale);
-    const descender = Math.floor(font.descender * scale);
+    const { glyphs, validIntervals, totalBitmapSize, metrics } = result;
 
     // Build binary file
-    const dir = path.dirname(outputPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 
-    const headerSize = 16;
-    const metricsSize = 18;
+    const headerSize = 16, metricsSize = 18;
     const intervalsSize = validIntervals.length * 12;
-    const glyphsSize = allGlyphs.length * 14;
-    const totalSize = headerSize + metricsSize + intervalsSize + glyphsSize + totalBitmapSize;
-
-    const buffer = Buffer.alloc(totalSize);
+    const glyphsSize = glyphs.length * 14;
+    const buffer = Buffer.alloc(headerSize + metricsSize + intervalsSize + glyphsSize + totalBitmapSize);
     let offset = 0;
 
-    // Header: magic(4) + version(2) + flags(2) + reserved(8) = 16 bytes
-    const flags = is2Bit ? 0x01 : 0x00;
-    buffer.writeUInt32LE(MAGIC, offset);
-    offset += 4;
-    buffer.writeUInt16LE(VERSION, offset);
-    offset += 2;
-    buffer.writeUInt16LE(flags, offset);
-    offset += 2;
+    // Header
+    buffer.writeUInt32LE(MAGIC, offset); offset += 4;
+    buffer.writeUInt16LE(VERSION, offset); offset += 2;
+    buffer.writeUInt16LE(is2Bit ? 0x01 : 0x00, offset); offset += 2;
     offset += 8; // reserved
 
-    // Metrics: advanceY(1) + pad(1) + ascender(2) + descender(2) + counts(12) = 18 bytes
-    buffer.writeUInt8(advanceY & 0xff, offset);
-    offset += 1;
-    buffer.writeUInt8(0, offset); // pad
-    offset += 1;
-    buffer.writeInt16LE(ascender, offset);
-    offset += 2;
-    buffer.writeInt16LE(descender, offset);
-    offset += 2;
-    buffer.writeUInt32LE(validIntervals.length, offset);
-    offset += 4;
-    buffer.writeUInt32LE(allGlyphs.length, offset);
-    offset += 4;
-    buffer.writeUInt32LE(totalBitmapSize, offset);
-    offset += 4;
+    // Metrics
+    buffer.writeUInt8(metrics.advanceY & 0xff, offset++);
+    buffer.writeUInt8(0, offset++); // pad
+    buffer.writeInt16LE(metrics.ascender, offset); offset += 2;
+    buffer.writeInt16LE(metrics.descender, offset); offset += 2;
+    buffer.writeUInt32LE(validIntervals.length, offset); offset += 4;
+    buffer.writeUInt32LE(glyphs.length, offset); offset += 4;
+    buffer.writeUInt32LE(totalBitmapSize, offset); offset += 4;
 
-    // Intervals: first(4) + last(4) + offset(4) = 12 bytes each
+    // Intervals
     let glyphOffset = 0;
     for (const [iStart, iEnd] of validIntervals) {
-      buffer.writeUInt32LE(iStart, offset);
-      offset += 4;
-      buffer.writeUInt32LE(iEnd, offset);
-      offset += 4;
-      buffer.writeUInt32LE(glyphOffset, offset);
-      offset += 4;
+      buffer.writeUInt32LE(iStart, offset); offset += 4;
+      buffer.writeUInt32LE(iEnd, offset); offset += 4;
+      buffer.writeUInt32LE(glyphOffset, offset); offset += 4;
       glyphOffset += iEnd - iStart + 1;
     }
 
-    // Glyphs: w(1) + h(1) + adv(1) + pad(1) + left(2) + top(2) + len(2) + off(4) = 14 bytes
-    for (const glyph of allGlyphs) {
-      buffer.writeUInt8(glyph.width, offset);
-      offset += 1;
-      buffer.writeUInt8(glyph.height, offset);
-      offset += 1;
-      buffer.writeUInt8(glyph.advanceX & 0xff, offset);
-      offset += 1;
-      buffer.writeUInt8(0, offset); // pad
-      offset += 1;
-      buffer.writeInt16LE(glyph.left, offset);
-      offset += 2;
-      buffer.writeInt16LE(glyph.top, offset);
-      offset += 2;
-      buffer.writeUInt16LE(glyph.dataLength, offset);
-      offset += 2;
-      buffer.writeUInt32LE(glyph.dataOffset, offset);
-      offset += 4;
+    // Glyphs
+    for (const g of glyphs) {
+      buffer.writeUInt8(g.width, offset++);
+      buffer.writeUInt8(g.height, offset++);
+      buffer.writeUInt8(g.advanceX & 0xff, offset++);
+      buffer.writeUInt8(0, offset++); // pad
+      buffer.writeInt16LE(g.left, offset); offset += 2;
+      buffer.writeInt16LE(g.top, offset); offset += 2;
+      buffer.writeUInt16LE(g.dataLength, offset); offset += 2;
+      buffer.writeUInt32LE(g.dataOffset, offset); offset += 4;
     }
 
     // Bitmap data
-    for (const glyph of allGlyphs) {
-      glyph.pixelData.copy(buffer, offset);
-      offset += glyph.pixelData.length;
+    for (const g of glyphs) {
+      g.pixelData.copy(buffer, offset);
+      offset += g.pixelData.length;
     }
 
     fs.writeFileSync(outputPath, buffer);
@@ -605,171 +374,158 @@ function convertFont(fontPath, outputPath, size, is2Bit, intervals) {
   }
 }
 
-/**
- * Convert a single font file to C header format (for builtin fonts)
- */
-function convertFontToHeader(fontPath, outputPath, size, is2Bit, intervals, headerName) {
+function convertFontToHeader(fontPath, outputPath, size, is2Bit, intervals, headerName, variations = null) {
   if (!fs.existsSync(fontPath)) {
     console.error(`  Warning: Font file not found: ${fontPath}`);
     return false;
   }
 
-  console.log(`  Converting: ${path.basename(fontPath)} -> ${path.basename(outputPath)}`);
+  const label = `Converting: ${path.basename(fontPath)} -> ${path.basename(outputPath)}`;
+  console.log(`  ${label}`);
 
   try {
     const font = opentype.loadSync(fontPath);
-    const rasterizer = new GlyphRasterizer(font, size);
+    const rasterizer = new GlyphRasterizer(font, size, variations);
+    const result = renderAllGlyphs(font, rasterizer, intervals, is2Bit, label);
 
-    // Validate intervals
-    const validIntervals = validateIntervals(
-      font,
-      [...intervals].sort((a, b) => a[0] - b[0])
-    );
-    if (!validIntervals.length) {
+    if (!result) {
       console.error("  Error: No valid glyphs found");
       return false;
     }
 
-    // Render all glyphs
-    const allGlyphs = [];
-    const allBitmapData = [];
-    let totalBitmapSize = 0;
+    const { glyphs, validIntervals, totalBitmapSize, metrics } = result;
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 
-    let totalGlyphs = 0;
-    for (const [iStart, iEnd] of validIntervals) {
-      totalGlyphs += iEnd - iStart + 1;
-    }
-
-    let processed = 0;
-    let lastPercent = -1;
-
-    for (const [iStart, iEnd] of validIntervals) {
-      for (let codePoint = iStart; codePoint <= iEnd; codePoint++) {
-        const glyph = rasterizer.renderGlyph(codePoint);
-
-        const width = glyph?.width ?? 0;
-        const height = glyph?.height ?? 0;
-        const advanceX = glyph?.advanceX ?? 0;
-        const left = glyph?.left ?? 0;
-        const top = glyph?.top ?? 0;
-
-        const pixelData =
-          width > 0 && height > 0 && glyph?.data
-            ? renderDownsampled(glyph.data, width, height, is2Bit)
-            : Buffer.alloc(0);
-
-        allGlyphs.push({
-          width,
-          height,
-          advanceX,
-          left,
-          top,
-          dataLength: pixelData.length,
-          dataOffset: totalBitmapSize,
-          codePoint,
-        });
-
-        allBitmapData.push(pixelData);
-        totalBitmapSize += pixelData.length;
-        processed++;
-
-        const percent = Math.floor((processed / totalGlyphs) * 100);
-        if (percent !== lastPercent && percent % 10 === 0) {
-          process.stdout.write(`\r  Converting: ${path.basename(fontPath)} -> ${path.basename(outputPath)} (${percent}%)`);
-          lastPercent = percent;
-        }
-      }
-    }
-    process.stdout.write("\r" + " ".repeat(80) + "\r");
-
-    // Get font metrics
-    const scale = (size * DPI) / (72 * font.unitsPerEm);
-    const advanceY = Math.ceil((font.ascender - font.descender) * scale);
-    const ascender = Math.ceil(font.ascender * scale);
-    const descender = Math.floor(font.descender * scale);
-
-    // Build C header file
-    const dir = path.dirname(outputPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
-    const lines = [];
-
-    // Header comment
-    lines.push("/**");
-    lines.push(" * generated by convert-fonts.mjs");
-    lines.push(` * name: ${headerName}`);
-    lines.push(` * size: ${size}`);
-    lines.push(` * mode: ${is2Bit ? "2-bit" : "1-bit"}`);
-    lines.push(" */");
-    lines.push("#pragma once");
-    lines.push('#include "EpdFontData.h"');
-    lines.push("");
+    const lines = [
+      "/**",
+      " * generated by convert-fonts.mjs",
+      ` * name: ${headerName}`,
+      ` * size: ${size}`,
+      ` * mode: ${is2Bit ? "2-bit" : "1-bit"}`,
+      " */",
+      "#pragma once",
+      '#include "EpdFontData.h"',
+      "",
+    ];
 
     // Bitmap array
+    const combinedBitmap = Buffer.concat(glyphs.map(g => g.pixelData));
     lines.push(`static const uint8_t ${headerName}Bitmaps[${totalBitmapSize}] = {`);
-    const combinedBitmap = Buffer.concat(allBitmapData);
-    const bytesPerLine = 19;
-    for (let i = 0; i < combinedBitmap.length; i += bytesPerLine) {
-      const chunk = combinedBitmap.slice(i, Math.min(i + bytesPerLine, combinedBitmap.length));
-      const hexBytes = Array.from(chunk).map(b => `0x${b.toString(16).toUpperCase().padStart(2, "0")}`);
-      const isLast = i + bytesPerLine >= combinedBitmap.length;
-      lines.push(`    ${hexBytes.join(", ")}${isLast ? "" : ","}`);
+    for (let i = 0; i < combinedBitmap.length; i += 19) {
+      const chunk = combinedBitmap.slice(i, Math.min(i + 19, combinedBitmap.length));
+      const hex = Array.from(chunk).map(b => `0x${b.toString(16).toUpperCase().padStart(2, "0")}`).join(", ");
+      lines.push(`    ${hex}${i + 19 >= combinedBitmap.length ? "" : ","}`);
     }
-    lines.push("};");
-    lines.push("");
-
-    // Get character for comment (safely)
-    function getCharComment(cp) {
-      if (cp < 0x20) return "";
-      if (cp === 0x5c) return " // \\\\";
-      if (cp === 0x2a) return " // *";
-      try {
-        const char = String.fromCodePoint(cp);
-        if (/[\p{C}\p{Z}]/u.test(char) && cp !== 0x20) return "";
-        return ` // ${char}`;
-      } catch {
-        return "";
-      }
-    }
+    lines.push("};", "");
 
     // Glyphs array
+    const getCharComment = (cp) => {
+      if (cp < 0x20 || cp === 0x5c || cp === 0x2a) return cp === 0x5c ? " // \\\\" : cp === 0x2a ? " // *" : "";
+      try {
+        const char = String.fromCodePoint(cp);
+        return /[\p{C}\p{Z}]/u.test(char) && cp !== 0x20 ? "" : ` // ${char}`;
+      } catch { return ""; }
+    };
+
     lines.push(`static const EpdGlyph ${headerName}Glyphs[] = {`);
-    for (const g of allGlyphs) {
-      const comment = getCharComment(g.codePoint);
-      lines.push(`    {${g.width}, ${g.height}, ${g.advanceX}, ${g.left}, ${g.top}, ${g.dataLength}, ${g.dataOffset}},${comment}`);
+    for (const g of glyphs) {
+      lines.push(`    {${g.width}, ${g.height}, ${g.advanceX}, ${g.left}, ${g.top}, ${g.dataLength}, ${g.dataOffset}},${getCharComment(g.codePoint)}`);
     }
-    lines.push("};");
-    lines.push("");
+    lines.push("};", "");
 
     // Intervals array
     lines.push(`static const EpdUnicodeInterval ${headerName}Intervals[] = {`);
     let glyphOffset = 0;
-    const intervalEntries = [];
-    for (const [iStart, iEnd] of validIntervals) {
-      intervalEntries.push(`{0x${iStart.toString(16)}, 0x${iEnd.toString(16)}, 0x${glyphOffset.toString(16)}}`);
-      glyphOffset += iEnd - iStart + 1;
-    }
-    // Format intervals 4 per line
+    const intervalEntries = validIntervals.map(([s, e]) => {
+      const entry = `{0x${s.toString(16)}, 0x${e.toString(16)}, 0x${glyphOffset.toString(16)}}`;
+      glyphOffset += e - s + 1;
+      return entry;
+    });
     for (let i = 0; i < intervalEntries.length; i += 4) {
       const chunk = intervalEntries.slice(i, Math.min(i + 4, intervalEntries.length));
-      const isLast = i + 4 >= intervalEntries.length;
-      lines.push(`    ${chunk.join(", ")}${isLast ? "" : ","}`);
+      lines.push(`    ${chunk.join(", ")}${i + 4 >= intervalEntries.length ? "" : ","}`);
     }
-    lines.push("};");
-    lines.push("");
+    lines.push("};", "");
 
-    // EpdFontData struct
+    // Font struct
     lines.push(`static const EpdFontData ${headerName} = {`);
-    lines.push(`    ${headerName}Bitmaps, ${headerName}Glyphs, ${headerName}Intervals, ${validIntervals.length}, ${advanceY}, ${ascender}, ${descender}, ${is2Bit ? "true" : "false"},`);
+    lines.push(`    ${headerName}Bitmaps, ${headerName}Glyphs, ${headerName}Intervals, ${validIntervals.length}, ${metrics.advanceY}, ${metrics.ascender}, ${metrics.descender}, ${is2Bit},`);
     lines.push("};");
 
     fs.writeFileSync(outputPath, lines.join("\n") + "\n");
-    console.log(`  Created: ${outputPath} (${totalBitmapSize} bytes bitmap, ${allGlyphs.length} glyphs)`);
+    console.log(`  Created: ${outputPath} (${totalBitmapSize} bytes bitmap, ${glyphs.length} glyphs)`);
     return true;
   } catch (error) {
     console.error(`  Error: ${error.message}`);
+    return false;
+  }
+}
+
+function generatePreview(fontPath, outputPath, size, variations = null) {
+  if (!fs.existsSync(fontPath)) return false;
+
+  try {
+    const font = opentype.loadSync(fontPath);
+    const rasterizer = new GlyphRasterizer(font, size, variations);
+
+    const sampleChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%&*()";
+    const glyphs = [...sampleChars]
+      .map(char => {
+        const glyph = rasterizer.renderGlyph(char.codePointAt(0));
+        return glyph?.width > 0 ? { char, ...glyph } : null;
+      })
+      .filter(Boolean);
+
+    const escapeHtml = c => c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === "&" ? "&amp;" : c;
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Font Preview: ${path.basename(fontPath)}</title>
+  <style>
+    body { font-family: monospace; background: #f0f0f0; padding: 20px; }
+    h1 { margin-bottom: 10px; }
+    .info { color: #666; margin-bottom: 20px; }
+    .glyphs { display: flex; flex-wrap: wrap; gap: 8px; background: white; padding: 20px; border-radius: 8px; }
+    .glyph { display: flex; flex-direction: column; align-items: center; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+    .glyph canvas { image-rendering: pixelated; }
+    .glyph .char { font-size: 12px; color: #333; margin-top: 4px; }
+    .glyph .metrics { font-size: 10px; color: #999; }
+  </style>
+</head>
+<body>
+  <h1>Font Preview: ${path.basename(fontPath)}</h1>
+  <div class="info">Size: ${size}pt | Glyphs: ${glyphs.length}</div>
+  <div class="glyphs">
+${glyphs.map(g => `    <div class="glyph">
+      <canvas width="${g.width}" height="${g.height}" data-pixels="data:application/octet-stream;base64,${g.data.toString("base64")}" style="width: ${g.width * 2}px; height: ${g.height * 2}px;"></canvas>
+      <span class="char">${escapeHtml(g.char)}</span>
+      <span class="metrics">${g.width}x${g.height}</span>
+    </div>`).join("\n")}
+  </div>
+  <script>
+    document.querySelectorAll('canvas[data-pixels]').forEach(canvas => {
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width, h = canvas.height;
+      const data = atob(canvas.dataset.pixels.split(',')[1]);
+      const imgData = ctx.createImageData(w, h);
+      for (let i = 0; i < data.length && i < w * h; i++) {
+        const v = 255 - data.charCodeAt(i);
+        imgData.data[i * 4] = imgData.data[i * 4 + 1] = imgData.data[i * 4 + 2] = v;
+        imgData.data[i * 4 + 3] = 255;
+      }
+      ctx.putImageData(imgData, 0, 0);
+    });
+  </script>
+</body>
+</html>`;
+
+    fs.writeFileSync(outputPath, html);
+    console.log(`  Preview: ${outputPath}`);
+    return true;
+  } catch (error) {
+    console.error(`  Preview error: ${error.message}`);
     return false;
   }
 }
@@ -788,6 +544,8 @@ function main() {
       "cjk-common": { type: "boolean", default: false },
       "cjk-2500": { type: "boolean", default: false },
       header: { type: "boolean", default: false },
+      var: { type: "string", multiple: true },
+      preview: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
     },
   });
@@ -799,9 +557,6 @@ Convert TTF/OTF fonts to Papyrix binary format (.epdfont)
 Usage:
   node convert-fonts.mjs <family-name> -r <regular.ttf> [options]
 
-Arguments:
-  family-name    Font family name (used as directory name)
-
 Options:
   -r, --regular  Path to regular style TTF/OTF file (required)
   -b, --bold     Path to bold style TTF/OTF file
@@ -812,39 +567,15 @@ Options:
   --all-sizes    Generate all reader sizes (14, 16, 18pt)
   --cjk-common   Use full CJK (20,992) + Hangul (11,172), reduced fullwidth
   --cjk-2500     Use minimal CJK (~2500 chars): Joyo kanji + kana + punctuation
-                 (fits in ESP32 RAM, covers 99%+ of Japanese text)
   --header       Output C header file instead of binary .epdfont
-                 (for creating builtin fonts compiled into firmware)
+  --var          Variable font axis value (e.g., --var wght=700 --var wdth=100)
+  --preview      Generate HTML preview of rendered glyphs
   -h, --help     Show this help message
 
 Examples:
-  # Convert a complete font family
   node convert-fonts.mjs my-font -r MyFont-Regular.ttf -b MyFont-Bold.ttf -i MyFont-Italic.ttf
-
-  # Convert only regular style
-  node convert-fonts.mjs my-font -r MyFont-Regular.ttf
-
-  # Specify font size (default: 16)
-  node convert-fonts.mjs my-font -r MyFont-Regular.ttf --size 14
-
-  # Output to SD card
-  node convert-fonts.mjs my-font -r MyFont-Regular.ttf -o /Volumes/SDCARD/config/fonts/
-
-  # Use 2-bit grayscale for smoother rendering
-  node convert-fonts.mjs my-font -r MyFont-Regular.ttf --2bit
-
-  # Generate minimal CJK font (fits in ESP32 RAM, ~300KB)
+  node convert-fonts.mjs roboto -r Roboto-VariableFont_wdth,wght.ttf --var wght=400
   node convert-fonts.mjs noto-sans-jp -r NotoSansJP-Regular.ttf --all-sizes --cjk-2500
-
-  # Generate full CJK fonts (large, requires streaming or external storage)
-  node convert-fonts.mjs noto-sans-jp -r NotoSansJP-Regular.ttf --all-sizes --cjk-common
-
-Output structure:
-  <output>/
-  └── <family-name>/
-      ├── regular.epdfont
-      ├── bold.epdfont
-      └── italic.epdfont
 `);
     process.exit(0);
   }
@@ -855,93 +586,81 @@ Output structure:
     process.exit(1);
   }
 
-  // Select interval set
+  // Build interval set
   let intervals = [...INTERVALS_BASE];
   if (values["cjk-2500"]) {
-    // Load Jōyō kanji codepoints from JSON file
     const joyoPath = path.join(__dirname, "joyo-kanji.json");
     if (!fs.existsSync(joyoPath)) {
       console.error(`Error: Joyo kanji file not found: ${joyoPath}`);
       process.exit(1);
     }
-    const joyoData = JSON.parse(fs.readFileSync(joyoPath, "utf-8"));
-    const joyoKanji = joyoData.codepoints;
-
-    // Build minimal CJK intervals: punctuation + kana + Jōyō kanji + fullwidth
-    const cjkMinimalIntervals = [
-      [0x3000, 0x303f], // CJK Symbols and Punctuation
-      [0x3040, 0x309f], // Hiragana
-      [0x30a0, 0x30ff], // Katakana
-      ...joyoKanji.map((cp) => [cp, cp]), // Individual Jōyō kanji
-      [0xff01, 0xff5e], // Fullwidth ASCII
-    ];
-
-    intervals = [...INTERVALS_BASE, ...cjkMinimalIntervals];
-    console.log(
-      `Using minimal CJK: ${joyoKanji.length} Joyo kanji + kana + punctuation (~2500 chars)`
+    const joyoKanji = JSON.parse(fs.readFileSync(joyoPath, "utf-8")).codepoints;
+    intervals.push(
+      [0x3000, 0x303f], [0x3040, 0x309f], [0x30a0, 0x30ff],
+      ...joyoKanji.map(cp => [cp, cp]),
+      [0xff01, 0xff5e]
     );
+    console.log(`Using minimal CJK: ${joyoKanji.length} Joyo kanji + kana (~2500 chars)`);
   } else if (values["cjk-common"]) {
-    intervals = [...INTERVALS_BASE, ...INTERVALS_CJK_COMMON];
+    intervals.push(...INTERVALS_CJK_BASE, [0xff00, 0xff5f]);
     console.log("Using full CJK (20,992 chars) + full Hangul (11,172 chars)");
   } else {
-    intervals = [...INTERVALS_BASE, ...INTERVALS_CJK_FULL];
+    intervals.push(...INTERVALS_CJK_BASE, [0xff00, 0xffef]);
   }
 
-  const outputBase = values.output;
-  const is2Bit = values["2bit"];
+  // Parse variations
+  let variations = null;
+  if (values.var?.length > 0) {
+    variations = {};
+    for (const spec of values.var) {
+      const match = spec.match(/^(\w+)=(\d+(?:\.\d+)?)$/);
+      if (!match) {
+        console.error(`Error: Invalid --var format: ${spec} (use axis=value)`);
+        process.exit(1);
+      }
+      variations[match[1]] = parseFloat(match[2]);
+    }
+  }
+
+  const { output: outputBase, "2bit": is2Bit, header: outputHeader, preview: doPreview } = values;
   const baseSize = parseInt(values.size, 10);
-  const outputHeader = values.header;
+  if (isNaN(baseSize) || baseSize <= 0) {
+    console.error("Error: Invalid font size");
+    process.exit(1);
+  }
 
   console.log(`Converting font family: ${family}`);
   console.log(`Output directory: ${outputBase}`);
   console.log(`Font size: ${baseSize}pt`);
-  if (is2Bit) {
-    console.log("Mode: 2-bit grayscale");
-  }
-  if (outputHeader) {
-    console.log("Output: C header files (for builtin fonts)");
-  }
+  if (is2Bit) console.log("Mode: 2-bit grayscale");
+  if (outputHeader) console.log("Output: C header files");
+  if (variations) console.log(`Variable font: ${Object.entries(variations).map(([k, v]) => `${k}=${v}`).join(", ")}`);
   console.log();
 
-  const styles = [
-    ["regular", values.regular],
-    ["bold", values.bold],
-    ["italic", values.italic],
-  ];
-
+  const styles = [["regular", values.regular], ["bold", values.bold], ["italic", values.italic]];
   const sizes = values["all-sizes"] ? [14, 16, 18] : [baseSize];
-  let successCount = 0;
-  let totalCount = 0;
+  let successCount = 0, totalCount = 0;
 
   for (const size of sizes) {
-    const familyDir = values["all-sizes"]
-      ? path.join(outputBase, `${family}-${size}`)
-      : path.join(outputBase, family);
-
-    if (values["all-sizes"]) {
-      console.log(`Size: ${size}pt -> ${path.basename(familyDir)}/`);
-    }
+    const familyDir = values["all-sizes"] ? path.join(outputBase, `${family}-${size}`) : path.join(outputBase, family);
+    if (values["all-sizes"]) console.log(`Size: ${size}pt -> ${path.basename(familyDir)}/`);
 
     for (const [styleName, fontPath] of styles) {
       if (!fontPath) continue;
-
       totalCount++;
 
-      if (outputHeader) {
-        // Output C header file
-        const sizeSuffix = values["all-sizes"] ? `_${size}` : "";
-        const headerName = `${family.replace(/-/g, "_")}_${styleName}${sizeSuffix}_2b`;
-        const outputFile = path.join(outputBase, `${headerName}.h`);
+      const outputFile = outputHeader
+        ? path.join(outputBase, `${family.replace(/-/g, "_")}_${styleName}${values["all-sizes"] ? `_${size}` : ""}_2b.h`)
+        : path.join(familyDir, `${styleName}.epdfont`);
 
-        if (convertFontToHeader(fontPath, outputFile, size, is2Bit, intervals, headerName)) {
-          successCount++;
-        }
-      } else {
-        // Output binary .epdfont
-        const outputFile = path.join(familyDir, `${styleName}.epdfont`);
+      const success = outputHeader
+        ? convertFontToHeader(fontPath, outputFile, size, is2Bit, intervals, path.basename(outputFile, ".h"), variations)
+        : convertFont(fontPath, outputFile, size, is2Bit, intervals, variations);
 
-        if (convertFont(fontPath, outputFile, size, is2Bit, intervals)) {
-          successCount++;
+      if (success) {
+        successCount++;
+        if (doPreview) {
+          generatePreview(fontPath, outputFile.replace(/\.(epdfont|h)$/, ".html"), size, variations);
         }
       }
     }
@@ -951,20 +670,12 @@ Output structure:
   console.log(`Converted ${successCount}/${totalCount} fonts`);
 
   if (successCount > 0) {
-    console.log();
-    console.log("To use this font in your theme, add to your .theme file:");
-    console.log();
+    console.log("\nTo use this font in your theme, add to your .theme file:\n");
     console.log("[fonts]");
-    for (const [sizeName, size] of [
-      ["small", 14],
-      ["medium", 16],
-      ["large", 18],
-    ]) {
-      const fontName = values["all-sizes"] ? `${family}-${size}` : family;
-      console.log(`reader_font_${sizeName} = ${fontName}`);
+    for (const [name, sz] of [["small", 14], ["medium", 16], ["large", 18]]) {
+      console.log(`reader_font_${name} = ${values["all-sizes"] ? `${family}-${sz}` : family}`);
     }
-    console.log();
-    console.log("Then copy the font folder(s) to /config/fonts/ on your SD card.");
+    console.log("\nThen copy the font folder(s) to /config/fonts/ on your SD card.");
   }
 
   process.exit(successCount === totalCount ? 0 : 1);

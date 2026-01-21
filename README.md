@@ -191,6 +191,13 @@ node convert-fonts.mjs my-font -r MyFont-Regular.ttf
 # Full font family with all reader sizes
 node convert-fonts.mjs my-font -r Regular.ttf -b Bold.ttf -i Italic.ttf --all-sizes
 
+# Variable font with specific weight (e.g., Roboto variable font)
+node convert-fonts.mjs roboto -r Roboto-VariableFont_wdth,wght.ttf --var wght=400
+node convert-fonts.mjs roboto-bold -r Roboto-VariableFont_wdth,wght.ttf --var wght=700
+
+# Generate HTML preview to check font rendering
+node convert-fonts.mjs my-font -r MyFont-Regular.ttf --preview
+
 # CJK fonts - minimal set (fits in device RAM, covers 99%+ Japanese text)
 node convert-fonts.mjs noto-sans-jp -r NotoSansJP-Regular.ttf --all-sizes --cjk-2500
 
@@ -198,7 +205,7 @@ node convert-fonts.mjs noto-sans-jp -r NotoSansJP-Regular.ttf --all-sizes --cjk-
 node convert-fonts.mjs noto-sans-jp -r NotoSansJP-Regular.ttf --all-sizes --cjk-common
 ```
 
-Options: `-r/--regular`, `-b/--bold`, `-i/--italic`, `-o/--output`, `-s/--size`, `--2bit`, `--all-sizes`, `--cjk-2500`, `--cjk-common`
+Options: `-r/--regular`, `-b/--bold`, `-i/--italic`, `-o/--output`, `-s/--size`, `--2bit`, `--all-sizes`, `--cjk-2500`, `--cjk-common`, `--var`, `--preview`
 
 See [customization guide](docs/customization.md) for detailed font conversion instructions.
 
