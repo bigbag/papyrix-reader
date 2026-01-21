@@ -1,6 +1,6 @@
 # File Formats
 
-This document describes the binary cache formats used by Papyrix for EPUB and TXT files.
+This document describes the binary cache formats used by Papyrix for EPUB, TXT, and Markdown files.
 
 ## TXT Cache Files
 
@@ -35,6 +35,69 @@ Optional cover image, discovered by searching for:
 2. `cover.jpg` or `cover.bmp` in the same directory
 
 The image is converted to BMP format for display.
+
+---
+
+## Markdown Cache Files
+
+Markdown files (`.md`, `.markdown`) use a cache format stored in `.papyrix/md_<hash>/`.
+
+### `progress.bin`
+
+Stores the current reading position as a 2-byte little-endian unsigned integer (page number).
+
+```
+Offset  Size  Description
+0x00    2     Current page number (uint16_t, little-endian)
+```
+
+### `section.bin`
+
+Stores the parsed and laid-out pages. The format is similar to EPUB section files but with a simpler header.
+
+#### Version 1
+
+```
+Offset  Size        Description
+0x00    1           Version (uint8_t) - currently 1
+0x01    4           Font ID (int32_t)
+0x05    4           Line compression (float)
+0x09    1           Indent level (uint8_t)
+0x0A    1           Spacing level (uint8_t)
+0x0B    1           Paragraph alignment (uint8_t)
+0x0C    1           Hyphenation enabled (bool)
+0x0D    1           Show images (bool)
+0x0E    2           Viewport width (uint16_t)
+0x10    2           Viewport height (uint16_t)
+0x12    2           Page count (uint16_t)
+0x14    4           LUT offset (uint32_t)
+0x18    ...         Page data (same format as EPUB sections)
+LUT     4 * count   Page offsets (uint32_t[])
+```
+
+The page data uses the same `Page` structure as EPUB section files (see below).
+
+### `cover.bmp`
+
+Optional cover image, discovered by searching for:
+1. `<filename>.jpg` or `<filename>.bmp` (matching the Markdown filename)
+2. `cover.jpg` or `cover.bmp` in the same directory
+
+The image is converted to BMP format for display.
+
+### Supported Markdown Features
+
+- **Headers** (`#`, `##`, etc.) - Rendered bold and centered
+- **Bold** (`**text**`) - Bold font style
+- **Italic** (`*text*`) - Italic font style
+- **Lists** (`-`, `*`, `1.`) - Bulleted with `•` prefix
+- **Blockquotes** (`>`) - Rendered in italic
+- **Inline code** (`` `code` ``) - Rendered in italic
+- **Horizontal rules** (`---`) - Rendered as centered line
+- **Links** - Text displayed (URL not shown)
+- **Images** - Placeholder `[Image]` shown
+- **Code blocks** - Placeholder `[Code: ...]` shown
+- **Tables** - Placeholder `[Table omitted]` shown
 
 ---
 

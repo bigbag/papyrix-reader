@@ -5,6 +5,8 @@
 #include "Epub.h"
 #include "EpubReaderActivity.h"
 #include "FileSelectionActivity.h"
+#include "Markdown.h"
+#include "MarkdownReaderActivity.h"
 #include "Txt.h"
 #include "TxtReaderActivity.h"
 #include "Xtc.h"
@@ -66,6 +68,21 @@ std::unique_ptr<Txt> ReaderActivity::loadTxt(const std::string& path) {
   return nullptr;
 }
 
+std::unique_ptr<Markdown> ReaderActivity::loadMarkdown(const std::string& path) {
+  if (!SdMan.exists(path.c_str())) {
+    Serial.printf("[%lu] [   ] File does not exist: %s\n", millis(), path.c_str());
+    return nullptr;
+  }
+
+  auto markdown = std::unique_ptr<Markdown>(new Markdown(path, PAPYRIX_DIR));
+  if (markdown->load()) {
+    return markdown;
+  }
+
+  Serial.printf("[%lu] [   ] Failed to load Markdown\n", millis());
+  return nullptr;
+}
+
 void ReaderActivity::onSelectBookFile(const std::string& path) {
   currentBookPath = path;  // Track current book path
   exitActivity();
@@ -110,6 +127,18 @@ void ReaderActivity::onSelectBookFile(const std::string& path) {
     } else {
       exitActivity();
       enterNewActivity(new FullScreenMessageActivity(renderer, mappedInput, "Failed to load TXT", REGULAR,
+                                                     EInkDisplay::HALF_REFRESH));
+      delay(2000);
+      onGoToFileSelection();
+    }
+  } else if (StringUtils::isMarkdownFile(path)) {
+    // Load Markdown file
+    auto markdown = loadMarkdown(path);
+    if (markdown) {
+      onGoToMarkdownReader(std::move(markdown));
+    } else {
+      exitActivity();
+      enterNewActivity(new FullScreenMessageActivity(renderer, mappedInput, "Failed to load Markdown", REGULAR,
                                                      EInkDisplay::HALF_REFRESH));
       delay(2000);
       onGoToFileSelection();
@@ -164,6 +193,15 @@ void ReaderActivity::onGoToTxtReader(std::unique_ptr<Txt> txt) {
       [this] { onGoBack(); }));
 }
 
+void ReaderActivity::onGoToMarkdownReader(std::unique_ptr<Markdown> markdown) {
+  const auto markdownPath = markdown->getPath();
+  currentBookPath = markdownPath;
+  exitActivity();
+  enterNewActivity(new MarkdownReaderActivity(
+      renderer, mappedInput, std::move(markdown), [this, markdownPath] { onGoToFileSelection(markdownPath); },
+      [this] { onGoBack(); }));
+}
+
 void ReaderActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
@@ -188,6 +226,13 @@ void ReaderActivity::onEnter() {
       return;
     }
     onGoToTxtReader(std::move(txt));
+  } else if (StringUtils::isMarkdownFile(initialBookPath)) {
+    auto markdown = loadMarkdown(initialBookPath);
+    if (!markdown) {
+      onGoBack();
+      return;
+    }
+    onGoToMarkdownReader(std::move(markdown));
   } else {
     auto epub = loadEpub(initialBookPath);
     if (!epub) {

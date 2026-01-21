@@ -33,6 +33,7 @@ This project is **not affiliated with Xteink**; it's built as a community projec
 ### Reading & Format Support
 - [x] EPUB 2 and EPUB 3 parsing (nav.xhtml with NCX fallback)
 - [x] XTC/XTCH native format support
+- [x] Markdown (.md, .markdown) file support with formatting
 - [x] Plain text (.txt, .text) file support
 - [x] Saved reading position
 - [x] Book cover display
@@ -293,6 +294,11 @@ The first time chapters of a book are loaded, they are cached to the SD card. Su
 │   ├── progress.bin     # Stores current page number (4-byte uint32)
 │   ├── index.bin        # Page index (byte offsets for each page start)
 │   └── cover.bmp        # Cover image (if found in same directory as TXT file)
+│
+├── md_12345678/         # Each Markdown file is cached to a subdirectory named `md_<hash>`
+│   ├── progress.bin     # Stores current page number (2-byte uint16)
+│   ├── section.bin      # Parsed pages (same format as EPUB sections)
+│   └── cover.bmp        # Cover image (if found in same directory as MD file)
 │
 └── epub_189013891/
 ```

@@ -61,7 +61,13 @@ bool isTxtFile(const std::string& path) {
   return checkFileExtension(path, ".txt") || checkFileExtension(path, ".text");
 }
 
-bool isSupportedBookFile(const std::string& path) { return isEpubFile(path) || isXtcFile(path) || isTxtFile(path); }
+bool isMarkdownFile(const std::string& path) {
+  return checkFileExtension(path, ".md") || checkFileExtension(path, ".markdown");
+}
+
+bool isSupportedBookFile(const std::string& path) {
+  return isEpubFile(path) || isXtcFile(path) || isTxtFile(path) || isMarkdownFile(path);
+}
 
 size_t utf8RemoveLastChar(std::string& str) { return ::utf8RemoveLastChar(str); }
 

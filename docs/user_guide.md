@@ -63,7 +63,7 @@ The Files screen acts as a folder and file browser.
   and down through folders and books.
 * **Open Selection:** Press **Confirm** to open a folder or read a selected book.
 
-> **Note:** EPUB (.epub), XTC (.xtc, .xtch), and plain text (.txt, .text) file formats are supported. EPUB 2 and EPUB 3 formats are fully supported. The device supports both FAT32 and exFAT formatted SD cards.
+> **Note:** EPUB (.epub), XTC (.xtc, .xtch), Markdown (.md, .markdown), and plain text (.txt, .text) file formats are supported. EPUB 2 and EPUB 3 formats are fully supported. Markdown files render with basic formatting (headers, bold, italic, lists). The device supports both FAT32 and exFAT formatted SD cards.
 
 > **Note:** System folders (LOST.DIR, $RECYCLE.BIN, etc.) are automatically hidden from the file browser.
 
