@@ -137,6 +137,18 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   // LUTs complete
   // Loop through spines from spine file matching up TOC indexes, calculating cumulative size and writing to book.bin
 
+  // Build spineIndex->tocIndex mapping in one pass (O(n) instead of O(n*m))
+  std::vector<int16_t> spineToTocIndex(spineCount, -1);
+  tocFile.seek(0);
+  for (int j = 0; j < tocCount; j++) {
+    auto tocEntry = readTocEntry(tocFile);
+    if (tocEntry.spineIndex >= 0 && static_cast<uint16_t>(tocEntry.spineIndex) < spineCount) {
+      if (spineToTocIndex[tocEntry.spineIndex] == -1) {
+        spineToTocIndex[tocEntry.spineIndex] = static_cast<int16_t>(j);
+      }
+    }
+  }
+
   ZipFile zip(epubPath);
   // Pre-open zip file to speed up size calculations
   if (!zip.open()) {
@@ -173,16 +185,10 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   for (int i = 0; i < spineCount; i++) {
     auto spineEntry = readSpineEntry(spineFile);
 
-    tocFile.seek(0);
-    for (int j = 0; j < tocCount; j++) {
-      auto tocEntry = readTocEntry(tocFile);
-      if (tocEntry.spineIndex == i) {
-        spineEntry.tocIndex = j;
-        break;
-      }
-    }
+    // O(1) lookup using prebuilt mapping
+    spineEntry.tocIndex = spineToTocIndex[i];
 
-    // Not a huge deal if we don't fine a TOC entry for the spine entry, this is expected behaviour for EPUBs
+    // Not a huge deal if we don't find a TOC entry for the spine entry, this is expected behaviour for EPUBs
     // Logging here is for debugging
     if (spineEntry.tocIndex == -1) {
       Serial.printf(
