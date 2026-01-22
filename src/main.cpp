@@ -316,6 +316,7 @@ void applyThemeFonts() {
 void setup() {
   // Only start serial if USB connected
   pinMode(UART0_RXD, INPUT);
+  gpio_deep_sleep_hold_dis();  // Release GPIO hold from deep sleep to allow fresh readings
   if (isUsbConnected()) {
     Serial.begin(115200);
     delay(SERIAL_INIT_DELAY_MS);  // Allow USB CDC to initialize
