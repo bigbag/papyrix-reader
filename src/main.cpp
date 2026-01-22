@@ -1,10 +1,9 @@
 #include <Arduino.h>
-#include <LittleFS.h>
-
 #include <EInkDisplay.h>
 #include <Epub.h>
 #include <GfxRenderer.h>
 #include <InputManager.h>
+#include <LittleFS.h>
 #include <SDCardManager.h>
 #include <SPI.h>
 #include <builtinFonts/reader_2b.h>
@@ -232,19 +231,19 @@ void onGoToSettings() {
 void onGoToSettingsNetLibrary() {
   exitActivity();
   enterNewActivity(new SettingsActivity(renderer, mappedInputManager, onGoHome, onGoToFileTransfer, onGoToOpdsServers,
-                                        onGoToCalibreWireless, 12));
+                                        onGoToCalibreWireless));
 }
 
 void onGoToSettingsCalibreWireless() {
   exitActivity();
   enterNewActivity(new SettingsActivity(renderer, mappedInputManager, onGoHome, onGoToFileTransfer, onGoToOpdsServers,
-                                        onGoToCalibreWireless, 13));
+                                        onGoToCalibreWireless));
 }
 
 void onGoToSettingsFileTransfer() {
   exitActivity();
   enterNewActivity(new SettingsActivity(renderer, mappedInputManager, onGoHome, onGoToFileTransfer, onGoToOpdsServers,
-                                        onGoToCalibreWireless, 14));
+                                        onGoToCalibreWireless));
 }
 
 void onGoHome() {

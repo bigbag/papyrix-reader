@@ -3,10 +3,10 @@
 #include <cstdint>
 
 // Brightness/Contrast adjustments for e-ink display optimization:
-constexpr int BRIGHTNESS_BOOST = 0;          // Brightness offset (0-50)
-constexpr float CONTRAST_FACTOR = 1.35f;     // Contrast multiplier (1.0 = no change, >1 = more contrast)
-constexpr bool USE_GAMMA_CORRECTION = false; // Gamma brightens midtones - disable for more contrast
-constexpr bool USE_NOISE_DITHERING = false;  // Hash-based noise dithering
+constexpr int BRIGHTNESS_BOOST = 0;           // Brightness offset (0-50)
+constexpr float CONTRAST_FACTOR = 1.35f;      // Contrast multiplier (1.0 = no change, >1 = more contrast)
+constexpr bool USE_GAMMA_CORRECTION = false;  // Gamma brightens midtones - disable for more contrast
+constexpr bool USE_NOISE_DITHERING = false;   // Hash-based noise dithering
 
 // Integer approximation of gamma correction (brightens midtones)
 // Uses a simple curve: out = 255 * sqrt(in/255) ≈ sqrt(in * 255)

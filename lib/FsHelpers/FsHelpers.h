@@ -18,14 +18,10 @@ class FsHelpers {
     return strcasecmp(pathExt, ext) == 0;
   }
 
-  static inline bool hasExtension(const std::string& path, const char* ext) {
-    return hasExtension(path.c_str(), ext);
-  }
+  static inline bool hasExtension(const std::string& path, const char* ext) { return hasExtension(path.c_str(), ext); }
 
   // Image formats
-  static inline bool isJpegFile(const char* path) {
-    return hasExtension(path, ".jpg") || hasExtension(path, ".jpeg");
-  }
+  static inline bool isJpegFile(const char* path) { return hasExtension(path, ".jpg") || hasExtension(path, ".jpeg"); }
   static inline bool isJpegFile(const std::string& path) { return isJpegFile(path.c_str()); }
 
   static inline bool isPngFile(const char* path) { return hasExtension(path, ".png"); }
@@ -38,14 +34,10 @@ class FsHelpers {
   static inline bool isEpubFile(const char* path) { return hasExtension(path, ".epub"); }
   static inline bool isEpubFile(const std::string& path) { return isEpubFile(path.c_str()); }
 
-  static inline bool isXtcFile(const char* path) {
-    return hasExtension(path, ".xtc") || hasExtension(path, ".xtch");
-  }
+  static inline bool isXtcFile(const char* path) { return hasExtension(path, ".xtc") || hasExtension(path, ".xtch"); }
   static inline bool isXtcFile(const std::string& path) { return isXtcFile(path.c_str()); }
 
-  static inline bool isTxtFile(const char* path) {
-    return hasExtension(path, ".txt") || hasExtension(path, ".text");
-  }
+  static inline bool isTxtFile(const char* path) { return hasExtension(path, ".txt") || hasExtension(path, ".text"); }
   static inline bool isTxtFile(const std::string& path) { return isTxtFile(path.c_str()); }
 
   static inline bool isMarkdownFile(const char* path) {

@@ -77,7 +77,7 @@ See [4. Reading Mode](#4-reading-mode) below for more information.
 
 ![File Transfer](images/file-transfer.jpg)
 
-File transfer is accessible from **Settings > File transfer**. This allows you to upload new e-books to the device over WiFi.
+File transfer is accessible from **Settings > Tools > File Transfer**. This allows you to upload new e-books to the device over WiFi.
 
 When you enter the screen, you'll be prompted to choose a network mode:
 
@@ -95,28 +95,20 @@ information on how to connect and upload files.
 
 ![Settings](images/settings.jpg)
 
-The Settings screen allows you to configure the device's behavior:
+The Settings screen is organized into four categories:
+
+#### Reader
+
+Reading and display settings:
 
 - **Theme** (default: light)
   - Select from available themes (light, dark, or custom themes from SD card)
   - Themes control colors, button mappings, and fonts
   - See [Customization Guide](customization.md) for creating custom themes
 
-- **Sleep Screen** (default: Dark)
-  - Options: Dark, Light, Custom, Cover
-  - Which image to display when the device sleeps
-
-- **Status Bar** (default: Full)
-  - Options: None, No Progress, Full
-  - Status bar display during reading
-
 - **Font Size** (default: Normal)
   - Options: Small (14pt), Normal (16pt), Large (18pt)
   - Text size for reading
-
-- **Paragraph Alignment** (default: Justified)
-  - Options: Justified, Left, Center, Right
-  - Text alignment for paragraphs (headers remain centered)
 
 - **Text Layout** (default: Standard)
   - Options: Compact, Standard, Large
@@ -125,14 +117,18 @@ The Settings screen allows you to configure the device's behavior:
     - **Standard:** Normal indent (em-space), small spacing between paragraphs
     - **Large:** Large indent, full line spacing between paragraphs
 
+- **Text Anti-Aliasing** (default: ON)
+  - Enable grayscale text rendering for smoother font edges
+  - Disable for faster page turns and to eliminate the brief "thick text" flash during transitions
+
+- **Paragraph Alignment** (default: Justified)
+  - Options: Justified, Left, Center, Right
+  - Text alignment for paragraphs (headers remain centered)
+
 - **Hyphenation** (default: ON)
   - Break long words at soft hyphen positions embedded in EPUB content
   - Words too wide for the line are automatically split with character-level hyphenation
   - Reduces large gaps in justified text and prevents words from overflowing
-
-- **Text Anti-Aliasing** (default: ON)
-  - Enable grayscale text rendering for smoother font edges
-  - Disable for faster page turns and to eliminate the brief "thick text" flash during transitions
 
 - **Show Images** (default: ON)
   - Display inline images within EPUB content and book covers
@@ -143,9 +139,30 @@ The Settings screen allows you to configure the device's behavior:
   - Creates a crisp black-and-white pattern that looks clean on e-ink
   - Disable for smoother grayscale gradients in cover artwork
 
-- **Pages Per Refresh** (default: 15)
-  - Options: 1, 5, 10, 15, 30
-  - Number of pages to turn before performing a full e-paper refresh (clears ghosting)
+- **Status Bar** (default: Full)
+  - Options: None, No Progress, Full
+  - Status bar display during reading
+
+- **Reading Orientation** (default: Portrait)
+  - Options: Portrait, Landscape CW, Inverted, Landscape CCW
+  - Screen orientation for reading
+
+#### Device
+
+Power and device behavior settings:
+
+- **Auto Sleep Timeout** (default: 10 min)
+  - Options: 5 min, 10 min, 15 min, 30 min, Never
+  - Time of inactivity before the device automatically sleeps
+
+- **Sleep Screen** (default: Dark)
+  - Options: Dark, Light, Custom, Cover
+  - Which image to display when the device sleeps
+
+- **Startup Behavior** (default: Last Document)
+  - Options: Last Document, Home
+  - **Last Document:** Resume reading the last opened book on startup
+  - **Home:** Always start at the Home screen
 
 - **Short Power Button** (default: Ignore)
   - Options: Ignore, Sleep, Page Turn
@@ -153,25 +170,16 @@ The Settings screen allows you to configure the device's behavior:
   - **Sleep:** Short press puts device to sleep
   - **Page Turn:** Short press turns to next page while reading (convenient for one-handed reading)
 
-- **Reading Orientation** (default: Portrait)
-  - Options: Portrait, Landscape CW, Inverted, Landscape CCW
-  - Screen orientation for reading
+- **Pages Per Refresh** (default: 15)
+  - Options: 1, 5, 10, 15, 30
+  - Number of pages to turn before performing a full e-paper refresh (clears ghosting)
 
-- **Sleep Timeout** (default: 10 min)
-  - Options: 5 min, 10 min, 15 min, 30 min, Never
-  - Time of inactivity before the device automatically sleeps
+#### Tools
 
-- **Startup Behavior** (default: Last Document)
-  - Options: Last Document, Home
-  - **Last Document:** Resume reading the last opened book on startup
-  - **Home:** Always start at the Home screen
+Network and maintenance actions:
 
-- **File transfer**
+- **File Transfer**
   - Upload e-books to the device via WiFi web server
-
-- **Check for updates**
-  - Check for and install firmware updates via WiFi
-  - Device will restart after exiting to reclaim WiFi memory
 
 - **Net Library**
   - Browse and download books from OPDS-compatible servers
@@ -183,11 +191,12 @@ The Settings screen allows you to configure the device's behavior:
 
 - **Cleanup**
   - **Clear Book Caches** — Delete all cached book data and reading progress
-  - **Clear Installed Font** — Remove custom font from internal flash, revert to builtin (requires restart)
+  - **Clear Device Storage** — Erase internal flash storage (requires restart)
   - **Factory Reset** — Erase ALL data (caches, settings, WiFi credentials, fonts) and restart device
 
-- **System Info**
-  - View device information: firmware version, uptime, WiFi status, MAC address, free memory, internal disk usage, SD card usage
+#### System Info
+
+View device information: firmware version, uptime, WiFi status, MAC address, free memory, internal disk usage, SD card usage
 
 ### 3.6 Net Library
 
@@ -251,7 +260,7 @@ Calibre Wireless allows you to send books directly from **Calibre** (the popular
 
 #### Connecting to Calibre
 
-1. Go to **Settings > Calibre Wireless**
+1. Go to **Settings > Tools > Calibre Wireless**
 2. Connect to your WiFi network (same as your computer)
 3. The device will show its IP address and port (e.g., `192.168.1.42:9090`)
 4. The screen displays "Waiting for Calibre..."

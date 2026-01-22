@@ -1,9 +1,8 @@
 #include "StorageActivity.h"
 
-#include <LittleFS.h>
-
 #include <Esp.h>
 #include <GfxRenderer.h>
+#include <LittleFS.h>
 
 #include "CacheManager.h"
 #include "ConfirmActionActivity.h"

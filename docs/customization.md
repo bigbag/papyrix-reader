@@ -27,7 +27,7 @@ When you first use the device, default `light.theme` and `dark.theme` files are 
 2. Rename it (e.g., `my-custom.theme`)
 3. Edit the file with any text editor
 4. Place it in `/config/themes/` on your SD card
-5. Restart the device and select your theme in **Settings > Theme**
+5. Restart the device and select your theme in **Settings > Reader > Theme**
 
 ### Theme File Format
 
@@ -475,7 +475,7 @@ The repository includes example theme and font files in [`docs/examples/`](examp
 To use:
 1. Copy `light-noto-serif.theme` to `/config/themes/` on your SD card
 2. Copy the `noto-serif-*` folders to `/config/fonts/` on your SD card
-3. Select "Light Noto Serif" in **Settings > Theme**
+3. Select "Light Noto Serif" in **Settings > Reader > Theme**
 
 ### Font Attribution
 

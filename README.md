@@ -313,7 +313,7 @@ The first time chapters of a book are loaded, they are cached to the SD card. Su
 └── epub_189013891/
 ```
 
-To clear cached data, use **Settings > Cleanup**:
+To clear cached data, use **Settings > Tools > Cleanup**:
 - **Clear Book Caches** — Delete all cached book data and reading progress
 - **Clear Installed Font** — Remove custom font from internal flash
 - **Factory Reset** — Erase all data (caches, settings, WiFi, fonts) and restart

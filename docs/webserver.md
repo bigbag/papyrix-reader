@@ -21,8 +21,8 @@ Papyrix Reader includes a built-in web server that allows you to:
 
 ## Step 1: Accessing File Transfer
 
-1. From the main menu or file browser, navigate to the **Settings** screen
-2. Select the **File transfer** option
+1. From the main menu or file browser, navigate to **Settings > Tools**
+2. Select **File Transfer**
 3. The device will automatically start scanning for available networks
 
 ---
