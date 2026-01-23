@@ -190,7 +190,8 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   }
 
   const auto wordWidths = calculateWordWidths(renderer, fontId);
-  const auto lineBreakIndices = computeLineBreaks(pageWidth, spaceWidth, wordWidths);
+  const auto lineBreakIndices = useGreedyBreaking ? computeLineBreaksGreedy(pageWidth, spaceWidth, wordWidths)
+                                                  : computeLineBreaks(pageWidth, spaceWidth, wordWidths);
   const size_t lineCount = includeLastLine ? lineBreakIndices.size() : lineBreakIndices.size() - 1;
 
   for (size_t i = 0; i < lineCount; ++i) {
@@ -302,6 +303,34 @@ std::vector<size_t> ParsedText::computeLineBreaks(const int pageWidth, const int
   }
 
   return lineBreakIndices;
+}
+
+std::vector<size_t> ParsedText::computeLineBreaksGreedy(const int pageWidth, const int spaceWidth,
+                                                        const std::vector<uint16_t>& wordWidths) const {
+  std::vector<size_t> breaks;
+  const size_t n = wordWidths.size();
+
+  if (n == 0) {
+    return breaks;
+  }
+
+  int lineWidth = -spaceWidth;  // First word won't have preceding space
+  for (size_t i = 0; i < n; i++) {
+    const int wordWidth = wordWidths[i];
+
+    // Check if adding this word would overflow the line
+    if (lineWidth + wordWidth + spaceWidth > pageWidth && lineWidth > 0) {
+      // Start a new line at this word
+      breaks.push_back(i);
+      lineWidth = wordWidth;
+    } else {
+      lineWidth += wordWidth + spaceWidth;
+    }
+  }
+
+  // Final break at end of all words
+  breaks.push_back(n);
+  return breaks;
 }
 
 void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const int spaceWidth,

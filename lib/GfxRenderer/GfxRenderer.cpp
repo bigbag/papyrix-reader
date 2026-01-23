@@ -67,13 +67,23 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
 }
 
 int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontFamily::Style style) const {
+  if (!text || !*text) return 0;
+
   if (fontMap.count(fontId) == 0) {
     Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
     return 0;
   }
 
+  // Check cache first (significant speedup during EPUB section creation)
+  const uint64_t key = makeWidthCacheKey(fontId, text, style);
+  auto it = wordWidthCache.find(key);
+  if (it != wordWidthCache.end()) {
+    return it->second;
+  }
+
   int w = 0, h = 0;
   fontMap.at(fontId).getTextDimensions(text, &w, &h, style);
+  wordWidthCache[key] = static_cast<int16_t>(w);
   return w;
 }
 

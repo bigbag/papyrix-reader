@@ -1,5 +1,6 @@
 #include "Section.h"
 
+#include <GfxRenderer.h>
 #include <Html5Normalizer.h>
 #include <Print.h>
 #include <SDCardManager.h>
@@ -116,6 +117,7 @@ bool Section::clearCache() const {
 
 bool Section::createSectionFile(const RenderConfig& config, const std::function<void()>& progressSetupFn,
                                 const std::function<void(int)>& progressFn) {
+  const unsigned long sectionStartMs = millis();
   constexpr uint32_t MIN_SIZE_FOR_PROGRESS = 50 * 1024;  // 50KB
   const auto localPath = epub->getSpineItem(spineIndex).href;
   const auto tmpHtmlPath = epub->getCachePath() + "/.tmp_" + std::to_string(spineIndex) + ".html";
@@ -240,6 +242,12 @@ bool Section::createSectionFile(const RenderConfig& config, const std::function<
   serialization::writePod(file, pageCount);
   serialization::writePod(file, lutOffset);
   file.close();
+
+  Serial.printf("[%lu] [PERF] Section creation: %lu ms (%d pages)\n", millis(), millis() - sectionStartMs, pageCount);
+
+  // Clear word width cache to prevent unbounded memory growth across sections
+  renderer.clearWidthCache();
+
   return true;
 }
 

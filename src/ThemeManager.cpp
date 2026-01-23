@@ -44,9 +44,7 @@ bool ThemeManager::loadTheme(const char* name) {
   return false;
 }
 
-bool ThemeManager::loadFromFile(const char* path) {
-  return loadFromFileToTheme(path, activeTheme);
-}
+bool ThemeManager::loadFromFile(const char* path) { return loadFromFileToTheme(path, activeTheme); }
 
 bool ThemeManager::loadFromFileToTheme(const char* path, Theme& theme) {
   // Start with light theme defaults

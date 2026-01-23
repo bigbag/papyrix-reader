@@ -4,6 +4,7 @@
 #include <EpdFontFamily.h>
 
 #include <map>
+#include <unordered_map>
 #include <vector>
 
 #include "Bitmap.h"
@@ -31,6 +32,27 @@ class GfxRenderer {
   Orientation orientation;
   uint8_t* bwBufferChunks[BW_BUFFER_NUM_CHUNKS] = {nullptr};
   std::map<int, EpdFontFamily> fontMap;
+
+  // Word width cache for performance optimization during EPUB section creation.
+  // Key: FNV-1a hash of (fontId, text, style). Value: measured width in pixels.
+  mutable std::unordered_map<uint64_t, int16_t> wordWidthCache;
+
+  uint64_t makeWidthCacheKey(int fontId, const char* text, EpdFontFamily::Style style) const {
+    // FNV-1a hash
+    uint64_t hash = 14695981039346656037ULL;
+    hash ^= static_cast<uint64_t>(fontId);
+    hash *= 1099511628211ULL;
+    hash ^= static_cast<uint64_t>(style);
+    hash *= 1099511628211ULL;
+    if (text) {
+      while (*text) {
+        hash ^= static_cast<uint8_t>(*text++);
+        hash *= 1099511628211ULL;
+      }
+    }
+    return hash;
+  }
+
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, const int* y, bool pixelState,
                   EpdFontFamily::Style style) const;
   void freeBwBufferChunks();
@@ -47,6 +69,7 @@ class GfxRenderer {
 
   // Setup
   void insertFont(int fontId, EpdFontFamily font);
+  void clearWidthCache() { wordWidthCache.clear(); }
 
   // Orientation control (affects logical width/height and coordinate transforms)
   void setOrientation(const Orientation o) { orientation = o; }
