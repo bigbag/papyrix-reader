@@ -45,74 +45,96 @@ bool ThemeManager::loadTheme(const char* name) {
 }
 
 bool ThemeManager::loadFromFile(const char* path) {
-  // Start with light theme defaults
-  activeTheme = BUILTIN_LIGHT_THEME;
+  return loadFromFileToTheme(path, activeTheme);
+}
 
-  return IniParser::parseFile(path, [this](const char* section, const char* key, const char* value) {
+bool ThemeManager::loadFromFileToTheme(const char* path, Theme& theme) {
+  // Start with light theme defaults
+  theme = BUILTIN_LIGHT_THEME;
+
+  return IniParser::parseFile(path, [&theme](const char* section, const char* key, const char* value) {
     // [theme] section - metadata
     if (strcmp(section, "theme") == 0) {
       if (strcmp(key, "name") == 0) {
-        strncpy(activeTheme.displayName, value, sizeof(activeTheme.displayName) - 1);
-        activeTheme.displayName[sizeof(activeTheme.displayName) - 1] = '\0';
+        strncpy(theme.displayName, value, sizeof(theme.displayName) - 1);
+        theme.displayName[sizeof(theme.displayName) - 1] = '\0';
       }
     }
     // [colors] section
     else if (strcmp(section, "colors") == 0) {
       if (strcmp(key, "inverted_mode") == 0) {
-        activeTheme.invertedMode = IniParser::parseBool(value, false);
+        theme.invertedMode = IniParser::parseBool(value, false);
       } else if (strcmp(key, "background") == 0) {
-        activeTheme.backgroundColor = IniParser::parseColor(value, 0xFF);
+        theme.backgroundColor = IniParser::parseColor(value, 0xFF);
       }
     }
     // [selection] section
     else if (strcmp(section, "selection") == 0) {
       if (strcmp(key, "fill_color") == 0) {
-        activeTheme.selectionFillBlack = (IniParser::parseColor(value, 0x00) == 0x00);
+        theme.selectionFillBlack = (IniParser::parseColor(value, 0x00) == 0x00);
       } else if (strcmp(key, "text_color") == 0) {
-        activeTheme.selectionTextBlack = (IniParser::parseColor(value, 0xFF) == 0x00);
+        theme.selectionTextBlack = (IniParser::parseColor(value, 0xFF) == 0x00);
       }
     }
     // [text] section
     else if (strcmp(section, "text") == 0) {
       if (strcmp(key, "primary_color") == 0) {
-        activeTheme.primaryTextBlack = (IniParser::parseColor(value, 0x00) == 0x00);
+        theme.primaryTextBlack = (IniParser::parseColor(value, 0x00) == 0x00);
       } else if (strcmp(key, "secondary_color") == 0) {
-        activeTheme.secondaryTextBlack = (IniParser::parseColor(value, 0x00) == 0x00);
+        theme.secondaryTextBlack = (IniParser::parseColor(value, 0x00) == 0x00);
       }
     }
     // [layout] section
     else if (strcmp(section, "layout") == 0) {
       if (strcmp(key, "margin_top") == 0) {
-        activeTheme.screenMarginTop = static_cast<uint8_t>(IniParser::parseInt(value, 9));
+        theme.screenMarginTop = static_cast<uint8_t>(IniParser::parseInt(value, 9));
       } else if (strcmp(key, "margin_side") == 0) {
-        activeTheme.screenMarginSide = static_cast<uint8_t>(IniParser::parseInt(value, 3));
+        theme.screenMarginSide = static_cast<uint8_t>(IniParser::parseInt(value, 3));
       } else if (strcmp(key, "item_height") == 0) {
-        activeTheme.itemHeight = static_cast<uint8_t>(IniParser::parseInt(value, 30));
+        theme.itemHeight = static_cast<uint8_t>(IniParser::parseInt(value, 30));
       } else if (strcmp(key, "item_spacing") == 0) {
-        activeTheme.itemSpacing = static_cast<uint8_t>(IniParser::parseInt(value, 0));
+        theme.itemSpacing = static_cast<uint8_t>(IniParser::parseInt(value, 0));
       } else if (strcmp(key, "front_buttons") == 0) {
-        activeTheme.frontButtonLayout = (strcmp(value, "lrbc") == 0) ? FRONT_LRBC : FRONT_BCLR;
+        theme.frontButtonLayout = (strcmp(value, "lrbc") == 0) ? FRONT_LRBC : FRONT_BCLR;
       }
     }
     // [fonts] section
     else if (strcmp(section, "fonts") == 0) {
       if (strcmp(key, "ui_font") == 0) {
-        strncpy(activeTheme.uiFontFamily, value, sizeof(activeTheme.uiFontFamily) - 1);
-        activeTheme.uiFontFamily[sizeof(activeTheme.uiFontFamily) - 1] = '\0';
+        strncpy(theme.uiFontFamily, value, sizeof(theme.uiFontFamily) - 1);
+        theme.uiFontFamily[sizeof(theme.uiFontFamily) - 1] = '\0';
       } else if (strcmp(key, "reader_font_small") == 0) {
-        strncpy(activeTheme.readerFontFamilySmall, value, sizeof(activeTheme.readerFontFamilySmall) - 1);
-        activeTheme.readerFontFamilySmall[sizeof(activeTheme.readerFontFamilySmall) - 1] = '\0';
+        strncpy(theme.readerFontFamilySmall, value, sizeof(theme.readerFontFamilySmall) - 1);
+        theme.readerFontFamilySmall[sizeof(theme.readerFontFamilySmall) - 1] = '\0';
       } else if (strcmp(key, "reader_font_medium") == 0) {
-        strncpy(activeTheme.readerFontFamilyMedium, value, sizeof(activeTheme.readerFontFamilyMedium) - 1);
-        activeTheme.readerFontFamilyMedium[sizeof(activeTheme.readerFontFamilyMedium) - 1] = '\0';
+        strncpy(theme.readerFontFamilyMedium, value, sizeof(theme.readerFontFamilyMedium) - 1);
+        theme.readerFontFamilyMedium[sizeof(theme.readerFontFamilyMedium) - 1] = '\0';
       } else if (strcmp(key, "reader_font_large") == 0) {
-        strncpy(activeTheme.readerFontFamilyLarge, value, sizeof(activeTheme.readerFontFamilyLarge) - 1);
-        activeTheme.readerFontFamilyLarge[sizeof(activeTheme.readerFontFamilyLarge) - 1] = '\0';
+        strncpy(theme.readerFontFamilyLarge, value, sizeof(theme.readerFontFamilyLarge) - 1);
+        theme.readerFontFamilyLarge[sizeof(theme.readerFontFamilyLarge) - 1] = '\0';
       }
     }
 
     return true;  // Continue parsing
   });
+}
+
+bool ThemeManager::applyCachedTheme(const char* themeName) {
+  if (!themeName || !*themeName) return false;
+
+  auto it = themeCache.find(themeName);
+  if (it != themeCache.end()) {
+    activeTheme = it->second;
+    strncpy(this->themeName, themeName, sizeof(this->themeName) - 1);
+    this->themeName[sizeof(this->themeName) - 1] = '\0';
+    return true;
+  }
+  return false;
+}
+
+bool ThemeManager::isThemeCached(const char* themeName) const {
+  if (!themeName || !*themeName) return false;
+  return themeCache.find(themeName) != themeCache.end();
 }
 
 bool ThemeManager::saveTheme(const char* name) {
@@ -187,9 +209,14 @@ void ThemeManager::applyDarkTheme() {
 std::vector<std::string> ThemeManager::listAvailableThemes() {
   std::vector<std::string> themes;
 
-  // Always include builtin themes
+  // Clear and rebuild cache to handle added/removed themes
+  themeCache.clear();
+
+  // Always include builtin themes and cache them
   themes.push_back("light");
   themes.push_back("dark");
+  themeCache["light"] = BUILTIN_LIGHT_THEME;
+  themeCache["dark"] = BUILTIN_DARK_THEME;
 
   // List theme files from SD
   FsFile dir = SdMan.open(CONFIG_THEMES_DIR);
@@ -216,6 +243,14 @@ std::vector<std::string> ThemeManager::listAvailableThemes() {
         // Add if not already in list (avoid duplicating light/dark)
         if (!std::any_of(themes.begin(), themes.end(), [&](const std::string& t) { return t == themeNameBuf; })) {
           themes.push_back(themeNameBuf);
+
+          // Pre-cache theme configuration
+          char path[64];
+          snprintf(path, sizeof(path), "%s/%s", CONFIG_THEMES_DIR, name);
+          Theme cachedTheme;
+          if (loadFromFileToTheme(path, cachedTheme)) {
+            themeCache[themeNameBuf] = cachedTheme;
+          }
         }
       }
     }

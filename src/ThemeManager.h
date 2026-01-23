@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "Theme.h"
@@ -58,9 +59,23 @@ class ThemeManager {
 
   /**
    * List available theme files on SD card.
+   * Also pre-caches theme configurations for instant switching.
    * @return Vector of theme names (without .theme extension)
    */
   std::vector<std::string> listAvailableThemes();
+
+  /**
+   * Apply a cached theme instantly (no file I/O).
+   * Use after listAvailableThemes() has been called.
+   * @param themeName Name of the theme
+   * @return true if theme was found in cache and applied
+   */
+  bool applyCachedTheme(const char* themeName);
+
+  /**
+   * Check if a theme is cached.
+   */
+  bool isThemeCached(const char* themeName) const;
 
   /**
    * Create default theme files on SD card if they don't exist.
@@ -80,10 +95,12 @@ class ThemeManager {
   ThemeManager& operator=(const ThemeManager&) = delete;
 
   bool loadFromFile(const char* path);
+  bool loadFromFileToTheme(const char* path, Theme& theme);
   bool saveToFile(const char* path, const Theme& theme);
 
   Theme activeTheme;
   char themeName[32];
+  std::unordered_map<std::string, Theme> themeCache;
 };
 
 // Convenience macros

@@ -33,6 +33,7 @@ class SettingsListActivity : public ActivityWithSubactivity {
   // Theme selection state (used by ReaderSettingsActivity)
   std::vector<std::string> availableThemes;
   int currentThemeIndex = 0;
+  bool themeWasChanged = false;
 
   // Subclasses must provide settings
   virtual const SettingInfo* getSettings() const = 0;

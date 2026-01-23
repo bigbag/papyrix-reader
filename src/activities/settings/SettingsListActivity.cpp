@@ -74,6 +74,10 @@ void SettingsListActivity::loop() {
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     SETTINGS.saveToFile();
+    if (themeWasChanged) {
+      FONT_MANAGER.unloadAllFonts();
+      applyThemeFonts();
+    }
     onComplete();
     return;
   }
@@ -115,9 +119,13 @@ void SettingsListActivity::toggleCurrentSetting() {
       const std::string& newTheme = availableThemes[currentThemeIndex];
       strncpy(SETTINGS.themeName, newTheme.c_str(), sizeof(SETTINGS.themeName) - 1);
       SETTINGS.themeName[sizeof(SETTINGS.themeName) - 1] = '\0';
-      THEME_MANAGER.loadTheme(SETTINGS.themeName);
-      FONT_MANAGER.unloadAllFonts();
-      applyThemeFonts();
+
+      // Use cached theme for instant switching (no file I/O)
+      // Font loading is deferred until settings screen is exited
+      if (!THEME_MANAGER.applyCachedTheme(SETTINGS.themeName)) {
+        THEME_MANAGER.loadTheme(SETTINGS.themeName);
+      }
+      themeWasChanged = true;
     }
   } else if (setting.type == SettingType::ACTION) {
     handleAction(setting.name);
