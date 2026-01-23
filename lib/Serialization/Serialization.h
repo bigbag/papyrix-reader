@@ -49,4 +49,13 @@ static void readString(FsFile& file, std::string& s) {
   s.resize(len);
   file.read(&s[0], len);
 }
+
+template <typename T>
+static void readPodValidated(FsFile& file, T& value, T maxValue) {
+  T temp;
+  file.read(reinterpret_cast<uint8_t*>(&temp), sizeof(T));
+  if (temp < maxValue) {
+    value = temp;
+  }
+}
 }  // namespace serialization

@@ -67,36 +67,36 @@ bool CrossPointSettings::loadFromFile() {
   serialization::readPod(inputFile, fileSettingsCount);
 
   // load settings that exist (support older files with fewer fields)
+  // readPodValidated keeps default value if read value >= maxValue
   uint8_t settingsRead = 0;
   do {
-    serialization::readPod(inputFile, sleepScreen);
+    serialization::readPodValidated(inputFile, sleepScreen, uint8_t(4));
     if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPod(inputFile, textLayout);
+    serialization::readPodValidated(inputFile, textLayout, uint8_t(3));
     if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPod(inputFile, shortPwrBtn);
+    serialization::readPodValidated(inputFile, shortPwrBtn, uint8_t(3));
     if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPod(inputFile, statusBar);
+    serialization::readPodValidated(inputFile, statusBar, uint8_t(3));
     if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPod(inputFile, orientation);
+    serialization::readPodValidated(inputFile, orientation, uint8_t(4));
     if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPod(inputFile, fontSize);
+    serialization::readPodValidated(inputFile, fontSize, uint8_t(3));
     if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPod(inputFile, pagesPerRefresh);
+    serialization::readPodValidated(inputFile, pagesPerRefresh, uint8_t(5));
     if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPod(inputFile, sideButtonLayout);
+    serialization::readPodValidated(inputFile, sideButtonLayout, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPod(inputFile, autoSleepMinutes);
+    serialization::readPodValidated(inputFile, autoSleepMinutes, uint8_t(5));
     if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPod(inputFile, paragraphAlignment);
+    serialization::readPodValidated(inputFile, paragraphAlignment, uint8_t(4));
     if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPod(inputFile, hyphenation);
+    serialization::readPodValidated(inputFile, hyphenation, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPod(inputFile, textAntiAliasing);
+    serialization::readPodValidated(inputFile, textAntiAliasing, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPod(inputFile, showImages);
+    serialization::readPodValidated(inputFile, showImages, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPod(inputFile, startupBehavior);
-    if (startupBehavior > STARTUP_HOME) startupBehavior = STARTUP_LAST_DOCUMENT;
+    serialization::readPodValidated(inputFile, startupBehavior, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
     // Read themeName as fixed-length string
     inputFile.read(reinterpret_cast<uint8_t*>(themeName), sizeof(themeName));
