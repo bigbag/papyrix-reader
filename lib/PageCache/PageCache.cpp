@@ -7,7 +7,7 @@
 #include "ContentParser.h"
 
 namespace {
-constexpr uint8_t CACHE_FILE_VERSION = 2;  // v2: Use MarkdownParser for .md files
+constexpr uint8_t CACHE_FILE_VERSION = 16;  // v16: Fix MarkdownParser block reuse bug
 
 // Header layout:
 // - version (1 byte)

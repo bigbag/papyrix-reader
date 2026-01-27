@@ -1,18 +1,22 @@
 /**
  * MarkdownParser.h
  *
- * Markdown parser for Papyrix Reader using MD4C.
+ * Markdown parser using md_parser for tokenization.
  * Implements ContentParser interface for integration with PageCache.
+ * Reads directly from SD card with minimal memory usage.
  */
 
 #pragma once
 
 #include <ContentParser.h>
 #include <Epub/RenderConfig.h>
+#include <SdFat.h>
 
 #include <functional>
 #include <memory>
 #include <string>
+
+#include "md_parser.h"
 
 class Page;
 class GfxRenderer;
@@ -20,56 +24,14 @@ class ParsedText;
 class TextBlock;
 
 constexpr int MAX_WORD_SIZE = 200;
+constexpr int LINE_BUFFER_SIZE = 512;
 
 /**
- * Content parser for Markdown files using MD4C.
+ * Content parser for Markdown files using md_parser tokenization.
  * Parses markdown syntax (headers, bold, italic, lists, etc.) into styled text.
+ * Minimal memory usage - reads line by line from SD card.
  */
 class MarkdownParser : public ContentParser {
-  std::string filepath_;
-  GfxRenderer& renderer_;
-  RenderConfig config_;
-  size_t fileSize_ = 0;
-  size_t currentOffset_ = 0;
-  bool hasMore_ = true;
-
-  // Parsing state
-  int boldDepth_ = 0;
-  int italicDepth_ = 0;
-  int headerLevel_ = 0;
-  bool inListItem_ = false;
-  bool firstListItemWord_ = false;
-
-  // Word buffer
-  char partWordBuffer_[MAX_WORD_SIZE + 1] = {};
-  int partWordBufferIndex_ = 0;
-
-  // Current text block and page being built
-  std::unique_ptr<ParsedText> currentTextBlock_;
-  std::unique_ptr<Page> currentPage_;
-  int16_t currentPageNextY_ = 0;
-
-  // Page emission state for partial parsing
-  std::function<void(std::unique_ptr<Page>)> onPageComplete_;
-  uint16_t maxPages_ = 0;
-  uint16_t pagesCreated_ = 0;
-  bool hitMaxPages_ = false;
-
-  // MD4C callbacks
-  static int enterBlockCallback(int blockType, void* detail, void* userdata);
-  static int leaveBlockCallback(int blockType, void* detail, void* userdata);
-  static int enterSpanCallback(int spanType, void* detail, void* userdata);
-  static int leaveSpanCallback(int spanType, void* detail, void* userdata);
-  static int textCallback(int textType, const char* text, unsigned size, void* userdata);
-
-  // Internal helpers
-  void startNewTextBlock(int style);
-  void makePages();
-  bool addLineToPage(std::shared_ptr<TextBlock> line);
-  void flushPartWordBuffer();
-  int getCurrentFontStyle() const;
-  void resetParsingState();
-
  public:
   MarkdownParser(std::string filepath, GfxRenderer& renderer, const RenderConfig& config);
   ~MarkdownParser() override;
@@ -77,4 +39,47 @@ class MarkdownParser : public ContentParser {
   bool parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint16_t maxPages = 0) override;
   bool hasMoreContent() const override { return hasMore_; }
   void reset() override;
+
+ private:
+  // File state
+  std::string filepath_;
+  GfxRenderer& renderer_;
+  RenderConfig config_;
+  size_t fileSize_ = 0;
+  size_t currentOffset_ = 0;
+  bool hasMore_ = true;
+
+  // Line buffer for reading from file
+  char lineBuffer_[LINE_BUFFER_SIZE];
+
+  // Parsing context passed through md_parser callback
+  struct ParseContext {
+    MarkdownParser* self;
+    std::unique_ptr<ParsedText> textBlock;
+    std::unique_ptr<Page> currentPage;
+    int16_t pageNextY;
+    bool inBold;
+    bool inItalic;
+    bool inCodeBlock;
+    int headerLevel;
+    bool hitMaxPages;
+    uint16_t pagesCreated;
+    uint16_t maxPages;
+    std::function<void(std::unique_ptr<Page>)> onPageComplete;
+
+    // Word buffer for building words
+    char wordBuffer[MAX_WORD_SIZE + 1];
+    int wordBufferIndex;
+  };
+
+  // Static callback for md_parser
+  static bool tokenCallback(const md_token_t* token, void* userData);
+
+  // Helpers
+  bool readLine(FsFile& file);
+  void flushWordBuffer(ParseContext& ctx);
+  void flushTextBlock(ParseContext& ctx);
+  bool addLineToPage(ParseContext& ctx, std::shared_ptr<TextBlock> line);
+  int getCurrentFontStyle(const ParseContext& ctx) const;
+  void startNewTextBlock(ParseContext& ctx, int style);
 };

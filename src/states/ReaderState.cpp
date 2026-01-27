@@ -32,7 +32,9 @@ inline std::string epubSectionCachePath(const std::string& epubCachePath, int sp
   return epubCachePath + "/sections/" + std::to_string(spineIndex) + ".bin";
 }
 
-inline std::string contentCachePath(const char* cacheDir) { return std::string(cacheDir) + "/pages.bin"; }
+inline std::string contentCachePath(const char* cacheDir, int fontId) {
+  return std::string(cacheDir) + "/pages_" + std::to_string(fontId) + ".bin";
+}
 }  // namespace
 
 // Template implementation for cache creation/extension
@@ -603,7 +605,7 @@ void ReaderState::loadCacheFromDisk(Core& core) {
     }
     cachePath = epubSectionCachePath(provider->getEpub()->getCachePath(), currentSpineIndex_);
   } else if (type == ContentType::Markdown || type == ContentType::Txt) {
-    cachePath = contentCachePath(core.content.cacheDir());
+    cachePath = contentCachePath(core.content.cacheDir(), config.fontId);
   } else {
     Serial.printf("[READER] loadCacheFromDisk: unsupported content type %d\n", static_cast<int>(type));
     return;
@@ -636,11 +638,11 @@ void ReaderState::createOrExtendCache(Core& core) {
     EpubChapterParser parser(epub, currentSpineIndex_, renderer_, config, imageCachePath);
     createOrExtendCacheImpl(parser, cachePath, config);
   } else if (type == ContentType::Markdown) {
-    std::string cachePath = contentCachePath(core.content.cacheDir());
+    std::string cachePath = contentCachePath(core.content.cacheDir(), config.fontId);
     MarkdownParser parser(contentPath_, renderer_, config);
     createOrExtendCacheImpl(parser, cachePath, config);
   } else {
-    std::string cachePath = contentCachePath(core.content.cacheDir());
+    std::string cachePath = contentCachePath(core.content.cacheDir(), config.fontId);
     PlainTextParser parser(contentPath_, renderer_, config);
     createOrExtendCacheImpl(parser, cachePath, config);
   }
@@ -811,13 +813,13 @@ void ReaderState::cacheTaskLoop() {
     } else if (type == ContentType::Markdown && !cacheTaskStopRequested_) {
       const auto vp = getReaderViewport();
       const auto config = coreRef.settings.getRenderConfig(theme, vp.width, vp.height);
-      std::string cachePath = contentCachePath(coreRef.content.cacheDir());
+      std::string cachePath = contentCachePath(coreRef.content.cacheDir(), config.fontId);
       MarkdownParser parser(contentPath_, renderer_, config);
       backgroundCacheImpl(parser, cachePath, config);
     } else if (type == ContentType::Txt && !cacheTaskStopRequested_) {
       const auto vp = getReaderViewport();
       const auto config = coreRef.settings.getRenderConfig(theme, vp.width, vp.height);
-      std::string cachePath = contentCachePath(coreRef.content.cacheDir());
+      std::string cachePath = contentCachePath(coreRef.content.cacheDir(), config.fontId);
       PlainTextParser parser(contentPath_, renderer_, config);
       backgroundCacheImpl(parser, cachePath, config);
     }

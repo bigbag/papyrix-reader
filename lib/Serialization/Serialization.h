@@ -1,4 +1,5 @@
 #pragma once
+#include <HardwareSerial.h>
 #include <SdFat.h>
 
 #include <iostream>
@@ -39,6 +40,11 @@ static void writeString(FsFile& file, const std::string& s) {
 static void readString(std::istream& is, std::string& s) {
   uint32_t len;
   readPod(is, len);
+  if (len > 65536) {  // Sanity check: no string should be > 64KB
+    s.clear();
+    is.setstate(std::ios::failbit);
+    return;
+  }
   s.resize(len);
   is.read(&s[0], len);
 }
@@ -46,6 +52,11 @@ static void readString(std::istream& is, std::string& s) {
 static void readString(FsFile& file, std::string& s) {
   uint32_t len;
   readPod(file, len);
+  if (len > 65536) {  // Sanity check: no string should be > 64KB
+    Serial.printf("[SER] String length %u exceeds max, file corrupt\n", len);
+    s.clear();
+    return;
+  }
   s.resize(len);
   file.read(&s[0], len);
 }

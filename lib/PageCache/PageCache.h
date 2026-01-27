@@ -19,7 +19,7 @@ class Page;
 class PageCache {
  public:
   // Default number of pages to cache initially
-  static constexpr uint16_t DEFAULT_CACHE_CHUNK = 15;
+  static constexpr uint16_t DEFAULT_CACHE_CHUNK = 10;
   // Extend cache when within this many pages of the end
   static constexpr uint16_t EXTEND_THRESHOLD = 3;
 

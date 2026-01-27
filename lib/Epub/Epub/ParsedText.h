@@ -18,7 +18,7 @@ class ParsedText {
   TextBlock::BLOCK_STYLE style;
   uint8_t indentLevel;
   bool hyphenationEnabled;
-  bool useGreedyBreaking = false;
+  bool useGreedyBreaking = true;  // Default to greedy to avoid Knuth-Plass memory spike
 
   std::vector<size_t> computeLineBreaks(int pageWidth, int spaceWidth, const std::vector<uint16_t>& wordWidths) const;
   std::vector<size_t> computeLineBreaksGreedy(int pageWidth, int spaceWidth,
