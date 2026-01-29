@@ -536,8 +536,8 @@ void bookPlaceholder(const GfxRenderer& r, const Theme& t, int x, int y, int wid
     return;
   }
 
-  const bool bgColor = t.primaryTextBlack;
-  const bool fgColor = !t.primaryTextBlack;
+  const bool bgColor = !t.primaryTextBlack;
+  const bool fgColor = t.primaryTextBlack;
 
   r.fillRect(x, y, width, height, bgColor);
 
@@ -546,44 +546,72 @@ void bookPlaceholder(const GfxRenderer& r, const Theme& t, int x, int y, int wid
     return;
   }
 
-  // Book icon dimensions (scaled to fit within bounds)
-  constexpr int baseWidth = 200;
-  constexpr int baseHeight = 280;
-  const float scale = std::min(static_cast<float>(width) / baseWidth, static_cast<float>(height) / baseHeight);
-  const int iconWidth = static_cast<int>(baseWidth * scale);
-  const int iconHeight = static_cast<int>(baseHeight * scale);
-  const int iconX = x + (width - iconWidth) / 2;
-  const int iconY = y + (height - iconHeight) / 2;
+  // Scale factors from base design (400x500)
+  const float scaleX = static_cast<float>(width) / 400.0f;
+  const float scaleY = static_cast<float>(height) / 500.0f;
+  const float scale = std::min(scaleX, scaleY);
 
-  // Book outline
-  r.drawRect(iconX, iconY, iconWidth, iconHeight, fgColor);
+  // Center the design within the area
+  const int designW = static_cast<int>(400 * scale);
+  const int designH = static_cast<int>(500 * scale);
+  const int offsetX = x + (width - designW) / 2;
+  const int offsetY = y + (height - designH) / 2;
 
-  // Spine (filled rectangle on left)
-  const int spineWidth = static_cast<int>(16 * scale);
-  r.fillRect(iconX, iconY, spineWidth, iconHeight, fgColor);
+  // Helper lambdas for scaled coordinates
+  auto sx = [&](int v) { return offsetX + static_cast<int>(v * scale); };
+  auto sy = [&](int v) { return offsetY + static_cast<int>(v * scale); };
+  auto sw = [&](int v) { return std::max(1, static_cast<int>(v * scale)); };
 
-  // "No Cover" text box
-  const char* noCoverText = "No Cover";
-  const int textWidth = r.getTextWidth(t.smallFontId, noCoverText);
-  const int boxPadding = static_cast<int>(8 * scale);
-  const int availableWidth = iconWidth - spineWidth;
-  const int boxWidth = std::min(textWidth + boxPadding * 2, availableWidth - 4);
-  const int boxHeight = r.getLineHeight(t.smallFontId) + boxPadding;
-  const int boxX = iconX + spineWidth + (availableWidth - boxWidth) / 2;
-  const int boxY = iconY + static_cast<int>(30 * scale);
-  r.drawRect(boxX, boxY, boxWidth, boxHeight, fgColor);
-  r.drawText(t.smallFontId, boxX + boxPadding, boxY + boxPadding / 2, noCoverText, fgColor);
+  // Line thickness for outlines
+  const int lineThick = std::max(2, sw(4));
 
-  // Horizontal lines (text placeholder)
-  const int lineStartX = iconX + spineWidth + static_cast<int>(20 * scale);
-  const int lineStartY = boxY + boxHeight + static_cast<int>(40 * scale);
-  const int lineSpacing = static_cast<int>(22 * scale);
-  const int lineLengths[] = {static_cast<int>(120 * scale), static_cast<int>(120 * scale),
-                             static_cast<int>(100 * scale), static_cast<int>(70 * scale)};
-  for (int i = 0; i < 4; i++) {
-    r.drawLine(lineStartX, lineStartY + i * lineSpacing, lineStartX + lineLengths[i], lineStartY + i * lineSpacing,
-               fgColor);
+  // Helper to draw thick rectangle outline
+  auto drawThickRect = [&](int rx, int ry, int rw, int rh) {
+    r.fillRect(rx, ry, rw, lineThick, fgColor);                   // top
+    r.fillRect(rx, ry + rh - lineThick, rw, lineThick, fgColor);  // bottom
+    r.fillRect(rx, ry, lineThick, rh, fgColor);                   // left
+    r.fillRect(rx + rw - lineThick, ry, lineThick, rh, fgColor);  // right
+  };
+
+  // 1. Draw spine (left side, filled)
+  r.fillRect(sx(20), sy(35), sw(20), sw(430), fgColor);
+
+  // 2. Draw page block outline (right side)
+  drawThickRect(sx(330), sy(35), sw(50), sw(430));
+  // Page lines (5 horizontal lines, drawn as thin rectangles for thickness)
+  const int pageLineYs[] = {65, 110, 155, 200, 245};
+  for (int py : pageLineYs) {
+    r.fillRect(sx(340), sy(py), sw(35), lineThick, fgColor);
   }
+
+  // 3. Draw main cover outline (front)
+  drawThickRect(sx(35), sy(35), sw(295), sw(430));
+
+  // 4. Draw bookmark ribbon (filled rectangle + triangle)
+  const int bmX = sx(280);
+  const int bmY = sy(35);
+  const int bmW = sw(40);
+  const int bmH = sw(45);
+  r.fillRect(bmX, bmY, bmW, bmH, fgColor);
+  // Triangle point (draw as filled lines)
+  const int triangleTop = bmY + bmH;
+  const int triangleTip = sy(100);
+  const int bmCenterX = bmX + bmW / 2;
+  for (int ty = triangleTop; ty <= triangleTip; ty++) {
+    int halfWidth = bmW / 2 * (triangleTip - ty) / (triangleTip - triangleTop);
+    if (halfWidth > 0) {
+      r.drawLine(bmCenterX - halfWidth, ty, bmCenterX + halfWidth, ty, fgColor);
+    }
+  }
+
+  // 5. Draw "No Cover" text centered on front cover
+  const int coverCenterX = sx(35) + sw(295) / 2;
+  const int coverCenterY = sy(35) + sw(430) / 2;
+  const char* noCoverText = "No Cover";
+  const int textWidth = r.getTextWidth(t.uiFontId, noCoverText);
+  const int textX = coverCenterX - textWidth / 2;
+  const int textY = coverCenterY - r.getLineHeight(t.uiFontId) / 2;
+  r.drawText(t.uiFontId, textX, textY, noCoverText, fgColor);
 }
 
 void overlayBox(const GfxRenderer& r, const Theme& t, int fontId, int y, const char* message) {
