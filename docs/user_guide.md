@@ -191,6 +191,12 @@ Power and device behavior settings:
   - Options: 1, 5, 10, 15, 30
   - Number of pages to turn before performing a full e-paper refresh (clears ghosting)
 
+- **Sunlight Fading Fix** (default: OFF)
+  - Powers down the display after each page refresh
+  - Prevents screen fading in bright sunlight (UV exposure causes the SSD1677 driver IC to fade to white)
+  - Adds ~100-200ms overhead per page turn
+  - Recommended for white X4 devices used outdoors
+
 #### Cleanup
 
 Maintenance actions for the device:

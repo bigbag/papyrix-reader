@@ -504,6 +504,9 @@ void SettingsState::loadDeviceSettings() {
 
   // Index 4: Pages Per Refresh (1=0, 5=1, 10=2, 15=3, 30=4)
   deviceView_.values[4] = settings.pagesPerRefresh;
+
+  // Index 5: Sunlight Fading Fix (toggle)
+  deviceView_.values[5] = settings.sunlightFadingFix;
 }
 
 void SettingsState::saveDeviceSettings() {
@@ -523,6 +526,9 @@ void SettingsState::saveDeviceSettings() {
 
   // Index 4: Pages Per Refresh
   settings.pagesPerRefresh = deviceView_.values[4];
+
+  // Index 5: Sunlight Fading Fix
+  settings.sunlightFadingFix = deviceView_.values[5];
 }
 
 void SettingsState::populateSystemInfo() {

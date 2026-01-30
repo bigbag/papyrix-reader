@@ -55,6 +55,7 @@ This project is **not affiliated with Xteink**; it's built as a community projec
 - [x] Text anti-aliasing toggle (grayscale text rendering)
 - [x] Cover dithering toggle (1-bit black/white vs grayscale covers)
 - [x] Pages per refresh setting (1/5/10/15/30)
+- [x] Sunlight fading fix (powers down display after refresh to prevent UV fading)
 - [x] 4 screen orientations
 
 ### Customization

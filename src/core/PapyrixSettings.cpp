@@ -13,10 +13,12 @@
 namespace papyrix {
 
 namespace {
-// Version 3: Removed showBookDetails (now always enabled)
-constexpr uint8_t SETTINGS_FILE_VERSION = 3;
+// Minimum version we can read (allows backward compatibility)
+constexpr uint8_t MIN_SETTINGS_VERSION = 3;
+// Version 4: Added sunlightFadingFix
+constexpr uint8_t SETTINGS_FILE_VERSION = 4;
 // Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 18;
+constexpr uint8_t SETTINGS_COUNT = 19;
 }  // namespace
 
 Result<void> Settings::save(drivers::Storage& storage) const {
@@ -51,6 +53,7 @@ Result<void> Settings::save(drivers::Storage& storage) const {
   outputFile.write(reinterpret_cast<const uint8_t*>(lastBookPath), sizeof(lastBookPath));
   serialization::writePod(outputFile, pendingTransition);
   serialization::writePod(outputFile, transitionReturnTo);
+  serialization::writePod(outputFile, sunlightFadingFix);
   outputFile.close();
 
   Serial.printf("[%lu] [SET] Settings saved to file\n", millis());
@@ -66,7 +69,7 @@ Result<void> Settings::load(drivers::Storage& storage) {
 
   uint8_t version;
   serialization::readPod(inputFile, version);
-  if (version != SETTINGS_FILE_VERSION) {
+  if (version < MIN_SETTINGS_VERSION || version > SETTINGS_FILE_VERSION) {
     Serial.printf("[%lu] [SET] Deserialization failed: Unknown version %u\n", millis(), version);
     inputFile.close();
     return ErrVoid(Error::UnsupportedVersion);
@@ -117,6 +120,8 @@ Result<void> Settings::load(drivers::Storage& storage) {
     serialization::readPodValidated(inputFile, pendingTransition, uint8_t(3));
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, transitionReturnTo, uint8_t(2));
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPodValidated(inputFile, sunlightFadingFix, uint8_t(1));
     if (++settingsRead >= fileSettingsCount) break;
   } while (false);
 
@@ -171,6 +176,7 @@ bool Settings::saveToFile() const {
   outputFile.write(reinterpret_cast<const uint8_t*>(lastBookPath), sizeof(lastBookPath));
   serialization::writePod(outputFile, pendingTransition);
   serialization::writePod(outputFile, transitionReturnTo);
+  serialization::writePod(outputFile, sunlightFadingFix);
   outputFile.close();
 
   Serial.printf("[%lu] [SET] Settings saved to file\n", millis());
@@ -185,7 +191,7 @@ bool Settings::loadFromFile() {
 
   uint8_t version;
   serialization::readPod(inputFile, version);
-  if (version != SETTINGS_FILE_VERSION) {
+  if (version < MIN_SETTINGS_VERSION || version > SETTINGS_FILE_VERSION) {
     Serial.printf("[%lu] [SET] Deserialization failed: Unknown version %u\n", millis(), version);
     inputFile.close();
     return false;
@@ -233,6 +239,8 @@ bool Settings::loadFromFile() {
     serialization::readPodValidated(inputFile, pendingTransition, uint8_t(3));
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, transitionReturnTo, uint8_t(2));
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPodValidated(inputFile, sunlightFadingFix, uint8_t(1));
     if (++settingsRead >= fileSettingsCount) break;
   } while (false);
 

@@ -587,7 +587,8 @@ void ReaderState::renderCachedPage(Core& core) {
     page->render(renderer_, fontId, vp.marginLeft, vp.marginTop, theme.primaryTextBlack);
     renderer_.copyGrayscaleMsbBuffers();
 
-    renderer_.displayGrayBuffer();
+    const bool turnOffScreen = core.settings.sunlightFadingFix != 0;
+    renderer_.displayGrayBuffer(turnOffScreen);
     renderer_.setRenderMode(GfxRenderer::BW);
     renderer_.restoreBwBuffer();
   }
@@ -773,11 +774,12 @@ void ReaderState::renderXtcPage(Core& core) {
 }
 
 void ReaderState::displayWithRefresh(Core& core) {
+  const bool turnOffScreen = core.settings.sunlightFadingFix != 0;
   if (pagesUntilFullRefresh_ <= 1) {
-    renderer_.displayBuffer(EInkDisplay::HALF_REFRESH);
+    renderer_.displayBuffer(EInkDisplay::HALF_REFRESH, turnOffScreen);
     pagesUntilFullRefresh_ = core.settings.getPagesPerRefreshValue();
   } else {
-    renderer_.displayBuffer();
+    renderer_.displayBuffer(EInkDisplay::FAST_REFRESH, turnOffScreen);
     pagesUntilFullRefresh_--;
   }
 }
@@ -804,10 +806,11 @@ bool ReaderState::renderCoverPage(Core& core) {
   Serial.printf("[%lu] [RDR] Rendering cover page from: %s\n", millis(), coverPath.c_str());
   const auto vp = getReaderViewport();
   int pagesUntilRefresh = pagesUntilFullRefresh_;
+  const bool turnOffScreen = core.settings.sunlightFadingFix != 0;
 
-  bool rendered =
-      CoverHelpers::renderCoverFromBmp(renderer_, coverPath, vp.marginTop, vp.marginRight, vp.marginBottom,
-                                       vp.marginLeft, pagesUntilRefresh, core.settings.getPagesPerRefreshValue());
+  bool rendered = CoverHelpers::renderCoverFromBmp(renderer_, coverPath, vp.marginTop, vp.marginRight, vp.marginBottom,
+                                                   vp.marginLeft, pagesUntilRefresh,
+                                                   core.settings.getPagesPerRefreshValue(), turnOffScreen);
 
   pagesUntilFullRefresh_ = pagesUntilRefresh;
   return rendered;

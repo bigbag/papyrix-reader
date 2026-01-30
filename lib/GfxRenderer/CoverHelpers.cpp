@@ -12,7 +12,8 @@
 namespace CoverHelpers {
 
 bool renderCoverFromBmp(GfxRenderer& renderer, const std::string& bmpPath, int marginTop, int marginRight,
-                        int marginBottom, int marginLeft, int& pagesUntilFullRefresh, int pagesPerRefreshValue) {
+                        int marginBottom, int marginLeft, int& pagesUntilFullRefresh, int pagesPerRefreshValue,
+                        bool turnOffScreen) {
   FsFile coverFile;
   if (!SdMan.openFileForRead("CVR", bmpPath, coverFile)) {
     Serial.printf("[%lu] [CVR] Failed to open cover BMP: %s\n", millis(), bmpPath.c_str());
@@ -38,10 +39,10 @@ bool renderCoverFromBmp(GfxRenderer& renderer, const std::string& bmpPath, int m
 
   // Display with refresh logic
   if (pagesUntilFullRefresh <= 1) {
-    renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
+    renderer.displayBuffer(EInkDisplay::HALF_REFRESH, turnOffScreen);
     pagesUntilFullRefresh = pagesPerRefreshValue;
   } else {
-    renderer.displayBuffer();
+    renderer.displayBuffer(EInkDisplay::FAST_REFRESH, turnOffScreen);
     pagesUntilFullRefresh--;
   }
 
@@ -59,7 +60,7 @@ bool renderCoverFromBmp(GfxRenderer& renderer, const std::string& bmpPath, int m
     renderer.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height);
     renderer.copyGrayscaleMsbBuffers();
 
-    renderer.displayGrayBuffer();
+    renderer.displayGrayBuffer(turnOffScreen);
     renderer.setRenderMode(GfxRenderer::BW);
     renderer.restoreBwBuffer();
   }

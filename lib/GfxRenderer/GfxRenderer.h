@@ -103,9 +103,10 @@ class GfxRenderer {
   // Screen ops
   int getScreenWidth() const;
   int getScreenHeight() const;
-  void displayBuffer(EInkDisplay::RefreshMode refreshMode = EInkDisplay::FAST_REFRESH) const;
+  void displayBuffer(EInkDisplay::RefreshMode refreshMode = EInkDisplay::FAST_REFRESH,
+                     bool turnOffScreen = false) const;
   // EXPERIMENTAL: Windowed update - display only a rectangular region
-  void displayWindow(int x, int y, int width, int height) const;
+  void displayWindow(int x, int y, int width, int height, bool turnOffScreen = false) const;
   void invertScreen() const;
   void clearScreen(uint8_t color = 0xFF) const;
   void clearArea(int x, int y, int width, int height, uint8_t color = 0xFF) const;
@@ -149,7 +150,7 @@ class GfxRenderer {
   void setRenderMode(const RenderMode mode) { this->renderMode = mode; }
   void copyGrayscaleLsbBuffers() const;
   void copyGrayscaleMsbBuffers() const;
-  void displayGrayBuffer() const;
+  void displayGrayBuffer(bool turnOffScreen = false) const;
   bool storeBwBuffer();  // Returns true if buffer was stored successfully
   void restoreBwBuffer();
   void cleanupGrayscaleWithFrameBuffer() const;

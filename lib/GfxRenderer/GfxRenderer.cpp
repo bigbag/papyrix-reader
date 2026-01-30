@@ -327,8 +327,12 @@ void GfxRenderer::invertScreen() const {
   }
 }
 
-void GfxRenderer::displayBuffer(const EInkDisplay::RefreshMode refreshMode) const {
-  einkDisplay.displayBuffer(refreshMode);
+void GfxRenderer::displayBuffer(const EInkDisplay::RefreshMode refreshMode, bool turnOffScreen) const {
+  einkDisplay.displayBuffer(refreshMode, turnOffScreen);
+}
+
+void GfxRenderer::displayWindow(int x, int y, int width, int height, bool turnOffScreen) const {
+  einkDisplay.displayWindow(x, y, width, height, turnOffScreen);
 }
 
 std::string GfxRenderer::truncatedText(const int fontId, const char* text, const int maxWidth,
@@ -610,7 +614,7 @@ void GfxRenderer::copyGrayscaleLsbBuffers() const { einkDisplay.copyGrayscaleLsb
 
 void GfxRenderer::copyGrayscaleMsbBuffers() const { einkDisplay.copyGrayscaleMsbBuffers(einkDisplay.getFrameBuffer()); }
 
-void GfxRenderer::displayGrayBuffer() const { einkDisplay.displayGrayBuffer(); }
+void GfxRenderer::displayGrayBuffer(bool turnOffScreen) const { einkDisplay.displayGrayBuffer(turnOffScreen); }
 
 void GfxRenderer::freeBwBufferChunks() {
   for (auto& bwBufferChunk : bwBufferChunks) {

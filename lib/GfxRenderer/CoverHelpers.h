@@ -47,8 +47,10 @@ inline CenteredRect calculateCenteredRect(int imageWidth, int imageHeight, int v
 // Returns true if cover was rendered successfully, false otherwise
 // Updates pagesUntilFullRefresh based on refresh logic
 // pagesPerRefreshValue: number of pages between full refreshes (from settings)
+// turnOffScreen: power down display after refresh (sunlight fading fix)
 bool renderCoverFromBmp(GfxRenderer& renderer, const std::string& bmpPath, int marginTop, int marginRight,
-                        int marginBottom, int marginLeft, int& pagesUntilFullRefresh, int pagesPerRefreshValue);
+                        int marginBottom, int marginLeft, int& pagesUntilFullRefresh, int pagesPerRefreshValue,
+                        bool turnOffScreen = false);
 
 // Find a cover image file in the given directory
 // Looks for: baseName.jpg, baseName.jpeg, baseName.png, baseName.bmp, cover.jpg, etc.

@@ -411,9 +411,10 @@ void EInkDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) {
 }
 #endif
 
-void EInkDisplay::displayBuffer(RefreshMode mode) {
-  if (!isScreenOn) {
-    // Force half refresh if screen is off
+void EInkDisplay::displayBuffer(RefreshMode mode, bool turnOffScreen) {
+  if (!isScreenOn && mode == FAST_REFRESH) {
+    // Force half refresh if screen is off - FAST_REFRESH requires valid
+    // previous frame data in RED RAM which may be stale after power-off
     mode = HALF_REFRESH;
   }
 
@@ -445,7 +446,7 @@ void EInkDisplay::displayBuffer(RefreshMode mode) {
 #endif
 
   // Refresh the display
-  refreshDisplay(mode);
+  refreshDisplay(mode, turnOffScreen);
 
 #ifdef EINK_DISPLAY_SINGLE_BUFFER_MODE
   // In single buffer mode always sync RED RAM after refresh to prepare for next fast refresh
@@ -458,7 +459,7 @@ void EInkDisplay::displayBuffer(RefreshMode mode) {
 // EXPERIMENTAL: Windowed update support
 // Displays only a rectangular region of the frame buffer, preserving the rest of the screen.
 // Requirements: x and w must be byte-aligned (multiples of 8 pixels)
-void EInkDisplay::displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
+void EInkDisplay::displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, bool turnOffScreen) {
   if (Serial) Serial.printf("[%lu]   Displaying window at (%d,%d) size (%dx%d)\n", millis(), x, y, w, h);
 
   // Validate bounds
@@ -521,7 +522,7 @@ void EInkDisplay::displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h) 
 #endif
 
   // Perform fast refresh
-  refreshDisplay(FAST_REFRESH);
+  refreshDisplay(FAST_REFRESH, turnOffScreen);
 
 #ifdef EINK_DISPLAY_SINGLE_BUFFER_MODE
   // Post-refresh: Sync RED RAM with current window (for next fast refresh)

@@ -600,6 +600,39 @@ This is much faster than writing 48,000 bytes manually during initialization.
 
 ---
 
+## Sunlight Fading Issue
+
+### Problem
+
+The XTEINK X4's SSD1677 display driver IC is packaged as "Gold Bump Die" without resin protection. This makes the IC susceptible to UV radiation. In bright sunlight, this causes the screen to fade to white.
+
+White X4 devices are more affected than black ones due to lower UV absorption by the case.
+
+### Solution
+
+Power down the display's VBUS after rendering each page. This is done by setting the analog shutdown bits in the Display Update Control 2 command (0x22):
+
+```c
+// After refresh, power down display to prevent UV fading
+sendCommand(0x22);
+sendData(displayMode | 0x03);  // Set ANALOG_OFF_PHASE (bit 1) and CLOCK_OFF (bit 0)
+sendCommand(0x20);
+waitWhileBusy();
+```
+
+The firmware implements this as the "Sunlight Fading Fix" setting in Device Settings. When enabled:
+- Sets bits 0 and 1 in the 0x22 command after each refresh
+- Adds ~100-200ms overhead per page turn (power-on cycle)
+- Screen will power back on automatically for the next refresh
+
+This fix was developed by the crosspoint-reader community.
+
+### Physical Alternative
+
+For permanent protection, apply UV-blocking tape over the driver IC area on the display PCB.
+
+---
+
 ## Important Notes
 
 - BUSY pin *must* be polled after reset and update
@@ -611,3 +644,4 @@ This is much faster than writing 48,000 bytes manually during initialization.
 - Total RAM size: 48,000 bytes (800x480 / 8)
 - Dual-buffer system enables differential partial updates
 - First write after init should be full refresh to clear ghost images
+- In sunlight: enable "Sunlight Fading Fix" setting to prevent UV-induced screen fading

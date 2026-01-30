@@ -43,9 +43,11 @@ class EInkDisplay {
   void cleanupGrayscaleBuffers(const uint8_t* bwBuffer);
 #endif
 
-  void displayBuffer(RefreshMode mode = FAST_REFRESH);
+  // turnOffScreen: Power down display after refresh. Used for sunlight fading fix
+  // on SSD1677 displays without resin protection (XTEINK X4).
+  void displayBuffer(RefreshMode mode = FAST_REFRESH, bool turnOffScreen = false);
   // EXPERIMENTAL: Windowed update - display only a rectangular region
-  void displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
+  void displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, bool turnOffScreen = false);
   void displayGrayBuffer(bool turnOffScreen = false);
 
   void refreshDisplay(RefreshMode mode = FAST_REFRESH, bool turnOffScreen = false);
