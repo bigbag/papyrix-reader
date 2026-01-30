@@ -26,7 +26,9 @@ FileListState::FileListState(GfxRenderer& renderer)
       needsRender_(true),
       hasSelection_(false),
       goHome_(false),
-      firstRender_(true) {
+      firstRender_(true),
+      currentScreen_(Screen::Browse),
+      confirmView_{} {
   strcpy(currentDir_, "/");
   selectedPath_[0] = '\0';
   memset(files_, 0, sizeof(files_));
@@ -59,6 +61,7 @@ void FileListState::enter(Core& core) {
   hasSelection_ = false;
   goHome_ = false;
   firstRender_ = true;
+  currentScreen_ = Screen::Browse;
   selectedPath_[0] = '\0';
 
   loadFiles(core);
@@ -183,27 +186,80 @@ StateTransition FileListState::update(Core& core) {
   while (core.events.pop(e)) {
     switch (e.type) {
       case EventType::ButtonPress:
-        switch (e.button) {
-          case Button::Up:
-            navigateUp(core);
-            break;
-          case Button::Down:
-            navigateDown(core);
-            break;
-          case Button::Left:
-            pageUp(core);
-            break;
-          case Button::Right:
-            pageDown(core);
-            break;
-          case Button::Center:
-            openSelected(core);
-            break;
-          case Button::Back:
-            goBack(core);
-            break;
-          case Button::Power:
-            break;
+        if (currentScreen_ == Screen::ConfirmDelete) {
+          // Confirmation dialog input
+          switch (e.button) {
+            case Button::Up:
+            case Button::Down:
+              confirmView_.toggleSelection();
+              needsRender_ = true;
+              break;
+            case Button::Center:
+              if (confirmView_.isYesSelected()) {
+                // Execute delete inline (like SettingsState pattern)
+                const FileEntry& entry = files_[selectedIndex_];
+                char pathBuf[512];  // currentDir_(256) + '/' + name(128)
+                size_t dirLen = strlen(currentDir_);
+                if (currentDir_[dirLen - 1] == '/') {
+                  snprintf(pathBuf, sizeof(pathBuf), "%s%s", currentDir_, entry.name);
+                } else {
+                  snprintf(pathBuf, sizeof(pathBuf), "%s/%s", currentDir_, entry.name);
+                }
+
+                // Check if trying to delete the currently active book
+                const char* activeBook = core.settings.lastBookPath;
+                if (activeBook[0] != '\0' && strcmp(pathBuf, activeBook) == 0) {
+                  ui::centeredMessage(renderer_, THEME, THEME.uiFontId, "Cannot delete active book");
+                  vTaskDelay(1500 / portTICK_PERIOD_MS);
+                } else {
+                  ui::centeredMessage(renderer_, THEME, THEME.uiFontId, "Deleting...");
+
+                  Result<void> result = entry.isDir ? core.storage.rmdir(pathBuf) : core.storage.remove(pathBuf);
+
+                  const char* msg = result.ok() ? "Deleted" : "Delete failed";
+                  ui::centeredMessage(renderer_, THEME, THEME.uiFontId, msg);
+                  vTaskDelay(1000 / portTICK_PERIOD_MS);
+
+                  loadFiles(core);
+                  if (selectedIndex_ >= fileCount_) {
+                    selectedIndex_ = fileCount_ > 0 ? fileCount_ - 1 : 0;
+                  }
+                }
+              }
+              currentScreen_ = Screen::Browse;
+              needsRender_ = true;
+              break;
+            case Button::Back:
+            case Button::Left:
+              currentScreen_ = Screen::Browse;
+              needsRender_ = true;
+              break;
+            default:
+              break;
+          }
+        } else {
+          // Normal browse mode
+          switch (e.button) {
+            case Button::Up:
+              navigateUp(core);
+              break;
+            case Button::Down:
+              navigateDown(core);
+              break;
+            case Button::Left:
+              break;
+            case Button::Right:
+              promptDelete(core);
+              break;
+            case Button::Center:
+              openSelected(core);
+              break;
+            case Button::Back:
+              goBack(core);
+              break;
+            case Button::Power:
+              break;
+          }
         }
         break;
 
@@ -234,6 +290,14 @@ void FileListState::render(Core& core) {
   }
 
   Theme& theme = THEME_MANAGER.mutableCurrent();
+
+  if (currentScreen_ == Screen::ConfirmDelete) {
+    ui::render(renderer_, theme, confirmView_);
+    confirmView_.needsRender = false;
+    needsRender_ = false;
+    core.display.markDirty();
+    return;
+  }
 
   renderer_.clearScreen(theme.backgroundColor);
 
@@ -266,7 +330,8 @@ void FileListState::render(Core& core) {
 
   // Button hints - "Home" if at root, "Back" if in subfolder
   const char* backLabel = isAtRoot() ? "Home" : "Back";
-  renderer_.drawButtonHints(theme.uiFontId, backLabel, "Open", "", "", theme.primaryTextBlack);
+  const char* deleteLabel = (fileCount_ > 0) ? "Delete" : "";
+  renderer_.drawButtonHints(theme.uiFontId, backLabel, "Open", "", deleteLabel, theme.primaryTextBlack);
 
   if (firstRender_) {
     renderer_.displayBuffer(EInkDisplay::HALF_REFRESH);
@@ -294,41 +359,6 @@ void FileListState::navigateDown(Core& core) {
     selectedIndex_++;
   } else {
     selectedIndex_ = 0;  // Wrap to first item
-  }
-  needsRender_ = true;
-}
-
-void FileListState::pageUp(Core& core) {
-  if (fileCount_ == 0) return;
-  // Fast scroll: jump by half visible count with circular wrap
-  const int jumpSize = std::max(1, getVisibleCount() / 2);
-
-  if (selectedIndex_ >= static_cast<uint16_t>(jumpSize)) {
-    selectedIndex_ -= jumpSize;
-  } else {
-    // Wrap to end with circular offset
-    int offset = jumpSize - static_cast<int>(selectedIndex_);
-    if (offset >= static_cast<int>(fileCount_)) {
-      selectedIndex_ = fileCount_ - 1;
-    } else {
-      selectedIndex_ = fileCount_ - offset;
-    }
-  }
-  needsRender_ = true;
-}
-
-void FileListState::pageDown(Core& core) {
-  if (fileCount_ == 0) return;
-  // Fast scroll: jump by half visible count with circular wrap
-  const int jumpSize = std::max(1, getVisibleCount() / 2);
-
-  selectedIndex_ += jumpSize;
-  if (selectedIndex_ >= fileCount_) {
-    // Wrap to beginning with circular offset
-    selectedIndex_ = selectedIndex_ - fileCount_;
-    if (selectedIndex_ >= fileCount_) {
-      selectedIndex_ = 0;
-    }
   }
   needsRender_ = true;
 }
@@ -383,6 +413,28 @@ void FileListState::goBack(Core& core) {
 
   selectedIndex_ = 0;
   loadFiles(core);
+  needsRender_ = true;
+}
+
+void FileListState::promptDelete(Core& core) {
+  if (fileCount_ == 0) return;
+
+  const FileEntry& entry = files_[selectedIndex_];
+  const char* typeStr = entry.isDir ? "folder" : "file";
+
+  char line1[48];
+  snprintf(line1, sizeof(line1), "Delete this %s?", typeStr);
+
+  char line2[48];
+  if (strlen(entry.name) > 40) {
+    snprintf(line2, sizeof(line2), "%.37s...", entry.name);
+  } else {
+    strncpy(line2, entry.name, sizeof(line2) - 1);
+    line2[sizeof(line2) - 1] = '\0';
+  }
+
+  confirmView_.setup("Confirm Delete", line1, line2);
+  currentScreen_ = Screen::ConfirmDelete;
   needsRender_ = true;
 }
 

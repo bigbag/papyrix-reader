@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstring>
 
+#include "../ui/views/SettingsViews.h"
 #include "State.h"
 
 class GfxRenderer;
@@ -12,6 +13,11 @@ namespace papyrix {
 // FileListState - browse and select files
 // Uses fixed-size arrays to avoid heap allocation
 class FileListState : public State {
+  enum class Screen : uint8_t {
+    Browse,
+    ConfirmDelete,
+  };
+
  public:
   static constexpr uint16_t MAX_FILES = 64;
   static constexpr uint16_t MAX_NAME_LEN = 128;  // UTF-8 aware: ~40 Cyrillic or 128 ASCII chars
@@ -50,12 +56,13 @@ class FileListState : public State {
   bool hasSelection_;
   bool goHome_;       // Return to Home state
   bool firstRender_;  // Use HALF_REFRESH on first render to clear ghosting
+  Screen currentScreen_;
+  ui::ConfirmDialogView confirmView_;
 
   void loadFiles(Core& core);
+  void promptDelete(Core& core);
   void navigateUp(Core& core);
   void navigateDown(Core& core);
-  void pageUp(Core& core);
-  void pageDown(Core& core);
   void openSelected(Core& core);
   void goBack(Core& core);
   void ensureVisible(int visibleCount);
