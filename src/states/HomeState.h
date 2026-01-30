@@ -1,9 +1,5 @@
 #pragma once
 
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
-
-#include <atomic>
 #include <cstdint>
 #include <string>
 
@@ -45,20 +41,9 @@ class HomeState : public State {
   bool coverBufferStored_ = false;
   bool coverRendered_ = false;
 
-  // Async cover generation
-  TaskHandle_t coverGenTaskHandle_ = nullptr;
-  std::atomic<bool> coverGenComplete_{false};
-  std::string pendingBookPath_;
-  std::string pendingCacheDir_;
-  std::string generatedCoverPath_;  // Written by task before release store; read after acquire exchange
-
   void loadLastBook(Core& core);
   void updateBattery();
   void renderCoverToCard();
-  void startCoverGenTask(const char* bookPath, const char* cacheDir);
-  void stopCoverGenTask();
-  static void coverGenTrampoline(void* arg);
-  void coverGenTask();
 
   // Compressed thumbnail caching methods
   bool storeCoverThumbnail();

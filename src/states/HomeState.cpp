@@ -3,16 +3,12 @@
 #include <Arduino.h>
 #include <Bitmap.h>
 #include <CoverHelpers.h>
-#include <Epub.h>
 #include <GfxRenderer.h>
 #include <Group5.h>
-#include <Markdown.h>
 #include <SDCardManager.h>
-#include <Txt.h>
 #include <esp_system.h>
 
 #include "../config.h"
-#include "../content/ContentTypes.h"
 #include "../core/BootMode.h"
 #include "../core/Core.h"
 #include "Battery.h"
@@ -23,10 +19,7 @@ namespace papyrix {
 
 HomeState::HomeState(GfxRenderer& renderer) : renderer_(renderer) {}
 
-HomeState::~HomeState() {
-  stopCoverGenTask();
-  freeCoverThumbnail();
-}
+HomeState::~HomeState() { freeCoverThumbnail(); }
 
 void HomeState::enter(Core& core) {
   Serial.println("[HOME] Entering");
@@ -42,7 +35,6 @@ void HomeState::enter(Core& core) {
 
 void HomeState::exit(Core& core) {
   Serial.println("[HOME] Exiting");
-  stopCoverGenTask();
   freeCoverThumbnail();
   view_.clear();
 }
@@ -54,24 +46,18 @@ void HomeState::loadLastBook(Core& core) {
   coverLoadFailed_ = false;
   coverRendered_ = false;
   freeCoverThumbnail();
-  stopCoverGenTask();
-  coverGenComplete_ = false;
 
   // If content already open, use it
   if (core.content.isOpen()) {
     const auto& meta = core.content.metadata();
     view_.setBook(meta.title, meta.author, core.buf.path);
 
-    // Check if thumbnail already exists, otherwise start async generation
+    // Check for existing thumbnail or cover (no async generation - ReaderState handles that)
     if (core.settings.showImages) {
       coverBmpPath_ = core.content.getThumbnailPath();
       if (!coverBmpPath_.empty() && SdMan.exists(coverBmpPath_.c_str())) {
         hasCoverImage_ = true;
         Serial.printf("[%lu] [HOME] Using cached thumbnail: %s\n", millis(), coverBmpPath_.c_str());
-      } else {
-        // Start async generation
-        Serial.printf("[%lu] [HOME] Thumbnail not found, starting async generation\n", millis());
-        startCoverGenTask(core.buf.path, PAPYRIX_CACHE_DIR);
       }
     }
     view_.hasCoverBmp = hasCoverImage_;
@@ -90,16 +76,12 @@ void HomeState::loadLastBook(Core& core) {
       strncpy(core.buf.path, savedPath, sizeof(core.buf.path) - 1);
       core.buf.path[sizeof(core.buf.path) - 1] = '\0';
 
-      // Check if thumbnail already exists, otherwise start async generation
+      // Check for existing thumbnail or cover (no async generation - ReaderState handles that)
       if (core.settings.showImages) {
         coverBmpPath_ = core.content.getThumbnailPath();
         if (!coverBmpPath_.empty() && SdMan.exists(coverBmpPath_.c_str())) {
           hasCoverImage_ = true;
           Serial.printf("[%lu] [HOME] Using cached thumbnail: %s\n", millis(), coverBmpPath_.c_str());
-        } else {
-          // Start async generation
-          Serial.printf("[%lu] [HOME] Thumbnail not found, starting async generation\n", millis());
-          startCoverGenTask(savedPath, PAPYRIX_CACHE_DIR);
         }
       }
       view_.hasCoverBmp = hasCoverImage_;
@@ -170,18 +152,6 @@ StateTransition HomeState::update(Core& core) {
 }
 
 void HomeState::render(Core& core) {
-  // Check if async cover generation completed (acquire pairs with release in task)
-  if (coverGenComplete_.exchange(false, std::memory_order_acquire)) {
-    // Copy path from task (safe now that flag was set with release semantics)
-    coverBmpPath_ = generatedCoverPath_;
-    if (!coverBmpPath_.empty() && SdMan.exists(coverBmpPath_.c_str())) {
-      hasCoverImage_ = true;
-      view_.hasCoverBmp = true;
-      view_.needsRender = true;
-      Serial.println("[HOME] Async cover generation completed");
-    }
-  }
-
   if (!view_.needsRender) {
     return;
   }
@@ -245,84 +215,6 @@ void HomeState::renderCoverToCard() {
 
   renderer_.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height);
   file.close();
-}
-
-void HomeState::startCoverGenTask(const char* bookPath, const char* cacheDir) {
-  stopCoverGenTask();
-
-  pendingBookPath_ = bookPath ? bookPath : "";
-  pendingCacheDir_ = cacheDir ? cacheDir : "";
-  generatedCoverPath_.clear();
-  coverGenComplete_ = false;
-
-  xTaskCreate(&HomeState::coverGenTrampoline, "CoverGen", 4096, this, 0, &coverGenTaskHandle_);
-  Serial.println("[HOME] Started async cover generation task");
-}
-
-void HomeState::stopCoverGenTask() {
-  if (coverGenTaskHandle_) {
-    vTaskDelete(coverGenTaskHandle_);
-    coverGenTaskHandle_ = nullptr;
-    Serial.println("[HOME] Stopped cover generation task");
-  }
-}
-
-void HomeState::coverGenTrampoline(void* arg) {
-  auto* self = static_cast<HomeState*>(arg);
-  self->coverGenTask();
-}
-
-void HomeState::coverGenTask() {
-  // Copy to locals immediately to avoid use-after-free if main thread modifies
-  std::string bookPath = pendingBookPath_;
-  std::string cacheDir = pendingCacheDir_;
-
-  Serial.printf("[HOME] Cover gen task running for: %s\n", bookPath.c_str());
-
-  // Detect content type from file extension
-  ContentType type = detectContentType(bookPath.c_str());
-  bool success = false;
-
-  switch (type) {
-    case ContentType::Epub: {
-      Epub epub(bookPath, cacheDir);
-      if (epub.load(false) && epub.generateThumbBmp()) {
-        generatedCoverPath_ = epub.getThumbBmpPath();
-        success = true;
-      }
-      break;
-    }
-    case ContentType::Txt: {
-      Txt txt(bookPath, cacheDir);
-      if (txt.load() && txt.generateThumbBmp()) {
-        generatedCoverPath_ = txt.getThumbBmpPath();
-        success = true;
-      }
-      break;
-    }
-    case ContentType::Markdown: {
-      Markdown md(bookPath, cacheDir);
-      if (md.load() && md.generateThumbBmp()) {
-        generatedCoverPath_ = md.getThumbBmpPath();
-        success = true;
-      }
-      break;
-    }
-    default:
-      Serial.printf("[HOME] Unsupported content type for cover generation\n");
-      break;
-  }
-
-  if (success) {
-    // Release fence ensures generatedCoverPath_ write is visible before flag
-    coverGenComplete_.store(true, std::memory_order_release);
-    Serial.println("[HOME] Cover generation task completed successfully");
-  } else {
-    Serial.println("[HOME] Cover generation task failed");
-  }
-
-  // Suspend self - will be deleted by stopCoverGenTask() or destructor
-  vTaskSuspend(nullptr);
 }
 
 bool HomeState::storeCoverThumbnail() {

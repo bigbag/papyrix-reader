@@ -23,6 +23,14 @@
 
 namespace papyrix {
 
+// WARNING: If timeout occurs in stopBackgroundCaching(), the task will be force-deleted.
+// Caller must ensure Core outlives ReaderState.
+static constexpr int kTaskStopTimeoutMs = 3000;
+static constexpr int kTaskStopPollMs = 10;
+static constexpr int kTaskStartSpinPollMs = 5;
+static constexpr int kTaskStartSpinMaxMs = 1000;
+static constexpr int kCacheTaskStackSize = 8192;
+
 namespace {
 constexpr int horizontalPadding = 5;
 constexpr int statusBarMargin = 19;
@@ -77,7 +85,7 @@ void ReaderState::backgroundCacheImpl(ParserT& parser, const std::string& cacheP
 
   if (!loaded || needsExtend) {
     xSemaphoreTake(cacheMutex_, portMAX_DELAY);
-    if (!cacheTaskStopRequested_) {
+    if (!cacheTaskStopRequested_.load(std::memory_order_acquire)) {
       if (needsExtend) {
         pageCache_->extend(parser, PageCache::DEFAULT_CACHE_CHUNK);
       } else {
@@ -129,7 +137,7 @@ void ReaderState::enter(Core& core) {
   xSemaphoreTake(cacheMutex_, portMAX_DELAY);
   pageCache_.reset();
   xSemaphoreGive(cacheMutex_);
-  cacheTaskComplete_ = false;
+  cacheTaskComplete_.store(false, std::memory_order_relaxed);
   currentSpineIndex_ = 0;
   currentSectionPage_ = 0;  // Will be set to -1 after progress load if at start
 
@@ -354,7 +362,7 @@ void ReaderState::navigateNext(Core& core) {
       xSemaphoreTake(cacheMutex_, portMAX_DELAY);
       pageCache_.reset();
       xSemaphoreGive(cacheMutex_);
-      cacheTaskComplete_ = false;
+      cacheTaskComplete_.store(false, std::memory_order_relaxed);
     }
     currentSectionPage_ = 0;
     needsRender_ = true;
@@ -390,7 +398,7 @@ void ReaderState::navigatePrev(Core& core) {
       xSemaphoreTake(cacheMutex_, portMAX_DELAY);
       pageCache_.reset();  // Don't need cache for cover
       xSemaphoreGive(cacheMutex_);
-      cacheTaskComplete_ = false;
+      cacheTaskComplete_.store(false, std::memory_order_relaxed);
       needsRender_ = true;
     }
     return;  // At start of book either way
@@ -422,7 +430,7 @@ void ReaderState::applyNavResult(const ReaderNavigation::NavResult& result) {
     xSemaphoreTake(cacheMutex_, portMAX_DELAY);
     pageCache_.reset();
     xSemaphoreGive(cacheMutex_);
-    cacheTaskComplete_ = false;
+    cacheTaskComplete_.store(false, std::memory_order_relaxed);
   }
 }
 
@@ -504,7 +512,7 @@ void ReaderState::renderCachedPage(Core& core) {
 
   if (!cacheExists) {
     // Check if background task completed
-    if (cacheTaskComplete_) {
+    if (cacheTaskComplete_.load(std::memory_order_acquire)) {
       Serial.println("[READER] Using cache from background task");
     } else {
       // Try to load existing cache silently first
@@ -817,15 +825,31 @@ bool ReaderState::renderCoverPage(Core& core) {
 }
 
 void ReaderState::startBackgroundCaching(Core& core) {
-  if (cacheTaskHandle_) {
-    return;  // Already running
+  // Spin-wait if a previous stop is still in progress
+  constexpr int kMaxSpinIterations = kTaskStartSpinMaxMs / kTaskStartSpinPollMs;
+  int spinCount = 0;
+  while (cacheTaskHandle_ != nullptr && cacheTaskStopRequested_.load(std::memory_order_acquire)) {
+    vTaskDelay(pdMS_TO_TICKS(kTaskStartSpinPollMs));
+    if (++spinCount > kMaxSpinIterations) {
+      Serial.println("[READER] ERROR: Previous task still not stopped after spin timeout");
+      vTaskDelete(cacheTaskHandle_);
+      cacheTaskHandle_ = nullptr;
+      cacheTaskStopRequested_.store(false, std::memory_order_release);
+      break;
+    }
+  }
+
+  if (cacheTaskHandle_ != nullptr) {
+    Serial.println("[READER] Warning: Previous cache task still running, stopping first");
+    stopBackgroundCaching();
   }
 
   Serial.println("[READER] Starting background page cache task");
   coreForCacheTask_ = &core;
-  cacheTaskComplete_ = false;
+  cacheTaskComplete_.store(false, std::memory_order_release);
+  cacheTaskStopRequested_.store(false, std::memory_order_release);
 
-  xTaskCreate(&ReaderState::cacheTaskTrampoline, "PageCache", 8192, this, 0, &cacheTaskHandle_);
+  xTaskCreate(&ReaderState::cacheTaskTrampoline, "PageCache", kCacheTaskStackSize, this, 0, &cacheTaskHandle_);
 }
 
 void ReaderState::cacheTaskTrampoline(void* param) { static_cast<ReaderState*>(param)->cacheTaskLoop(); }
@@ -835,29 +859,36 @@ void ReaderState::cacheTaskLoop() {
 
   Serial.println("[READER] Background cache task started");
 
-  if (cacheTaskStopRequested_) {
+  // Declare variables before any goto to avoid crossing initialization
+  bool cacheExists = false;
+  Core* corePtr = nullptr;
+  int sectionPage = 0;
+  int spineIndex = 0;
+  bool coverExists = false;
+  int textStart = 0;
+
+  if (cacheTaskStopRequested_.load(std::memory_order_acquire)) {
     Serial.println("[READER] Background cache task aborted (stop requested)");
-    vTaskSuspend(nullptr);
-    return;
+    goto cleanup;
   }
 
   // Snapshot shared state under mutex to avoid race condition
   xSemaphoreTake(cacheMutex_, portMAX_DELAY);
-  bool cacheExists = (pageCache_ != nullptr);
-  Core* corePtr = coreForCacheTask_;
-  int sectionPage = currentSectionPage_;
-  int spineIndex = currentSpineIndex_;
-  bool coverExists = hasCover_;
-  int textStart = textStartIndex_;
+  cacheExists = (pageCache_ != nullptr);
+  corePtr = coreForCacheTask_;
+  sectionPage = currentSectionPage_;
+  spineIndex = currentSpineIndex_;
+  coverExists = hasCover_;
+  textStart = textStartIndex_;
   xSemaphoreGive(cacheMutex_);
 
-  if (!cacheExists && !cacheTaskStopRequested_ && corePtr) {
+  if (!cacheExists && !cacheTaskStopRequested_.load(std::memory_order_acquire) && corePtr) {
     Core& coreRef = *corePtr;
     ContentType type = coreRef.content.metadata().type;
 
     if (type == ContentType::Epub) {
       auto* provider = coreRef.content.asEpub();
-      if (provider && provider->getEpub() && !cacheTaskStopRequested_) {
+      if (provider && provider->getEpub() && !cacheTaskStopRequested_.load(std::memory_order_acquire)) {
         const auto vp = getReaderViewport();
         const auto config = coreRef.settings.getRenderConfig(theme, vp.width, vp.height);
         const auto* epub = provider->getEpub();
@@ -871,13 +902,13 @@ void ReaderState::cacheTaskLoop() {
         EpubChapterParser parser(provider->getEpubShared(), spineToCache, renderer_, config, imageCachePath);
         backgroundCacheImpl(parser, cachePath, config);
       }
-    } else if (type == ContentType::Markdown && !cacheTaskStopRequested_) {
+    } else if (type == ContentType::Markdown && !cacheTaskStopRequested_.load(std::memory_order_acquire)) {
       const auto vp = getReaderViewport();
       const auto config = coreRef.settings.getRenderConfig(theme, vp.width, vp.height);
       std::string cachePath = contentCachePath(coreRef.content.cacheDir(), config.fontId);
       MarkdownParser parser(contentPath_, renderer_, config);
       backgroundCacheImpl(parser, cachePath, config);
-    } else if (type == ContentType::Txt && !cacheTaskStopRequested_) {
+    } else if (type == ContentType::Txt && !cacheTaskStopRequested_.load(std::memory_order_acquire)) {
       const auto vp = getReaderViewport();
       const auto config = coreRef.settings.getRenderConfig(theme, vp.width, vp.height);
       std::string cachePath = contentCachePath(coreRef.content.cacheDir(), config.fontId);
@@ -886,31 +917,73 @@ void ReaderState::cacheTaskLoop() {
     }
   }
 
-  if (!cacheTaskStopRequested_) {
-    cacheTaskComplete_ = true;
+  // Generate thumbnail from cover for HomeState (lower priority than page cache)
+  if (corePtr && !cacheTaskStopRequested_.load(std::memory_order_acquire)) {
+    Core& coreRef = *corePtr;
+    std::string coverPath = coreRef.content.getCoverPath();
+    std::string thumbPath = coreRef.content.getThumbnailPath();
+    if (!coverPath.empty() && !thumbPath.empty()) {
+      const char* logTag = "RDR";
+      switch (coreRef.content.metadata().type) {
+        case ContentType::Epub:
+          logTag = "EPB";
+          break;
+        case ContentType::Txt:
+          logTag = "TXT";
+          break;
+        case ContentType::Markdown:
+          logTag = "MD ";
+          break;
+        default:
+          break;
+      }
+      if (!CoverHelpers::generateThumbFromCover(coverPath, thumbPath, logTag)) {
+        Serial.printf("[%s] Thumbnail generation failed\n", logTag);
+      }
+    }
+  }
+
+  if (!cacheTaskStopRequested_.load(std::memory_order_acquire)) {
+    cacheTaskComplete_.store(true, std::memory_order_release);
     Serial.println("[READER] Background cache task completed");
   } else {
     Serial.println("[READER] Background cache task stopped");
   }
 
-  // Suspend self - will be deleted by stopBackgroundCaching()
-  vTaskSuspend(nullptr);
+cleanup:
+  // CRITICAL: Clear handle BEFORE vTaskDelete so main thread knows we're exiting
+  cacheTaskHandle_ = nullptr;
+
+  // Memory barrier to ensure handle clear is visible to other cores (ESP32 dual-core)
+  std::atomic_thread_fence(std::memory_order_seq_cst);
+
+  vTaskDelete(nullptr);
 }
 
 void ReaderState::stopBackgroundCaching() {
-  if (cacheTaskHandle_) {
-    Serial.println("[READER] Stopping background cache task");
-    cacheTaskStopRequested_ = true;
-
-    // Wait for task to complete or suspend (max 500ms)
-    for (int i = 0; i < 50 && eTaskGetState(cacheTaskHandle_) == eRunning; i++) {
-      vTaskDelay(pdMS_TO_TICKS(10));
-    }
-
-    vTaskDelete(cacheTaskHandle_);
-    cacheTaskHandle_ = nullptr;
-    cacheTaskStopRequested_ = false;
+  TaskHandle_t taskToStop = cacheTaskHandle_;
+  if (!taskToStop) {
+    return;
   }
+
+  Serial.println("[READER] Stopping background cache task");
+  cacheTaskStopRequested_.store(true, std::memory_order_release);
+
+  // Wait for task to clear cacheTaskHandle_ (it does this BEFORE vTaskDelete)
+  for (int i = 0; i < kTaskStopTimeoutMs / kTaskStopPollMs; i++) {
+    if (cacheTaskHandle_ == nullptr) {
+      Serial.println("[READER] Cache task stopped cleanly");
+      cacheTaskStopRequested_.store(false, std::memory_order_release);
+      return;
+    }
+    vTaskDelay(pdMS_TO_TICKS(kTaskStopPollMs));
+  }
+
+  // Timeout - force delete
+  Serial.println("[READER] Cache task timeout - forcing delete");
+  vTaskDelete(taskToStop);
+  cacheTaskHandle_ = nullptr;
+  cacheTaskStopRequested_.store(false, std::memory_order_release);
 }
 
 // ============================================================================
@@ -1025,7 +1098,7 @@ void ReaderState::jumpToTocEntry(Core& core, int tocIndex) {
       xSemaphoreTake(cacheMutex_, portMAX_DELAY);
       pageCache_.reset();
       xSemaphoreGive(cacheMutex_);
-      cacheTaskComplete_ = false;
+      cacheTaskComplete_.store(false, std::memory_order_relaxed);
     }
   } else if (type == ContentType::Xtc) {
     // For XTC, pageNum is page index

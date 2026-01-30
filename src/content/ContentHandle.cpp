@@ -202,6 +202,29 @@ std::string ContentHandle::getThumbnailPath() const {
   return "";
 }
 
+std::string ContentHandle::getCoverPath() const {
+  switch (type) {
+    case ContentType::Epub:
+      if (epub.getEpub()) {
+        return epub.getEpub()->getCoverBmpPath();
+      }
+      break;
+    case ContentType::Txt:
+      if (txt.getTxt()) {
+        return txt.getTxt()->getCoverBmpPath();
+      }
+      break;
+    case ContentType::Markdown:
+      if (markdown.getMarkdown()) {
+        return markdown.getMarkdown()->getCoverBmpPath();
+      }
+      break;
+    default:
+      break;
+  }
+  return "";
+}
+
 std::string ContentHandle::generateThumbnail() {
   switch (type) {
     case ContentType::Epub:
