@@ -18,10 +18,10 @@ bool IniParser::parseFile(const char* path, Callback callback) {
     // Read line
     size_t len = 0;
     while (file.available() && len < sizeof(line) - 1) {
-      char c = file.read();
-      if (c == '\n') break;
+      int c = file.read();
+      if (c < 0 || c == '\n') break;
       if (c != '\r') {
-        line[len++] = c;
+        line[len++] = static_cast<char>(c);
       }
     }
     line[len] = '\0';
@@ -29,7 +29,8 @@ bool IniParser::parseFile(const char* path, Callback callback) {
     // Discard remainder of long lines
     if (len == sizeof(line) - 1) {
       while (file.available()) {
-        if (file.read() == '\n') break;
+        int c = file.read();
+        if (c < 0 || c == '\n') break;
       }
     }
 
