@@ -17,10 +17,10 @@ namespace {
 constexpr uint32_t SETTINGS_MAGIC = 0x53585050;
 // Minimum version we can read (allows backward compatibility)
 constexpr uint8_t MIN_SETTINGS_VERSION = 3;
-// Version 5: Added fileListDir, fileListSelectedName, fileListSelectedIndex
-constexpr uint8_t SETTINGS_FILE_VERSION = 5;
+// Version 6: Added coverDithering
+constexpr uint8_t SETTINGS_FILE_VERSION = 6;
 // Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 22;
+constexpr uint8_t SETTINGS_COUNT = 23;
 }  // namespace
 
 Result<void> Settings::save(drivers::Storage& storage) const {
@@ -51,6 +51,7 @@ Result<void> Settings::save(drivers::Storage& storage) const {
   serialization::writePod(outputFile, textAntiAliasing);
   serialization::writePod(outputFile, showImages);
   serialization::writePod(outputFile, startupBehavior);
+  serialization::writePod(outputFile, coverDithering);
   // Write themeName as fixed-length string
   outputFile.write(reinterpret_cast<const uint8_t*>(themeName), sizeof(themeName));
   outputFile.write(reinterpret_cast<const uint8_t*>(lastBookPath), sizeof(lastBookPath));
@@ -133,6 +134,8 @@ Result<void> Settings::load(drivers::Storage& storage) {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, startupBehavior, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPodValidated(inputFile, coverDithering, uint8_t(2));
+    if (++settingsRead >= fileSettingsCount) break;
     // Read themeName as fixed-length string
     inputFile.read(reinterpret_cast<uint8_t*>(themeName), sizeof(themeName));
     themeName[sizeof(themeName) - 1] = '\0';  // Ensure null-terminated
@@ -144,7 +147,7 @@ Result<void> Settings::load(drivers::Storage& storage) {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, transitionReturnTo, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPodValidated(inputFile, sunlightFadingFix, uint8_t(1));
+    serialization::readPodValidated(inputFile, sunlightFadingFix, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
     inputFile.read(reinterpret_cast<uint8_t*>(fileListDir), sizeof(fileListDir));
     fileListDir[sizeof(fileListDir) - 1] = '\0';
@@ -204,6 +207,7 @@ bool Settings::saveToFile() const {
   serialization::writePod(outputFile, textAntiAliasing);
   serialization::writePod(outputFile, showImages);
   serialization::writePod(outputFile, startupBehavior);
+  serialization::writePod(outputFile, coverDithering);
   outputFile.write(reinterpret_cast<const uint8_t*>(themeName), sizeof(themeName));
   outputFile.write(reinterpret_cast<const uint8_t*>(lastBookPath), sizeof(lastBookPath));
   serialization::writePod(outputFile, pendingTransition);
@@ -282,6 +286,8 @@ bool Settings::loadFromFile() {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, startupBehavior, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPodValidated(inputFile, coverDithering, uint8_t(2));
+    if (++settingsRead >= fileSettingsCount) break;
     inputFile.read(reinterpret_cast<uint8_t*>(themeName), sizeof(themeName));
     themeName[sizeof(themeName) - 1] = '\0';
     if (++settingsRead >= fileSettingsCount) break;
@@ -292,7 +298,7 @@ bool Settings::loadFromFile() {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, transitionReturnTo, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPodValidated(inputFile, sunlightFadingFix, uint8_t(1));
+    serialization::readPodValidated(inputFile, sunlightFadingFix, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
     inputFile.read(reinterpret_cast<uint8_t*>(fileListDir), sizeof(fileListDir));
     fileListDir[sizeof(fileListDir) - 1] = '\0';
