@@ -12,3 +12,4 @@ tmp/*
 data/*
 crosspoint-reader/*
 *.o
+test/build/*

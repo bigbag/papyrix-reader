@@ -2,7 +2,8 @@
 # Wraps PlatformIO commands for convenience
 
 .PHONY: all build build-release release upload upload-release flash flash-release \
-        clean format check monitor size erase build-fs upload-fs sleep-screen gh-release changelog help
+        clean format check monitor size erase build-fs upload-fs sleep-screen gh-release changelog help \
+        test test-build test-run test-clean
 
 # Default target
 all: help
@@ -117,6 +118,21 @@ else
 	@echo "Usage: make sleep-screen INPUT=<image> OUTPUT=<bmp> [ARGS='--dither --bits 8']"
 	@echo "Example: make sleep-screen INPUT=photo.jpg OUTPUT=sleep.bmp"
 endif
+
+## Unit Tests:
+
+test: test-build test-run ## Build and run all unit tests
+
+test-build: ## Build unit tests
+	@mkdir -p test/build
+	@cd test/build && cmake .. -DCMAKE_BUILD_TYPE=Debug && cmake --build . --parallel
+
+test-run: ## Run unit tests (build first if needed)
+	@if [ ! -d test/build/bin ]; then $(MAKE) test-build; fi
+	@test/scripts/run_tests.sh
+
+test-clean: ## Clean test build artifacts
+	@rm -rf test/build
 
 ## Help:
 
