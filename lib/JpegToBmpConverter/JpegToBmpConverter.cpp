@@ -395,7 +395,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
             const uint8_t r = imageInfo.m_pMCUBufR[pixelOffset];
             const uint8_t g = imageInfo.m_pMCUBufG[pixelOffset];
             const uint8_t b = imageInfo.m_pMCUBufB[pixelOffset];
-            gray = (r * 25 + g * 50 + b * 25) / 100;
+            gray = (77 * r + 150 * g + 29 * b) >> 8;
           }
 
           mcuRowBuffer[blockY * imageInfo.m_width + pixelX] = gray;

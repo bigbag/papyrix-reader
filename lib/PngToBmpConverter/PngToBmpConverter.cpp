@@ -97,7 +97,7 @@ void pngDrawCallback(pngle_t* pngle, uint32_t x, uint32_t y, uint32_t w, uint32_
   if (!ctx || !ctx->srcRowBuffer) return;
 
   // Convert to grayscale
-  const uint8_t gray = (rgba[0] * 25 + rgba[1] * 50 + rgba[2] * 25) / 100;
+  const uint8_t gray = (77 * rgba[0] + 150 * rgba[1] + 29 * rgba[2]) >> 8;
 
   // Handle alpha: blend with white background
   const uint8_t alpha = rgba[3];
