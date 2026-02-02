@@ -9,6 +9,12 @@ uint8_t quantizeSimple(int gray);
 uint8_t quantize1bit(int gray, int x, int y);
 int adjustPixel(int gray);
 
+// RGB to grayscale conversion using BT.601 coefficients via lookup tables.
+// Avoids 3 multiplications per pixel on ESP32-C3 (no FPU).
+// Note: Sum of max values is 254 (not 255) due to integer truncation of coefficients.
+// This is expected behavior - pure white (255,255,255) maps to 254.
+uint8_t rgbToGray(uint8_t r, uint8_t g, uint8_t b);
+
 // Scale down a BMP file to create a 1-bit thumbnail.
 // Uses 2x2 pixel averaging for clean downscaling with Atkinson dithering.
 // Returns true on success, false on failure.

@@ -11,6 +11,10 @@ namespace {
 class JpegImageConverter : public ImageConverter {
  public:
   bool convert(FsFile& input, Print& output, const ImageConvertConfig& config) override {
+    // Quick mode: simple threshold instead of dithering
+    if (config.quickMode) {
+      return JpegToBmpConverter::jpegFileToBmpStreamQuick(input, output, config.maxWidth, config.maxHeight);
+    }
     if (config.maxWidth == 480 && config.maxHeight == 800) {
       return config.oneBit ? JpegToBmpConverter::jpegFileTo1BitBmpStream(input, output)
                            : JpegToBmpConverter::jpegFileToBmpStream(input, output);
@@ -26,6 +30,10 @@ class JpegImageConverter : public ImageConverter {
 class PngImageConverter : public ImageConverter {
  public:
   bool convert(FsFile& input, Print& output, const ImageConvertConfig& config) override {
+    // Quick mode: simple threshold instead of dithering
+    if (config.quickMode) {
+      return PngToBmpConverter::pngFileToBmpStreamQuick(input, output, config.maxWidth, config.maxHeight);
+    }
     // Note: PNG converter always produces 2-bit output. Unlike JPEG, PNG does not support
     // 1-bit dithering (oneBit flag is ignored). PNG thumbnails will be slightly larger but
     // render at the same speed since the display hardware handles both formats equally.

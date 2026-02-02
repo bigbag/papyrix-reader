@@ -78,6 +78,8 @@ struct PngContext {
   uint32_t scaleY_fp;
   bool needsScaling;
   bool headerWritten;
+  bool quickMode;   // Fast preview: simple threshold instead of dithering
+  bool initFailed;  // Set when allocation fails in pngInitCallback
   int currentSrcY;
   int currentOutY;
   uint32_t nextOutY_srcStart;
@@ -94,10 +96,10 @@ struct PngContext {
 
 void pngDrawCallback(pngle_t* pngle, uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint8_t rgba[4]) {
   auto* ctx = static_cast<PngContext*>(pngle_get_user_data(pngle));
-  if (!ctx || !ctx->srcRowBuffer) return;
+  if (!ctx || ctx->initFailed || !ctx->srcRowBuffer) return;
 
-  // Convert to grayscale
-  const uint8_t gray = (77 * rgba[0] + 150 * rgba[1] + 29 * rgba[2]) >> 8;
+  // Convert to grayscale using LUT
+  const uint8_t gray = rgbToGray(rgba[0], rgba[1], rgba[2]);
 
   // Handle alpha: blend with white background
   const uint8_t alpha = rgba[3];
@@ -116,12 +118,18 @@ void pngDrawCallback(pngle_t* pngle, uint32_t x, uint32_t y, uint32_t w, uint32_
       memset(ctx->outRowBuffer, 0, ctx->bytesPerRow);
       for (int outX = 0; outX < ctx->outWidth; outX++) {
         const uint8_t gray = adjustPixel(ctx->srcRowBuffer[outX]);
-        const uint8_t twoBit = ctx->ditherer ? ctx->ditherer->processPixel(gray, outX) : quantize(gray, outX, y);
+        uint8_t twoBit;
+        if (ctx->quickMode) {
+          // Simple threshold quantization (faster)
+          twoBit = quantizeSimple(gray);
+        } else {
+          twoBit = ctx->ditherer ? ctx->ditherer->processPixel(gray, outX) : quantize(gray, outX, y);
+        }
         const int byteIndex = (outX * 2) / 8;
         const int bitOffset = 6 - ((outX * 2) % 8);
         ctx->outRowBuffer[byteIndex] |= (twoBit << bitOffset);
       }
-      if (ctx->ditherer) ctx->ditherer->nextRow();
+      if (ctx->ditherer && !ctx->quickMode) ctx->ditherer->nextRow();
       ctx->bmpOut->write(ctx->outRowBuffer, ctx->bytesPerRow);
     } else {
       // Scaling: accumulate source pixels
@@ -150,13 +158,18 @@ void pngDrawCallback(pngle_t* pngle, uint32_t x, uint32_t y, uint32_t w, uint32_
         memset(ctx->outRowBuffer, 0, ctx->bytesPerRow);
         for (int outX = 0; outX < ctx->outWidth; outX++) {
           const uint8_t gray = adjustPixel((ctx->rowCount[outX] > 0) ? (ctx->rowAccum[outX] / ctx->rowCount[outX]) : 0);
-          const uint8_t twoBit =
-              ctx->ditherer ? ctx->ditherer->processPixel(gray, outX) : quantize(gray, outX, ctx->currentOutY);
+          uint8_t twoBit;
+          if (ctx->quickMode) {
+            // Simple threshold quantization (faster)
+            twoBit = quantizeSimple(gray);
+          } else {
+            twoBit = ctx->ditherer ? ctx->ditherer->processPixel(gray, outX) : quantize(gray, outX, ctx->currentOutY);
+          }
           const int byteIndex = (outX * 2) / 8;
           const int bitOffset = 6 - ((outX * 2) % 8);
           ctx->outRowBuffer[byteIndex] |= (twoBit << bitOffset);
         }
-        if (ctx->ditherer) ctx->ditherer->nextRow();
+        if (ctx->ditherer && !ctx->quickMode) ctx->ditherer->nextRow();
         ctx->bmpOut->write(ctx->outRowBuffer, ctx->bytesPerRow);
         ctx->currentOutY++;
 
@@ -218,16 +231,46 @@ void pngInitCallback(pngle_t* pngle, uint32_t w, uint32_t h) {
     free(ctx->outRowBuffer);  // safe if nullptr
     ctx->srcRowBuffer = nullptr;
     ctx->outRowBuffer = nullptr;
+    ctx->initFailed = true;
     return;
   }
 
   if (ctx->needsScaling) {
-    ctx->rowAccum = new uint32_t[ctx->outWidth]();
-    ctx->rowCount = new uint16_t[ctx->outWidth]();
+    ctx->rowAccum = new (std::nothrow) uint32_t[ctx->outWidth]();
+    ctx->rowCount = new (std::nothrow) uint16_t[ctx->outWidth]();
+    if (!ctx->rowAccum || !ctx->rowCount) {
+      Serial.printf("[%lu] [PNG] Failed to allocate scaling buffers\n", millis());
+      free(ctx->srcRowBuffer);
+      free(ctx->outRowBuffer);
+      delete[] ctx->rowAccum;  // safe if nullptr
+      delete[] ctx->rowCount;  // safe if nullptr
+      ctx->srcRowBuffer = nullptr;
+      ctx->outRowBuffer = nullptr;
+      ctx->rowAccum = nullptr;
+      ctx->rowCount = nullptr;
+      ctx->initFailed = true;
+      return;
+    }
     ctx->nextOutY_srcStart = ctx->scaleY_fp;
   }
 
-  ctx->ditherer = new AtkinsonDitherer(ctx->outWidth);
+  // Skip ditherer allocation in quickMode for faster preview
+  if (!ctx->quickMode) {
+    ctx->ditherer = new (std::nothrow) AtkinsonDitherer(ctx->outWidth);
+    if (!ctx->ditherer) {
+      Serial.printf("[%lu] [PNG] Failed to allocate ditherer\n", millis());
+      free(ctx->srcRowBuffer);
+      free(ctx->outRowBuffer);
+      delete[] ctx->rowAccum;
+      delete[] ctx->rowCount;
+      ctx->srcRowBuffer = nullptr;
+      ctx->outRowBuffer = nullptr;
+      ctx->rowAccum = nullptr;
+      ctx->rowCount = nullptr;
+      ctx->initFailed = true;
+      return;
+    }
+  }
   ctx->currentSrcY = 0;
   ctx->currentOutY = 0;
 
@@ -236,11 +279,10 @@ void pngInitCallback(pngle_t* pngle, uint32_t w, uint32_t h) {
   ctx->headerWritten = true;
 }
 
-}  // namespace
-
-bool PngToBmpConverter::pngFileToBmpStreamWithSize(FsFile& pngFile, Print& bmpOut, int targetMaxWidth,
-                                                   int targetMaxHeight) {
-  Serial.printf("[%lu] [PNG] Converting PNG to BMP (target: %dx%d)\n", millis(), targetMaxWidth, targetMaxHeight);
+bool pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOut, int targetMaxWidth, int targetMaxHeight,
+                                bool quickMode) {
+  Serial.printf("[%lu] [PNG] Converting PNG to BMP (target: %dx%d)%s\n", millis(), targetMaxWidth, targetMaxHeight,
+                quickMode ? " [QUICK]" : "");
 
   pngle_t* pngle = pngle_new();
   if (!pngle) {
@@ -254,6 +296,7 @@ bool PngToBmpConverter::pngFileToBmpStreamWithSize(FsFile& pngFile, Print& bmpOu
   ctx.targetMaxWidth = targetMaxWidth;
   ctx.targetMaxHeight = targetMaxHeight;
   ctx.headerWritten = false;
+  ctx.quickMode = quickMode;
 
   pngle_set_user_data(pngle, &ctx);
   pngle_set_init_callback(pngle, pngInitCallback);
@@ -288,4 +331,16 @@ bool PngToBmpConverter::pngFileToBmpStreamWithSize(FsFile& pngFile, Print& bmpOu
   }
 
   return false;
+}
+
+}  // namespace
+
+bool PngToBmpConverter::pngFileToBmpStreamWithSize(FsFile& pngFile, Print& bmpOut, int targetMaxWidth,
+                                                   int targetMaxHeight) {
+  return pngFileToBmpStreamInternal(pngFile, bmpOut, targetMaxWidth, targetMaxHeight, false);
+}
+
+bool PngToBmpConverter::pngFileToBmpStreamQuick(FsFile& pngFile, Print& bmpOut, int targetMaxWidth,
+                                                int targetMaxHeight) {
+  return pngFileToBmpStreamInternal(pngFile, bmpOut, targetMaxWidth, targetMaxHeight, true);
 }

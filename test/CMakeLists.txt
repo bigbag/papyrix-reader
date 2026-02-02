@@ -38,6 +38,7 @@ include_directories(
   ${PROJECT_ROOT}/lib/ScriptDetector
   ${PROJECT_ROOT}/lib/Markdown
   ${PROJECT_ROOT}/lib/Txt
+  ${PROJECT_ROOT}/lib/GfxRenderer
 )
 
 # Common test helpers

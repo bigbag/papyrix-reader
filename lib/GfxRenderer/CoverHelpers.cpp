@@ -11,6 +11,23 @@
 
 namespace CoverHelpers {
 
+bool renderCoverWithFallback(GfxRenderer& renderer, const std::string& coverPath, const std::string& previewPath,
+                             int marginTop, int marginRight, int marginBottom, int marginLeft,
+                             int& pagesUntilFullRefresh, int pagesPerRefreshValue, bool turnOffScreen) {
+  // Prefer full cover if available
+  if (SdMan.exists(coverPath.c_str())) {
+    return renderCoverFromBmp(renderer, coverPath, marginTop, marginRight, marginBottom, marginLeft,
+                              pagesUntilFullRefresh, pagesPerRefreshValue, turnOffScreen);
+  }
+  // Fall back to preview
+  if (SdMan.exists(previewPath.c_str())) {
+    Serial.printf("[%lu] [CVR] Using preview cover (full cover not ready)\n", millis());
+    return renderCoverFromBmp(renderer, previewPath, marginTop, marginRight, marginBottom, marginLeft,
+                              pagesUntilFullRefresh, pagesPerRefreshValue, turnOffScreen);
+  }
+  return false;
+}
+
 bool renderCoverFromBmp(GfxRenderer& renderer, const std::string& bmpPath, int marginTop, int marginRight,
                         int marginBottom, int marginLeft, int& pagesUntilFullRefresh, int pagesPerRefreshValue,
                         bool turnOffScreen) {

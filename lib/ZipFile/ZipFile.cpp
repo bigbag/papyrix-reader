@@ -364,6 +364,93 @@ int ZipFile::fillUncompressedSizes(std::vector<SizeTarget>& targets, std::vector
   return matched;
 }
 
+int ZipFile::findFirstExisting(const char* const* paths, int pathCount) {
+  if (!paths || pathCount <= 0 || pathCount > 65535) {
+    return -1;
+  }
+
+  const bool wasOpen = isOpen();
+  if (!wasOpen && !open()) {
+    return -1;
+  }
+
+  if (!loadZipDetails()) {
+    if (!wasOpen) {
+      close();
+    }
+    return -1;
+  }
+
+  // Build sorted vector of targets with hashes for binary search
+  std::vector<SizeTarget> targets;
+  for (int i = 0; i < pathCount; i++) {
+    const char* path = paths[i];
+    if (!path) continue;
+    const size_t len = strlen(path);
+    if (len > 255) continue;  // Skip paths that are too long for itemName[256]
+    targets.push_back({fnvHash64(path, len), static_cast<uint16_t>(len), static_cast<uint16_t>(i)});
+  }
+  std::sort(targets.begin(), targets.end());
+
+  file.seek(zipDetails.centralDirOffset);
+
+  uint32_t sig;
+  char itemName[256];
+  int foundIndex = -1;
+  int lowestPriority = pathCount;  // Lower index = higher priority
+
+  while (file.available()) {
+    if (file.read(&sig, 4) != 4) break;
+    if (sig != 0x02014b50) break;  // End of central directory
+
+    // Skip to name length (skip 24 bytes from after signature)
+    if (!file.seekCur(24)) break;
+    uint16_t nameLen, m, k;
+    if (file.read(&nameLen, 2) != 2) break;
+    if (file.read(&m, 2) != 2) break;
+    if (file.read(&k, 2) != 2) break;
+    // Skip remaining header (12 bytes)
+    if (!file.seekCur(12)) break;
+
+    // Bounds check to prevent buffer overflow
+    if (nameLen > 255) {
+      file.seekCur(nameLen + m + k);
+      continue;
+    }
+
+    if (file.read(itemName, nameLen) != nameLen) break;
+    itemName[nameLen] = '\0';
+
+    // Compute hash on-the-fly from filename
+    const uint64_t entryHash = fnvHash64(itemName, nameLen);
+
+    // Binary search for matching target
+    SizeTarget key = {entryHash, nameLen, 0};
+    auto it = std::lower_bound(targets.begin(), targets.end(), key);
+
+    // Check for match (hash and len must match)
+    if (it != targets.end() && it->hash == entryHash && it->len == nameLen) {
+      // Verify string match (hash collision protection) with bounds check
+      if (it->index < pathCount && strcmp(itemName, paths[it->index]) == 0) {
+        // Keep track of lowest index (highest priority)
+        if (it->index < lowestPriority) {
+          lowestPriority = it->index;
+          foundIndex = it->index;
+          if (lowestPriority == 0) break;  // Can't find higher priority
+        }
+      }
+    }
+
+    // Skip the rest of this entry (extra field + comment)
+    file.seekCur(m + k);
+  }
+
+  if (!wasOpen) {
+    close();
+  }
+  return foundIndex;
+}
+
 uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const bool trailingNullByte) {
   const bool wasOpen = isOpen();
   if (!wasOpen && !open()) {

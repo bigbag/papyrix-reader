@@ -9,6 +9,7 @@ struct ImageConvertConfig {
   int maxWidth = 480;
   int maxHeight = 800;
   bool oneBit = false;
+  bool quickMode = false;  // Fast preview: simple threshold instead of dithering
   const char* logTag = "IMG";
 };
 

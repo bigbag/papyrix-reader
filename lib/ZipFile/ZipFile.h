@@ -67,6 +67,9 @@ class ZipFile {
   // targets must be sorted by (hash, len). sizes[target.index] receives uncompressedSize.
   // Returns number of targets matched.
   int fillUncompressedSizes(std::vector<SizeTarget>& targets, std::vector<uint32_t>& sizes);
+  // Find first existing file from a list of paths. Returns index into paths array, or -1 if none found.
+  // More efficient than calling getInflatedFileSize() for each path individually.
+  int findFirstExisting(const char* const* paths, int pathCount);
   // Due to the memory required to run each of these, it is recommended to not preopen the zip file for multiple
   // These functions will open and close the zip as needed
   uint8_t* readFileToMemory(const char* filename, size_t* size = nullptr, bool trailingNullByte = false);

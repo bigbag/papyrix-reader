@@ -200,9 +200,9 @@ unsigned char JpegToBmpConverter::jpegReadCallback(unsigned char* pBuf, const un
 
 // Internal implementation with configurable target size and bit depth
 bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bmpOut, int targetWidth, int targetHeight,
-                                                     bool oneBit) {
-  Serial.printf("[%lu] [JPG] Converting JPEG to %s BMP (target: %dx%d)\n", millis(), oneBit ? "1-bit" : "2-bit",
-                targetWidth, targetHeight);
+                                                     bool oneBit, bool quickMode) {
+  Serial.printf("[%lu] [JPG] Converting JPEG to %s BMP (target: %dx%d)%s\n", millis(), oneBit ? "1-bit" : "2-bit",
+                targetWidth, targetHeight, quickMode ? " [QUICK]" : "");
 
   // Setup context for picojpeg callback
   JpegReadContext context = {.file = jpegFile, .bufferPos = 0, .bufferFilled = 0};
@@ -301,37 +301,39 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
     return false;
   }
 
-  // Create ditherer if enabled
+  // Create ditherer if enabled (skip in quickMode for faster preview)
   // Use OUTPUT dimensions for dithering (after prescaling)
   AtkinsonDitherer* atkinsonDitherer = nullptr;
   FloydSteinbergDitherer* fsDitherer = nullptr;
   Atkinson1BitDitherer* atkinson1BitDitherer = nullptr;
 
-  if (oneBit) {
-    // For 1-bit output, use Atkinson dithering for better quality
-    atkinson1BitDitherer = new (std::nothrow) Atkinson1BitDitherer(outWidth);
-    if (!atkinson1BitDitherer) {
-      Serial.printf("[%lu] [JPG] Failed to allocate 1-bit ditherer\n", millis());
-      free(mcuRowBuffer);
-      free(rowBuffer);
-      return false;
-    }
-  } else if (!USE_8BIT_OUTPUT) {
-    if (USE_ATKINSON) {
-      atkinsonDitherer = new (std::nothrow) AtkinsonDitherer(outWidth);
-      if (!atkinsonDitherer) {
-        Serial.printf("[%lu] [JPG] Failed to allocate Atkinson ditherer\n", millis());
+  if (!quickMode) {
+    if (oneBit) {
+      // For 1-bit output, use Atkinson dithering for better quality
+      atkinson1BitDitherer = new (std::nothrow) Atkinson1BitDitherer(outWidth);
+      if (!atkinson1BitDitherer) {
+        Serial.printf("[%lu] [JPG] Failed to allocate 1-bit ditherer\n", millis());
         free(mcuRowBuffer);
         free(rowBuffer);
         return false;
       }
-    } else if (USE_FLOYD_STEINBERG) {
-      fsDitherer = new (std::nothrow) FloydSteinbergDitherer(outWidth);
-      if (!fsDitherer) {
-        Serial.printf("[%lu] [JPG] Failed to allocate Floyd-Steinberg ditherer\n", millis());
-        free(mcuRowBuffer);
-        free(rowBuffer);
-        return false;
+    } else if (!USE_8BIT_OUTPUT) {
+      if (USE_ATKINSON) {
+        atkinsonDitherer = new (std::nothrow) AtkinsonDitherer(outWidth);
+        if (!atkinsonDitherer) {
+          Serial.printf("[%lu] [JPG] Failed to allocate Atkinson ditherer\n", millis());
+          free(mcuRowBuffer);
+          free(rowBuffer);
+          return false;
+        }
+      } else if (USE_FLOYD_STEINBERG) {
+        fsDitherer = new (std::nothrow) FloydSteinbergDitherer(outWidth);
+        if (!fsDitherer) {
+          Serial.printf("[%lu] [JPG] Failed to allocate Floyd-Steinberg ditherer\n", millis());
+          free(mcuRowBuffer);
+          free(rowBuffer);
+          return false;
+        }
       }
     }
   }
@@ -395,7 +397,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
             const uint8_t r = imageInfo.m_pMCUBufR[pixelOffset];
             const uint8_t g = imageInfo.m_pMCUBufG[pixelOffset];
             const uint8_t b = imageInfo.m_pMCUBufB[pixelOffset];
-            gray = (77 * r + 150 * g + 29 * b) >> 8;
+            gray = rgbToGray(r, g, b);
           }
 
           mcuRowBuffer[blockY * imageInfo.m_width + pixelX] = gray;
@@ -436,7 +438,10 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
           for (int x = 0; x < outWidth; x++) {
             const uint8_t gray = adjustPixel(mcuRowBuffer[bufferY * imageInfo.m_width + x]);
             uint8_t twoBit;
-            if (atkinsonDitherer) {
+            if (quickMode) {
+              // Quick mode: simple threshold (faster, no dithering)
+              twoBit = quantizeSimple(gray);
+            } else if (atkinsonDitherer) {
               twoBit = atkinsonDitherer->processPixel(gray, x);
             } else if (fsDitherer) {
               twoBit = fsDitherer->processPixel(gray, x);
@@ -512,7 +517,10 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
             for (int x = 0; x < outWidth; x++) {
               const uint8_t gray = adjustPixel((rowCount[x] > 0) ? (rowAccum[x] / rowCount[x]) : 0);
               uint8_t twoBit;
-              if (atkinsonDitherer) {
+              if (quickMode) {
+                // Quick mode: simple threshold (faster, no dithering)
+                twoBit = quantizeSimple(gray);
+              } else if (atkinsonDitherer) {
                 twoBit = atkinsonDitherer->processPixel(gray, x);
               } else if (fsDitherer) {
                 twoBit = fsDitherer->processPixel(gray, x);
@@ -586,4 +594,10 @@ bool JpegToBmpConverter::jpegFileTo1BitBmpStream(FsFile& jpegFile, Print& bmpOut
 bool JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(FsFile& jpegFile, Print& bmpOut, int targetMaxWidth,
                                                          int targetMaxHeight) {
   return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetMaxWidth, targetMaxHeight, true);
+}
+
+// Quick preview mode: simple threshold instead of dithering (faster but lower quality)
+bool JpegToBmpConverter::jpegFileToBmpStreamQuick(FsFile& jpegFile, Print& bmpOut, int targetMaxWidth,
+                                                  int targetMaxHeight) {
+  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetMaxWidth, targetMaxHeight, false, true);
 }

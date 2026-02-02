@@ -8,7 +8,7 @@ class JpegToBmpConverter {
   static unsigned char jpegReadCallback(unsigned char* pBuf, unsigned char buf_size,
                                         unsigned char* pBytes_actually_read, void* pCallback_data);
   static bool jpegFileToBmpStreamInternal(class FsFile& jpegFile, Print& bmpOut, int targetWidth, int targetHeight,
-                                          bool oneBit);
+                                          bool oneBit, bool quickMode = false);
 
  public:
   static bool jpegFileToBmpStream(FsFile& jpegFile, Print& bmpOut);
@@ -18,4 +18,6 @@ class JpegToBmpConverter {
   static bool jpegFileTo1BitBmpStream(FsFile& jpegFile, Print& bmpOut);
   // Convert to 1-bit BMP with custom target size (for thumbnails)
   static bool jpegFileTo1BitBmpStreamWithSize(FsFile& jpegFile, Print& bmpOut, int targetMaxWidth, int targetMaxHeight);
+  // Quick preview mode: simple threshold instead of dithering (faster but lower quality)
+  static bool jpegFileToBmpStreamQuick(FsFile& jpegFile, Print& bmpOut, int targetMaxWidth, int targetMaxHeight);
 };
