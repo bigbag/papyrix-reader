@@ -233,6 +233,8 @@ static inline uint8_t palette2bitToGray(uint8_t index) {
   return lut[index & 0x03];
 }
 
+static inline uint8_t palette1bitToGray(uint8_t index) { return (index & 0x01) ? 255 : 0; }
+
 // Simple 1-bit Atkinson ditherer without contrast adjustment
 // Used when source is already contrast-enhanced (like cover.bmp)
 class RawAtkinson1BitDitherer {
@@ -334,13 +336,13 @@ bool bmpTo1BitBmpScaled(const char* srcPath, const char* dstPath, int targetMaxW
   srcFile.seekCur(2);  // Skip planes
   const uint16_t bpp = readLE16(srcFile);
 
-  if (bpp != 2) {
-    Serial.printf("[%lu] [BMP] Expected 2-bit BMP, got %d-bit\n", millis(), bpp);
+  if (bpp != 1 && bpp != 2) {
+    Serial.printf("[%lu] [BMP] Expected 1 or 2-bit BMP, got %d-bit\n", millis(), bpp);
     srcFile.close();
     return false;
   }
 
-  Serial.printf("[%lu] [BMP] Scaling %dx%d 2-bit BMP to 1-bit thumbnail\n", millis(), srcWidth, srcHeight);
+  Serial.printf("[%lu] [BMP] Scaling %dx%d %d-bit BMP to 1-bit thumbnail\n", millis(), srcWidth, srcHeight, bpp);
 
   // Calculate output dimensions (scale to fit target while maintaining aspect)
   int outWidth = srcWidth;
@@ -368,8 +370,8 @@ bool bmpTo1BitBmpScaled(const char* srcPath, const char* dstPath, int targetMaxW
                 static_cast<unsigned long>(scaleX_fp), static_cast<unsigned long>(scaleY_fp));
 
   // Calculate row sizes
-  const int srcRowBytes = (srcWidth * 2 + 31) / 32 * 4;  // 2-bit source, 4-byte aligned
-  const int outRowBytes = (outWidth + 31) / 32 * 4;      // 1-bit output, 4-byte aligned
+  const int srcRowBytes = (srcWidth * bpp + 31) / 32 * 4;  // bpp-bit source, 4-byte aligned
+  const int outRowBytes = (outWidth + 31) / 32 * 4;        // 1-bit output, 4-byte aligned
 
   // Allocate buffers for source rows needed per output row
   auto* srcRows = static_cast<uint8_t*>(malloc(srcRowBytes * maxSrcRowsPerOut));
@@ -460,11 +462,21 @@ bool bmpTo1BitBmpScaled(const char* srcPath, const char* dstPath, int targetMaxW
       for (int dy = 0; dy < srcRowsNeeded && (srcYStart + dy) < srcHeight; dy++) {
         const uint8_t* row = srcRows + dy * srcRowBytes;
         for (int srcX = srcXStart; srcX < srcXEnd && srcX < srcWidth; srcX++) {
-          // Extract 2-bit pixel value (MSB first, 4 pixels per byte)
-          const int byteIdx = srcX / 4;
-          const int bitShift = 6 - (srcX % 4) * 2;
-          const uint8_t pixel = (row[byteIdx] >> bitShift) & 0x03;
-          sum += palette2bitToGray(pixel);
+          uint8_t gray;
+          if (bpp == 2) {
+            // 2-bit: 4 pixels per byte, MSB first
+            const int byteIdx = srcX / 4;
+            const int bitShift = 6 - (srcX % 4) * 2;
+            const uint8_t pixel = (row[byteIdx] >> bitShift) & 0x03;
+            gray = palette2bitToGray(pixel);
+          } else {
+            // 1-bit: 8 pixels per byte, MSB first
+            const int byteIdx = srcX / 8;
+            const int bitOffset = 7 - (srcX % 8);
+            const uint8_t pixel = (row[byteIdx] >> bitOffset) & 0x01;
+            gray = palette1bitToGray(pixel);
+          }
+          sum += gray;
           count++;
         }
       }

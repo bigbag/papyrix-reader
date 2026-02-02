@@ -109,6 +109,27 @@ static uint8_t quantize1bit(int gray, int x, int y) {
   return gray < 128 ? 0 : 1;
 }
 
+// Convert 2-bit palette index to grayscale (0-255)
+static inline uint8_t palette2bitToGray(uint8_t index) {
+  static const uint8_t lut[4] = {0, 85, 170, 255};
+  return lut[index & 0x03];
+}
+
+// Convert 1-bit palette index to grayscale (0-255)
+static inline uint8_t palette1bitToGray(uint8_t index) { return (index & 0x01) ? 255 : 0; }
+
+// Helper to extract 2-bit pixel from packed byte (4 pixels per byte, MSB first)
+static inline uint8_t extract2bitPixel(uint8_t byte, int pixelIndex) {
+  const int bitShift = 6 - (pixelIndex % 4) * 2;
+  return (byte >> bitShift) & 0x03;
+}
+
+// Helper to extract 1-bit pixel from packed byte (8 pixels per byte, MSB first)
+static inline uint8_t extract1bitPixel(uint8_t byte, int pixelIndex) {
+  const int bitOffset = 7 - (pixelIndex % 8);
+  return (byte >> bitOffset) & 0x01;
+}
+
 int main() {
   TestUtils::TestRunner runner("BitmapHelpers");
 
@@ -286,6 +307,104 @@ int main() {
                     "quantize1bit: position doesn't affect result (dark)");
     runner.expectEq(static_cast<uint8_t>(1), quantize1bit(200, 100, 100),
                     "quantize1bit: position doesn't affect result (light)");
+  }
+
+  // ============================================
+  // palette2bitToGray() tests - 2-bit palette conversion
+  // Palette: 0=black(0), 1=dark gray(85), 2=light gray(170), 3=white(255)
+  // ============================================
+
+  // Test 24: All 4 palette entries
+  {
+    runner.expectEq(static_cast<uint8_t>(0), palette2bitToGray(0), "palette2bitToGray: 0 -> black (0)");
+    runner.expectEq(static_cast<uint8_t>(85), palette2bitToGray(1), "palette2bitToGray: 1 -> dark gray (85)");
+    runner.expectEq(static_cast<uint8_t>(170), palette2bitToGray(2), "palette2bitToGray: 2 -> light gray (170)");
+    runner.expectEq(static_cast<uint8_t>(255), palette2bitToGray(3), "palette2bitToGray: 3 -> white (255)");
+  }
+
+  // Test 25: Masking - only lower 2 bits used
+  {
+    runner.expectEq(static_cast<uint8_t>(0), palette2bitToGray(0x04), "palette2bitToGray: 0x04 masked to 0");
+    runner.expectEq(static_cast<uint8_t>(85), palette2bitToGray(0x05), "palette2bitToGray: 0x05 masked to 1");
+    runner.expectEq(static_cast<uint8_t>(170), palette2bitToGray(0xFE), "palette2bitToGray: 0xFE masked to 2");
+    runner.expectEq(static_cast<uint8_t>(255), palette2bitToGray(0xFF), "palette2bitToGray: 0xFF masked to 3");
+  }
+
+  // ============================================
+  // palette1bitToGray() tests - 1-bit palette conversion
+  // Palette: 0=black(0), 1=white(255)
+  // ============================================
+
+  // Test 26: Both palette entries
+  {
+    runner.expectEq(static_cast<uint8_t>(0), palette1bitToGray(0), "palette1bitToGray: 0 -> black (0)");
+    runner.expectEq(static_cast<uint8_t>(255), palette1bitToGray(1), "palette1bitToGray: 1 -> white (255)");
+  }
+
+  // Test 27: Masking - only lower 1 bit used
+  {
+    runner.expectEq(static_cast<uint8_t>(0), palette1bitToGray(0x02), "palette1bitToGray: 0x02 masked to 0");
+    runner.expectEq(static_cast<uint8_t>(255), palette1bitToGray(0x03), "palette1bitToGray: 0x03 masked to 1");
+    runner.expectEq(static_cast<uint8_t>(0), palette1bitToGray(0xFE), "palette1bitToGray: 0xFE masked to 0");
+    runner.expectEq(static_cast<uint8_t>(255), palette1bitToGray(0xFF), "palette1bitToGray: 0xFF masked to 1");
+  }
+
+  // ============================================
+  // extract2bitPixel() tests - 2-bit BMP pixel extraction
+  // 4 pixels per byte, MSB first
+  // ============================================
+
+  // Test 28: Extract each position from a byte
+  {
+    // Byte 0b11_10_01_00 = 0xE4 contains pixels: 3, 2, 1, 0
+    const uint8_t byte = 0xE4;
+    runner.expectEq(static_cast<uint8_t>(3), extract2bitPixel(byte, 0), "extract2bitPixel: pixel 0 (bits 7-6)");
+    runner.expectEq(static_cast<uint8_t>(2), extract2bitPixel(byte, 1), "extract2bitPixel: pixel 1 (bits 5-4)");
+    runner.expectEq(static_cast<uint8_t>(1), extract2bitPixel(byte, 2), "extract2bitPixel: pixel 2 (bits 3-2)");
+    runner.expectEq(static_cast<uint8_t>(0), extract2bitPixel(byte, 3), "extract2bitPixel: pixel 3 (bits 1-0)");
+  }
+
+  // Test 29: All zeros and all ones
+  {
+    runner.expectEq(static_cast<uint8_t>(0), extract2bitPixel(0x00, 0), "extract2bitPixel: 0x00 pixel 0 -> 0");
+    runner.expectEq(static_cast<uint8_t>(0), extract2bitPixel(0x00, 3), "extract2bitPixel: 0x00 pixel 3 -> 0");
+    runner.expectEq(static_cast<uint8_t>(3), extract2bitPixel(0xFF, 0), "extract2bitPixel: 0xFF pixel 0 -> 3");
+    runner.expectEq(static_cast<uint8_t>(3), extract2bitPixel(0xFF, 3), "extract2bitPixel: 0xFF pixel 3 -> 3");
+  }
+
+  // ============================================
+  // extract1bitPixel() tests - 1-bit BMP pixel extraction
+  // 8 pixels per byte, MSB first
+  // ============================================
+
+  // Test 30: Extract each position from a byte
+  {
+    // Byte 0b10101010 = 0xAA contains alternating 1,0,1,0,1,0,1,0
+    const uint8_t byte = 0xAA;
+    runner.expectEq(static_cast<uint8_t>(1), extract1bitPixel(byte, 0), "extract1bitPixel: pixel 0 (bit 7)");
+    runner.expectEq(static_cast<uint8_t>(0), extract1bitPixel(byte, 1), "extract1bitPixel: pixel 1 (bit 6)");
+    runner.expectEq(static_cast<uint8_t>(1), extract1bitPixel(byte, 2), "extract1bitPixel: pixel 2 (bit 5)");
+    runner.expectEq(static_cast<uint8_t>(0), extract1bitPixel(byte, 3), "extract1bitPixel: pixel 3 (bit 4)");
+    runner.expectEq(static_cast<uint8_t>(1), extract1bitPixel(byte, 4), "extract1bitPixel: pixel 4 (bit 3)");
+    runner.expectEq(static_cast<uint8_t>(0), extract1bitPixel(byte, 5), "extract1bitPixel: pixel 5 (bit 2)");
+    runner.expectEq(static_cast<uint8_t>(1), extract1bitPixel(byte, 6), "extract1bitPixel: pixel 6 (bit 1)");
+    runner.expectEq(static_cast<uint8_t>(0), extract1bitPixel(byte, 7), "extract1bitPixel: pixel 7 (bit 0)");
+  }
+
+  // Test 31: All zeros and all ones
+  {
+    runner.expectEq(static_cast<uint8_t>(0), extract1bitPixel(0x00, 0), "extract1bitPixel: 0x00 pixel 0 -> 0");
+    runner.expectEq(static_cast<uint8_t>(0), extract1bitPixel(0x00, 7), "extract1bitPixel: 0x00 pixel 7 -> 0");
+    runner.expectEq(static_cast<uint8_t>(1), extract1bitPixel(0xFF, 0), "extract1bitPixel: 0xFF pixel 0 -> 1");
+    runner.expectEq(static_cast<uint8_t>(1), extract1bitPixel(0xFF, 7), "extract1bitPixel: 0xFF pixel 7 -> 1");
+  }
+
+  // Test 32: Single bit set at each position
+  {
+    runner.expectEq(static_cast<uint8_t>(1), extract1bitPixel(0x80, 0), "extract1bitPixel: 0x80 pixel 0 -> 1");
+    runner.expectEq(static_cast<uint8_t>(0), extract1bitPixel(0x80, 1), "extract1bitPixel: 0x80 pixel 1 -> 0");
+    runner.expectEq(static_cast<uint8_t>(1), extract1bitPixel(0x01, 7), "extract1bitPixel: 0x01 pixel 7 -> 1");
+    runner.expectEq(static_cast<uint8_t>(0), extract1bitPixel(0x01, 6), "extract1bitPixel: 0x01 pixel 6 -> 0");
   }
 
   return runner.allPassed() ? 0 : 1;
