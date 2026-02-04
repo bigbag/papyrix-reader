@@ -338,6 +338,12 @@ The "Pages Per Refresh" setting controls how often full refresh occurs (1/5/10/1
 
 ---
 
+## Image Rendering
+
+EPUB images (JPEG/PNG/BMP) are converted to BMP and cached to SD card. Data URIs are stripped before parsing to prevent OOM. See [images.md](images.md) for details.
+
+---
+
 ## UI System
 
 Papyrix uses a view-based UI architecture with reusable elements and state-driven rendering.

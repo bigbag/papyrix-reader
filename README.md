@@ -7,6 +7,7 @@
 [![Architecture](https://img.shields.io/badge/docs-Architecture-green)](docs/architecture.md)
 [![Device Specs](https://img.shields.io/badge/docs-Device_Specs-green)](docs/device-specifications.md)
 [![File Formats](https://img.shields.io/badge/docs-File_Formats-green)](docs/file-formats.md)
+[![Images](https://img.shields.io/badge/docs-Images-green)](docs/images.md)
 [![SSD1677 Driver](https://img.shields.io/badge/docs-SSD1677_Driver-green)](docs/ssd1677-driver.md)
 [![Webserver](https://img.shields.io/badge/docs-Webserver-green)](docs/webserver.md)
 [![Calibre](https://img.shields.io/badge/docs-Calibre_Wireless-green)](docs/calibre.md)
@@ -42,7 +43,7 @@ This project is **not affiliated with Xteink**; it's built as a community projec
 - [x] Saved reading position
 - [x] Book cover display (JPG/JPEG/PNG/BMP, case-insensitive)
 - [x] Table of contents navigation
-- [x] Image support within EPUB (JPEG/PNG)
+- [x] Image support within EPUB (JPEG/PNG/BMP, baseline JPEG only, max 2048×3072)
 
 ### Text & Display
 - [x] Configurable font sizes (Small/Medium/Large)
@@ -306,6 +307,8 @@ The ESP32 WiFi stack allocates ~100KB and fragments heap memory in a way that ca
 **Group5 compression**: 1-bit image data uses CCITT Group5 compression for fast decompression and reduced SD card I/O.
 
 **Word width caching**: 512-entry cache in GfxRenderer avoids repeated font measurements.
+
+**Image caching**: EPUB images are converted to BMP once and cached to `/.papyrix/epub_<hash>/images/`. Failed conversions are marked to avoid re-processing.
 
 ### Data caching
 

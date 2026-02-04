@@ -387,6 +387,7 @@ bool ChapterHtmlSlimParser::shouldAbort() const {
 bool ChapterHtmlSlimParser::parseAndBuildPages() {
   parseStartTime_ = millis();
   loopCounter_ = 0;
+  dataUriStripper_.reset();
   startNewTextBlock(static_cast<TextBlock::BLOCK_STYLE>(config.paragraphAlignment));
 
   const XML_Parser parser = XML_ParserCreate(nullptr);
@@ -438,7 +439,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
       return false;
     }
 
-    const size_t len = file.read(static_cast<uint8_t*>(buf), 1024);
+    size_t len = file.read(static_cast<uint8_t*>(buf), 1024);
 
     if (len == 0) {
       Serial.printf("[%lu] [EHP] File read error\n", millis());
@@ -453,9 +454,14 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
       return false;
     }
 
+    // Strip data URIs BEFORE expat parses the buffer to prevent OOM on large embedded images.
+    // This replaces src="data:image/..." with src="#" so expat never sees the huge base64 string.
+    const size_t originalLen = len;
+    len = dataUriStripper_.strip(static_cast<char*>(buf), len, 1024);
+
     // Update progress (call every 10% change to avoid too frequent updates)
     // Only show progress for larger chapters where rendering overhead is worth it
-    bytesRead += len;
+    bytesRead += originalLen;
     if (progressFn && totalSize >= MIN_SIZE_FOR_PROGRESS) {
       const int progress = static_cast<int>((bytesRead * 100) / totalSize);
       if (lastProgress / 10 != progress / 10) {
@@ -529,6 +535,14 @@ void ChapterHtmlSlimParser::makePages() {
     return;
   }
 
+  // Check memory before expensive layout operation
+  const size_t freeHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+  if (freeHeap < MIN_FREE_HEAP * 2) {
+    Serial.printf("[%lu] [EHP] Insufficient memory for layout (%zu bytes)\n", millis(), freeHeap);
+    currentTextBlock.reset();
+    return;
+  }
+
   if (!currentPage) {
     currentPage.reset(new Page());
     currentPageNextY = 0;
@@ -550,6 +564,12 @@ void ChapterHtmlSlimParser::makePages() {
 }
 
 std::string ChapterHtmlSlimParser::cacheImage(const std::string& src) {
+  // Skip data URIs - embedded base64 images can't be extracted and waste memory
+  if (src.length() >= 5 && strncasecmp(src.c_str(), "data:", 5) == 0) {
+    Serial.printf("[%lu] [EHP] Skipping embedded data URI image\n", millis());
+    return "";
+  }
+
   // Skip remaining images after too many consecutive failures
   if (consecutiveImageFailures_ >= MAX_CONSECUTIVE_IMAGE_FAILURES) {
     Serial.printf("[%lu] [EHP] Skipping image - too many failures\n", millis());

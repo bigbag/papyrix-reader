@@ -105,6 +105,12 @@ The image is converted to BMP format for display. The **Cover Dithering** settin
 
 EPUB files use a more complex cache format stored in `.papyrix/epub_<hash>/`.
 
+### Image Cache (`images/` subdirectory)
+
+Inline images are converted to BMP and cached:
+- `<hash>.bmp` — Converted image (FNV-1a hash of resolved image path)
+- `<hash>.failed` — Marker file for failed conversions (prevents re-attempts)
+
 ## `book.bin`
 
 ### Version 3

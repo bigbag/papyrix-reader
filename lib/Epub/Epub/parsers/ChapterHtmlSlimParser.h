@@ -3,6 +3,7 @@
 #include <expat.h>
 
 #include <climits>
+#include <cstring>
 #include <functional>
 #include <memory>
 #include <string>
@@ -12,6 +13,7 @@
 #include "../blocks/ImageBlock.h"
 #include "../blocks/TextBlock.h"
 #include "../css/CssParser.h"
+#include "DataUriStripper.h"
 
 class Page;
 class GfxRenderer;
@@ -66,6 +68,9 @@ class ChapterHtmlSlimParser {
   static constexpr uint32_t MAX_PARSE_TIME_MS = 20000;   // 20 second timeout
   static constexpr uint16_t YIELD_CHECK_INTERVAL = 100;  // Check every 100 iterations
   static constexpr size_t MIN_FREE_HEAP = 8192;          // 8KB minimum free heap
+
+  // Pre-parse data URI stripper to prevent expat OOM on large embedded images
+  DataUriStripper dataUriStripper_;
 
   // Check if parsing should abort due to timeout or memory pressure
   bool shouldAbort() const;
