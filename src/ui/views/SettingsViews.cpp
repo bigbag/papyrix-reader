@@ -9,6 +9,7 @@ constexpr const char* const CleanupMenuView::ITEMS[];
 // ReaderSettingsView static definitions
 constexpr const char* const ReaderSettingsView::FONT_SIZE_VALUES[];
 constexpr const char* const ReaderSettingsView::TEXT_LAYOUT_VALUES[];
+constexpr const char* const ReaderSettingsView::LINE_SPACING_VALUES[];
 constexpr const char* const ReaderSettingsView::ALIGNMENT_VALUES[];
 constexpr const char* const ReaderSettingsView::STATUS_BAR_VALUES[];
 constexpr const char* const ReaderSettingsView::ORIENTATION_VALUES[];
@@ -17,6 +18,7 @@ const ReaderSettingsView::SettingDef ReaderSettingsView::DEFS[SETTING_COUNT] = {
     {"Theme", SettingType::ThemeSelect, nullptr, 0},
     {"Font Size", SettingType::Enum, FONT_SIZE_VALUES, 3},
     {"Text Layout", SettingType::Enum, TEXT_LAYOUT_VALUES, 3},
+    {"Line Spacing", SettingType::Enum, LINE_SPACING_VALUES, 4},
     {"Text Anti-Aliasing", SettingType::Toggle, nullptr, 0},
     {"Paragraph Alignment", SettingType::Enum, ALIGNMENT_VALUES, 4},
     {"Hyphenation", SettingType::Toggle, nullptr, 0},

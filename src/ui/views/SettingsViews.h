@@ -115,11 +115,12 @@ struct ReaderSettingsView {
   // Static setting definitions
   static constexpr const char* const FONT_SIZE_VALUES[] = {"Small", "Normal", "Large"};
   static constexpr const char* const TEXT_LAYOUT_VALUES[] = {"Compact", "Standard", "Large"};
+  static constexpr const char* const LINE_SPACING_VALUES[] = {"Compact", "Normal", "Relaxed", "Large"};
   static constexpr const char* const ALIGNMENT_VALUES[] = {"Justified", "Left", "Center", "Right"};
   static constexpr const char* const STATUS_BAR_VALUES[] = {"None", "Show"};
   static constexpr const char* const ORIENTATION_VALUES[] = {"Portrait", "Landscape CW", "Inverted", "Landscape CCW"};
 
-  static constexpr int SETTING_COUNT = 10;
+  static constexpr int SETTING_COUNT = 11;
   static constexpr int MAX_THEMES = 16;
   static const SettingDef DEFS[SETTING_COUNT];
 

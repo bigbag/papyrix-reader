@@ -47,6 +47,9 @@ struct Settings {
   // Text layout presets
   enum TextLayout : uint8_t { LayoutCompact = 0, LayoutStandard = 1, LayoutLarge = 2 };
 
+  // Line spacing presets
+  enum LineSpacing : uint8_t { SpacingCompact = 0, SpacingNormal = 1, SpacingRelaxed = 2, SpacingLarge = 3 };
+
   // Short power button press actions
   enum PowerButtonAction : uint8_t { PowerIgnore = 0, PowerSleep = 1, PowerPageTurn = 2 };
 
@@ -69,6 +72,7 @@ struct Settings {
   uint8_t showImages = 1;
   uint8_t startupBehavior = StartupLastDocument;
   uint8_t coverDithering = 0;
+  uint8_t lineSpacing = SpacingNormal;
   char themeName[32] = "light";
   char lastBookPath[256] = "";          // Path to last opened book
   uint8_t pendingTransition = 0;        // 0=none, 1=UI, 2=Reader
@@ -134,6 +138,21 @@ struct Settings {
         return 3;
       default:
         return 1;
+    }
+  }
+
+  float getLineCompression() const {
+    switch (lineSpacing) {
+      case SpacingCompact:
+        return 0.85f;
+      case SpacingNormal:
+        return 0.95f;
+      case SpacingRelaxed:
+        return 1.10f;
+      case SpacingLarge:
+        return 1.20f;
+      default:
+        return 0.95f;
     }
   }
 

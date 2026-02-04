@@ -422,26 +422,29 @@ void SettingsState::loadReaderSettings() {
   // Index 2: Text Layout (0=Compact, 1=Standard, 2=Large)
   readerView_.values[2] = settings.textLayout;
 
-  // Index 3: Text Anti-Aliasing (toggle)
-  readerView_.values[3] = settings.textAntiAliasing;
+  // Index 3: Line Spacing (0=Compact, 1=Normal, 2=Relaxed, 3=Large)
+  readerView_.values[3] = settings.lineSpacing;
 
-  // Index 4: Paragraph Alignment (0=Justified, 1=Left, 2=Center, 3=Right)
-  readerView_.values[4] = settings.paragraphAlignment;
+  // Index 4: Text Anti-Aliasing (toggle)
+  readerView_.values[4] = settings.textAntiAliasing;
 
-  // Index 5: Hyphenation (toggle)
-  readerView_.values[5] = settings.hyphenation;
+  // Index 5: Paragraph Alignment (0=Justified, 1=Left, 2=Center, 3=Right)
+  readerView_.values[5] = settings.paragraphAlignment;
 
-  // Index 6: Show Images (toggle)
-  readerView_.values[6] = settings.showImages;
+  // Index 6: Hyphenation (toggle)
+  readerView_.values[6] = settings.hyphenation;
 
-  // Index 7: Cover Dithering (toggle)
-  readerView_.values[7] = settings.coverDithering;
+  // Index 7: Show Images (toggle)
+  readerView_.values[7] = settings.showImages;
 
-  // Index 8: Status Bar (0=None, 1=No Progress, 2=Full)
-  readerView_.values[8] = settings.statusBar;
+  // Index 8: Cover Dithering (toggle)
+  readerView_.values[8] = settings.coverDithering;
 
-  // Index 9: Reading Orientation (0=Portrait, 1=Landscape CW, 2=Inverted, 3=Landscape CCW)
-  readerView_.values[9] = settings.orientation;
+  // Index 9: Status Bar (0=None, 1=Show)
+  readerView_.values[9] = settings.statusBar;
+
+  // Index 10: Reading Orientation (0=Portrait, 1=Landscape CW, 2=Inverted, 3=Landscape CCW)
+  readerView_.values[10] = settings.orientation;
 }
 
 void SettingsState::saveReaderSettings() {
@@ -465,26 +468,29 @@ void SettingsState::saveReaderSettings() {
   // Index 2: Text Layout
   settings.textLayout = readerView_.values[2];
 
-  // Index 3: Text Anti-Aliasing
-  settings.textAntiAliasing = readerView_.values[3];
+  // Index 3: Line Spacing
+  settings.lineSpacing = readerView_.values[3];
 
-  // Index 4: Paragraph Alignment
-  settings.paragraphAlignment = readerView_.values[4];
+  // Index 4: Text Anti-Aliasing
+  settings.textAntiAliasing = readerView_.values[4];
 
-  // Index 5: Hyphenation
-  settings.hyphenation = readerView_.values[5];
+  // Index 5: Paragraph Alignment
+  settings.paragraphAlignment = readerView_.values[5];
 
-  // Index 6: Show Images
-  settings.showImages = readerView_.values[6];
+  // Index 6: Hyphenation
+  settings.hyphenation = readerView_.values[6];
 
-  // Index 7: Cover Dithering
-  settings.coverDithering = readerView_.values[7];
+  // Index 7: Show Images
+  settings.showImages = readerView_.values[7];
 
-  // Index 8: Status Bar
-  settings.statusBar = readerView_.values[8];
+  // Index 8: Cover Dithering
+  settings.coverDithering = readerView_.values[8];
 
-  // Index 9: Reading Orientation
-  settings.orientation = readerView_.values[9];
+  // Index 9: Status Bar
+  settings.statusBar = readerView_.values[9];
+
+  // Index 10: Reading Orientation
+  settings.orientation = readerView_.values[10];
 }
 
 void SettingsState::loadDeviceSettings() {

@@ -17,10 +17,10 @@ namespace {
 constexpr uint32_t SETTINGS_MAGIC = 0x53585050;
 // Minimum version we can read (allows backward compatibility)
 constexpr uint8_t MIN_SETTINGS_VERSION = 3;
-// Version 6: Added coverDithering
-constexpr uint8_t SETTINGS_FILE_VERSION = 6;
+// Version 7: Added lineSpacing
+constexpr uint8_t SETTINGS_FILE_VERSION = 7;
 // Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 23;
+constexpr uint8_t SETTINGS_COUNT = 24;
 }  // namespace
 
 Result<void> Settings::save(drivers::Storage& storage) const {
@@ -52,6 +52,7 @@ Result<void> Settings::save(drivers::Storage& storage) const {
   serialization::writePod(outputFile, showImages);
   serialization::writePod(outputFile, startupBehavior);
   serialization::writePod(outputFile, coverDithering);
+  serialization::writePod(outputFile, lineSpacing);
   // Write themeName as fixed-length string
   outputFile.write(reinterpret_cast<const uint8_t*>(themeName), sizeof(themeName));
   outputFile.write(reinterpret_cast<const uint8_t*>(lastBookPath), sizeof(lastBookPath));
@@ -136,6 +137,8 @@ Result<void> Settings::load(drivers::Storage& storage) {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, coverDithering, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPodValidated(inputFile, lineSpacing, uint8_t(4));
+    if (++settingsRead >= fileSettingsCount) break;
     // Read themeName as fixed-length string
     inputFile.read(reinterpret_cast<uint8_t*>(themeName), sizeof(themeName));
     themeName[sizeof(themeName) - 1] = '\0';  // Ensure null-terminated
@@ -176,8 +179,9 @@ int Settings::getReaderFontId(const Theme& theme) const {
 }
 
 RenderConfig Settings::getRenderConfig(const Theme& theme, uint16_t viewportWidth, uint16_t viewportHeight) const {
-  return RenderConfig(getReaderFontId(theme), 0.95f, getIndentLevel(), getSpacingLevel(), paragraphAlignment,
-                      static_cast<bool>(hyphenation), static_cast<bool>(showImages), viewportWidth, viewportHeight);
+  return RenderConfig(getReaderFontId(theme), getLineCompression(), getIndentLevel(), getSpacingLevel(),
+                      paragraphAlignment, static_cast<bool>(hyphenation), static_cast<bool>(showImages), viewportWidth,
+                      viewportHeight);
 }
 
 // Legacy methods that use SdMan directly (for early init before Core)
@@ -208,6 +212,7 @@ bool Settings::saveToFile() const {
   serialization::writePod(outputFile, showImages);
   serialization::writePod(outputFile, startupBehavior);
   serialization::writePod(outputFile, coverDithering);
+  serialization::writePod(outputFile, lineSpacing);
   outputFile.write(reinterpret_cast<const uint8_t*>(themeName), sizeof(themeName));
   outputFile.write(reinterpret_cast<const uint8_t*>(lastBookPath), sizeof(lastBookPath));
   serialization::writePod(outputFile, pendingTransition);
@@ -287,6 +292,8 @@ bool Settings::loadFromFile() {
     serialization::readPodValidated(inputFile, startupBehavior, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, coverDithering, uint8_t(2));
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPodValidated(inputFile, lineSpacing, uint8_t(4));
     if (++settingsRead >= fileSettingsCount) break;
     inputFile.read(reinterpret_cast<uint8_t*>(themeName), sizeof(themeName));
     themeName[sizeof(themeName) - 1] = '\0';

@@ -145,6 +145,15 @@ Reading and display settings:
     - **Standard:** Normal indent (em-space), small spacing between paragraphs
     - **Large:** Large indent, full line spacing between paragraphs
 
+- **Line Spacing** (default: Normal)
+  - Options: Compact, Normal, Relaxed, Large
+  - Controls vertical spacing between lines within paragraphs:
+    - **Compact:** Tighter line spacing (0.85×)
+    - **Normal:** Standard line spacing (0.95×)
+    - **Relaxed:** More space between lines (1.10×)
+    - **Large:** Maximum line spacing (1.20×)
+  - Adjusting line spacing can improve readability for different fonts and preferences
+
 - **Text Anti-Aliasing** (default: ON)
   - Enable grayscale text rendering for smoother font edges
   - Disable for faster page turns and to eliminate the brief "thick text" flash during transitions
