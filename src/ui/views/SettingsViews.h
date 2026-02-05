@@ -113,7 +113,7 @@ struct ReaderSettingsView {
   };
 
   // Static setting definitions
-  static constexpr const char* const FONT_SIZE_VALUES[] = {"Small", "Normal", "Large"};
+  static constexpr const char* const FONT_SIZE_VALUES[] = {"XSmall", "Small", "Normal", "Large"};
   static constexpr const char* const TEXT_LAYOUT_VALUES[] = {"Compact", "Standard", "Large"};
   static constexpr const char* const LINE_SPACING_VALUES[] = {"Compact", "Normal", "Relaxed", "Large"};
   static constexpr const char* const ALIGNMENT_VALUES[] = {"Justified", "Left", "Center", "Right"};

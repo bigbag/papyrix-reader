@@ -31,14 +31,12 @@ const INTERVALS_BASE = [
   [0x0100, 0x017f], // Latin Extended-A
   [0x0180, 0x024f], // Latin Extended-B (Vietnamese Ơ, Ư)
   [0x1e00, 0x1eff], // Latin Extended Additional (Vietnamese tones)
-  [0x2000, 0x206f], // General Punctuation
-  [0x2010, 0x203a], // Dashes, quotes, prime marks
-  [0x2040, 0x205f], // Misc punctuation
+  [0x2000, 0x206f], // General Punctuation (includes dashes, quotes, misc)
   [0x20a0, 0x20cf], // Currency symbols
   [0x0300, 0x036f], // Combining Diacritical Marks
   [0x0400, 0x04ff], // Cyrillic
-  [0x2200, 0x22ff], // Math operators
   [0x2190, 0x21ff], // Arrows
+  [0x2200, 0x22ff], // Math operators
 ];
 
 // Thai script intervals
@@ -56,8 +54,7 @@ const INTERVALS_BIN_CJK = [
   [0x0300, 0x036f], // Combining Diacritical Marks
   [0x0e00, 0x0e7f], // Thai
   [0x1e00, 0x1eff], // Latin Extended Additional (Vietnamese tones)
-  [0x2000, 0x206f], // General Punctuation
-  [0x2010, 0x203a], // Dashes, quotes, prime marks
+  [0x2000, 0x206f], // General Punctuation (includes dashes, quotes, misc)
   [0x20a0, 0x20cf], // Currency symbols
   [0x3000, 0x303f], // CJK Symbols and Punctuation
   [0x3040, 0x309f], // Hiragana
@@ -256,10 +253,31 @@ function validateIntervals(font, intervals) {
 }
 
 /**
+ * Merge overlapping or adjacent intervals (must be pre-sorted)
+ */
+function mergeIntervals(intervals) {
+  if (intervals.length === 0) return [];
+  const merged = [intervals[0].slice()];
+  for (let i = 1; i < intervals.length; i++) {
+    const [iStart, iEnd] = intervals[i];
+    const last = merged[merged.length - 1];
+    // Merge if new interval starts at or before end of previous (+1 for adjacent)
+    if (iStart <= last[1] + 1) {
+      last[1] = Math.max(last[1], iEnd);
+    } else {
+      merged.push([iStart, iEnd]);
+    }
+  }
+  return merged;
+}
+
+/**
  * Render all glyphs from a font - shared by binary and header output
  */
 function renderAllGlyphs(font, rasterizer, intervals, is2Bit, progressLabel) {
-  const validIntervals = validateIntervals(font, [...intervals].sort((a, b) => a[0] - b[0]));
+  const sortedIntervals = [...intervals].sort((a, b) => a[0] - b[0]);
+  const mergedIntervals = mergeIntervals(sortedIntervals);
+  const validIntervals = validateIntervals(font, mergedIntervals);
   if (!validIntervals.length) return null;
 
   const totalGlyphs = validIntervals.reduce((sum, [s, e]) => sum + (e - s + 1), 0);

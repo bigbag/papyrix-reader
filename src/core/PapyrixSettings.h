@@ -30,7 +30,7 @@ struct Settings {
   };
 
   // Reader font size
-  enum FontSize : uint8_t { FontSmall = 0, FontMedium = 1, FontLarge = 2 };
+  enum FontSize : uint8_t { FontXSmall = 0, FontSmall = 1, FontMedium = 2, FontLarge = 3 };
 
   // Side button layout
   enum SideButtonLayout : uint8_t { PrevNext = 0, NextPrev = 1 };
@@ -62,7 +62,7 @@ struct Settings {
   uint8_t textLayout = LayoutStandard;
   uint8_t shortPwrBtn = PowerIgnore;
   uint8_t orientation = Portrait;
-  uint8_t fontSize = FontMedium;
+  uint8_t fontSize = FontSmall;
   uint8_t pagesPerRefresh = PPR15;
   uint8_t sideButtonLayout = PrevNext;
   uint8_t autoSleepMinutes = Sleep10Min;

@@ -9,6 +9,10 @@
 #include <builtinFonts/reader_2b.h>
 #include <builtinFonts/reader_bold_2b.h>
 #include <builtinFonts/reader_italic_2b.h>
+// XSmall font (12pt)
+#include <builtinFonts/reader_xsmall_bold_2b.h>
+#include <builtinFonts/reader_xsmall_italic_2b.h>
+#include <builtinFonts/reader_xsmall_regular_2b.h>
 #include <driver/gpio.h>
 #include <esp_system.h>
 // Medium font (16pt)
@@ -91,6 +95,13 @@ static papyrix::ErrorState errorState(renderer);
 static papyrix::StateMachine stateMachine;
 
 RTC_DATA_ATTR uint16_t rtcPowerButtonDurationMs = 400;
+
+// Fonts - XSmall (12pt)
+EpdFont readerXSmallFont(&reader_xsmall_regular_2b);
+EpdFont readerXSmallBoldFont(&reader_xsmall_bold_2b);
+EpdFont readerXSmallItalicFont(&reader_xsmall_italic_2b);
+EpdFontFamily readerXSmallFontFamily(&readerXSmallFont, &readerXSmallBoldFont, &readerXSmallItalicFont,
+                                     &readerXSmallBoldFont);
 
 // Fonts - Small (14pt, default)
 EpdFont readerFont(&reader_2b);
@@ -188,6 +199,7 @@ void waitForPowerRelease() {
 void setupDisplayAndFonts() {
   einkDisplay.begin();
   Serial.printf("[%lu] [   ] Display initialized\n", millis());
+  renderer.insertFont(READER_FONT_ID_XSMALL, readerXSmallFontFamily);
   renderer.insertFont(READER_FONT_ID, readerFontFamily);
   renderer.insertFont(READER_FONT_ID_MEDIUM, readerMediumFontFamily);
   renderer.insertFont(READER_FONT_ID_LARGE, readerLargeFontFamily);
@@ -218,6 +230,11 @@ void applyThemeFonts() {
   int builtinFontId = 0;
 
   switch (papyrix::core.settings.fontSize) {
+    case papyrix::Settings::FontXSmall:
+      fontFamilyName = theme.readerFontFamilyXSmall;
+      targetFontId = &theme.readerFontIdXSmall;
+      builtinFontId = READER_FONT_ID_XSMALL;
+      break;
     case papyrix::Settings::FontMedium:
       fontFamilyName = theme.readerFontFamilyMedium;
       targetFontId = &theme.readerFontIdMedium;

@@ -381,7 +381,7 @@ The `ui::` namespace provides reusable rendering components:
 - **`chapterItem()`** — TOC entry with depth indentation
 - **`wifiEntry()`** — Network + signal + lock icon
 - **`dialog()`** — Yes/No confirmation
-- **`readerStatusBar()`** — Battery, title, page numbers
+- **`readerStatusBar()`** — Battery, title, page numbers (chapter page count available only after caching)
 
 ### ButtonBar Pattern
 

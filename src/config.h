@@ -3,6 +3,16 @@
 /**
  * Generated with:
  *  ruby -rdigest -e 'puts [
+ *    "./lib/EpdFont/builtinFonts/reader_xsmall_regular_2b.h",
+ *    "./lib/EpdFont/builtinFonts/reader_xsmall_bold_2b.h",
+ *    "./lib/EpdFont/builtinFonts/reader_xsmall_italic_2b.h",
+ *  ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+ */
+#define READER_FONT_ID_XSMALL (-1506109732)
+
+/**
+ * Generated with:
+ *  ruby -rdigest -e 'puts [
  *    "./lib/EpdFont/builtinFonts/reader_2b.h",
  *    "./lib/EpdFont/builtinFonts/reader_bold_2b.h",
  *    "./lib/EpdFont/builtinFonts/reader_italic_2b.h",

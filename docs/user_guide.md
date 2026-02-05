@@ -134,8 +134,8 @@ Reading and display settings:
   - Themes control colors, button mappings, and fonts
   - See [Customization Guide](customization.md) for creating custom themes
 
-- **Font Size** (default: Normal)
-  - Options: Small (14pt), Normal (16pt), Large (18pt)
+- **Font Size** (default: Small)
+  - Options: XSmall (12pt), Small (14pt), Normal (16pt), Large (18pt)
   - Text size for reading
 
 - **Text Layout** (default: Standard)
@@ -178,7 +178,11 @@ Reading and display settings:
 
 - **Status Bar** (default: Full)
   - Options: None, No Progress, Full
-  - Status bar display during reading
+  - Controls the reading screen status bar display
+  - **Full:** Shows battery, book title, and page number (e.g., "5 / 12")
+  - **No Progress:** Shows battery and book title only
+  - **None:** Hides the status bar entirely for maximum reading area
+  - **Note:** The total page count for a chapter appears only after the chapter is fully cached. While reading through a chapter for the first time, only the current page number is shown until all pages have been rendered. Overall book completion percentage is not available due to memory constraints on the device.
 
 - **Reading Orientation** (default: Portrait)
   - Options: Portrait, Landscape CW, Inverted, Landscape CCW

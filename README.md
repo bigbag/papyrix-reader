@@ -46,7 +46,7 @@ This project is **not affiliated with Xteink**; it's built as a community projec
 - [x] Image support within EPUB (JPEG/PNG/BMP, baseline JPEG only, max 2048×3072)
 
 ### Text & Display
-- [x] Configurable font sizes (Small/Medium/Large)
+- [x] Configurable font sizes (XSmall/Small/Normal/Large)
 - [x] Paragraph alignment (Justified/Left/Center/Right)
 - [x] Text layout presets (Compact/Standard/Large) for indentation and spacing
 - [x] Soft hyphen support for text layout

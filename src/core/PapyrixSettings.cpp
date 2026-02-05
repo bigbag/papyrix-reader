@@ -17,8 +17,8 @@ namespace {
 constexpr uint32_t SETTINGS_MAGIC = 0x53585050;
 // Minimum version we can read (allows backward compatibility)
 constexpr uint8_t MIN_SETTINGS_VERSION = 3;
-// Version 7: Added lineSpacing
-constexpr uint8_t SETTINGS_FILE_VERSION = 7;
+// Version 8: Added FontXSmall (shifted font size enum values +1)
+constexpr uint8_t SETTINGS_FILE_VERSION = 8;
 // Increment this when adding new persisted settings fields
 constexpr uint8_t SETTINGS_COUNT = 24;
 }  // namespace
@@ -117,7 +117,7 @@ Result<void> Settings::load(drivers::Storage& storage) {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, orientation, uint8_t(4));
     if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPodValidated(inputFile, fontSize, uint8_t(3));
+    serialization::readPodValidated(inputFile, fontSize, uint8_t(4));
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, pagesPerRefresh, uint8_t(5));
     if (++settingsRead >= fileSettingsCount) break;
@@ -162,6 +162,14 @@ Result<void> Settings::load(drivers::Storage& storage) {
     if (++settingsRead >= fileSettingsCount) break;
   } while (false);
 
+  // Migrate font size from version < 8 (enum values shifted +1 for FontXSmall)
+  // Old: FontSmall=0, FontMedium=1, FontLarge=2
+  // New: FontXSmall=0, FontSmall=1, FontMedium=2, FontLarge=3
+  // TODO: Delete this migration when MIN_SETTINGS_VERSION >= 8 (after version 10)
+  if (version < 8) {
+    fontSize++;
+  }
+
   inputFile.close();
   Serial.printf("[%lu] [SET] Settings loaded from file\n", millis());
   return Ok();
@@ -169,11 +177,13 @@ Result<void> Settings::load(drivers::Storage& storage) {
 
 int Settings::getReaderFontId(const Theme& theme) const {
   switch (fontSize) {
+    case FontXSmall:
+      return FONT_MANAGER.getReaderFontId(theme.readerFontFamilyXSmall, theme.readerFontIdXSmall);
     case FontMedium:
       return FONT_MANAGER.getReaderFontId(theme.readerFontFamilyMedium, theme.readerFontIdMedium);
     case FontLarge:
       return FONT_MANAGER.getReaderFontId(theme.readerFontFamilyLarge, theme.readerFontIdLarge);
-    default:
+    default:  // FontSmall
       return FONT_MANAGER.getReaderFontId(theme.readerFontFamilySmall, theme.readerFontId);
   }
 }
@@ -273,7 +283,7 @@ bool Settings::loadFromFile() {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, orientation, uint8_t(4));
     if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPodValidated(inputFile, fontSize, uint8_t(3));
+    serialization::readPodValidated(inputFile, fontSize, uint8_t(4));
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, pagesPerRefresh, uint8_t(5));
     if (++settingsRead >= fileSettingsCount) break;
@@ -316,6 +326,14 @@ bool Settings::loadFromFile() {
     serialization::readPod(inputFile, fileListSelectedIndex);
     if (++settingsRead >= fileSettingsCount) break;
   } while (false);
+
+  // Migrate font size from version < 8 (enum values shifted +1 for FontXSmall)
+  // Old: FontSmall=0, FontMedium=1, FontLarge=2
+  // New: FontXSmall=0, FontSmall=1, FontMedium=2, FontLarge=3
+  // TODO: Delete this migration when MIN_SETTINGS_VERSION >= 8 (after version 10)
+  if (version < 8) {
+    fontSize++;
+  }
 
   inputFile.close();
   Serial.printf("[%lu] [SET] Settings loaded from file\n", millis());
