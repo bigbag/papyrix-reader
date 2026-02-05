@@ -16,7 +16,7 @@ constexpr const char* const ReaderSettingsView::ORIENTATION_VALUES[];
 
 const ReaderSettingsView::SettingDef ReaderSettingsView::DEFS[SETTING_COUNT] = {
     {"Theme", SettingType::ThemeSelect, nullptr, 0},
-    {"Font Size", SettingType::Enum, FONT_SIZE_VALUES, 3},
+    {"Font Size", SettingType::Enum, FONT_SIZE_VALUES, 4},
     {"Text Layout", SettingType::Enum, TEXT_LAYOUT_VALUES, 3},
     {"Line Spacing", SettingType::Enum, LINE_SPACING_VALUES, 4},
     {"Text Anti-Aliasing", SettingType::Toggle, nullptr, 0},
