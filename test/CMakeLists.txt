@@ -62,6 +62,14 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/Markdown/md_parser.c
       ${TEST_HELPERS}
     )
+  elseif(TEST_NAME STREQUAL "ChapterHtmlSlimParserTest")
+    # Find expat library - test uses expat directly for XML parsing
+    find_package(EXPAT REQUIRED)
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${TEST_HELPERS}
+    )
+    target_link_libraries(${TEST_NAME} PRIVATE EXPAT::EXPAT)
   else()
     add_executable(${TEST_NAME} ${TEST_SRC} ${TEST_HELPERS})
   endif()

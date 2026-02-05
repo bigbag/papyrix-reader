@@ -199,6 +199,18 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
   }
 
+  // Skip empty anchor tags with aria-hidden (Pandoc line number anchors)
+  // These appear as: <a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>
+  if (strcmp(name, "a") == 0 && atts != nullptr) {
+    for (int i = 0; atts[i]; i += 2) {
+      if (strcmp(atts[i], "aria-hidden") == 0 && strcmp(atts[i + 1], "true") == 0) {
+        self->skipUntilDepth = self->depth;
+        self->depth += 1;
+        return;
+      }
+    }
+  }
+
   // Extract class and style attributes for CSS lookup
   std::string classAttr;
   std::string styleAttr;
