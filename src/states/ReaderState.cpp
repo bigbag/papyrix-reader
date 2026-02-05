@@ -1088,11 +1088,15 @@ void ReaderState::renderTocOverlay(Core& core) {
   renderer_.clearScreen(theme.backgroundColor);
   renderer_.drawCenteredText(theme.uiFontId, 15, "Chapters", theme.primaryTextBlack, BOLD);
 
+  // Use reader font for EPUB/TXT/Markdown (supports Vietnamese), UI font for XTC (pre-rendered content)
+  const ContentType type = core.content.metadata().type;
+  const int tocFontId = (type == ContentType::Xtc) ? theme.uiFontId : theme.readerFontIdXSmall;
+
   const int end = std::min(tocView_.scrollOffset + visibleCount, static_cast<int>(tocView_.chapterCount));
   for (int i = tocView_.scrollOffset; i < end; i++) {
     const int y = startY + (i - tocView_.scrollOffset) * itemHeight;
-    ui::chapterItem(renderer_, theme, y, tocView_.chapters[i].title, tocView_.chapters[i].depth, i == tocView_.selected,
-                    i == tocView_.currentChapter);
+    ui::chapterItem(renderer_, theme, tocFontId, y, tocView_.chapters[i].title, tocView_.chapters[i].depth,
+                    i == tocView_.selected, i == tocView_.currentChapter);
   }
 
   renderer_.displayBuffer();

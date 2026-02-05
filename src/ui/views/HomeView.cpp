@@ -192,7 +192,7 @@ void render(const GfxRenderer& r, const Theme& t, ChapterListView& v) {
   const int end = std::min(v.scrollOffset + visibleCount, static_cast<int>(v.chapterCount));
   for (int i = v.scrollOffset; i < end; i++) {
     const int y = listStartY + (i - v.scrollOffset) * itemHeight;
-    chapterItem(r, t, y, v.chapters[i].title, v.chapters[i].depth, i == v.selected, i == v.currentChapter);
+    chapterItem(r, t, t.uiFontId, y, v.chapters[i].title, v.chapters[i].depth, i == v.selected, i == v.currentChapter);
   }
 
   buttonBar(r, t, v.buttons);

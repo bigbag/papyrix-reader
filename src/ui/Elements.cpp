@@ -457,14 +457,14 @@ void fileEntry(const GfxRenderer& r, const Theme& t, int y, const char* name, bo
              selected ? t.selectionTextBlack : t.primaryTextBlack);
 }
 
-void chapterItem(const GfxRenderer& r, const Theme& t, int y, const char* title, uint8_t depth, bool selected,
-                 bool isCurrent) {
+void chapterItem(const GfxRenderer& r, const Theme& t, int fontId, int y, const char* title, uint8_t depth,
+                 bool selected, bool isCurrent) {
   constexpr int depthIndent = 12;
   constexpr int minWidth = 50;
   const int x = t.screenMarginSide + depth * depthIndent;
   const int w = std::max(minWidth, r.getScreenWidth() - x - t.screenMarginSide);
   const int h = t.itemHeight;
-  const int textY = y + (h - r.getLineHeight(t.uiFontId)) / 2;
+  const int textY = y + (h - r.getLineHeight(fontId)) / 2;
 
   // Selection highlight
   if (selected) {
@@ -473,13 +473,13 @@ void chapterItem(const GfxRenderer& r, const Theme& t, int y, const char* title,
 
   // Current chapter indicator
   if (isCurrent) {
-    r.drawText(t.uiFontId, t.screenMarginSide, textY, ">", t.primaryTextBlack);
+    r.drawText(fontId, t.screenMarginSide, textY, ">", t.primaryTextBlack);
   }
 
   // Truncated title
   const int maxTitleW = w - t.itemPaddingX * 2;
-  const auto truncTitle = r.truncatedText(t.uiFontId, title, maxTitleW);
-  r.drawText(t.uiFontId, x + t.itemPaddingX, textY, truncTitle.c_str(),
+  const auto truncTitle = r.truncatedText(fontId, title, maxTitleW);
+  r.drawText(fontId, x + t.itemPaddingX, textY, truncTitle.c_str(),
              selected ? t.selectionTextBlack : t.primaryTextBlack);
 }
 

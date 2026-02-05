@@ -94,8 +94,10 @@ void bookCard(const GfxRenderer& r, const Theme& t, int y, const char* title, co
 void fileEntry(const GfxRenderer& r, const Theme& t, int y, const char* name, bool isDir, bool selected);
 
 // Chapter item - TOC entry with depth indentation and current chapter indicator
-void chapterItem(const GfxRenderer& r, const Theme& t, int y, const char* title, uint8_t depth, bool selected,
-                 bool isCurrent);
+// fontId: Use reader font (readerFontIdXSmall) for EPUB/TXT/Markdown to support non-Latin glyphs,
+//         or UI font (uiFontId) for XTC/XTCH where reader fonts aren't loaded
+void chapterItem(const GfxRenderer& r, const Theme& t, int fontId, int y, const char* title, uint8_t depth,
+                 bool selected, bool isCurrent);
 
 // Wifi entry - Network name + signal strength + lock icon
 void wifiEntry(const GfxRenderer& r, const Theme& t, int y, const char* ssid, int signal, bool locked, bool selected);
