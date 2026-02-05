@@ -324,7 +324,7 @@ function renderAllGlyphs(font, rasterizer, intervals, is2Bit, progressLabel) {
     validIntervals,
     totalBitmapSize,
     metrics: {
-      advanceY: Math.ceil((font.ascender - font.descender) * scale),
+      advanceY: Math.round((font.ascender - font.descender + (font.tables.hhea?.lineGap ?? 0)) * scale),
       ascender: Math.ceil(font.ascender * scale),
       descender: Math.floor(font.descender * scale),
     },
