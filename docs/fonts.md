@@ -34,7 +34,7 @@ A versatile serif typeface with a contemporary feel. Excellent for body text wit
 - **Styles**: Regular, Bold, Italic
 - **License**: OFL (Open Font License)
 
-![PT Serif Sample](examples/images/ptserif-sample.png)
+![PT Serif Sample](examples/images/pt-serif-sample.png)
 
 ### Bookerly
 
@@ -61,7 +61,7 @@ A classic serif font from Google's Noto family. Excellent readability with exten
 - **Styles**: Regular, Italic
 - **License**: OFL (Open Font License)
 
-![Noto Serif Sample](examples/images/notoserif-sample.png)
+![Noto Serif Sample](examples/images/noto-serif-sample.png)
 
 ### Noto Sans
 
@@ -70,7 +70,7 @@ A clean sans-serif font from Google's Noto family. Modern appearance with wide l
 - **Styles**: Regular, Italic (Variable font)
 - **License**: OFL (Open Font License)
 
-![Noto Sans Sample](examples/images/notosans-sample.png)
+![Noto Sans Sample](examples/images/noto-sans-sample.png)
 
 ### Roboto
 
@@ -130,42 +130,36 @@ See `light-cjk-external.theme` for usage.
 
 ## Converting Your Own Fonts
 
-Use the `convert-fonts.mjs` script to convert TTF/OTF fonts:
+Use the `fontconvert.py` script to convert TTF/OTF fonts. Requires [uv](https://docs.astral.sh/uv/):
 
 ```bash
-cd scripts && npm install  # First time only
-
 # Basic conversion
-node convert-fonts.mjs my-font -r MyFont-Regular.ttf -b MyFont-Bold.ttf -i MyFont-Italic.ttf
+uv run scripts/fontconvert.py my-font -r MyFont-Regular.ttf -b MyFont-Bold.ttf -i MyFont-Italic.ttf --2bit -o /tmp/fonts/
 
 # All reader sizes (14, 16, 18pt)
-node convert-fonts.mjs my-font -r MyFont-Regular.ttf --all-sizes
+uv run scripts/fontconvert.py my-font -r MyFont-Regular.ttf --2bit --all-sizes -o /tmp/fonts/
 
 # Thai font
-node convert-fonts.mjs noto-sans-thai -r NotoSansThai-Regular.ttf --thai --all-sizes
+uv run scripts/fontconvert.py noto-sans-thai -r NotoSansThai-Regular.ttf --2bit --thai --all-sizes -o /tmp/fonts/
 
-# Variable font with weight
-node convert-fonts.mjs roboto -r Roboto-Variable.ttf --var wght=400 --all-sizes
-
-# Generate HTML preview
-node convert-fonts.mjs my-font -r MyFont-Regular.ttf --preview
+# Generate C header (for builtin fonts)
+uv run scripts/fontconvert.py my_font 16 MyFont-Regular.ttf --2bit > my_font_16_2b.h
 ```
 
 ### Options
 
 | Option | Description |
 |--------|-------------|
-| `-r, --regular` | Path to regular style font (required) |
+| `-r, --regular` | Path to regular style font (required for binary mode) |
 | `-b, --bold` | Path to bold style font |
 | `-i, --italic` | Path to italic style font |
 | `-o, --output` | Output directory (default: current) |
-| `-s, --size` | Font size in points (default: 16) |
+| `-s, --size-opt` | Font size in points (default: 16) |
 | `--all-sizes` | Generate 14pt, 16pt, and 18pt |
 | `--thai` | Include Thai script characters |
 | `--2bit` | 2-bit grayscale (smoother, larger) |
-| `--var` | Variable font axis (e.g., `--var wght=400`) |
-| `--preview` | Generate HTML preview |
-| `--bin` | Binary format for CJK fonts |
+| `--header` | Output C header instead of binary |
+| `--additional-intervals` | Add custom Unicode ranges |
 
 ## Installing Fonts
 

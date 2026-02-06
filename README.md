@@ -101,11 +101,12 @@ See [Development](#development) below.
 ### Prerequisites
 
 * **PlatformIO Core** (`pio`) or **VS Code + PlatformIO IDE**
-* Node.js 18+ (for build scripts: font conversion, sleep screen, logo)
+* Python 3.12+ with [uv](https://docs.astral.sh/uv/) (for font conversion)
+* Node.js 18+ (for sleep screen and logo scripts)
 * USB-C cable for flashing the ESP32-C3
 * Xteink X4
 
-Install Node.js dependencies:
+Install Node.js dependencies (for sleep screen and logo scripts):
 ```bash
 cd scripts && npm install
 ```
@@ -179,44 +180,33 @@ Replace `/dev/ttyACM0` with your device port (e.g., `COM3` on Windows, `/dev/tty
 
 ### Build Scripts
 
-All build scripts are in the `scripts/` directory and require Node.js 18+.
-
-```bash
-# Install dependencies (one time)
-cd scripts && npm install
-```
+Build scripts are in the `scripts/` directory.
 
 #### Converting fonts
 
-Convert TTF/OTF fonts to Papyrix `.epdfont` format:
+Convert TTF/OTF fonts to Papyrix `.epdfont` format using Python (requires [uv](https://docs.astral.sh/uv/)):
 
 ```bash
-cd scripts
+# Basic conversion (outputs to current directory)
+uv run scripts/fontconvert.py my-font -r MyFont-Regular.ttf --2bit
 
-# Basic conversion
-node convert-fonts.mjs my-font -r MyFont-Regular.ttf
+# Full font family with all reader sizes (14, 16, 18pt)
+uv run scripts/fontconvert.py my-font -r Regular.ttf -b Bold.ttf -i Italic.ttf --2bit --all-sizes -o /tmp/fonts/
 
-# Full font family with all reader sizes
-node convert-fonts.mjs my-font -r Regular.ttf -b Bold.ttf -i Italic.ttf --all-sizes
+# With Thai script support
+uv run scripts/fontconvert.py my-font -r Regular.ttf --2bit --thai -o /tmp/fonts/
 
-# Variable font with specific weight (e.g., Roboto variable font)
-node convert-fonts.mjs roboto -r Roboto-VariableFont_wdth,wght.ttf --var wght=400
-node convert-fonts.mjs roboto-bold -r Roboto-VariableFont_wdth,wght.ttf --var wght=700
-
-# Generate HTML preview to check font rendering
-node convert-fonts.mjs my-font -r MyFont-Regular.ttf --preview
-
-# CJK/Thai fonts - use .bin format (streamed from SD card)
-node convert-fonts.mjs noto-sans-cjk -r NotoSansSC-Regular.ttf --bin --size 24
+# Generate C header instead of binary (for builtin fonts)
+uv run scripts/fontconvert.py my_font 16 Regular.ttf --2bit > my_font_16_2b.h
 ```
 
-Options: `-r/--regular`, `-b/--bold`, `-i/--italic`, `-o/--output`, `-s/--size`, `--2bit`, `--all-sizes`, `--bin`, `--var`, `--preview`
+Options: `-r/--regular`, `-b/--bold`, `-i/--italic`, `-o/--output`, `-s/--size`, `--2bit`, `--all-sizes`, `--header`, `--thai`
 
 See [customization guide](docs/customization.md) for detailed font conversion instructions.
 
 #### Creating sleep screen images
 
-Convert any image to sleep screen BMP format:
+Convert any image to sleep screen BMP format (requires `cd scripts && npm install`):
 
 ```bash
 # Via Makefile

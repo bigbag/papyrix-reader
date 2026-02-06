@@ -250,66 +250,62 @@ Each font family is a subdirectory containing one or more style variants.
 
 ### Converting Fonts
 
-To create `.epdfont` files from TTF/OTF fonts, use the `convert-fonts.mjs` script included in the firmware source code (`scripts/convert-fonts.mjs`).
+To create `.epdfont` files from TTF/OTF fonts, use the `fontconvert.py` script included in the firmware source code (`scripts/fontconvert.py`).
 
 #### Requirements
 
-- Node.js 18+
-- Install dependencies: `cd scripts && npm install`
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/) package manager (dependencies are handled automatically via inline script metadata)
 
 #### Basic Usage
 
 Convert a complete font family:
 
 ```bash
-cd scripts
-node convert-fonts.mjs my-font \
+uv run scripts/fontconvert.py my-font \
     -r MyFont-Regular.ttf \
     -b MyFont-Bold.ttf \
-    -i MyFont-Italic.ttf
+    -i MyFont-Italic.ttf \
+    --2bit \
+    -o /path/to/output/
 ```
 
 Convert only the regular style:
 
 ```bash
-node convert-fonts.mjs my-font -r MyFont-Regular.ttf
+uv run scripts/fontconvert.py my-font -r MyFont-Regular.ttf --2bit -o /tmp/fonts/
 ```
 
 #### Options
 
-- **-r, --regular** - Path to regular style font (required)
+- **-r, --regular** - Path to regular style font (required for binary mode)
 - **-b, --bold** - Path to bold style font
 - **-i, --italic** - Path to italic style font
 - **-o, --output** - Output directory (default: current directory)
-- **-s, --size** - Font size in points (default: 16)
+- **-s, --size-opt** - Font size in points (default: 16)
 - **--2bit** - Generate 2-bit grayscale (smoother but larger)
 - **--all-sizes** - Generate all reader sizes (14, 16, 18pt)
-- **--bin** - Output raw .bin format for CJK/Thai/Vietnamese (streamed from SD card)
-- **--var** - Variable font axis value (e.g., `--var wght=700 --var wdth=100`). Can be specified multiple times for different axes
-- **--preview** - Generate HTML preview of rendered glyphs for debugging
+- **--header** - Output C header instead of binary .epdfont
+- **--thai** - Include Thai script (U+0E00-0E7F)
+- **--additional-intervals** - Additional Unicode intervals as min,max (can be repeated)
 
 #### Examples
 
 ```bash
 # Convert with custom size
-node convert-fonts.mjs my-font -r Font.ttf --size 14
+uv run scripts/fontconvert.py my-font -r Font.ttf --2bit -s 14 -o /tmp/fonts/
 
 # Output directly to SD card
-node convert-fonts.mjs my-font -r Font.ttf -o /Volumes/SDCARD/fonts/
+uv run scripts/fontconvert.py my-font -r Font.ttf --2bit -o /Volumes/SDCARD/config/fonts/
 
-# Generate all sizes for reader font
-node convert-fonts.mjs my-font -r Font.ttf --all-sizes
+# Generate all sizes for reader font (14, 16, 18pt)
+uv run scripts/fontconvert.py my-font -r Font.ttf --2bit --all-sizes -o /tmp/fonts/
 
-# Use 2-bit grayscale for smoother rendering
-node convert-fonts.mjs my-font -r Font.ttf --2bit
+# Include Thai script support
+uv run scripts/fontconvert.py my-font -r NotoSansThai-Regular.ttf --2bit --thai -o /tmp/fonts/
 
-# Variable font with specific weight (e.g., Roboto, Inter, or other variable fonts)
-node convert-fonts.mjs roboto -r Roboto-VariableFont_wdth,wght.ttf --var wght=400
-node convert-fonts.mjs roboto-bold -r Roboto-VariableFont_wdth,wght.ttf --var wght=700
-node convert-fonts.mjs roboto-condensed -r Roboto-VariableFont_wdth,wght.ttf --var wght=400 --var wdth=75
-
-# Generate HTML preview to verify font rendering
-node convert-fonts.mjs my-font -r Font.ttf --preview
+# Generate C header for builtin fonts (original mode, outputs to stdout)
+uv run scripts/fontconvert.py my_font 16 Font.ttf --2bit > my_font_16_2b.h
 ```
 
 The script creates a font family directory structure:
@@ -321,38 +317,20 @@ my-font/
 └── italic.epdfont
 ```
 
-Copy the entire folder to `/config/fonts/` on your SD card.
-
-#### Variable Fonts
-
-Variable fonts (like Roboto, Inter, or Noto Sans) contain multiple weights and widths in a single file. Use the `--var` option to select specific axis values:
-
-**Common axes:**
-- **wght** (weight): 100 (thin) to 900 (black), with 400 being regular and 700 being bold
-- **wdth** (width): 50 (extra-condensed) to 200 (extra-expanded), with 100 being normal
-
-**Example: Creating a font family from Roboto variable font:**
-
-```bash
-# Regular weight
-node convert-fonts.mjs roboto -r Roboto-VariableFont_wdth,wght.ttf --var wght=400 --all-sizes
-
-# Bold weight
-node convert-fonts.mjs roboto-bold -r Roboto-VariableFont_wdth,wght.ttf --var wght=700 --all-sizes
-
-# Light condensed
-node convert-fonts.mjs roboto-light-condensed -r Roboto-VariableFont_wdth,wght.ttf --var wght=300 --var wdth=75 --all-sizes
-```
-
-**Detecting variable font axes:**
-
-The converter automatically detects and displays available axes when processing a variable font:
+With `--all-sizes`, separate directories are created for each size:
 
 ```
-Converting: Roboto-VariableFont_wdth,wght.ttf -> regular.epdfont
-  Variable font axes: wdth(75-100-100), wght(100-400-900)
-  Applied variations: wght=700
+my-font-14/
+├── regular.epdfont
+├── bold.epdfont
+└── italic.epdfont
+my-font-16/
+├── ...
+my-font-18/
+├── ...
 ```
+
+Copy the entire folder(s) to `/config/fonts/` on your SD card.
 
 ### Recommended Font Sizes
 
@@ -391,19 +369,18 @@ By default, the font converter includes:
 
 Vietnamese fonts work with standard `.epdfont` format since they use Latin script with additional diacritics.
 
-### CJK and Thai Fonts
+### Thai Fonts
 
-The ESP32-C3 has limited RAM (~380KB), so CJK and Thai fonts must use the `.bin` format which streams glyphs from SD card:
+Thai fonts can be generated using the `--thai` flag:
 
 ```bash
-# CJK font (Chinese/Japanese/Korean)
-node convert-fonts.mjs noto-sans-cjk -r NotoSansSC-Regular.ttf --bin --size 24
-
-# Thai font
-node convert-fonts.mjs noto-sans-thai -r NotoSansThai-Regular.ttf --bin --size 16
+# Thai font with Thai script support
+uv run scripts/fontconvert.py noto-sans-thai -r NotoSansThai-Regular.ttf --2bit --thai -o /tmp/fonts/
 ```
 
-External `.bin` fonts use ~52KB RAM for glyph caching regardless of character set size.
+### CJK Fonts
+
+The ESP32-C3 has limited RAM (~380KB), so CJK fonts require external `.bin` format which streams glyphs from SD card. Pre-converted CJK fonts are available in the `docs/examples/fonts/` directory.
 
 ### Fallback Behavior
 
@@ -458,12 +435,22 @@ The repository includes example theme and font files in [`docs/examples/`](examp
 
 **Themes:**
 - **`light-noto-serif.theme`** - Light theme with Noto Serif reader fonts (Latin script)
+- **`light-noto-sans.theme`** - Light theme with Noto Sans reader fonts
+- **`light-pt-serif.theme`** - Light theme with PT Serif reader fonts
+- **`light-literata.theme`** - Light theme with Literata reader fonts
+- **`light-roboto.theme`** - Light theme with Roboto reader fonts
+- **`light-opendyslexic.theme`** - Light theme with OpenDyslexic reader fonts
 - **`light-thai.theme`** - Light theme with Noto Sans Thai fonts
 - **`light-vietnamese.theme`** - Light theme with Noto Serif Vietnamese fonts
 - **`light-cjk-external.theme`** - Light theme with CJK external (.bin) fonts
 
 **Fonts:**
 - **`fonts/noto-serif-*/`** - Noto Serif at 14pt, 16pt, 18pt (Latin script)
+- **`fonts/noto-sans-*/`** - Noto Sans at 14pt, 16pt, 18pt
+- **`fonts/pt-serif-*/`** - PT Serif at 14pt, 16pt, 18pt
+- **`fonts/literata-*/`** - Literata at 14pt, 16pt, 18pt
+- **`fonts/roboto-*/`** - Roboto at 14pt, 16pt, 18pt
+- **`fonts/opendyslexic-*/`** - OpenDyslexic at 14pt, 16pt, 18pt
 - **`fonts/noto-sans-thai-*/`** - Noto Sans Thai at 14pt, 16pt, 18pt
 - **`fonts/noto-serif-vn-*/`** - Noto Serif Vietnamese at 14pt, 16pt, 18pt
 - **`fonts/*.bin`** - CJK external fonts (Source Han Sans CN, KingHwaOldSong)

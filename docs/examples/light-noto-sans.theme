@@ -1,0 +1,34 @@
+# Papyrix Theme: Light with Noto Sans
+# Copy this file to /config/themes/ on your SD card
+# Copy the fonts/noto-sans-* folders to /config/fonts/ on your SD card
+#
+# Noto Sans is available from: https://fonts.google.com/noto/specimen/Noto+Sans
+# License: OFL (Open Font License)
+
+[theme]
+name = Light Noto Sans
+
+[colors]
+inverted_mode = false
+background = white
+
+[selection]
+fill_color = black
+text_color = white
+
+[text]
+primary_color = black
+secondary_color = black
+
+[layout]
+margin_top = 9
+margin_side = 3
+item_height = 30
+item_spacing = 0
+front_buttons = bclr
+
+[fonts]
+ui_font =
+reader_font_small = noto-sans-14
+reader_font_medium = noto-sans-16
+reader_font_large = noto-sans-18
