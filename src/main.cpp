@@ -520,11 +520,25 @@ void loop() {
     return;
   }
 
-  // Check for power button long press -> sleep
-  if (inputManager.isPressed(InputManager::BTN_POWER) &&
-      inputManager.getHeldTime() > papyrix::core.settings.getPowerButtonDuration()) {
-    stateMachine.init(papyrix::core, papyrix::StateId::Sleep);
-    return;
+  // Power button sleep check: track held time that excludes long rendering gaps
+  // where button state changes could have been missed by inputManager
+  {
+    static unsigned long powerHeldSinceMs = 0;
+    static unsigned long prevPowerCheckMs = 0;
+    const unsigned long loopGap = loopStartTime - prevPowerCheckMs;
+    prevPowerCheckMs = loopStartTime;
+
+    if (inputManager.isPressed(InputManager::BTN_POWER)) {
+      if (powerHeldSinceMs == 0 || loopGap > 100) {
+        powerHeldSinceMs = loopStartTime;
+      }
+      if (loopStartTime - powerHeldSinceMs > papyrix::core.settings.getPowerButtonDuration()) {
+        stateMachine.init(papyrix::core, papyrix::StateId::Sleep);
+        return;
+      }
+    } else {
+      powerHeldSinceMs = 0;
+    }
   }
 
   // Update state machine (handles transitions and rendering)

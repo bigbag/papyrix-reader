@@ -339,6 +339,9 @@ StateTransition ReaderState::update(Core& core) {
             // Won't reach here after restart
             return StateTransition::stay(StateId::Reader);
           case Button::Power:
+            if (core.settings.shortPwrBtn == Settings::PowerPageTurn) {
+              navigateNext(core);
+            }
             break;
         }
         break;
@@ -1008,6 +1011,10 @@ void ReaderState::handleTocInput(Core& core, const Event& e) {
       break;
 
     case Button::Power:
+      if (core.settings.shortPwrBtn == Settings::PowerPageTurn) {
+        tocView_.moveDown();
+        needsRender_ = true;
+      }
       break;
   }
 }
