@@ -237,7 +237,7 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
     return false;
   }
 
-  isPartial_ = hitMaxPages && parser.hasMoreContent();
+  isPartial_ = parser.hasMoreContent();
 
   if (!writeLut(lut)) {
     file_.close();

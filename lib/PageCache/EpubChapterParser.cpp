@@ -104,8 +104,8 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
   // Clear word width cache
   renderer_.clearWidthCache();
 
-  // Only claim more content if we explicitly hit the page limit
-  // If parsing failed/aborted (timeout, memory, error), don't retry - it will likely fail again
-  hasMore_ = hitMaxPages;
+  // More content remains if we hit the page limit OR the parser was internally aborted
+  // (timeout/memory). Without this, an aborted parse marks the chapter as complete.
+  hasMore_ = hitMaxPages || parser.wasAborted();
   return success || pagesCreated > 0;
 }

@@ -54,6 +54,7 @@ class ChapterHtmlSlimParser {
   XML_Parser xmlParser_ = nullptr;
   bool stopRequested_ = false;
   bool pendingEmergencySplit_ = false;
+  bool aborted_ = false;
 
   // External abort callback for cooperative cancellation
   std::function<bool()> externalAbortCallback_ = nullptr;
@@ -107,4 +108,5 @@ class ChapterHtmlSlimParser {
   ~ChapterHtmlSlimParser() = default;
   bool parseAndBuildPages();
   void addLineToPage(std::shared_ptr<TextBlock> line);
+  bool wasAborted() const { return aborted_; }
 };

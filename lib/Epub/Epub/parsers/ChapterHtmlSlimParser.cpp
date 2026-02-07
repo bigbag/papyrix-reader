@@ -395,6 +395,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   parseStartTime_ = millis();
   loopCounter_ = 0;
   pendingEmergencySplit_ = false;
+  aborted_ = false;
   dataUriStripper_.reset();
   startNewTextBlock(static_cast<TextBlock::BLOCK_STYLE>(config.paragraphAlignment));
 
@@ -428,6 +429,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     if (++loopCounter_ % YIELD_CHECK_INTERVAL == 0) {
       if (shouldAbort()) {
         Serial.printf("[%lu] [EHP] Aborting parse, pages created: %u\n", millis(), pagesCreated_);
+        aborted_ = true;
         break;
       }
       vTaskDelay(1);  // Yield to prevent watchdog reset
@@ -503,6 +505,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
       const size_t freeHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
       if (freeHeap < MIN_FREE_HEAP * 2) {
         Serial.printf("[%lu] [EHP] Low memory (%zu), aborting parse\n", millis(), freeHeap);
+        aborted_ = true;
         break;
       }
       Serial.printf("[%lu] [EHP] Text block too long (%zu words), splitting\n", millis(), currentTextBlock->size());
@@ -548,6 +551,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
       }
       return;
     }
+    parseStartTime_ = millis();
     currentPage.reset(new Page());
     currentPageNextY = 0;
   }
@@ -702,6 +706,7 @@ void ChapterHtmlSlimParser::addImageToPage(std::shared_ptr<ImageBlock> image) {
       }
       return;
     }
+    parseStartTime_ = millis();
     currentPage.reset(new Page());
     currentPageNextY = 0;
   }
