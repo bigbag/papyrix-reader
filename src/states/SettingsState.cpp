@@ -1,11 +1,11 @@
 #include "SettingsState.h"
 
-#include <algorithm>
-
 #include <Arduino.h>
 #include <GfxRenderer.h>
 #include <LittleFS.h>  // Must be before SdFat includes to avoid FILE_READ/FILE_WRITE redefinition
 #include <SDCardManager.h>
+
+#include <algorithm>
 
 #include "../Battery.h"
 #include "../config.h"

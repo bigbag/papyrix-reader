@@ -132,16 +132,27 @@ EpdFontFamily uiFontFamily(&ui12Font, &uiBold12Font);
 
 bool isUsbConnected() { return digitalRead(UART0_RXD) == HIGH; }
 
-bool isWakeupAfterFlashing() {
+struct WakeupInfo {
+  esp_reset_reason_t resetReason;
+  bool isPowerButton;
+};
+
+WakeupInfo getWakeupInfo() {
+  const bool usbConnected = isUsbConnected();
   const auto wakeupCause = esp_sleep_get_wakeup_cause();
   const auto resetReason = esp_reset_reason();
-  return isUsbConnected() && (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED) && (resetReason == ESP_RST_UNKNOWN);
+
+  // Without USB: power button triggers a full power-on reset (not GPIO wakeup)
+  // With USB: power button wakes from deep sleep via GPIO
+  const bool isPowerButton =
+      (!usbConnected && wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON) ||
+      (usbConnected && wakeupCause == ESP_SLEEP_WAKEUP_GPIO && resetReason == ESP_RST_DEEPSLEEP);
+
+  return {resetReason, isPowerButton};
 }
 
 // Verify long press on wake-up from deep sleep
-void verifyWakeupLongPress() {
-  // Skip verification on software restart (e.g., after WiFi memory cleanup)
-  const auto resetReason = esp_reset_reason();
+void verifyWakeupLongPress(esp_reset_reason_t resetReason) {
   if (resetReason == ESP_RST_SW) {
     Serial.printf("[%lu] [   ] Skipping wakeup verification (software restart)\n", millis());
     return;
@@ -289,8 +300,9 @@ bool earlyInit() {
   }
 
   inputManager.begin();
-  if (!isWakeupAfterFlashing()) {
-    verifyWakeupLongPress();
+  const auto wakeup = getWakeupInfo();
+  if (wakeup.isPowerButton) {
+    verifyWakeupLongPress(wakeup.resetReason);
   }
 
   Serial.printf("[%lu] [   ] Starting Papyrix version " PAPYRIX_VERSION "\n", millis());
