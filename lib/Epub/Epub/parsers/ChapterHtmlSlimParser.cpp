@@ -660,8 +660,7 @@ std::string ChapterHtmlSlimParser::cacheImage(const std::string& src) {
   }
   tempFile.close();
 
-  // Max width is viewport, max height is half of viewport to avoid images taking too much vertical space
-  const int maxImageHeight = config.viewportHeight / 2;
+  const int maxImageHeight = config.viewportHeight;
   ImageConvertConfig convertConfig;
   convertConfig.maxWidth = static_cast<int>(config.viewportWidth);
   convertConfig.maxHeight = maxImageHeight;
@@ -691,8 +690,23 @@ void ChapterHtmlSlimParser::addImageToPage(std::shared_ptr<ImageBlock> image) {
 
   const int imageHeight = image->getHeight();
   const int lineHeight = renderer.getLineHeight(config.fontId) * config.lineCompression;
+  const bool isTallImage = imageHeight > config.viewportHeight / 2;
 
   if (!currentPage) {
+    currentPage.reset(new Page());
+    currentPageNextY = 0;
+  }
+
+  // Tall images get a dedicated page: flush current page if it has content
+  if (isTallImage && currentPageNextY > 0) {
+    if (!completePageFn(std::move(currentPage))) {
+      stopRequested_ = true;
+      if (xmlParser_) {
+        XML_StopParser(xmlParser_, XML_FALSE);
+      }
+      return;
+    }
+    parseStartTime_ = millis();
     currentPage.reset(new Page());
     currentPageNextY = 0;
   }
@@ -715,6 +729,26 @@ void ChapterHtmlSlimParser::addImageToPage(std::shared_ptr<ImageBlock> image) {
   int xPos = (static_cast<int>(config.viewportWidth) - static_cast<int>(image->getWidth())) / 2;
   if (xPos < 0) xPos = 0;
 
-  currentPage->elements.push_back(std::make_shared<PageImage>(image, xPos, currentPageNextY));
-  currentPageNextY += imageHeight + lineHeight;  // Add line spacing after image
+  // Center tall images vertically on their dedicated page
+  int yPos = currentPageNextY;
+  if (isTallImage && currentPageNextY == 0 && imageHeight < config.viewportHeight) {
+    yPos = (config.viewportHeight - imageHeight) / 2;
+  }
+
+  currentPage->elements.push_back(std::make_shared<PageImage>(image, xPos, yPos));
+  currentPageNextY = yPos + imageHeight + lineHeight;
+
+  // Complete the page after a tall image so text continues on the next page
+  if (isTallImage) {
+    if (!completePageFn(std::move(currentPage))) {
+      stopRequested_ = true;
+      if (xmlParser_) {
+        XML_StopParser(xmlParser_, XML_FALSE);
+      }
+      return;
+    }
+    parseStartTime_ = millis();
+    currentPage.reset(new Page());
+    currentPageNextY = 0;
+  }
 }

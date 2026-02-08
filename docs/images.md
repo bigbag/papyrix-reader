@@ -48,7 +48,7 @@ convert progressive.jpg -interlace none baseline.jpg
 
 - **Max parse width**: 2048px — Memory limit during decoding
 - **Max parse height**: 3072px — Memory limit during decoding
-- **Max render height**: viewport/2 — Prevents images dominating pages
+- **Max render height**: viewport — Images taller than half viewport get a dedicated page
 - **Min free heap**: 8KB — Parsing aborts if memory drops below
 
 Images exceeding viewport width are scaled down proportionally while maintaining aspect ratio.
