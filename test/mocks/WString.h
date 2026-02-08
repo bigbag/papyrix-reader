@@ -1,6 +1,7 @@
 // Minimal WString.h for host tests
 #pragma once
 
+#include <cstring>
 #include <string>
 
 class String {
@@ -62,6 +63,18 @@ class String {
     return (pos == std::string::npos) ? -1 : static_cast<int>(pos);
   }
   bool isEmpty() const { return s_.empty(); }
+  bool startsWith(const char* prefix) const {
+    if (!prefix) return false;
+    return s_.compare(0, strlen(prefix), prefix) == 0;
+  }
+  bool startsWith(const String& prefix) const { return startsWith(prefix.c_str()); }
+  bool endsWith(const char* suffix) const {
+    if (!suffix) return false;
+    size_t suffixLen = strlen(suffix);
+    if (suffixLen > s_.size()) return false;
+    return s_.compare(s_.size() - suffixLen, suffixLen, suffix) == 0;
+  }
+  bool endsWith(const String& suffix) const { return endsWith(suffix.c_str()); }
   String& operator+=(char c) {
     s_ += c;
     return *this;

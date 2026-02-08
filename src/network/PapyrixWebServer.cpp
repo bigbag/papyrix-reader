@@ -5,6 +5,7 @@
 #include <FsHelpers.h>
 #include <SDCardManager.h>
 #include <WiFi.h>
+#include <esp_heap_caps.h>
 
 #include "../config.h"
 #include "html/FilesPageHtml.generated.h"
@@ -12,15 +13,17 @@
 
 namespace papyrix {
 
-namespace {
-// Static upload state (reused, not per-request heap)
-FsFile uploadFile;
-String uploadFileName;
-String uploadPath = "/";
-size_t uploadSize = 0;
-bool uploadSuccess = false;
-String uploadError = "";
-}  // namespace
+bool PapyrixWebServer::flushUploadBuffer() {
+  if (upload_.bufferPos > 0 && upload_.file) {
+    const size_t written = upload_.file.write(upload_.buffer.data(), upload_.bufferPos);
+    if (written != upload_.bufferPos) {
+      upload_.bufferPos = 0;
+      return false;
+    }
+    upload_.bufferPos = 0;
+  }
+  return true;
+}
 
 PapyrixWebServer::PapyrixWebServer() = default;
 
@@ -84,14 +87,17 @@ void PapyrixWebServer::stop() {
   server_.reset();
 
   // Clear upload state
-  if (uploadFile) {
-    uploadFile.close();
+  if (upload_.file) {
+    upload_.file.close();
   }
-  uploadFileName = "";
-  uploadPath = "/";
-  uploadSize = 0;
-  uploadSuccess = false;
-  uploadError = "";
+  upload_.fileName = "";
+  upload_.path = "/";
+  upload_.size = 0;
+  upload_.success = false;
+  upload_.error = "";
+  upload_.bufferPos = 0;
+  upload_.buffer.clear();
+  upload_.buffer.shrink_to_fit();
 
   Serial.printf("[WEB] Server stopped (free heap: %d)\n", ESP.getFreeHeap());
 }
@@ -192,77 +198,105 @@ void PapyrixWebServer::handleUpload() {
   HTTPUpload& upload = server_->upload();
 
   if (upload.status == UPLOAD_FILE_START) {
-    uploadFileName = upload.filename;
-    uploadSize = 0;
-    uploadSuccess = false;
-    uploadError = "";
+    upload_.fileName = upload.filename;
+    upload_.size = 0;
+    upload_.success = false;
+    upload_.error = "";
+    upload_.bufferPos = 0;
+    if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < UploadState::BUFFER_SIZE * 2) {
+      upload_.error = "Insufficient memory for upload";
+      return;
+    }
+    upload_.buffer.resize(UploadState::BUFFER_SIZE);
 
     if (server_->hasArg("path")) {
-      uploadPath = server_->arg("path");
-      if (!uploadPath.startsWith("/")) {
-        uploadPath = "/" + uploadPath;
+      upload_.path = server_->arg("path");
+      if (!upload_.path.startsWith("/")) {
+        upload_.path = "/" + upload_.path;
       }
-      if (uploadPath.length() > 1 && uploadPath.endsWith("/")) {
-        uploadPath = uploadPath.substring(0, uploadPath.length() - 1);
+      if (upload_.path.length() > 1 && upload_.path.endsWith("/")) {
+        upload_.path = upload_.path.substring(0, upload_.path.length() - 1);
       }
     } else {
-      uploadPath = "/";
+      upload_.path = "/";
     }
 
-    Serial.printf("[WEB] Upload start: %s to %s\n", uploadFileName.c_str(), uploadPath.c_str());
+    Serial.printf("[WEB] Upload start: %s to %s\n", upload_.fileName.c_str(), upload_.path.c_str());
 
-    String filePath = uploadPath;
+    String filePath = upload_.path;
     if (!filePath.endsWith("/")) filePath += "/";
-    filePath += uploadFileName;
+    filePath += upload_.fileName;
 
     if (SdMan.exists(filePath.c_str())) {
       SdMan.remove(filePath.c_str());
     }
 
-    if (!SdMan.openFileForWrite("WEB", filePath, uploadFile)) {
-      uploadError = "Failed to create file";
+    if (!SdMan.openFileForWrite("WEB", filePath, upload_.file)) {
+      upload_.error = "Failed to create file";
       Serial.printf("[WEB] Failed to create: %s\n", filePath.c_str());
       return;
     }
 
   } else if (upload.status == UPLOAD_FILE_WRITE) {
-    if (uploadFile && uploadError.isEmpty()) {
-      size_t written = uploadFile.write(upload.buf, upload.currentSize);
-      if (written != upload.currentSize) {
-        uploadError = "Write failed - disk full?";
-        uploadFile.close();
-      } else {
-        uploadSize += written;
+    if (upload_.file && upload_.error.isEmpty()) {
+      const uint8_t* data = upload.buf;
+      size_t remaining = upload.currentSize;
+
+      while (remaining > 0) {
+        size_t space = UploadState::BUFFER_SIZE - upload_.bufferPos;
+        size_t toCopy = remaining < space ? remaining : space;
+        memcpy(upload_.buffer.data() + upload_.bufferPos, data, toCopy);
+        upload_.bufferPos += toCopy;
+        data += toCopy;
+        remaining -= toCopy;
+
+        if (upload_.bufferPos >= UploadState::BUFFER_SIZE) {
+          if (!flushUploadBuffer()) {
+            upload_.error = "Write failed - disk full?";
+            upload_.file.close();
+            return;
+          }
+        }
       }
+
+      upload_.size += upload.currentSize;
     }
 
   } else if (upload.status == UPLOAD_FILE_END) {
-    if (uploadFile) {
-      uploadFile.close();
-      if (uploadError.isEmpty()) {
-        uploadSuccess = true;
-        Serial.printf("[WEB] Upload complete: %s (%d bytes)\n", uploadFileName.c_str(), uploadSize);
+    if (upload_.file) {
+      if (upload_.error.isEmpty() && !flushUploadBuffer()) {
+        upload_.error = "Write failed - disk full?";
+      }
+      upload_.file.close();
+      if (upload_.error.isEmpty()) {
+        upload_.success = true;
+        Serial.printf("[WEB] Upload complete: %s (%zu bytes)\n", upload_.fileName.c_str(), upload_.size);
       }
     }
+    upload_.buffer.clear();
+    upload_.buffer.shrink_to_fit();
 
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
-    if (uploadFile) {
-      uploadFile.close();
-      String filePath = uploadPath;
+    upload_.bufferPos = 0;
+    upload_.buffer.clear();
+    upload_.buffer.shrink_to_fit();
+    if (upload_.file) {
+      upload_.file.close();
+      String filePath = upload_.path;
       if (!filePath.endsWith("/")) filePath += "/";
-      filePath += uploadFileName;
+      filePath += upload_.fileName;
       SdMan.remove(filePath.c_str());
     }
-    uploadError = "Upload aborted";
+    upload_.error = "Upload aborted";
     Serial.println("[WEB] Upload aborted");
   }
 }
 
 void PapyrixWebServer::handleUploadPost() {
-  if (uploadSuccess) {
-    server_->send(200, "text/plain", "File uploaded: " + uploadFileName);
+  if (upload_.success) {
+    server_->send(200, "text/plain", "File uploaded: " + upload_.fileName);
   } else {
-    String error = uploadError.isEmpty() ? "Unknown error" : uploadError;
+    String error = upload_.error.isEmpty() ? "Unknown error" : upload_.error;
     server_->send(400, "text/plain", error);
   }
 }
