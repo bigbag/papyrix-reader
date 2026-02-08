@@ -251,6 +251,22 @@ node calibre-simulator.mjs
 
 The device simulator listens for Calibre broadcasts and can receive books (saved to `scripts/received_books/`). The Calibre simulator broadcasts discovery packets and sends test books to connected devices.
 
+#### Serial monitor
+
+A standalone Go binary for reading device logs without PlatformIO. Pre-built binaries are available on the [releases page](https://github.com/pliashkou/papyrix/releases), or build from source:
+
+```bash
+cd tools/monitor && go build -o monitor .
+```
+
+Usage:
+```bash
+./monitor                                  # Auto-detect port
+./monitor -port /dev/ttyACM0               # Explicit port
+./monitor -port /dev/ttyACM0 -log out.txt  # Also save to file
+./monitor -speed 921600                    # Custom baud rate (default: 115200)
+```
+
 ### Creating a GitHub release
 
 ```sh

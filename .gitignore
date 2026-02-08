@@ -13,3 +13,5 @@ data/*
 crosspoint-reader/*
 *.o
 test/build/*
+tools/monitor/build/
+/monitor
