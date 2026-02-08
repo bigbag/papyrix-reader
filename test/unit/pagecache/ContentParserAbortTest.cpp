@@ -16,8 +16,8 @@ class Page {
 };
 
 // Mock ContentParser that simulates configurable abort/complete/maxPages behavior.
-// Models the hasMore_ logic from EpubChapterParser (commit 7df2932):
-//   hasMore_ = hitMaxPages || parser.wasAborted()
+// Models the hasMore_ logic from EpubChapterParser:
+//   hasMore_ = hitMaxPages || parser.wasAborted() || (!success && pagesCreated > 0)
 class MockContentParser {
  public:
   MockContentParser(int totalPages) : totalPages_(totalPages) {}
@@ -34,6 +34,11 @@ class MockContentParser {
         break;
       }
 
+      // Simulate parse failure (e.g., XML_GetBuffer returns null)
+      if (failAfterPages_ > 0 && pagesCreated >= failAfterPages_) {
+        break;
+      }
+
       if (hitMaxPages) break;
 
       onPageComplete(std::make_unique<Page>(i));
@@ -45,12 +50,15 @@ class MockContentParser {
       }
     }
 
-    // Core logic from commit 7df2932:
-    // Before: hasMore_ = hitMaxPages
-    // After:  hasMore_ = hitMaxPages || aborted_
-    hasMore_ = hitMaxPages || aborted_;
+    bool success = !aborted_ && !failAfterPages_;
 
-    return !aborted_;
+    // Core logic: hasMore_ tracks whether more content remains unparsed.
+    // hitMaxPages: stopped at page limit, more content exists
+    // aborted_: stopped due to timeout/memory, more content exists
+    // !success && pagesCreated > 0: parse error mid-chapter, partial content exists
+    hasMore_ = hitMaxPages || aborted_ || (!success && pagesCreated > 0);
+
+    return success;
   }
 
   bool hasMoreContent() const { return hasMore_; }
@@ -62,11 +70,15 @@ class MockContentParser {
     aborted_ = false;
   }
 
+  // Simulate parse failure after N pages (e.g., XML_GetBuffer returns null mid-chapter)
+  void setFailAfterPages(int n) { failAfterPages_ = n; }
+
  private:
   int totalPages_;
   int currentPage_ = 0;
   bool hasMore_ = true;
   bool aborted_ = false;
+  int failAfterPages_ = 0;
 };
 
 // Simplified PageCache that mirrors the isPartial_ decision from PageCache::create():
@@ -105,9 +117,17 @@ class MockPageCache {
   bool extend(MockContentParser& parser, uint16_t additionalPages, const AbortCallback& shouldAbort = nullptr) {
     if (!isPartial_) return true;
 
+    const uint16_t currentPages = pageCount_;
     uint16_t targetPages = pageCount_ + additionalPages;
     parser.reset();
-    return create(parser, targetPages, shouldAbort);
+    bool result = create(parser, targetPages, shouldAbort);
+
+    // No forward progress → deterministic error, stop retrying
+    if (result && pageCount_ <= currentPages) {
+      isPartial_ = false;
+    }
+
+    return result;
   }
 
   uint16_t pageCount() const { return pageCount_; }
@@ -219,6 +239,48 @@ int main() {
     runner.expectTrue(ok, "extend_to_finish");
     runner.expectEq(static_cast<uint16_t>(10), cache.pageCount(), "extend_final_count");
     runner.expectFalse(cache.isPartial(), "extend_complete");
+  }
+
+  // Test 7: Parse error with partial content -> hasMore_ = true (issue #34 fix)
+  // Before the fix: parse error mid-chapter -> hasMore_=false -> content lost!
+  // After the fix: parse error + pages created -> hasMore_=true -> extend will retry
+  {
+    MockContentParser parser(100);
+    parser.setFailAfterPages(5);  // Simulate XML_GetBuffer failure after 5 pages
+
+    MockPageCache cache;
+    bool ok = cache.create(parser, 0);  // No maxPages limit
+
+    runner.expectTrue(ok, "parse_error_partial_success");
+    runner.expectEq(static_cast<uint16_t>(5), cache.pageCount(), "parse_error_partial_page_count");
+    runner.expectTrue(parser.hasMoreContent(), "parse_error_partial_has_more");
+    runner.expectTrue(cache.isPartial(), "parse_error_partial_is_partial");
+  }
+
+  // Test 8: Extend after deterministic parse error should stop retrying (no-progress guard)
+  // If extend() re-parses and gets the same page count, the error is deterministic.
+  // The cache should mark itself complete to prevent infinite extend loops.
+  {
+    MockContentParser parser(100);
+    parser.setFailAfterPages(5);  // Always fails after 5 pages
+
+    MockPageCache cache;
+    bool ok = cache.create(parser, 10);  // maxPages=10, but fails at 5
+
+    runner.expectTrue(ok, "no_progress_initial_create");
+    runner.expectEq(static_cast<uint16_t>(5), cache.pageCount(), "no_progress_initial_count");
+    runner.expectTrue(cache.isPartial(), "no_progress_initial_partial");
+
+    // Extend: re-parses from start, hits same error at page 5 → no progress
+    ok = cache.extend(parser, 10);
+    runner.expectTrue(ok, "no_progress_extend_success");
+    runner.expectEq(static_cast<uint16_t>(5), cache.pageCount(), "no_progress_extend_count");
+    runner.expectFalse(cache.isPartial(), "no_progress_extend_not_partial");
+
+    // Further extend should be a no-op since isPartial is now false
+    ok = cache.extend(parser, 10);
+    runner.expectTrue(ok, "no_progress_extend_noop");
+    runner.expectEq(static_cast<uint16_t>(5), cache.pageCount(), "no_progress_extend_noop_count");
   }
 
   return runner.allPassed() ? 0 : 1;

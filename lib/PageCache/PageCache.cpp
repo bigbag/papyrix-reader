@@ -256,13 +256,25 @@ bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const Ab
     return true;
   }
 
+  // Cap extend chunk to 30 pages once cache is large enough. Each extend() re-parses
+  // from the start (skipping serialization of cached pages), so small chunks limit the
+  // time spent on each re-parse pass while still making forward progress.
+  const uint16_t chunk = pageCount_ >= 30 ? 30 : additionalPages;
   const uint16_t currentPages = pageCount_;
-  const uint16_t targetPages = pageCount_ + additionalPages;
+  const uint16_t targetPages = pageCount_ + chunk;
   Serial.printf("[CACHE] Extending from %d to %d pages\n", currentPages, targetPages);
 
   // Re-parse from start but skip serializing already-cached pages
   parser.reset();
-  return create(parser, config_, targetPages, currentPages, shouldAbort);
+  bool result = create(parser, config_, targetPages, currentPages, shouldAbort);
+
+  // No forward progress → deterministic error, stop retrying
+  if (result && pageCount_ <= currentPages) {
+    Serial.printf("[CACHE] No progress during extend (%d pages), marking complete\n", pageCount_);
+    isPartial_ = false;
+  }
+
+  return result;
 }
 
 std::unique_ptr<Page> PageCache::loadPage(uint16_t pageNum) {

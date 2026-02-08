@@ -456,7 +456,9 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
       vTaskDelay(1);  // Yield to prevent watchdog reset
     }
 
-    void* const buf = XML_GetBuffer(parser, 1024);
+    constexpr size_t kReadChunkSize = 1024;
+    constexpr size_t kDataUriPrefixSize = 10;  // max partial saved by DataUriStripper: "src=\"data:"
+    void* const buf = XML_GetBuffer(parser, kReadChunkSize + kDataUriPrefixSize);
     if (!buf) {
       Serial.printf("[%lu] [EHP] Couldn't allocate memory for buffer\n", millis());
       XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
@@ -470,7 +472,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
       return false;
     }
 
-    size_t len = file.read(static_cast<uint8_t*>(buf), 1024);
+    size_t len = file.read(static_cast<uint8_t*>(buf), kReadChunkSize);
 
     if (len == 0) {
       Serial.printf("[%lu] [EHP] File read error\n", millis());
@@ -488,7 +490,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     // Strip data URIs BEFORE expat parses the buffer to prevent OOM on large embedded images.
     // This replaces src="data:image/..." with src="#" so expat never sees the huge base64 string.
     const size_t originalLen = len;
-    len = dataUriStripper_.strip(static_cast<char*>(buf), len, 1024);
+    len = dataUriStripper_.strip(static_cast<char*>(buf), len, kReadChunkSize + kDataUriPrefixSize);
 
     // Update progress (call every 10% change to avoid too frequent updates)
     // Only show progress for larger chapters where rendering overhead is worth it
@@ -592,6 +594,7 @@ void ChapterHtmlSlimParser::makePages() {
   if (freeHeap < MIN_FREE_HEAP * 2) {
     Serial.printf("[%lu] [EHP] Insufficient memory for layout (%zu bytes)\n", millis(), freeHeap);
     currentTextBlock.reset();
+    aborted_ = true;
     return;
   }
 
