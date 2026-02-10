@@ -559,6 +559,12 @@ void ReaderState::renderCachedPage(Core& core) {
   // Stop background task to ensure we own pageCache_ (ownership model)
   stopBackgroundCaching();
 
+  // Background task may have left parser in inconsistent state
+  if (!pageCache_ && parser_ && parserSpineIndex_ == currentSpineIndex_) {
+    parser_.reset();
+    parserSpineIndex_ = -1;
+  }
+
   // Create or load cache if needed
   if (!pageCache_) {
     // Try to load existing cache silently first
@@ -574,6 +580,17 @@ void ReaderState::renderCachedPage(Core& core) {
       renderer_.displayBuffer();
 
       createOrExtendCache(core);
+
+      // Backward navigation: cache entire chapter to find actual last page
+      if (currentSectionPage_ == INT16_MAX) {
+        while (pageCache_ && pageCache_->isPartial()) {
+          const size_t pagesBefore = pageCache_->pageCount();
+          createOrExtendCache(core);
+          if (pageCache_ && pageCache_->pageCount() <= pagesBefore) {
+            break;  // No progress - avoid infinite loop
+          }
+        }
+      }
 
       // Clear overlay
       renderer_.clearScreen(theme.backgroundColor);
