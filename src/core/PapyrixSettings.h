@@ -71,10 +71,10 @@ struct Settings {
   uint8_t autoSleepMinutes = Sleep10Min;
   uint8_t paragraphAlignment = AlignJustified;
   uint8_t hyphenation = 1;
-  uint8_t textAntiAliasing = 1;
+  uint8_t textAntiAliasing = 0;
   uint8_t showImages = 1;
   uint8_t startupBehavior = StartupLastDocument;
-  uint8_t coverDithering = 0;
+  uint8_t _reserved = 0;  // was coverDithering, kept for serialization compatibility
   uint8_t lineSpacing = SpacingNormal;
   char themeName[32] = "light";
   char lastBookPath[256] = "";          // Path to last opened book

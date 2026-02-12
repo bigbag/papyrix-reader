@@ -154,8 +154,9 @@ Reading and display settings:
     - **Large:** Maximum line spacing (1.20×)
   - Adjusting line spacing can improve readability for different fonts and preferences
 
-- **Text Anti-Aliasing** (default: ON)
-  - Enable grayscale text rendering for smoother font edges
+- **Text Anti-Aliasing** (default: OFF)
+  - Enable grayscale text rendering for smoother font edges on builtin fonts
+  - Has no effect when using custom fonts loaded from SD card
   - Disable for faster page turns and to eliminate the brief "thick text" flash during transitions
 
 - **Paragraph Alignment** (default: Justified)
@@ -170,11 +171,6 @@ Reading and display settings:
 - **Show Images** (default: ON)
   - Display inline images within EPUB content and book covers
   - Disable for faster page rendering (images show "[Image]" placeholder)
-
-- **Cover Dithering** (default: OFF)
-  - Use 1-bit dithering for book cover images instead of grayscale
-  - Creates a crisp black-and-white pattern that looks clean on e-ink
-  - Disable for smoother grayscale gradients in cover artwork
 
 - **Status Bar** (default: Full)
   - Options: None, No Progress, Full

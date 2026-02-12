@@ -184,17 +184,17 @@ void SleepState::renderCoverSleepScreen(Core& core) const {
     }
   } else if (FsHelpers::isTxtFile(bookPath)) {
     Txt txt(bookPath, PAPYRIX_CACHE_DIR);
-    if (txt.load() && txt.generateCoverBmp(core.settings.coverDithering != 0)) {
+    if (txt.load() && txt.generateCoverBmp(true)) {
       coverBmpPath = txt.getCoverBmpPath();
     }
   } else if (FsHelpers::isMarkdownFile(bookPath)) {
     Markdown md(bookPath, PAPYRIX_CACHE_DIR);
-    if (md.load() && md.generateCoverBmp(core.settings.coverDithering != 0)) {
+    if (md.load() && md.generateCoverBmp(true)) {
       coverBmpPath = md.getCoverBmpPath();
     }
   } else if (FsHelpers::isEpubFile(bookPath)) {
     Epub epub(bookPath, PAPYRIX_CACHE_DIR);
-    if (epub.load() && epub.generateCoverBmp(core.settings.coverDithering != 0)) {
+    if (epub.load() && epub.generateCoverBmp(true)) {
       coverBmpPath = epub.getCoverBmpPath();
     }
   }

@@ -51,7 +51,7 @@ Result<void> Settings::save(drivers::Storage& storage) const {
   serialization::writePod(outputFile, textAntiAliasing);
   serialization::writePod(outputFile, showImages);
   serialization::writePod(outputFile, startupBehavior);
-  serialization::writePod(outputFile, coverDithering);
+  serialization::writePod(outputFile, _reserved);
   serialization::writePod(outputFile, lineSpacing);
   // Write themeName as fixed-length string
   outputFile.write(reinterpret_cast<const uint8_t*>(themeName), sizeof(themeName));
@@ -136,7 +136,7 @@ Result<void> Settings::load(drivers::Storage& storage) {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, startupBehavior, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPodValidated(inputFile, coverDithering, uint8_t(2));
+    serialization::readPodValidated(inputFile, _reserved, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, lineSpacing, uint8_t(4));
     if (++settingsRead >= fileSettingsCount) break;
@@ -224,7 +224,7 @@ bool Settings::saveToFile() const {
   serialization::writePod(outputFile, textAntiAliasing);
   serialization::writePod(outputFile, showImages);
   serialization::writePod(outputFile, startupBehavior);
-  serialization::writePod(outputFile, coverDithering);
+  serialization::writePod(outputFile, _reserved);
   serialization::writePod(outputFile, lineSpacing);
   outputFile.write(reinterpret_cast<const uint8_t*>(themeName), sizeof(themeName));
   outputFile.write(reinterpret_cast<const uint8_t*>(lastBookPath), sizeof(lastBookPath));
@@ -305,7 +305,7 @@ bool Settings::loadFromFile() {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, startupBehavior, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPodValidated(inputFile, coverDithering, uint8_t(2));
+    serialization::readPodValidated(inputFile, _reserved, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, lineSpacing, uint8_t(4));
     if (++settingsRead >= fileSettingsCount) break;

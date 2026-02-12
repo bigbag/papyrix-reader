@@ -34,7 +34,7 @@ Optional cover image, discovered by searching for (case-insensitive):
 1. `<filename>.jpg`, `<filename>.jpeg`, `<filename>.png`, or `<filename>.bmp` (matching the TXT filename)
 2. `cover.jpg`, `cover.jpeg`, `cover.png`, or `cover.bmp` in the same directory
 
-The image is converted to BMP format for display. The **Cover Dithering** setting controls whether covers use 1-bit dithering (crisp black/white) or grayscale rendering.
+The image is converted to 1-bit dithered BMP format for display.
 
 ---
 
@@ -83,7 +83,7 @@ Optional cover image, discovered by searching for (case-insensitive):
 1. `<filename>.jpg`, `<filename>.jpeg`, `<filename>.png`, or `<filename>.bmp` (matching the Markdown filename)
 2. `cover.jpg`, `cover.jpeg`, `cover.png`, or `cover.bmp` in the same directory
 
-The image is converted to BMP format for display. The **Cover Dithering** setting controls whether covers use 1-bit dithering (crisp black/white) or grayscale rendering.
+The image is converted to 1-bit dithered BMP format for display.
 
 ### Supported Markdown Features
 

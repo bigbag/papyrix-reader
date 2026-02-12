@@ -637,8 +637,9 @@ void ReaderState::renderCachedPage(Core& core) {
 
   displayWithRefresh(core);
 
-  // Grayscale text rendering (anti-aliasing)
-  if (core.settings.textAntiAliasing && renderer_.fontSupportsGrayscale(fontId) && renderer_.storeBwBuffer()) {
+  // Grayscale text rendering (anti-aliasing) - skip for custom fonts (saves ~48KB)
+  if (core.settings.textAntiAliasing && !FONT_MANAGER.isUsingCustomReaderFont() &&
+      renderer_.fontSupportsGrayscale(fontId) && renderer_.storeBwBuffer()) {
     renderer_.clearScreen(0x00);
     renderer_.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     page->render(renderer_, fontId, vp.marginLeft, vp.marginTop, theme.primaryTextBlack);
@@ -861,7 +862,7 @@ ReaderState::Viewport ReaderState::getReaderViewport() const {
 
 bool ReaderState::renderCoverPage(Core& core) {
   Serial.printf("[%lu] [RDR] Generating cover for reader...\n", millis());
-  std::string coverPath = core.content.generateCover(core.settings.coverDithering);
+  std::string coverPath = core.content.generateCover(true);  // Always 1-bit in reader (saves ~48KB grayscale buffer)
   if (coverPath.empty()) {
     Serial.printf("[%lu] [RDR] No cover available, skipping cover page\n", millis());
     return false;

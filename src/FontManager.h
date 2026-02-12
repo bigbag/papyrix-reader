@@ -118,6 +118,9 @@ class FontManager {
    */
   ExternalFont* getExternalFont() { return (_externalFont && _externalFont->isLoaded()) ? _externalFont : nullptr; }
 
+  /// Returns true if the active reader font was loaded from SD card (not a builtin font).
+  bool isUsingCustomReaderFont() const { return _activeReaderFontId != 0; }
+
   /**
    * Log information about all loaded fonts.
    */
