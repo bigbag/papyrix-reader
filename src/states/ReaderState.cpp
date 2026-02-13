@@ -286,6 +286,7 @@ void ReaderState::enter(Core& core) {
   // Reset state for new book
   textStartIndex_ = 0;
   hasCover_ = false;
+  thumbnailDone_ = false;
   switch (core.content.metadata().type) {
     case ContentType::Epub: {
       auto* provider = core.content.asEpub();
@@ -601,6 +602,10 @@ void ReaderState::renderCurrentPage(Core& core) {
       break;
     default:
       break;
+  }
+
+  if (!cacheTask_.isRunning() && (!pageCache_ || !thumbnailDone_)) {
+    startBackgroundCaching(core);
   }
 
   core.display.markDirty();
@@ -1035,28 +1040,10 @@ void ReaderState::startBackgroundCaching(Core& core) {
         }
 
         // Generate thumbnail from cover for HomeState (lower priority than page cache)
-        if (!cacheTask_.shouldStop()) {
-          std::string coverPath = coreRef.content.getCoverPath();
-          std::string thumbPath = coreRef.content.getThumbnailPath();
-          if (!coverPath.empty() && !thumbPath.empty()) {
-            const char* logTag = "RDR";
-            switch (type) {
-              case ContentType::Epub:
-                logTag = "EPB";
-                break;
-              case ContentType::Txt:
-                logTag = "TXT";
-                break;
-              case ContentType::Markdown:
-                logTag = "MD ";
-                break;
-              default:
-                break;
-            }
-            if (!CoverHelpers::generateThumbFromCover(coverPath, thumbPath, logTag)) {
-              Serial.printf("[%s] Thumbnail generation failed\n", logTag);
-            }
-          }
+        // Only attempt once per book open — skip if already tried (success or failure)
+        if (!thumbnailDone_ && !cacheTask_.shouldStop()) {
+          coreRef.content.generateThumbnail();
+          thumbnailDone_ = true;
         }
 
         if (!cacheTask_.shouldStop()) {

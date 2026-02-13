@@ -84,6 +84,7 @@ class ReaderState : public State {
   // Background caching (uses BackgroundTask for proper lifecycle management)
   BackgroundTask cacheTask_;
   Core* coreForCacheTask_ = nullptr;
+  bool thumbnailDone_ = false;
   void startBackgroundCaching(Core& core);
   void stopBackgroundCaching();
 
