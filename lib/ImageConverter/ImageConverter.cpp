@@ -4,6 +4,7 @@
 #include <HardwareSerial.h>
 #include <JpegToBmpConverter.h>
 #include <PngToBmpConverter.h>
+#include <GifToBmpConverter.h>
 #include <SDCardManager.h>
 
 namespace {
@@ -45,6 +46,20 @@ class PngImageConverter : public ImageConverter {
   const char* formatName() const override { return "PNG"; }
 };
 
+class GifImageConverter : public ImageConverter {
+ public:
+  bool convert(FsFile& input, Print& output, const ImageConvertConfig& config) override {
+    // Quick mode: simple threshold instead of dithering
+    if (config.quickMode) {
+      return GifToBmpConverter::gifFileToBmpStreamQuick(input, output, config.maxWidth, config.maxHeight);
+    }
+    return GifToBmpConverter::gifFileToBmpStreamWithSize(input, output, config.maxWidth, config.maxHeight,
+                                                         config.shouldAbort);
+  }
+
+  const char* formatName() const override { return "GIF"; }
+};
+
 class BmpImageConverter : public ImageConverter {
  public:
   bool convert(FsFile& input, Print& output, const ImageConvertConfig& config) override {
@@ -64,6 +79,7 @@ class BmpImageConverter : public ImageConverter {
 
 JpegImageConverter jpegConverter;
 PngImageConverter pngConverter;
+GifImageConverter gifConverter;
 BmpImageConverter bmpConverter;
 
 }  // namespace
@@ -74,6 +90,9 @@ ImageConverter* ImageConverterFactory::getConverter(const std::string& filePath)
   }
   if (FsHelpers::isPngFile(filePath)) {
     return &pngConverter;
+  }
+  if (FsHelpers::isGifFile(filePath)) {
+    return &gifConverter;
   }
   if (FsHelpers::isBmpFile(filePath)) {
     return &bmpConverter;

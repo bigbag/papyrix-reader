@@ -11,7 +11,7 @@ EPUB HTML → ChapterHtmlSlimParser → ImageConverter → BMP Cache → GfxRend
 1. **HTML Parsing**: Detects `<img>` tags, extracts `src` and `alt` attributes
 2. **Data URI Stripping**: Removes embedded base64 images before XML parsing (prevents OOM)
 3. **Image Extraction**: Extracts image from EPUB ZIP to temp file
-4. **Conversion**: Converts JPEG/PNG to BMP format
+4. **Conversion**: Converts JPEG/PNG/GIF to BMP format
 5. **Caching**: Stores converted BMP on SD card
 6. **Rendering**: Displays image centered on page
 
@@ -21,6 +21,7 @@ EPUB HTML → ChapterHtmlSlimParser → ImageConverter → BMP Cache → GfxRend
 
 - **JPEG** (`.jpg`, `.jpeg`) — Baseline only (see below)
 - **PNG** (`.png`) — Transparency rendered as opaque
+- **GIF** (`.gif`) — First frame only, transparency as white
 - **BMP** (`.bmp`) — Direct display, no conversion needed
 
 Format detection is case-insensitive.

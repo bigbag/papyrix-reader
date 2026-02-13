@@ -365,7 +365,7 @@ Please note that this firmware is currently in active development. The following
 are planned for future updates:
 
 * **Tables:** HTML tables are not rendered. A `[Table omitted]` placeholder is shown instead.
-* **Image formats:** Only JPEG and PNG images are supported in EPUB. Other formats (GIF, SVG, WebP) show a placeholder.
+* **Image formats:** JPEG, PNG, and GIF images are supported in EPUB. Other formats (SVG, WebP) show a placeholder.
 
 ---
 
