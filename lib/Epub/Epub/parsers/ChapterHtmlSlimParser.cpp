@@ -694,6 +694,8 @@ void ChapterHtmlSlimParser::makePages() {
 }
 
 std::string ChapterHtmlSlimParser::cacheImage(const std::string& src) {
+  Serial.printf("[%lu] [EHP] Starting cacheImage for: %s\n", millis(), src.c_str());
+
   // Check abort before starting image processing
   if (externalAbortCallback_ && externalAbortCallback_()) {
     Serial.printf("[%lu] [EHP] Abort requested, skipping image\n", millis());
@@ -714,26 +716,37 @@ std::string ChapterHtmlSlimParser::cacheImage(const std::string& src) {
 
   // Resolve relative path from chapter base
   std::string resolvedPath = FsHelpers::normalisePath(chapterBasePath + src);
+  Serial.printf("[%lu] [EHP] Resolved path: %s\n", millis(), resolvedPath.c_str());
 
   // Generate cache filename from hash
   size_t srcHash = std::hash<std::string>{}(resolvedPath);
   std::string cachedBmpPath = imageCachePath + "/" + std::to_string(srcHash) + ".bmp";
+  Serial.printf("[%lu] [EHP] Cache path: %s\n", millis(), cachedBmpPath.c_str());
 
   // Check if already cached
   if (SdMan.exists(cachedBmpPath.c_str())) {
+    Serial.printf("[%lu] [EHP] Image already cached: %s\n", millis(), cachedBmpPath.c_str());
     consecutiveImageFailures_ = 0;  // Reset on success
     return cachedBmpPath;
   }
+  Serial.printf("[%lu] [EHP] Image not cached, checking format support\n", millis());
 
   // Check for failed marker
   std::string failedMarker = imageCachePath + "/" + std::to_string(srcHash) + ".failed";
   if (SdMan.exists(failedMarker.c_str())) {
+    Serial.printf("[%lu] [EHP] Found failed marker, skipping: %s\n", millis(), failedMarker.c_str());
     consecutiveImageFailures_++;
     return "";
   }
 
   // Check if format is supported
-  if (!ImageConverterFactory::isSupported(src)) {
+  bool isGif = FsHelpers::isGifFile(src);
+  bool isPng = FsHelpers::isPngFile(src);
+  bool isSupported = ImageConverterFactory::isSupported(src);
+  Serial.printf("[%lu] [EHP] Format check - GIF: %s, PNG: %s, Supported: %s\n", millis(),
+                isGif ? "YES" : "NO", isPng ? "YES" : "NO", isSupported ? "YES" : "NO");
+
+  if (!isSupported) {
     Serial.printf("[%lu] [EHP] Unsupported image format: %s\n", millis(), src.c_str());
     FsFile marker;
     if (SdMan.openFileForWrite("EHP", failedMarker, marker)) {
@@ -744,14 +757,24 @@ std::string ChapterHtmlSlimParser::cacheImage(const std::string& src) {
   }
 
   // Extract image to temp file (include hash in name for uniqueness)
-  const std::string tempExt = FsHelpers::isPngFile(src) ? ".png" : ".jpg";
+  std::string tempExt;
+  if (FsHelpers::isPngFile(src)) {
+    tempExt = ".png";
+  } else if (FsHelpers::isGifFile(src)) {
+    tempExt = ".gif";
+  } else {
+    tempExt = ".jpg";  // Default for JPEG and other formats
+  }
   std::string tempPath = imageCachePath + "/.tmp_" + std::to_string(srcHash) + tempExt;
+  Serial.printf("[%lu] [EHP] Creating temp file: %s\n", millis(), tempPath.c_str());
+
   FsFile tempFile;
   if (!SdMan.openFileForWrite("EHP", tempPath, tempFile)) {
     Serial.printf("[%lu] [EHP] Failed to create temp file for image\n", millis());
     return "";
   }
 
+  Serial.printf("[%lu] [EHP] Extracting image data to temp file\n", millis());
   if (!readItemFn(resolvedPath, tempFile, 1024)) {
     Serial.printf("[%lu] [EHP] Failed to extract image: %s\n", millis(), resolvedPath.c_str());
     tempFile.close();
@@ -764,6 +787,7 @@ std::string ChapterHtmlSlimParser::cacheImage(const std::string& src) {
     return "";
   }
   tempFile.close();
+  Serial.printf("[%lu] [EHP] Image extraction completed, starting conversion\n", millis());
 
   const int maxImageHeight = config.viewportHeight;
   ImageConvertConfig convertConfig;
@@ -772,6 +796,7 @@ std::string ChapterHtmlSlimParser::cacheImage(const std::string& src) {
   convertConfig.logTag = "EHP";
   convertConfig.shouldAbort = externalAbortCallback_;
 
+  Serial.printf("[%lu] [EHP] Converting to BMP: %s -> %s\n", millis(), tempPath.c_str(), cachedBmpPath.c_str());
   const bool success = ImageConverterFactory::convertToBmp(tempPath, cachedBmpPath, convertConfig);
   SdMan.remove(tempPath.c_str());
 
@@ -787,7 +812,7 @@ std::string ChapterHtmlSlimParser::cacheImage(const std::string& src) {
   }
 
   consecutiveImageFailures_ = 0;  // Reset on success
-  Serial.printf("[%lu] [EHP] Cached image: %s\n", millis(), cachedBmpPath.c_str());
+  Serial.printf("[%lu] [EHP] Successfully cached image: %s\n", millis(), cachedBmpPath.c_str());
   return cachedBmpPath;
 }
 

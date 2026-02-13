@@ -4,6 +4,14 @@
 #include <HardwareSerial.h>
 #include <SdFat.h>
 
+#include "TinyGifDecoder.h"
+
+// Static member initialization
+bool GifToBmpConverter::s_useTinyDecoder = true;  // Use TinyGifDecoder by default (lighter weight)
+
+// Forward declaration of callback function
+extern "C" void GIFDraw(GIFDRAW* pDraw);
+
 // Global variables for callbacks
 static Print* g_output = nullptr;
 static int g_width = 0;
@@ -38,26 +46,26 @@ struct BMPHeader {
 static AnimatedGIF gif;
 
 // Callback for GIF drawing
-void * GIFOpenFile(const char *fname, int32_t *pSize) {
+void* GIFOpenFile(const char* fname, int32_t* pSize) {
   // Not used since we pass buffer
   return nullptr;
 }
 
-void GIFCloseFile(void *pHandle) {
+void GIFCloseFile(void* pHandle) {
   // Not used
 }
 
-int32_t GIFReadFile(GIFFILE *pFile, uint8_t *pBuf, int32_t iLen) {
+int32_t GIFReadFile(GIFFILE* pFile, uint8_t* pBuf, int32_t iLen) {
   // Not used since we pass buffer
   return 0;
 }
 
-int32_t GIFSeekFile(GIFFILE *pFile, int32_t iPosition) {
+int32_t GIFSeekFile(GIFFILE* pFile, int32_t iPosition) {
   // Not used
   return 0;
 }
 
-void GIFDraw(GIFDRAW *pDraw) {
+extern "C" void GIFDraw(GIFDRAW* pDraw) {
   if (!g_output || !g_imageBuffer || (g_shouldAbort && g_shouldAbort())) return;
 
   uint8_t* s = pDraw->pPixels;
@@ -91,81 +99,115 @@ bool GifToBmpConverter::gifFileToBmpStream(FsFile& input, Print& output, int max
 
 bool GifToBmpConverter::gifFileToBmpStreamWithSize(FsFile& input, Print& output, int maxWidth, int maxHeight,
                                                    std::function<bool()> shouldAbort) {
-  g_output = &output;
-  g_shouldAbort = shouldAbort;
+  if (s_useTinyDecoder) {
+    // Use TinyGifDecoder for static GIF images
+    size_t fileSize = input.size();
+    if (fileSize > 200 * 1024) {
+      Serial.printf("[GIF] ERROR: File too large (%zu bytes)\n", fileSize);
+      return false;
+    }
 
-  // Read the entire file into memory (GIFs are typically small)
-  size_t fileSize = input.size();
-  if (fileSize > 200 * 1024) {  // Limit to 200KB
-    Serial.printf("[GIF] File too large: %zu bytes\n", fileSize);
-    return false;
-  }
+    uint8_t* fileBuffer = (uint8_t*)malloc(fileSize);
+    if (!fileBuffer) {
+      Serial.printf("[GIF] ERROR: Failed to allocate file buffer\n");
+      return false;
+    }
 
-  uint8_t* fileBuffer = (uint8_t*)malloc(fileSize);
-  if (!fileBuffer) {
-    Serial.printf("[GIF] Failed to allocate memory for file\n");
-    return false;
-  }
+    size_t bytesRead = input.read(fileBuffer, fileSize);
+    if (bytesRead != fileSize) {
+      Serial.printf("[GIF] ERROR: Read failed (%zu/%zu bytes)\n", bytesRead, fileSize);
+      free(fileBuffer);
+      return false;
+    }
 
-  size_t bytesRead = input.read(fileBuffer, fileSize);
-  if (bytesRead != fileSize) {
+    bool result = TinyGifDecoder::decodeGifToBmp(fileBuffer, fileSize, output, maxWidth, maxHeight, shouldAbort);
     free(fileBuffer);
-    return false;
-  }
 
-  // Initialize GIF decoder
-  gif.begin(LITTLE_ENDIAN_PIXELS);
+    return result;
+  } else {
+    // Use AnimatedGIF library (for animated GIFs if needed)
+    g_output = &output;
+    g_shouldAbort = shouldAbort;
 
-  int result = gif.open(fileBuffer, fileSize, nullptr);
-  if (result != GIF_SUCCESS) {
-    Serial.printf("[GIF] Failed to open GIF: %d\n", result);
-    free(fileBuffer);
-    return false;
-  }
+    size_t fileSize = input.size();
+    if (fileSize > 200 * 1024) {
+      Serial.printf("[GIF] ERROR: File too large\n");
+      return false;
+    }
 
-  g_width = gif.getCanvasWidth();
-  g_height = gif.getCanvasHeight();
+    uint8_t* fileBuffer = (uint8_t*)malloc(fileSize);
+    if (!fileBuffer) {
+      Serial.printf("[GIF] ERROR: Failed to allocate file buffer\n");
+      return false;
+    }
 
-  // Allocate buffer for the image
-  g_bufferSize = g_width * g_height * 3;  // 24-bit RGB
-  g_imageBuffer = (uint8_t*)malloc(g_bufferSize);
-  if (!g_imageBuffer) {
-    Serial.printf("[GIF] Failed to allocate image buffer\n");
-    gif.close();
-    free(fileBuffer);
-    return false;
-  }
+    size_t bytesRead = input.read(fileBuffer, fileSize);
+    if (bytesRead != fileSize) {
+      Serial.printf("[GIF] ERROR: Read failed\n");
+      free(fileBuffer);
+      return false;
+    }
 
-  // Decode first frame
-  result = gif.playFrame(true, nullptr);
-  if (result != GIF_SUCCESS) {
-    Serial.printf("[GIF] Failed to decode frame: %d\n", result);
+    gif.begin(LITTLE_ENDIAN_PIXELS);
+
+    int result = gif.open(fileBuffer, fileSize, GIFDraw);
+    if (result != GIF_SUCCESS) {
+      Serial.printf("[GIF] ERROR: Failed to open GIF (code %d)\n", result);
+      free(fileBuffer);
+      return false;
+    }
+
+    g_width = gif.getCanvasWidth();
+    g_height = gif.getCanvasHeight();
+    g_bufferSize = g_width * g_height * 3;
+
+    g_imageBuffer = (uint8_t*)malloc(g_bufferSize);
+    if (!g_imageBuffer) {
+      Serial.printf("[GIF] ERROR: Failed to allocate image buffer\n");
+      gif.close();
+      free(fileBuffer);
+      return false;
+    }
+
+    result = gif.playFrame(true, nullptr);
+    if (result != GIF_SUCCESS) {
+      Serial.printf("[GIF] ERROR: Failed to decode frame (code %d)\n", result);
+      free(g_imageBuffer);
+      g_imageBuffer = nullptr;
+      gif.close();
+      free(fileBuffer);
+      return false;
+    }
+
+    // Write BMP with proper row padding
+    int rowBytes = g_width * 3;
+    int padding = (4 - (rowBytes % 4)) % 4;
+    size_t imageDataSize = (rowBytes + padding) * g_height;
+
+    BMPHeader header;
+    header.bfSize = sizeof(BMPHeader) + imageDataSize;
+    header.biWidth = g_width;
+    header.biHeight = g_height;
+    header.biSizeImage = imageDataSize;
+
+    output.write((uint8_t*)&header, sizeof(header));
+
+    // Write image data with padding
+    for (int y = 0; y < g_height; y++) {
+      output.write(g_imageBuffer + y * rowBytes, rowBytes);
+      for (int p = 0; p < padding; p++) {
+        output.write((uint8_t)0);
+      }
+    }
+
+    // Cleanup
     free(g_imageBuffer);
     g_imageBuffer = nullptr;
     gif.close();
     free(fileBuffer);
-    return false;
+
+    return true;
   }
-
-  // Write BMP header
-  BMPHeader header;
-  header.bfSize = sizeof(BMPHeader) + g_bufferSize;
-  header.biWidth = g_width;
-  header.biHeight = g_height;
-  header.biSizeImage = g_bufferSize;
-
-  output.write((uint8_t*)&header, sizeof(header));
-
-  // Write image data
-  output.write(g_imageBuffer, g_bufferSize);
-
-  // Cleanup
-  free(g_imageBuffer);
-  g_imageBuffer = nullptr;
-  gif.close();
-  free(fileBuffer);
-
-  return true;
 }
 
 bool GifToBmpConverter::gifFileToBmpStreamQuick(FsFile& input, Print& output, int maxWidth, int maxHeight) {
