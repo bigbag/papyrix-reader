@@ -15,6 +15,14 @@ Custom fonts use a memory-efficient **streaming** system that loads glyph bitmap
 
 This is transparent to users - fonts work the same way, just more efficiently.
 
+### Supported Styles
+
+Custom `.epdfont` fonts support **regular** and **bold** styles:
+
+- **Regular** (`regular.epdfont`) - Required. Loaded when the book is opened.
+- **Bold** (`bold.epdfont`) - Optional. Loaded on demand when bold text is first encountered, saving ~42KB of RAM for books that don't use bold.
+- **Italic** text renders using the regular variant. When using built-in fonts, the native italic is used.
+
 ### Fallback Behavior
 
 Papyrix ensures you can always read your books, even if a custom font fails:
@@ -31,7 +39,7 @@ If you notice missing characters, try switching to a different font in Settings.
 
 A versatile serif typeface with a contemporary feel. Excellent for body text with good readability on e-paper displays.
 
-- **Styles**: Regular, Bold, Italic
+- **Styles**: Regular, Bold
 - **License**: OFL (Open Font License)
 
 ![PT Serif Sample](examples/images/pt-serif-sample.png)
@@ -49,7 +57,7 @@ Amazon's custom font designed specifically for e-readers. Optimized for readabil
 
 A contemporary serif typeface designed for long-form reading. Features excellent legibility and a warm, inviting character.
 
-- **Styles**: Regular, Italic (Variable font)
+- **Styles**: Regular
 - **License**: OFL (Open Font License)
 
 ![Literata Sample](examples/images/literata-sample.png)
@@ -58,7 +66,7 @@ A contemporary serif typeface designed for long-form reading. Features excellent
 
 A classic serif font from Google's Noto family. Excellent readability with extensive language support.
 
-- **Styles**: Regular, Italic
+- **Styles**: Regular
 - **License**: OFL (Open Font License)
 
 ![Noto Serif Sample](examples/images/noto-serif-sample.png)
@@ -142,7 +150,7 @@ Use the `fontconvert.py` script to convert TTF/OTF fonts. Requires [uv](https://
 
 ```bash
 # Basic conversion
-uv run scripts/fontconvert.py my-font -r MyFont-Regular.ttf -b MyFont-Bold.ttf -i MyFont-Italic.ttf --2bit -o /tmp/fonts/
+uv run scripts/fontconvert.py my-font -r MyFont-Regular.ttf -b MyFont-Bold.ttf --2bit -o /tmp/fonts/
 
 # All reader sizes (14, 16, 18pt)
 uv run scripts/fontconvert.py my-font -r MyFont-Regular.ttf --2bit --all-sizes -o /tmp/fonts/

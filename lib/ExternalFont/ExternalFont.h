@@ -117,7 +117,7 @@ class ExternalFont {
   // To reduce memory usage, change EXTERNAL_FONT_CACHE_SIZE before including this header,
   // or modify the default below.
 #ifndef EXTERNAL_FONT_CACHE_SIZE
-#define EXTERNAL_FONT_CACHE_SIZE 128
+#define EXTERNAL_FONT_CACHE_SIZE 64
 #endif
   static constexpr int CACHE_SIZE = EXTERNAL_FONT_CACHE_SIZE;
   static constexpr int MAX_GLYPH_BYTES = 200;  // Max 200 bytes per glyph (enough for 33x39)

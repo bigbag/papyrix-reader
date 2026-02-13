@@ -191,7 +191,7 @@ Convert TTF/OTF fonts to Papyrix `.epdfont` format using Python (requires [uv](h
 uv run scripts/fontconvert.py my-font -r MyFont-Regular.ttf --2bit
 
 # Full font family with all reader sizes (14, 16, 18pt)
-uv run scripts/fontconvert.py my-font -r Regular.ttf -b Bold.ttf -i Italic.ttf --2bit --all-sizes -o /tmp/fonts/
+uv run scripts/fontconvert.py my-font -r Regular.ttf -b Bold.ttf --2bit --all-sizes -o /tmp/fonts/
 
 # With Thai script support
 uv run scripts/fontconvert.py my-font -r Regular.ttf --2bit --thai -o /tmp/fonts/
@@ -315,7 +315,7 @@ The ESP32 WiFi stack allocates ~100KB and fragments heap memory in a way that ca
 
 **Group5 compression**: 1-bit image data uses CCITT Group5 compression for fast decompression and reduced SD card I/O.
 
-**Word width caching**: 512-entry cache in GfxRenderer avoids repeated font measurements.
+**Word width caching**: 256-entry cache in GfxRenderer avoids repeated font measurements.
 
 **Image caching**: EPUB images are converted to BMP once and cached to `/.papyrix/epub_<hash>/images/`. Failed conversions are marked to avoid re-processing.
 

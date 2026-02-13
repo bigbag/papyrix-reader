@@ -39,7 +39,6 @@ class FontManager {
    * Looks for files in /fonts/<familyName>/:
    *   - regular.epdfont
    *   - bold.epdfont (optional)
-   *   - italic.epdfont (optional)
    *
    * @param familyName Directory name under /fonts/
    * @param fontId Unique ID to register with renderer
@@ -200,8 +199,9 @@ class FontManager {
   };
 
   struct LoadedFamily {
-    std::vector<LoadedFont> fonts;  // Up to 4: regular, bold, italic, bold_italic
-    int fontId;
+    LoadedFont fonts[3];           // Indexed by Style: REGULAR=0, BOLD=1, ITALIC=2
+    std::string deferredPaths[3];  // Paths for lazy loading (empty = not available)
+    int fontId = 0;
   };
 
   std::map<int, LoadedFamily> loadedFamilies;
@@ -215,6 +215,9 @@ class FontManager {
   LoadedFont loadSingleFont(const char* path);
   LoadedFont loadStreamingFont(const char* path);
   void freeFont(LoadedFont& font);
+  void loadDeferredStyle(int fontId, int styleIdx);
+
+  static void fontStyleResolverCallback(void* ctx, int fontId, int styleIdx);
 
   // Whether to use streaming fonts (default: true for memory savings)
   bool _useStreamingFonts = true;

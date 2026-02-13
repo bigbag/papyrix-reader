@@ -753,14 +753,14 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
   const uint8_t height = glyph->height;
   const int left = glyph->left;
 
-  // Check for streaming font first - if available, get bitmap from streaming font
+  // Bitmap lookup bypasses getStreamingFont() (no lazy resolver) for performance.
+  // Font variants are already resolved during layout (word width measurement).
   const uint8_t* bitmap = nullptr;
   auto streamingIt = _streamingFonts.find(fontId);
   if (streamingIt != _streamingFonts.end()) {
-    // Look up streaming font by style (BOLD_ITALIC falls back to BOLD)
     int idx = (style == EpdFontFamily::BOLD_ITALIC) ? EpdFontFamily::BOLD : style;
     StreamingEpdFont* sf = streamingIt->second[idx];
-    if (!sf) sf = streamingIt->second[EpdFontFamily::REGULAR];  // Fallback to regular
+    if (!sf) sf = streamingIt->second[EpdFontFamily::REGULAR];
     if (sf) {
       bitmap = sf->getGlyphBitmap(glyph);
     }

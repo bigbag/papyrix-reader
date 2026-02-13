@@ -237,13 +237,12 @@ Custom fonts are stored in the `/config/fonts/` directory, organized by font fam
 /config/fonts/
 ├── my-font/
 │   ├── regular.epdfont
-│   ├── bold.epdfont
-│   └── italic.epdfont
+│   └── bold.epdfont       # optional
 └── another-font/
     └── regular.epdfont
 ```
 
-Each font family is a subdirectory containing one or more style variants.
+Each font family is a subdirectory containing style variants. Only `regular.epdfont` is required. Bold is loaded on demand when first encountered. Italic text renders using the regular variant. If the font is not found on SD card, the built-in font is used (with native italic support).
 
 ### Converting Fonts
 
@@ -256,13 +255,12 @@ To create `.epdfont` files from TTF/OTF fonts, use the `fontconvert.py` script i
 
 #### Basic Usage
 
-Convert a complete font family:
+Convert a font family with bold:
 
 ```bash
 uv run scripts/fontconvert.py my-font \
     -r MyFont-Regular.ttf \
     -b MyFont-Bold.ttf \
-    -i MyFont-Italic.ttf \
     --2bit \
     -o /path/to/output/
 ```
@@ -311,8 +309,7 @@ The script creates a font family directory structure:
 ```
 my-font/
 ├── regular.epdfont
-├── bold.epdfont
-└── italic.epdfont
+└── bold.epdfont       # optional
 ```
 
 With `--all-sizes`, separate directories are created for each size:
@@ -320,8 +317,7 @@ With `--all-sizes`, separate directories are created for each size:
 ```
 my-font-14/
 ├── regular.epdfont
-├── bold.epdfont
-└── italic.epdfont
+└── bold.epdfont
 my-font-16/
 ├── ...
 my-font-18/
@@ -424,8 +420,7 @@ Here's the complete SD card structure for customization:
 │   └── fonts/
 │       ├── my-reader-font/
 │       │   ├── regular.epdfont
-│       │   ├── bold.epdfont
-│       │   └── italic.epdfont
+│       │   └── bold.epdfont       # optional
 │       └── my-ui-font/
 │           └── regular.epdfont
 ├── sleep.bmp              # Custom sleep image (optional)

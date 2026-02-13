@@ -10,9 +10,11 @@ class ExternalFont;
 class StreamingEpdFont;
 
 // Minimal GfxRenderer implementation for testing streaming font storage/retrieval
-// Only includes streaming font methods - no rendering logic needed
+// Only includes streaming font methods and lazy resolver - no rendering logic needed
 class GfxRenderer {
  public:
+  using FontStyleResolver = void (*)(void* ctx, int fontId, int styleIdx);
+
   explicit GfxRenderer(EInkDisplay&) {}
 
   void setStreamingFont(int fontId, EpdFontFamily::Style style, StreamingEpdFont* font) {
@@ -24,17 +26,61 @@ class GfxRenderer {
 
   void removeStreamingFont(int fontId) { _streamingFonts.erase(fontId); }
 
+  void setFontStyleResolver(FontStyleResolver resolver, void* ctx) {
+    _fontStyleResolver = resolver;
+    _fontStyleResolverCtx = ctx;
+  }
+
+  void updateFontFamily(int fontId, EpdFontFamily::Style style, const EpdFont* font) {
+    (void)fontId;
+    (void)style;
+    (void)font;
+  }
+
   StreamingEpdFont* getStreamingFont(int fontId, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const {
     auto it = _streamingFonts.find(fontId);
     if (it == _streamingFonts.end()) return nullptr;
     int idx = (style == EpdFontFamily::BOLD_ITALIC) ? EpdFontFamily::BOLD : style;
     StreamingEpdFont* sf = it->second[idx];
+    if (!sf && idx != EpdFontFamily::REGULAR && _fontStyleResolver) {
+      _fontStyleResolver(_fontStyleResolverCtx, fontId, idx);
+      sf = it->second[idx];
+    }
     return sf ? sf : it->second[EpdFontFamily::REGULAR];
   }
 
  private:
-  std::map<int, std::array<StreamingEpdFont*, 3>> _streamingFonts;
+  mutable std::map<int, std::array<StreamingEpdFont*, 3>> _streamingFonts;
+  FontStyleResolver _fontStyleResolver = nullptr;
+  void* _fontStyleResolverCtx = nullptr;
 };
+
+// Helper for lazy resolver tests
+struct ResolverContext {
+  GfxRenderer* gfx;
+  StreamingEpdFont* fontToSet;
+  int callCount = 0;
+  int lastFontId = 0;
+  int lastStyleIdx = 0;
+};
+
+static void testResolver(void* ctx, int fontId, int styleIdx) {
+  auto* rc = static_cast<ResolverContext*>(ctx);
+  rc->callCount++;
+  rc->lastFontId = fontId;
+  rc->lastStyleIdx = styleIdx;
+  if (rc->gfx && rc->fontToSet) {
+    rc->gfx->setStreamingFont(fontId, static_cast<EpdFontFamily::Style>(styleIdx), rc->fontToSet);
+  }
+}
+
+static void noopResolver(void* ctx, int fontId, int styleIdx) {
+  auto* rc = static_cast<ResolverContext*>(ctx);
+  rc->callCount++;
+  rc->lastFontId = fontId;
+  rc->lastStyleIdx = styleIdx;
+  // Intentionally does NOT set any font
+}
 
 int main() {
   TestUtils::TestRunner runner("GfxRendererStreamingFont");
@@ -187,6 +233,97 @@ int main() {
                     "multiple_fontids_independent_font1_removed");
     runner.expectEq(font2Regular, gfx.getStreamingFont(2, EpdFontFamily::REGULAR),
                     "multiple_fontids_independent_font2_unaffected");
+  }
+
+  // ============================================
+  // Lazy Font Resolver Tests
+  // ============================================
+
+  // Test 12: Resolver called when bold is null - provides bold font
+  {
+    GfxRenderer gfx(display);
+    gfx.setStreamingFont(1, EpdFontFamily::REGULAR, regularFont);
+
+    ResolverContext ctx = {&gfx, boldFont, 0, 0, 0};
+    gfx.setFontStyleResolver(testResolver, &ctx);
+
+    StreamingEpdFont* result = gfx.getStreamingFont(1, EpdFontFamily::BOLD);
+    runner.expectEq(boldFont, result, "resolver_called_when_bold_is_null: returns bold from resolver");
+    runner.expectEq(1, ctx.callCount, "resolver_called_when_bold_is_null: resolver called once");
+    runner.expectEq(1, ctx.lastFontId, "resolver_called_when_bold_is_null: correct fontId");
+    runner.expectEq(static_cast<int>(EpdFontFamily::BOLD), ctx.lastStyleIdx,
+                    "resolver_called_when_bold_is_null: correct styleIdx");
+  }
+
+  // Test 13: Resolver called when italic is null - provides italic font
+  {
+    GfxRenderer gfx(display);
+    gfx.setStreamingFont(1, EpdFontFamily::REGULAR, regularFont);
+
+    ResolverContext ctx = {&gfx, italicFont, 0, 0, 0};
+    gfx.setFontStyleResolver(testResolver, &ctx);
+
+    StreamingEpdFont* result = gfx.getStreamingFont(1, EpdFontFamily::ITALIC);
+    runner.expectEq(italicFont, result, "resolver_called_when_italic_is_null: returns italic from resolver");
+    runner.expectEq(1, ctx.callCount, "resolver_called_when_italic_is_null: resolver called once");
+    runner.expectEq(static_cast<int>(EpdFontFamily::ITALIC), ctx.lastStyleIdx,
+                    "resolver_called_when_italic_is_null: correct styleIdx");
+  }
+
+  // Test 14: Resolver NOT called when requested style already exists
+  {
+    GfxRenderer gfx(display);
+    gfx.setStreamingFont(1, EpdFontFamily::REGULAR, regularFont);
+    gfx.setStreamingFont(1, EpdFontFamily::BOLD, boldFont);
+
+    ResolverContext ctx = {&gfx, nullptr, 0, 0, 0};
+    gfx.setFontStyleResolver(testResolver, &ctx);
+
+    StreamingEpdFont* result = gfx.getStreamingFont(1, EpdFontFamily::BOLD);
+    runner.expectEq(boldFont, result, "resolver_not_called_when_style_exists: returns existing bold");
+    runner.expectEq(0, ctx.callCount, "resolver_not_called_when_style_exists: resolver not called");
+  }
+
+  // Test 15: Resolver NOT called for REGULAR style
+  {
+    GfxRenderer gfx(display);
+    gfx.setStreamingFont(1, EpdFontFamily::REGULAR, regularFont);
+
+    ResolverContext ctx = {&gfx, boldFont, 0, 0, 0};
+    gfx.setFontStyleResolver(testResolver, &ctx);
+
+    StreamingEpdFont* result = gfx.getStreamingFont(1, EpdFontFamily::REGULAR);
+    runner.expectEq(regularFont, result, "resolver_not_called_for_regular: returns regular");
+    runner.expectEq(0, ctx.callCount, "resolver_not_called_for_regular: resolver not called");
+  }
+
+  // Test 16: Resolver fails (doesn't set font) - falls back to regular
+  {
+    GfxRenderer gfx(display);
+    gfx.setStreamingFont(1, EpdFontFamily::REGULAR, regularFont);
+
+    ResolverContext ctx = {&gfx, nullptr, 0, 0, 0};
+    gfx.setFontStyleResolver(noopResolver, &ctx);
+
+    StreamingEpdFont* result = gfx.getStreamingFont(1, EpdFontFamily::BOLD);
+    runner.expectEq(regularFont, result,
+                    "resolver_fallback_to_regular_when_fails: falls back to regular");
+    runner.expectEq(1, ctx.callCount, "resolver_fallback_to_regular_when_fails: resolver was called");
+  }
+
+  // Test 17: Resolver called once, second access uses cached result
+  {
+    GfxRenderer gfx(display);
+    gfx.setStreamingFont(1, EpdFontFamily::REGULAR, regularFont);
+
+    ResolverContext ctx = {&gfx, boldFont, 0, 0, 0};
+    gfx.setFontStyleResolver(testResolver, &ctx);
+
+    StreamingEpdFont* result1 = gfx.getStreamingFont(1, EpdFontFamily::BOLD);
+    StreamingEpdFont* result2 = gfx.getStreamingFont(1, EpdFontFamily::BOLD);
+    runner.expectEq(boldFont, result1, "resolver_called_once_then_cached: first call returns bold");
+    runner.expectEq(boldFont, result2, "resolver_called_once_then_cached: second call returns bold");
+    runner.expectEq(1, ctx.callCount, "resolver_called_once_then_cached: resolver called exactly once");
   }
 
   return runner.allPassed() ? 0 : 1;

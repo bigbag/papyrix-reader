@@ -7,6 +7,9 @@
 
 #include <algorithm>
 
+static_assert(ZipFile::DECOMP_DICT_SIZE == TINFL_LZ_DICT_SIZE,
+              "ZipFile::DECOMP_DICT_SIZE must match TINFL_LZ_DICT_SIZE");
+
 bool inflateOneShot(const uint8_t* inputBuf, const size_t deflatedSize, uint8_t* outputBuf, const size_t inflatedSize) {
   // Setup inflator
   const auto inflator = static_cast<tinfl_decompressor*>(malloc(sizeof(tinfl_decompressor)));
@@ -549,7 +552,7 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
   return data;
 }
 
-bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t chunkSize) {
+bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t chunkSize, uint8_t* dictBuffer) {
   const bool wasOpen = isOpen();
   if (!wasOpen && !open()) {
     return false;
@@ -628,7 +631,8 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
       return false;
     }
 
-    const auto outputBuffer = static_cast<uint8_t*>(malloc(TINFL_LZ_DICT_SIZE));
+    const bool ownDict = (dictBuffer == nullptr);
+    auto outputBuffer = dictBuffer ? dictBuffer : static_cast<uint8_t*>(malloc(TINFL_LZ_DICT_SIZE));
     if (!outputBuffer) {
       free(fileReadBuffer);
       free(inflator);
@@ -684,7 +688,7 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
           if (!wasOpen) {
             close();
           }
-          free(outputBuffer);
+          if (ownDict) free(outputBuffer);
           free(fileReadBuffer);
           free(inflator);
           return false;
@@ -698,7 +702,7 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
         if (!wasOpen) {
           close();
         }
-        free(outputBuffer);
+        if (ownDict) free(outputBuffer);
         free(fileReadBuffer);
         free(inflator);
         return false;
@@ -710,7 +714,7 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
         if (!wasOpen) {
           close();
         }
-        free(outputBuffer);
+        if (ownDict) free(outputBuffer);
         free(fileReadBuffer);
         free(inflator);
         return true;
@@ -722,7 +726,7 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
     if (!wasOpen) {
       close();
     }
-    free(outputBuffer);
+    if (ownDict) free(outputBuffer);
     free(fileReadBuffer);
     free(inflator);
     return false;

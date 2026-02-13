@@ -7,6 +7,7 @@
 
 class ZipFile {
  public:
+  static constexpr size_t DECOMP_DICT_SIZE = 32768;  // Must match TINFL_LZ_DICT_SIZE
   struct FileStatSlim {
     uint16_t method;             // Compression method
     uint32_t compressedSize;     // Compressed size
@@ -73,5 +74,5 @@ class ZipFile {
   // Due to the memory required to run each of these, it is recommended to not preopen the zip file for multiple
   // These functions will open and close the zip as needed
   uint8_t* readFileToMemory(const char* filename, size_t* size = nullptr, bool trailingNullByte = false);
-  bool readFileToStream(const char* filename, Print& out, size_t chunkSize);
+  bool readFileToStream(const char* filename, Print& out, size_t chunkSize, uint8_t* dictBuffer = nullptr);
 };

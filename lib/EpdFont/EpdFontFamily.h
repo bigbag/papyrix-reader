@@ -14,13 +14,29 @@ class EpdFontFamily {
   const EpdFontData* getData(Style style = REGULAR) const;
   const EpdGlyph* getGlyph(uint32_t cp, Style style = REGULAR) const;
 
+  void setFont(Style style, const EpdFont* font) {
+    switch (style) {
+      case BOLD:
+        bold = font;
+        break;
+      case ITALIC:
+        italic = font;
+        break;
+      case BOLD_ITALIC:
+        boldItalic = font;
+        break;
+      default:
+        break;
+    }
+  }
+
+  const EpdFont* getFont(Style style) const;
+
  private:
   const EpdFont* regular;
   const EpdFont* bold;
   const EpdFont* italic;
   const EpdFont* boldItalic;
-
-  const EpdFont* getFont(Style style) const;
 };
 
 // Backward-compatible aliases for code using the old global enum values

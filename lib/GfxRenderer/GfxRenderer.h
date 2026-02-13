@@ -41,8 +41,16 @@ class GfxRenderer {
   uint8_t* bwBufferChunks[BW_BUFFER_NUM_CHUNKS] = {nullptr};
   std::map<int, EpdFontFamily> fontMap;
   // Streaming fonts: [fontId] -> array of [REGULAR, BOLD, ITALIC] (BOLD_ITALIC uses BOLD)
-  std::map<int, std::array<StreamingEpdFont*, 3>> _streamingFonts;
+  // Mutable: getStreamingFont may trigger lazy loading of bold/italic variants via resolver
+  mutable std::map<int, std::array<StreamingEpdFont*, 3>> _streamingFonts;
   ExternalFont* _externalFont = nullptr;
+
+  // Lazy font style resolver: called when a streaming font variant (bold/italic) is
+  // requested but not yet loaded. The callback should load the variant and call
+  // setStreamingFont() + updateFontFamily() to register it.
+  using FontStyleResolver = void (*)(void* ctx, int fontId, int styleIdx);
+  mutable FontStyleResolver _fontStyleResolver = nullptr;
+  mutable void* _fontStyleResolverCtx = nullptr;
 
   // Pre-allocated row buffers for bitmap rendering (reduces heap fragmentation)
   // Sized for max screen dimension (800 pixels): outputRow = 800/4 = 200 bytes, rowBytes = 800*3 = 2400 bytes (24bpp)
@@ -56,7 +64,7 @@ class GfxRenderer {
   // Word width cache for performance optimization during EPUB section creation.
   // Key: FNV-1a hash of (fontId, text, style). Value: measured width in pixels.
   // Limited to MAX_WIDTH_CACHE_SIZE entries to prevent heap fragmentation.
-  static constexpr size_t MAX_WIDTH_CACHE_SIZE = 512;
+  static constexpr size_t MAX_WIDTH_CACHE_SIZE = 256;
   mutable std::unordered_map<uint64_t, int16_t> wordWidthCache;
 
   uint64_t makeWidthCacheKey(int fontId, const char* text, EpdFontFamily::Style style) const {
@@ -102,6 +110,17 @@ class GfxRenderer {
   void setExternalFont(ExternalFont* font) { _externalFont = font; }
   ExternalFont* getExternalFont() const { return _externalFont; }
 
+  void setFontStyleResolver(FontStyleResolver resolver, void* ctx) {
+    _fontStyleResolver = resolver;
+    _fontStyleResolverCtx = ctx;
+  }
+  void updateFontFamily(int fontId, EpdFontFamily::Style style, const EpdFont* font) {
+    auto it = fontMap.find(fontId);
+    if (it != fontMap.end()) {
+      it->second.setFont(style, font);
+    }
+  }
+
   void setStreamingFont(int fontId, EpdFontFamily::Style style, StreamingEpdFont* font) {
     int idx = (style == EpdFontFamily::BOLD_ITALIC) ? EpdFontFamily::BOLD : style;
     // std::map::operator[] value-initializes new entries, so array elements are nullptr by default
@@ -109,11 +128,17 @@ class GfxRenderer {
   }
   void setStreamingFont(int fontId, StreamingEpdFont* font) { _streamingFonts[fontId][EpdFontFamily::REGULAR] = font; }
   void removeStreamingFont(int fontId) { _streamingFonts.erase(fontId); }
+  // NOTE: May trigger lazy font loading (SD I/O + allocation) on first access to bold/italic.
+  // Thread safety: caller must have exclusive renderer access (ownership model).
   StreamingEpdFont* getStreamingFont(int fontId, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const {
     auto it = _streamingFonts.find(fontId);
     if (it == _streamingFonts.end()) return nullptr;
     int idx = (style == EpdFontFamily::BOLD_ITALIC) ? EpdFontFamily::BOLD : style;
     StreamingEpdFont* sf = it->second[idx];
+    if (!sf && idx != EpdFontFamily::REGULAR && _fontStyleResolver) {
+      _fontStyleResolver(_fontStyleResolverCtx, fontId, idx);
+      sf = it->second[idx];
+    }
     return sf ? sf : it->second[EpdFontFamily::REGULAR];
   }
 

@@ -41,13 +41,10 @@ bool FontManager::loadFontFamily(const char* familyName, int fontId) {
     const char* filename;
     EpdFontFamily::Style style;
   };
-  const StyleInfo styles[] = {{"regular.epdfont", EpdFontFamily::REGULAR},
-                              {"bold.epdfont", EpdFontFamily::BOLD},
-                              {"italic.epdfont", EpdFontFamily::ITALIC}};
+  const StyleInfo styles[] = {{"regular.epdfont", EpdFontFamily::REGULAR}, {"bold.epdfont", EpdFontFamily::BOLD}};
 
   LoadedFamily family;
   family.fontId = fontId;
-  EpdFont* fontPtrs[4] = {nullptr, nullptr, nullptr, nullptr};
 
   for (const auto& s : styles) {
     char fontPath[80];
@@ -60,28 +57,39 @@ bool FontManager::loadFontFamily(const char* familyName, int fontId) {
       continue;
     }
 
+    // Defer bold/italic loading to save ~42KB per variant
+    if (s.style != EpdFontFamily::REGULAR) {
+      family.deferredPaths[s.style] = fontPath;
+      continue;
+    }
+
     LoadedFont loaded = _useStreamingFonts ? loadStreamingFont(fontPath) : loadSingleFont(fontPath);
 
     if (!loaded.font && !loaded.streamingFont) {
-      if (s.style == EpdFontFamily::REGULAR) {
-        return false;
-      }
-      continue;
+      return false;  // Regular is required
     }
 
     // Create EpdFont wrapper if streaming
     if (loaded.streamingFont) {
-      loaded.font = new EpdFont(loaded.streamingFont->getData());
+      loaded.font = new (std::nothrow) EpdFont(loaded.streamingFont->getData());
+      if (!loaded.font) {
+        delete loaded.streamingFont;
+        loaded.streamingFont = nullptr;
+        return false;
+      }
       renderer->setStreamingFont(fontId, s.style, loaded.streamingFont);
     }
 
-    fontPtrs[s.style] = loaded.font;
-    family.fonts.push_back(loaded);
+    family.fonts[s.style] = loaded;
   }
 
-  // Bold-italic (4th param) uses bold font; EpdFontFamily falls back to regular if nullptr
-  EpdFontFamily fontFamily(fontPtrs[0], fontPtrs[1], fontPtrs[2], fontPtrs[1]);
+  // Register with renderer: bold initially nullptr (loaded on demand)
+  // Italic not provided for custom fonts — falls back to regular via EpdFontFamily::getFont()
+  EpdFontFamily fontFamily(family.fonts[0].font, nullptr, nullptr, nullptr);
   renderer->insertFont(fontId, fontFamily);
+
+  // Set up lazy-loading resolver so bold loads on first use
+  renderer->setFontStyleResolver(fontStyleResolverCallback, this);
 
   // Store for cleanup
   loadedFamilies[fontId] = std::move(family);
@@ -178,6 +186,44 @@ void FontManager::unloadAllFonts() {
     }
   }
   loadedFamilies.clear();
+}
+
+void FontManager::fontStyleResolverCallback(void* ctx, int fontId, int styleIdx) {
+  auto* self = static_cast<FontManager*>(ctx);
+  self->loadDeferredStyle(fontId, styleIdx);
+}
+
+void FontManager::loadDeferredStyle(int fontId, int styleIdx) {
+  if (styleIdx < 0 || styleIdx > 2) return;
+
+  auto famIt = loadedFamilies.find(fontId);
+  if (famIt == loadedFamilies.end()) return;
+
+  auto& family = famIt->second;
+  if (family.deferredPaths[styleIdx].empty()) return;
+
+  std::string path = std::move(family.deferredPaths[styleIdx]);
+  family.deferredPaths[styleIdx].clear();
+
+  LoadedFont loaded = _useStreamingFonts ? loadStreamingFont(path.c_str()) : loadSingleFont(path.c_str());
+  if (!loaded.font && !loaded.streamingFont) return;
+
+  auto style = static_cast<EpdFontFamily::Style>(styleIdx);
+
+  if (loaded.streamingFont) {
+    loaded.font = new (std::nothrow) EpdFont(loaded.streamingFont->getData());
+    if (!loaded.font) {
+      delete loaded.streamingFont;
+      loaded.streamingFont = nullptr;
+      return;
+    }
+    renderer->setStreamingFont(fontId, style, loaded.streamingFont);
+  }
+
+  // Update the EpdFontFamily in the renderer so glyph metrics are correct
+  renderer->updateFontFamily(fontId, style, loaded.font);
+
+  family.fonts[styleIdx] = loaded;
 }
 
 std::vector<std::string> FontManager::listAvailableFonts() {
@@ -352,7 +398,9 @@ size_t FontManager::getCustomFontMemoryUsage() const {
   size_t total = 0;
   for (const auto& pair : loadedFamilies) {
     for (const auto& font : pair.second.fonts) {
-      total += font.totalSize();
+      if (font.font || font.streamingFont) {
+        total += font.totalSize();
+      }
     }
   }
   return total;

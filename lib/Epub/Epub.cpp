@@ -301,6 +301,11 @@ bool Epub::load(const bool buildIfMissing) {
 
   // Parse CSS files for styling
   parseCssFiles();
+  // Free CSS file paths - no longer needed after rules are parsed into cssParser_
+  {
+    std::vector<std::string> tmp;
+    cssFiles_.swap(tmp);
+  }
 
   // TOC Pass - try EPUB 3 nav first, fall back to NCX
   if (!bookMetadataCache->beginTocPass()) {
@@ -822,14 +827,15 @@ uint8_t* Epub::readItemContentsToBytes(const std::string& itemHref, size_t* size
   return content;
 }
 
-bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, const size_t chunkSize) const {
+bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, const size_t chunkSize,
+                                    uint8_t* dictBuffer) const {
   if (itemHref.empty()) {
     Serial.printf("[%lu] [EBP] Failed to read item, empty href\n", millis());
     return false;
   }
 
   const std::string path = FsHelpers::normalisePath(itemHref);
-  return ZipFile(filepath).readFileToStream(path.c_str(), out, chunkSize);
+  return ZipFile(filepath).readFileToStream(path.c_str(), out, chunkSize, dictBuffer);
 }
 
 bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {

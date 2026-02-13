@@ -96,7 +96,9 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
     if (!SdMan.openFileForWrite("EPUB", tmpHtmlPath_, tmpHtml)) {
       continue;
     }
-    success = epub_->readItemContentsToStream(localPath, tmpHtml, 1024);
+    // Reuse frame buffer (48KB) as ZIP decompression dict (32KB) — safe because
+    // the background task owns the renderer and display isn't active during parsing
+    success = epub_->readItemContentsToStream(localPath, tmpHtml, 1024, renderer_.getFrameBuffer());
     tmpHtml.close();
 
     if (!success && SdMan.exists(tmpHtmlPath_.c_str())) {
