@@ -1,7 +1,7 @@
-#include "test_utils.h"
-
 #include <functional>
 #include <string>
+
+#include "test_utils.h"
 
 // Replicate ImageConvertConfig from lib/ImageConverter/ImageConverter.h
 // to test struct defaults and routing logic without hardware dependencies
@@ -17,11 +17,11 @@ struct TestImageConvertConfig {
 // Routing decision logic extracted from JpegImageConverter::convert()
 // Returns which code path the JPEG converter would take
 enum class JpegRoute {
-  QuickMode,           // jpegFileToBmpStreamQuick
-  FastPath,            // jpegFileToBmpStream (no scaling, no abort support)
-  FastPath1Bit,        // jpegFileTo1BitBmpStream (no scaling, no abort support)
-  WithSize,            // jpegFileToBmpStreamWithSize (supports abort)
-  WithSize1Bit,        // jpegFileTo1BitBmpStreamWithSize
+  QuickMode,     // jpegFileToBmpStreamQuick
+  FastPath,      // jpegFileToBmpStream (no scaling, no abort support)
+  FastPath1Bit,  // jpegFileTo1BitBmpStream (no scaling, no abort support)
+  WithSize,      // jpegFileToBmpStreamWithSize (supports abort)
+  WithSize1Bit,  // jpegFileTo1BitBmpStreamWithSize
 };
 
 JpegRoute getJpegRoute(const TestImageConvertConfig& config) {
@@ -36,8 +36,8 @@ JpegRoute getJpegRoute(const TestImageConvertConfig& config) {
 
 // Routing decision logic extracted from PngImageConverter::convert()
 enum class PngRoute {
-  QuickMode,   // pngFileToBmpStreamQuick
-  WithSize,    // pngFileToBmpStreamWithSize (always supports abort)
+  QuickMode,  // pngFileToBmpStreamQuick
+  WithSize,   // pngFileToBmpStreamWithSize (always supports abort)
 };
 
 PngRoute getPngRoute(const TestImageConvertConfig& config) {
@@ -132,8 +132,7 @@ int main() {
   {
     TestImageConvertConfig config;
     config.shouldAbort = []() { return false; };
-    runner.expectTrue(getJpegRoute(config) == JpegRoute::WithSize,
-                      "jpeg_480x800_with_abort_uses_withsize");
+    runner.expectTrue(getJpegRoute(config) == JpegRoute::WithSize, "jpeg_480x800_with_abort_uses_withsize");
   }
 
   // Test 9: shouldAbort set with 480x800 + oneBit -> WithSize1Bit
@@ -162,23 +161,93 @@ int main() {
   }
 
   // ============================================
+  // GIF routing logic
+  // ============================================
+
+// Routing decision logic extracted from GifImageConverter::convert()
+enum class GifRoute {
+  QuickMode,  // gifFileToBmpStreamQuick
+  WithSize,   // gifFileToBmpStreamWithSize (always supports abort)
+};
+
+GifRoute getGifRoute(const TestImageConvertConfig& config) {
+  if (config.quickMode) {
+    return GifRoute::QuickMode;
+  }
+  return GifRoute::WithSize;
+}
+
+  // Test 12: Default GIF config -> WithSize (always passes shouldAbort through)
+  {
+    TestImageConvertConfig config;
+    runner.expectTrue(getGifRoute(config) == GifRoute::WithSize, "gif_default_withsize");
+  }
+
+  // Test 13: GIF quickMode
+  {
+    TestImageConvertConfig config;
+    config.quickMode = true;
+    runner.expectTrue(getGifRoute(config) == GifRoute::QuickMode, "gif_quickmode");
+  }
+
+  // Test 14: GIF with shouldAbort -> WithSize (which propagates it)
+  {
+    TestImageConvertConfig config;
+    config.shouldAbort = []() { return false; };
+    runner.expectTrue(getGifRoute(config) == GifRoute::WithSize, "gif_with_abort_withsize");
+  }
+
+  // Test 15: GIF doesn't optimize for 480x800 (no fast-path like JPEG)
+  {
+    TestImageConvertConfig config;
+    // Default is 480x800
+    runner.expectTrue(getGifRoute(config) == GifRoute::WithSize, "gif_480x800_uses_withsize");
+  }
+
+  // Test 16: GIF with custom size -> still WithSize
+  {
+    TestImageConvertConfig config;
+    config.maxWidth = 240;
+    config.maxHeight = 400;
+    runner.expectTrue(getGifRoute(config) == GifRoute::WithSize, "gif_custom_size_withsize");
+  }
+
+  // Test 17: GIF doesn't have oneBit support (unlike JPEG)
+  {
+    TestImageConvertConfig config;
+    config.oneBit = true;
+    // oneBit is ignored by GIF converter
+    runner.expectTrue(getGifRoute(config) == GifRoute::WithSize, "gif_ignores_onebit");
+  }
+
+  // Test 18: GIF quickMode overrides all other settings
+  {
+    TestImageConvertConfig config;
+    config.quickMode = true;
+    config.shouldAbort = []() { return false; };
+    config.maxWidth = 100;
+    config.oneBit = true;
+    runner.expectTrue(getGifRoute(config) == GifRoute::QuickMode, "gif_quickmode_overrides_all");
+  }
+
+  // ============================================
   // PNG routing logic
   // ============================================
 
-  // Test 12: Default PNG config -> WithSize (always passes shouldAbort through)
+  // Test 19: Default PNG config -> WithSize (always passes shouldAbort through)
   {
     TestImageConvertConfig config;
     runner.expectTrue(getPngRoute(config) == PngRoute::WithSize, "png_default_withsize");
   }
 
-  // Test 13: PNG quickMode
+  // Test 20: PNG quickMode
   {
     TestImageConvertConfig config;
     config.quickMode = true;
     runner.expectTrue(getPngRoute(config) == PngRoute::QuickMode, "png_quickmode");
   }
 
-  // Test 14: PNG with shouldAbort still uses WithSize (which propagates it)
+  // Test 21: PNG with shouldAbort still uses WithSize (which propagates it)
   {
     TestImageConvertConfig config;
     config.shouldAbort = []() { return false; };
@@ -189,7 +258,7 @@ int main() {
   // Abort callback semantics
   // ============================================
 
-  // Test 15: Abort callback called multiple times returns consistent results
+  // Test 22: Abort callback called multiple times returns consistent results
   {
     int callCount = 0;
     int abortAfter = 3;
@@ -206,11 +275,11 @@ int main() {
     runner.expectEq(5, callCount, "abort_called_5_times");
   }
 
-  // Test 16: Null abort callback pattern - safe to check before calling
+  // Test 23: Null abort callback pattern - safe to check before calling
   {
     std::function<bool()> shouldAbort = nullptr;
 
-    // The pattern used in JPEG/PNG converters:
+    // The pattern used in JPEG/PNG/GIF converters:
     // if (shouldAbort && shouldAbort()) { abort; }
     bool aborted = false;
     if (shouldAbort && shouldAbort()) {
@@ -219,7 +288,7 @@ int main() {
     runner.expectFalse(aborted, "null_abort_check_pattern_safe");
   }
 
-  // Test 17: Non-null abort callback returning false - conversion continues
+  // Test 24: Non-null abort callback returning false - conversion continues
   {
     std::function<bool()> shouldAbort = []() { return false; };
 
@@ -230,7 +299,7 @@ int main() {
     runner.expectFalse(aborted, "false_abort_continues");
   }
 
-  // Test 18: Non-null abort callback returning true - conversion stops
+  // Test 25: Non-null abort callback returning true - conversion stops
   {
     std::function<bool()> shouldAbort = []() { return true; };
 
@@ -245,7 +314,7 @@ int main() {
   // Simulated conversion loop with abort
   // ============================================
 
-  // Test 19: Simulated MCU row loop (JPEG pattern) - abort mid-conversion
+  // Test 26: Simulated MCU row loop (JPEG pattern) - abort mid-conversion
   {
     int totalRows = 100;
     int rowsProcessed = 0;
@@ -266,7 +335,7 @@ int main() {
     runner.expectEq(abortAtRow, rowsProcessed, "mcu_loop_abort_at_correct_row");
   }
 
-  // Test 20: Simulated MCU row loop without abort - completes normally
+  // Test 27: Simulated MCU row loop without abort - completes normally
   {
     int totalRows = 100;
     int rowsProcessed = 0;
@@ -286,7 +355,7 @@ int main() {
     runner.expectEq(totalRows, rowsProcessed, "mcu_loop_no_abort_all_rows");
   }
 
-  // Test 21: Simulated PNG pixel callback pattern - abort at row start
+  // Test 28: Simulated PNG pixel callback pattern - abort at row start
   {
     int totalRows = 50;
     int rowWidth = 100;
@@ -316,7 +385,7 @@ int main() {
   // cacheImage abort pattern
   // ============================================
 
-  // Test 22: cacheImage pattern - abort before image processing
+  // Test 29: cacheImage pattern - abort before image processing
   {
     bool abortRequested = true;
     std::function<bool()> externalAbortCallback = [&]() { return abortRequested; };
@@ -332,7 +401,7 @@ int main() {
     runner.expectTrue(result.empty(), "cacheImage_abort_returns_empty");
   }
 
-  // Test 23: cacheImage pattern - no abort proceeds normally
+  // Test 30: cacheImage pattern - no abort proceeds normally
   {
     std::function<bool()> externalAbortCallback = nullptr;
 
@@ -346,7 +415,7 @@ int main() {
     runner.expectFalse(result.empty(), "cacheImage_no_abort_returns_path");
   }
 
-  // Test 24: startElement pattern - abort before cacheImage
+  // Test 31: startElement pattern - abort before cacheImage
   {
     int cacheImageCalls = 0;
 
@@ -386,7 +455,7 @@ int main() {
     runner.expectEq(1, cacheImageCalls, "startElement_null_callback_calls_cache");
   }
 
-  // Test 25: startElement pattern - abort triggered during slow cacheImage
+  // Test 32: startElement pattern - abort triggered during slow cacheImage
   {
     int cacheImageCalls = 0;
     bool cacheImageDone = false;
