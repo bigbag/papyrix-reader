@@ -9,7 +9,7 @@
  *
  * TinyGifDecoder is a minimal GIF decoder designed for resource-constrained
  * embedded systems. It extracts only the first frame of a GIF file and converts
- * it to 24-bit BMP format. Much lighter than full animation libraries like AnimatedGIF.
+ * it to 24-bit BMP format.
  *
  * Features:
  * - LZW decompression with dynamic memory allocation
