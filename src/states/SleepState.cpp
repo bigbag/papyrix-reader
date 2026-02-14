@@ -33,6 +33,11 @@ SleepState::SleepState(GfxRenderer& renderer) : renderer_(renderer) {}
 void SleepState::enter(Core& core) {
   Serial.println("[STATE] SleepState::enter - rendering sleep screen");
 
+  // Show immediate feedback before rendering sleep screen
+  renderer_.clearScreen(THEME.backgroundColor);
+  renderer_.drawCenteredText(THEME.uiFontId, renderer_.getScreenHeight() / 2, "Sleeping...", THEME.primaryTextBlack);
+  renderer_.displayBuffer(EInkDisplay::FAST_REFRESH);
+
   // Render the appropriate sleep screen based on settings
   switch (core.settings.sleepScreen) {
     case Settings::SleepCustom:
