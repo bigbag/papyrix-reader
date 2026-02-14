@@ -169,7 +169,7 @@ void SleepState::renderCustomSleepScreen(const Core& core) const {
 }
 
 void SleepState::renderCoverSleepScreen(Core& core) const {
-  if (!core.content.isOpen()) {
+  if (core.settings.lastBookPath[0] == '\0') {
     return renderDefaultSleepScreen(core);
   }
 
