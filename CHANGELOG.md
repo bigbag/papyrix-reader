@@ -1,5 +1,26 @@
 
 
+## v1.6.3 (2026-02-15)
+
+*  Update docs [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Epub: Add HTML entity resolution for undeclared entities [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Increase idle loop delay for power saving after 3s inactivity [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  WebServer: Gzip-compress HTML assets for smaller flash footprint [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Reader: Skip background caching for XTC content. Issue #45 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Sleep: Show immediate Sleeping... feedback before rendering sleep screen. Issue #37 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bumv version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.6.2 (2026-02-14)
+
+*  Update CHANGELOG [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Reader TOC: Add page-up/page-down navigation with Left/Right buttons. Issue #26 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Sleep: Check lastBookPath instead of content.isOpen() for cover sleep screen [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Epub: Flush part word buffer before page layout. Issue #48 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add reader-test [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
 ## v1.6.1 (2026-02-14)
 
 *  EPUB: Silently skip unsupported image formats instead of showing placeholder [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
