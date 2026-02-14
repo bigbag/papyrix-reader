@@ -74,14 +74,14 @@ Images are rendered when all conditions are met:
 
 ### Silently skipped (no placeholder)
 
-- **Tiny decorative images** — Width or height <20px (e.g. 1px-tall JPEG line separators, small spacer GIFs, decorative borders). These are invisible on e-paper and would only waste vertical space.
+- **Unsupported format** — Not JPEG/PNG/BMP (e.g. GIF, SVG, WebP, TIFF). Detected by file extension before any processing.
+- **Tiny decorative images** — Width or height <20px (e.g. 1px-tall JPEG line separators, small spacer PNGs, decorative borders). These are invisible on e-paper and would only waste vertical space.
 
 ### Skipped with placeholder text `[Image: alt-text]`
 
 - **`showImages` disabled** — User preference
 - **Empty/malformed source** — Invalid HTML
 - **Data URI source** — Memory protection (see below)
-- **Unsupported format** — Not JPEG/PNG/BMP
 - **Progressive/arithmetic JPEG** — picojpeg limitation
 - **File not found** — Missing from EPUB archive
 - **Conversion failure** — Corrupt file or I/O error

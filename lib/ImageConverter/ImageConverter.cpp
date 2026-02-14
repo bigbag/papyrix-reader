@@ -118,4 +118,4 @@ bool ImageConverterFactory::convertToBmp(const std::string& inputPath, const std
   return success;
 }
 
-bool ImageConverterFactory::isSupported(const std::string& filePath) { return getConverter(filePath) != nullptr; }
+bool ImageConverterFactory::isSupported(const std::string& filePath) { return FsHelpers::isImageFile(filePath); }

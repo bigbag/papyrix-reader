@@ -30,6 +30,9 @@ class FsHelpers {
   static inline bool isBmpFile(const char* path) { return hasExtension(path, ".bmp"); }
   static inline bool isBmpFile(const std::string& path) { return isBmpFile(path.c_str()); }
 
+  static inline bool isImageFile(const char* path) { return isJpegFile(path) || isPngFile(path) || isBmpFile(path); }
+  static inline bool isImageFile(const std::string& path) { return isImageFile(path.c_str()); }
+
   // Book formats
   static inline bool isEpubFile(const char* path) { return hasExtension(path, ".epub"); }
   static inline bool isEpubFile(const std::string& path) { return isEpubFile(path.c_str()); }

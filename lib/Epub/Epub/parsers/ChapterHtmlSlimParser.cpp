@@ -116,6 +116,13 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
     Serial.printf("[%lu] [EHP] Found image: src=%s\n", millis(), srcAttr.empty() ? "(empty)" : srcAttr.c_str());
 
+    // Silently skip unsupported image formats (GIF, SVG, WebP, etc.)
+    if (!srcAttr.empty() && !ImageConverterFactory::isSupported(srcAttr)) {
+      Serial.printf("[%lu] [EHP] Skipping unsupported format: %s\n", millis(), srcAttr.c_str());
+      self->depth += 1;
+      return;
+    }
+
     // Try to cache and display the image if we have image support configured
     if (!srcAttr.empty() && self->readItemFn && !self->imageCachePath.empty()) {
       // Check abort before and after image caching (conversion can take 10+ seconds for large JPEGs)

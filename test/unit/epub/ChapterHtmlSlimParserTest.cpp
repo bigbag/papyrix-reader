@@ -8,6 +8,7 @@
 
 #include "test_utils.h"
 
+#include <FsHelpers.h>
 #include <SDCardManager.h>
 #include <expat.h>
 
@@ -94,12 +95,15 @@ class TestParser {
     // Image handling
     if (matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS)) {
       self->flushText();
+      std::string srcAttr;
       std::string altText;
       int imgWidth = 0;
       int imgHeight = 0;
       if (atts) {
         for (int i = 0; atts[i]; i += 2) {
-          if (strcmp(atts[i], "alt") == 0 && atts[i + 1][0] != '\0') {
+          if (strcmp(atts[i], "src") == 0 && atts[i + 1][0] != '\0') {
+            srcAttr = atts[i + 1];
+          } else if (strcmp(atts[i], "alt") == 0 && atts[i + 1][0] != '\0') {
             altText = atts[i + 1];
           } else if (strcmp(atts[i], "width") == 0) {
             imgWidth = atoi(atts[i + 1]);
@@ -107,6 +111,11 @@ class TestParser {
             imgHeight = atoi(atts[i + 1]);
           }
         }
+      }
+      // Silently skip unsupported image formats (GIF, SVG, WebP, etc.)
+      if (!srcAttr.empty() && !FsHelpers::isImageFile(srcAttr)) {
+        self->depth++;
+        return;
       }
       // Skip tiny decorative images (approximates ChapterHtmlSlimParser BMP dimension check).
       // Production checks actual BMP pixel dimensions; this mock uses HTML attributes as proxy,
@@ -656,7 +665,7 @@ int main() {
     TestParser parser;
     bool ok = parser.parse(
         "<html><body>"
-        "<p><img width=\"1\" height=\"100\" src=\"spacer.gif\"/></p>"
+        "<p><img width=\"1\" height=\"100\" src=\"spacer.png\"/></p>"
         "</body></html>");
     runner.expectTrue(ok, "skip_1px_width: parses successfully");
     runner.expectFalse(parser.hasImagePlaceholder(), "skip_1px_width: 1px-wide image skipped");
@@ -721,7 +730,7 @@ int main() {
   {
     TestParser parser;
     bool ok = parser.parse(
-        "<html><body><img width=\"19\" height=\"19\" src=\"dot.gif\"/></body></html>");
+        "<html><body><img width=\"19\" height=\"19\" src=\"dot.png\"/></body></html>");
     runner.expectTrue(ok, "skip_19x19: parses successfully");
     runner.expectFalse(parser.hasImagePlaceholder(), "skip_19x19: tiny square image skipped");
   }
@@ -730,16 +739,52 @@ int main() {
   {
     TestParser parser;
     bool ok = parser.parse(
-        "<html><body><img width=\"20\" height=\"20\" src=\"icon.gif\"/></body></html>");
+        "<html><body><img width=\"20\" height=\"20\" src=\"icon.png\"/></body></html>");
     runner.expectTrue(ok, "keep_20x20: parses successfully");
     runner.expectTrue(parser.hasImagePlaceholder(), "keep_20x20: small but visible image kept");
+  }
+
+  // ============================================
+  // Unsupported image format tests
+  // ============================================
+
+  // Test 37: Unsupported format (GIF) produces no placeholder
+  {
+    TestParser parser;
+    bool ok = parser.parse("<html><body><img src=\"photo.gif\"/></body></html>");
+    runner.expectTrue(ok, "skip_gif: parses successfully");
+    runner.expectFalse(parser.hasImagePlaceholder(), "skip_gif: GIF image silently skipped");
+  }
+
+  // Test 38: Unsupported format (SVG) produces no placeholder
+  {
+    TestParser parser;
+    bool ok = parser.parse("<html><body><img src=\"icon.svg\"/></body></html>");
+    runner.expectTrue(ok, "skip_svg: parses successfully");
+    runner.expectFalse(parser.hasImagePlaceholder(), "skip_svg: SVG image silently skipped");
+  }
+
+  // Test 39: Unsupported format (WebP) produces no placeholder
+  {
+    TestParser parser;
+    bool ok = parser.parse("<html><body><img src=\"photo.webp\"/></body></html>");
+    runner.expectTrue(ok, "skip_webp: parses successfully");
+    runner.expectFalse(parser.hasImagePlaceholder(), "skip_webp: WebP image silently skipped");
+  }
+
+  // Test 40: Unsupported format with alt text still produces no placeholder
+  {
+    TestParser parser;
+    bool ok = parser.parse("<html><body><img src=\"anim.gif\" alt=\"A funny cat\"/></body></html>");
+    runner.expectTrue(ok, "skip_gif_alt: parses successfully");
+    runner.expectFalse(parser.hasImagePlaceholder(), "skip_gif_alt: GIF with alt text silently skipped");
   }
 
   // ============================================
   // Anchor map (id attribute) tests
   // ============================================
 
-  // Test 37: Elements with id attribute are tracked in anchor map
+  // Test 41: Elements with id attribute are tracked in anchor map
   {
     TestParser parser;
     bool ok = parser.parse(
@@ -753,7 +798,7 @@ int main() {
     runner.expectEqual("chapter2", parser.anchorMap[1].first, "anchor_basic: second anchor id");
   }
 
-  // Test 38: Empty id attribute is skipped
+  // Test 42: Empty id attribute is skipped
   {
     TestParser parser;
     bool ok = parser.parse(
@@ -766,7 +811,7 @@ int main() {
     runner.expectEqual("valid", parser.anchorMap[0].first, "anchor_empty_id: correct id");
   }
 
-  // Test 39: id attributes inside <head> skip region are not tracked
+  // Test 43: id attributes inside <head> skip region are not tracked
   {
     TestParser parser;
     bool ok = parser.parse(
@@ -779,7 +824,7 @@ int main() {
     runner.expectEqual("body-anchor", parser.anchorMap[0].first, "anchor_skip_head: correct id");
   }
 
-  // Test 40: id attributes inside <table> skip region are not tracked
+  // Test 44: id attributes inside <table> skip region are not tracked
   {
     TestParser parser;
     bool ok = parser.parse(
@@ -792,7 +837,7 @@ int main() {
     runner.expectEqual("after-table", parser.anchorMap[0].first, "anchor_skip_table: correct id");
   }
 
-  // Test 41: id attributes on aria-hidden anchors are not tracked
+  // Test 45: id attributes on aria-hidden anchors are not tracked
   {
     TestParser parser;
     bool ok = parser.parse(
@@ -806,7 +851,7 @@ int main() {
     runner.expectEqual("visible", parser.anchorMap[0].first, "anchor_skip_aria_hidden: correct id");
   }
 
-  // Test 42: id on non-block element (span) is still tracked
+  // Test 46: id on non-block element (span) is still tracked
   {
     TestParser parser;
     bool ok = parser.parse(
@@ -818,7 +863,7 @@ int main() {
     runner.expectEqual("inline-anchor", parser.anchorMap[0].first, "anchor_inline: correct id");
   }
 
-  // Test 43: id on header element is tracked
+  // Test 47: id on header element is tracked
   {
     TestParser parser;
     bool ok = parser.parse(
@@ -832,7 +877,7 @@ int main() {
     runner.expectEqual("section1", parser.anchorMap[1].first, "anchor_headers: h2 id");
   }
 
-  // Test 44: Block count reflects correct ordering for anchor page mapping
+  // Test 48: Block count reflects correct ordering for anchor page mapping
   {
     TestParser parser;
     bool ok = parser.parse(
@@ -848,7 +893,7 @@ int main() {
                       "anchor_page_order: second anchor has higher block count");
   }
 
-  // Test 45: No id attributes means empty anchor map
+  // Test 49: No id attributes means empty anchor map
   {
     TestParser parser;
     bool ok = parser.parse(
@@ -857,7 +902,7 @@ int main() {
     runner.expectEq(static_cast<size_t>(0), parser.anchorMap.size(), "anchor_none: empty anchor map");
   }
 
-  // Test 46: id on pagebreak skip region is not tracked
+  // Test 50: id on pagebreak skip region is not tracked
   {
     TestParser parser;
     bool ok = parser.parse(
