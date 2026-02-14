@@ -685,6 +685,8 @@ void ChapterHtmlSlimParser::makePages() {
     return;
   }
 
+  flushPartWordBuffer();
+
   // Check memory before expensive layout operation
   const size_t freeHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
   if (freeHeap < MIN_FREE_HEAP * 2) {
