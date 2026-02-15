@@ -557,5 +557,107 @@ int main() {
     runner.expectFalse(cache.isPartial(), "reachedend_fail_not_partial");
   }
 
+  // ============================================
+  // Content preservation tests (batch vs unbatched)
+  // ============================================
+
+  // Test 21: Batched parsing produces same total pages as unbatched
+  // This validates the core invariant: batching should not lose content.
+  // The pendingNewTextBlock_ fix in ChapterHtmlSlimParser ensures words at
+  // block boundaries aren't lost during suspend/resume.
+  {
+    const int totalContent = 47;  // Odd number to avoid exact batch multiples
+
+    // Unbatched: parse all at once
+    MockContentParser parserAll(totalContent);
+    MockPageCache cacheAll;
+    cacheAll.create(parserAll, 0);
+
+    // Batched: parse in chunks of 5 (matching device DEFAULT_CACHE_CHUNK)
+    MockContentParser parserBatch(totalContent);
+    MockPageCache cacheBatch;
+    cacheBatch.create(parserBatch, 5);
+    while (cacheBatch.isPartial()) {
+      cacheBatch.extend(parserBatch, 5);
+    }
+
+    runner.expectEq(cacheAll.pageCount(), cacheBatch.pageCount(), "batch_vs_unbatch_same_total");
+    runner.expectFalse(cacheAll.isPartial(), "unbatched_complete");
+    runner.expectFalse(cacheBatch.isPartial(), "batched_complete");
+  }
+
+  // Test 22: Single-page chapter with batch limit > 1
+  {
+    MockContentParser parser(1);
+    MockPageCache cache;
+
+    bool ok = cache.create(parser, 5);
+    runner.expectTrue(ok, "single_page_batch_success");
+    runner.expectEq(static_cast<uint16_t>(1), cache.pageCount(), "single_page_batch_count");
+    runner.expectFalse(cache.isPartial(), "single_page_batch_complete");
+    runner.expectFalse(parser.canResume(), "single_page_batch_no_resume");
+  }
+
+  // Test 23: Batch size of 1 (most granular batching)
+  // Each page is its own batch, maximizing suspend/resume transitions
+  {
+    MockContentParser parser(7);
+    MockPageCache cache;
+
+    cache.create(parser, 1);
+    runner.expectEq(static_cast<uint16_t>(1), cache.pageCount(), "batch_1_initial");
+    runner.expectTrue(cache.isPartial(), "batch_1_initial_partial");
+
+    // Extend one page at a time
+    for (int i = 0; i < 6; i++) {
+      cache.extend(parser, 1);
+    }
+
+    runner.expectEq(static_cast<uint16_t>(7), cache.pageCount(), "batch_1_final_count");
+    runner.expectFalse(cache.isPartial(), "batch_1_complete");
+  }
+
+  // Test 24: Hot extend immediately after create with batch size matching content
+  // Edge case: batch size equals content size, so first create gets everything
+  {
+    MockContentParser parser(5);
+    MockPageCache cache;
+
+    cache.create(parser, 5);  // Exactly matches content
+    runner.expectEq(static_cast<uint16_t>(5), cache.pageCount(), "exact_batch_count");
+    runner.expectFalse(cache.isPartial(), "exact_batch_complete");
+
+    // Extend should be a no-op since not partial
+    bool ok = cache.extend(parser, 5);
+    runner.expectTrue(ok, "exact_batch_extend_noop");
+    runner.expectEq(static_cast<uint16_t>(5), cache.pageCount(), "exact_batch_extend_unchanged");
+  }
+
+  // Test 25: Mixed hot and cold extends preserve total content
+  {
+    const int total = 30;
+    MockContentParser parser(total);
+    MockPageCache cache;
+
+    // Hot: create + extend
+    cache.create(parser, 5);   // 5 pages
+    cache.extend(parser, 5);   // 10 pages (hot)
+    runner.expectEq(static_cast<uint16_t>(10), cache.pageCount(), "mixed_hot_count");
+
+    // Force cold path (simulates device restart)
+    parser.reset();
+    cache.extend(parser, 5);   // 15 pages (cold: re-parses from 0, targets 15)
+    runner.expectEq(static_cast<uint16_t>(15), cache.pageCount(), "mixed_cold_count");
+
+    // Hot again (parser kept state from cold path)
+    cache.extend(parser, 5);   // 20 pages (hot)
+    runner.expectEq(static_cast<uint16_t>(20), cache.pageCount(), "mixed_hot2_count");
+
+    // Finish
+    cache.extend(parser, 100);
+    runner.expectEq(static_cast<uint16_t>(total), cache.pageCount(), "mixed_final_count");
+    runner.expectFalse(cache.isPartial(), "mixed_complete");
+  }
+
   return runner.allPassed() ? 0 : 1;
 }

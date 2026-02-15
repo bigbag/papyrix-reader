@@ -422,6 +422,58 @@ class HomeState : public State {
 
 ---
 
+## Desktop Testing (reader-test)
+
+`tools/reader-test/` is a desktop tool that runs the full content parsing pipeline (EPUB/TXT/Markdown) without hardware. It uses the same built-in fonts and viewport dimensions as the device to produce identical page boundaries.
+
+### Device Emulation
+
+- **Real font metrics**: Uses `reader_2b`, `reader_bold_2b`, `reader_italic_2b` built-in fonts with per-glyph `advanceX` lookup (not fixed-width approximation)
+- **Device viewport**: 464x769 pixels (480 - 2*(3+5) x 800 - 9 - (3+19)), matching `ReaderState.cpp`
+- **Batched caching**: `--batch 5` emulates the device's batched page cache generation with suspend/resume cycles
+- **Font ID**: `READER_FONT_ID = 1818981670`, same as device
+
+### Architecture
+
+```
+tools/reader-test/
+├── main.cpp              # CLI entry, font registration, content dispatch
+├── CMakeLists.txt        # Build config (links real EpdFont, Utf8, parsers)
+└── mocks/
+    ├── GfxRenderer.h     # Real text metrics, no-op drawing
+    ├── EInkDisplay.h     # Stub display (buffer only)
+    ├── SDCardManager.h   # Maps SD calls to filesystem
+    └── platform_stubs.cpp # Arduino/FreeRTOS stubs
+```
+
+The mock `GfxRenderer` provides real text measurement (`getTextWidth`, `getSpaceWidth`, `getLineHeight`, `getFontAscenderSize`, `breakWordWithHyphenation`) using the font map, while all drawing methods are no-ops.
+
+### Usage
+
+```bash
+# Parse book with device-matching batch mode
+reader-test --dump --batch 5 book.epub /tmp/cache
+
+# Dump text from device cache (copied from SD card)
+reader-test --cache-dump /path/to/.papyrix/epub_<hash>/
+
+# Compare to find text differences (missing/duplicated text)
+diff <(reader-test --dump --batch 5 book.epub /tmp/cache 2>/dev/null) \
+     <(reader-test --cache-dump /path/to/device-cache/ 2>/dev/null)
+```
+
+### Verifying Parser Fixes
+
+To verify fixes to the parsing/caching pipeline:
+
+1. Build reader-test **without** the fix, run with `--batch 5`, save output
+2. Apply the fix, rebuild, run again
+3. Diff the outputs — recovered text confirms the fix works
+
+The `--batch 5` flag is critical for reproducing suspend/resume bugs that only trigger at batch boundaries during page cache generation.
+
+---
+
 ## Key Files
 
 ### Core (`/src/core/`)

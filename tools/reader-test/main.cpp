@@ -1,11 +1,15 @@
+#include <dirent.h>
 #include <sys/stat.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <EInkDisplay.h>
+#include <EpdFont.h>
 #include <Epub.h>
 #include <EpubChapterParser.h>
 #include <Epub/Page.h>
@@ -18,6 +22,10 @@
 #include <SDCardManager.h>
 #include <Txt.h>
 #include <LittleFS.h>
+
+#include <builtinFonts/reader_2b.h>
+#include <builtinFonts/reader_bold_2b.h>
+#include <builtinFonts/reader_italic_2b.h>
 
 // LittleFS global
 MockLittleFS LittleFS;
@@ -65,9 +73,50 @@ static void dumpPages(PageCache& cache) {
   }
 }
 
+static void dumpCacheDir(const std::string& dir) {
+  // Find and dump .bin files in sections/ subdirectory
+  std::string sectionsDir = dir + "/sections";
+  struct stat st;
+  const std::string& scanDir = (stat(sectionsDir.c_str(), &st) == 0) ? sectionsDir : dir;
+
+  // Collect and sort .bin files
+  std::vector<std::string> binFiles;
+  DIR* d = opendir(scanDir.c_str());
+  if (!d) {
+    fprintf(stderr, "Cannot open directory: %s\n", scanDir.c_str());
+    return;
+  }
+  struct dirent* entry;
+  while ((entry = readdir(d)) != nullptr) {
+    std::string name = entry->d_name;
+    if (name.size() > 4 && name.substr(name.size() - 4) == ".bin") {
+      binFiles.push_back(scanDir + "/" + name);
+    }
+  }
+  closedir(d);
+  std::sort(binFiles.begin(), binFiles.end());
+
+  int totalPages = 0;
+  for (auto& path : binFiles) {
+    PageCache cache(path);
+    if (!cache.loadRaw()) {
+      fprintf(stderr, "  Failed to load: %s\n", path.c_str());
+      continue;
+    }
+    fprintf(stderr, "  %s: %d pages%s\n", path.c_str(), cache.pageCount(), cache.isPartial() ? " (partial)" : "");
+    dumpPages(cache);
+    totalPages += cache.pageCount();
+  }
+  fprintf(stderr, "Total: %d pages\n", totalPages);
+}
+
 static void usage() {
-  fprintf(stderr, "Usage: reader-test [--dump] <file.epub|.md|.txt> [output_dir]\n");
-  fprintf(stderr, "  --dump     Print parsed text content of each page\n");
+  fprintf(stderr, "Usage: reader-test [--dump] [--batch N] <file.epub|.md|.txt> [output_dir]\n");
+  fprintf(stderr, "       reader-test --cache-dump <cache_dir>\n");
+  fprintf(stderr, "  --dump       Print parsed text content of each page\n");
+  fprintf(stderr, "  --batch N    Cache N pages per batch (default: 5, matching device)\n");
+  fprintf(stderr, "               Use 0 for unlimited (no suspend/resume)\n");
+  fprintf(stderr, "  --cache-dump Dump text from existing device cache directory\n");
   fprintf(stderr, "  output_dir defaults to /tmp/papyrix-cache/\n");
 }
 
@@ -78,10 +127,21 @@ int main(int argc, char* argv[]) {
   }
 
   bool dump = false;
+  uint16_t batchSize = 5;
   int argIdx = 1;
-  if (argc > 1 && strcmp(argv[1], "--dump") == 0) {
-    dump = true;
-    argIdx++;
+  while (argIdx < argc && argv[argIdx][0] == '-') {
+    if (strcmp(argv[argIdx], "--dump") == 0) {
+      dump = true;
+      argIdx++;
+    } else if (strcmp(argv[argIdx], "--batch") == 0 && argIdx + 1 < argc) {
+      batchSize = static_cast<uint16_t>(atoi(argv[argIdx + 1]));
+      argIdx += 2;
+    } else if (strcmp(argv[argIdx], "--cache-dump") == 0 && argIdx + 1 < argc) {
+      dumpCacheDir(argv[argIdx + 1]);
+      return 0;
+    } else {
+      break;
+    }
   }
 
   if (argIdx >= argc) {
@@ -98,15 +158,21 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  // Setup renderer with fixed-width font metrics
+  // Setup renderer with real font metrics
   EInkDisplay display(0, 0, 0, 0, 0, 0);
   GfxRenderer gfx(display);
   gfx.begin();
 
+  EpdFont readerFont(&reader_2b);
+  EpdFont readerBoldFont(&reader_bold_2b);
+  EpdFont readerItalicFont(&reader_italic_2b);
+  EpdFontFamily readerFontFamily(&readerFont, &readerBoldFont, &readerItalicFont, &readerBoldFont);
+  gfx.insertFont(1818981670, readerFontFamily);  // READER_FONT_ID
+
   RenderConfig config;
-  config.fontId = 0;
-  config.viewportWidth = 474;   // 480 - margins
-  config.viewportHeight = 788;  // 800 - margins
+  config.fontId = 1818981670;
+  config.viewportWidth = 464;   // 480 - 2*(3+5)
+  config.viewportHeight = 769;  // 800 - 9 - (3+19)
   config.paragraphAlignment = 0;
   config.spacingLevel = 1;
   config.lineCompression = 1.0f;
@@ -131,7 +197,11 @@ int main(int argc, char* argv[]) {
       std::string cachePath = sectionsDir + "/" + std::to_string(i) + ".bin";
       EpubChapterParser parser(epub, i, gfx, config, imageCachePath);
       PageCache cache(cachePath);
-      cache.create(parser, config, 0);
+      cache.create(parser, config, batchSize);
+      // Extend in batches until all pages are cached, matching device behavior
+      while (batchSize > 0 && cache.isPartial()) {
+        cache.extend(parser, batchSize);
+      }
       printf("  Spine %d: %d pages -> %s\n", i, cache.pageCount(), cachePath.c_str());
       if (dump) dumpPages(cache);
       totalPages += cache.pageCount();

@@ -40,6 +40,10 @@ add_executable(reader-test
   ${PROJECT_ROOT}/lib/PageCache/EpubChapterParser.cpp
   ${PROJECT_ROOT}/lib/PageCache/PageCache.cpp
 
+  # Font support
+  ${PROJECT_ROOT}/lib/EpdFont/EpdFont.cpp
+  ${PROJECT_ROOT}/lib/EpdFont/EpdFontFamily.cpp
+
   # Support
   ${PROJECT_ROOT}/lib/Html5/Html5Normalizer.cpp
   ${PROJECT_ROOT}/lib/ZipFile/ZipFile.cpp
@@ -68,6 +72,7 @@ target_include_directories(reader-test PRIVATE
   ${PROJECT_ROOT}/lib/Txt
   ${PROJECT_ROOT}/lib/GfxRenderer
   ${PROJECT_ROOT}/lib/EpdFont
+  ${PROJECT_ROOT}/lib/EpdFont/builtinFonts
   ${PROJECT_ROOT}/lib/ArabicShaper
   ${PROJECT_ROOT}/lib/ThaiShaper
   ${PROJECT_ROOT}/lib/ZipFile

@@ -56,6 +56,8 @@ class ChapterHtmlSlimParser {
   XML_Parser xmlParser_ = nullptr;
   bool stopRequested_ = false;
   bool pendingEmergencySplit_ = false;
+  bool pendingNewTextBlock_ = false;
+  TextBlock::BLOCK_STYLE pendingBlockStyle_ = TextBlock::LEFT_ALIGN;
   bool pendingRtl_ = false;
   int rtlUntilDepth_ = INT_MAX;
   bool aborted_ = false;

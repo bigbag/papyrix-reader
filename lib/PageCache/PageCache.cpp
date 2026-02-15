@@ -106,6 +106,30 @@ bool PageCache::loadLut(std::vector<uint32_t>& lut) {
   return true;
 }
 
+bool PageCache::loadRaw() {
+  if (!SdMan.openFileForRead("CACHE", cachePath_, file_)) {
+    return false;
+  }
+
+  uint8_t version;
+  serialization::readPod(file_, version);
+  if (version != CACHE_FILE_VERSION) {
+    file_.close();
+    Serial.printf("[CACHE] Version mismatch: got %u, expected %u\n", version, CACHE_FILE_VERSION);
+    return false;
+  }
+
+  // Skip config fields, read pageCount and isPartial
+  file_.seek(HEADER_SIZE - 4 - 1 - 2);
+  serialization::readPod(file_, pageCount_);
+  uint8_t partial;
+  serialization::readPod(file_, partial);
+  isPartial_ = (partial != 0);
+
+  file_.close();
+  return true;
+}
+
 bool PageCache::load(const RenderConfig& config) {
   if (!SdMan.openFileForRead("CACHE", cachePath_, file_)) {
     return false;

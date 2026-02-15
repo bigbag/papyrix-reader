@@ -82,6 +82,15 @@ void ChapterHtmlSlimParser::startNewTextBlock(const TextBlock::BLOCK_STYLE style
 
     makePages();
     pendingEmergencySplit_ = false;
+
+    // If page batch limit was hit during makePages(), the text block may still
+    // contain words that weren't laid out yet. Preserve them for resumeParsing()
+    // to process before the XML parser continues.
+    if (stopRequested_) {
+      pendingNewTextBlock_ = true;
+      pendingBlockStyle_ = style;
+      return;
+    }
   }
   currentTextBlock.reset(new ParsedText(style, config.indentLevel, config.hyphenation, true, pendingRtl_));
 }
@@ -492,6 +501,7 @@ bool ChapterHtmlSlimParser::initParser() {
   elementCounter_ = 0;
   cssHeapOk_ = true;
   pendingEmergencySplit_ = false;
+  pendingNewTextBlock_ = false;
   aborted_ = false;
   stopRequested_ = false;
   suspended_ = false;
@@ -657,6 +667,29 @@ bool ChapterHtmlSlimParser::resumeParsing() {
   elementCounter_ = 0;
   stopRequested_ = false;
   suspended_ = false;
+
+  // Lay out remaining words from the text block that was interrupted when the
+  // previous batch hit its page limit. Without this, words after the page-break
+  // point in a paragraph are silently lost.
+  if (currentTextBlock && !currentTextBlock->isEmpty()) {
+    makePages();
+    if (stopRequested_) {
+      // Remaining words filled another batch — stay suspended
+      suspended_ = true;
+      file_.close();
+      return true;
+    }
+  }
+
+  // Complete the deferred startNewTextBlock() that was interrupted by the batch limit.
+  // The XML parser already processed startElement() for the new block tag, so we must
+  // create the text block here before resuming — otherwise the new paragraph's text
+  // would be appended to the old (now empty) text block with wrong style/no break.
+  if (pendingNewTextBlock_) {
+    pendingNewTextBlock_ = false;
+    currentTextBlock.reset(
+        new ParsedText(pendingBlockStyle_, config.indentLevel, config.hyphenation, true, pendingRtl_));
+  }
 
   const auto status = XML_ResumeParser(xmlParser_);
   if (status == XML_STATUS_ERROR) {

@@ -3,6 +3,7 @@
 #include <EInkDisplay.h>
 #include <EpdFontFamily.h>
 #include <ThaiCluster.h>
+#include <Utf8.h>
 
 #include <array>
 #include <cstring>
@@ -34,17 +35,6 @@ class GfxRenderer {
   static constexpr size_t MAX_WIDTH_CACHE_SIZE = 256;
   mutable std::unordered_map<uint64_t, int16_t> wordWidthCache;
   static uint8_t frameBuffer_[EInkDisplay::BUFFER_SIZE];
-
-  // Count UTF-8 characters
-  static int utf8Len(const char* text) {
-    if (!text) return 0;
-    int count = 0;
-    while (*text) {
-      if ((*text & 0xC0) != 0x80) count++;
-      text++;
-    }
-    return count;
-  }
 
  public:
   static constexpr int VIEWABLE_MARGIN_TOP = 9;
@@ -116,49 +106,96 @@ class GfxRenderer {
   void drawImage(const uint8_t*, int, int, int, int) const {}
   void drawBitmap(const Bitmap&, int, int, int, int) const {}
 
-  // Text - fixed-width metrics (8px per UTF-8 char)
-  int getTextWidth(int, const char* text, EpdFontFamily::Style = EpdFontFamily::REGULAR) const {
-    return utf8Len(text) * 8;
+  // Text measurement using real font metrics
+  int getTextWidth(int fontId, const char* text, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const {
+    if (!text || !*text) return 0;
+    auto it = fontMap.find(fontId);
+    if (it == fontMap.end()) return 0;
+    const auto& font = it->second;
+    int w = 0;
+    const char* ptr = text;
+    uint32_t cp;
+    while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&ptr)))) {
+      const EpdGlyph* glyph = font.getGlyph(cp, style);
+      if (!glyph) glyph = font.getGlyph('?', style);
+      if (glyph) w += glyph->advanceX;
+    }
+    return w;
   }
   void drawCenteredText(int, int, const char*, bool = true, EpdFontFamily::Style = EpdFontFamily::REGULAR) const {}
   void drawText(int, int, int, const char*, bool = true, EpdFontFamily::Style = EpdFontFamily::REGULAR) const {}
-  int getSpaceWidth(int) const { return 5; }
-  int getFontAscenderSize(int) const { return 16; }
-  int getLineHeight(int) const { return 20; }
+  int getSpaceWidth(int fontId) const {
+    auto it = fontMap.find(fontId);
+    if (it == fontMap.end()) return 5;
+    const EpdGlyph* glyph = it->second.getGlyph(' ');
+    return glyph ? glyph->advanceX : 5;
+  }
+  int getFontAscenderSize(int fontId) const {
+    auto it = fontMap.find(fontId);
+    if (it == fontMap.end()) return 16;
+    const EpdFontData* data = it->second.getData();
+    return data ? data->ascender : 16;
+  }
+  int getLineHeight(int fontId) const {
+    auto it = fontMap.find(fontId);
+    if (it == fontMap.end()) return 20;
+    const EpdFontData* data = it->second.getData();
+    return data ? data->advanceY : 20;
+  }
   std::string truncatedText(int, const char* text, int, EpdFontFamily::Style = EpdFontFamily::REGULAR) const {
     return text ? text : "";
   }
 
-  std::vector<std::string> breakWordWithHyphenation(int, const char* word, int maxWidth,
-                                                     EpdFontFamily::Style = EpdFontFamily::REGULAR) const {
-    std::vector<std::string> result;
-    if (!word || maxWidth <= 0) return result;
+  std::vector<std::string> breakWordWithHyphenation(int fontId, const char* word, int maxWidth,
+                                                     EpdFontFamily::Style style = EpdFontFamily::REGULAR) const {
+    std::vector<std::string> chunks;
+    if (!word || *word == '\0') return chunks;
 
-    std::string w(word);
-    int charWidth = 8;
-    int hyphenWidth = 8;
-    int maxChars = (maxWidth - hyphenWidth) / charWidth;
-    if (maxChars < 1) maxChars = 1;
-
-    // Break UTF-8 aware
-    size_t i = 0;
-    while (i < w.size()) {
-      int count = 0;
-      size_t start = i;
-      while (i < w.size() && count < maxChars) {
-        if ((w[i] & 0xC0) != 0x80) count++;
-        i++;
-        // Advance past continuation bytes
-        while (i < w.size() && (w[i] & 0xC0) == 0x80) i++;
+    std::string remaining = word;
+    while (!remaining.empty()) {
+      const int remainingWidth = getTextWidth(fontId, remaining.c_str(), style);
+      if (remainingWidth <= maxWidth) {
+        chunks.push_back(remaining);
+        break;
       }
-      if (i < w.size()) {
-        result.push_back(w.substr(start, i - start) + "-");
+
+      // Find max chars that fit with hyphen
+      std::string chunk;
+      const char* ptr = remaining.c_str();
+      const char* lastGoodPos = ptr;
+
+      while (*ptr) {
+        const char* nextChar = ptr;
+        utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&nextChar));
+
+        std::string testChunk = chunk;
+        testChunk.append(ptr, nextChar - ptr);
+        const int testWidth = getTextWidth(fontId, (testChunk + "-").c_str(), style);
+
+        if (testWidth > maxWidth && !chunk.empty()) break;
+
+        chunk = testChunk;
+        lastGoodPos = nextChar;
+        ptr = nextChar;
+      }
+
+      if (chunk.empty()) {
+        // Single char too wide - force it
+        const char* nextChar = remaining.c_str();
+        utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&nextChar));
+        chunk.append(remaining.c_str(), nextChar - remaining.c_str());
+        lastGoodPos = nextChar;
+      }
+
+      if (lastGoodPos < remaining.c_str() + remaining.size()) {
+        chunks.push_back(chunk + "-");
+        remaining = remaining.substr(lastGoodPos - remaining.c_str());
       } else {
-        result.push_back(w.substr(start));
+        chunks.push_back(chunk);
+        remaining.clear();
       }
     }
-    if (result.empty()) result.push_back(w);
-    return result;
+    return chunks;
   }
 
   std::vector<std::string> wrapTextWithHyphenation(int, const char* text, int, int,
@@ -170,15 +207,15 @@ class GfxRenderer {
 
   bool fontSupportsGrayscale(int) const { return false; }
 
-  // Thai text - use same fixed metrics
-  int getThaiTextWidth(int, const char* text, EpdFontFamily::Style = EpdFontFamily::REGULAR) const {
-    return utf8Len(text) * 8;
+  // Thai text - use same font metrics
+  int getThaiTextWidth(int fontId, const char* text, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const {
+    return getTextWidth(fontId, text, style);
   }
   void drawThaiText(int, int, int, const char*, bool = true, EpdFontFamily::Style = EpdFontFamily::REGULAR) const {}
 
   // Arabic text
-  int getArabicTextWidth(int, const char* text, EpdFontFamily::Style = EpdFontFamily::REGULAR) const {
-    return utf8Len(text) * 8;
+  int getArabicTextWidth(int fontId, const char* text, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const {
+    return getTextWidth(fontId, text, style);
   }
   void drawArabicText(int, int, int, const char*, bool = true, EpdFontFamily::Style = EpdFontFamily::REGULAR) const {}
 

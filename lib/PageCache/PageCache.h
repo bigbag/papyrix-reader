@@ -49,6 +49,12 @@ class PageCache {
   bool load(const RenderConfig& config);
 
   /**
+   * Load cache header without config validation (for dump/debug tools).
+   * @return true if valid cache exists and header was read
+   */
+  bool loadRaw();
+
+  /**
    * Create cache by parsing content.
    * @param parser Content parser to use
    * @param config Render config
