@@ -106,11 +106,7 @@ void render(const GfxRenderer& r, const Theme& t, const ReaderSettingsView& v) {
     const int y = startY + i * (t.itemHeight + t.itemSpacing);
     const auto& def = ReaderSettingsView::DEFS[i];
 
-    if (def.type == ReaderSettingsView::SettingType::Toggle) {
-      toggle(r, t, y, def.label, v.values[i] != 0, i == v.selected);
-    } else {
-      enumValue(r, t, y, def.label, v.getCurrentValueStr(i), i == v.selected);
-    }
+    enumValue(r, t, y, def.label, v.getCurrentValueStr(i), i == v.selected);
   }
 
   buttonBar(r, t, v.buttons);
