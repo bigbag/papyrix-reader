@@ -274,24 +274,22 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   const int destHeight = isScaled ? static_cast<int>(bitmap.getHeight() * scale) : bitmap.getHeight();
   const float invScale = isScaled ? (1.0f / scale) : 1.0f;
 
-  int lastBmpY = -1;
+  int lastSrcY = -1;
   for (int destY = 0; destY < destHeight; destY++) {
-    const int screenY = y + destY;
+    // For bottom-up BMPs, flip screen placement since readRow reads sequentially from file
+    const int screenY = bitmap.isTopDown() ? (y + destY) : (y + destHeight - 1 - destY);
     if (screenY < 0) continue;
-    if (screenY >= getScreenHeight()) break;
+    if (screenY >= getScreenHeight()) continue;
 
     int srcY = isScaled ? static_cast<int>(destY * invScale) : destY;
     if (srcY >= bitmap.getHeight()) srcY = bitmap.getHeight() - 1;
 
-    // BMP row order: bottom-up (default) or top-down
-    const int bmpY = bitmap.isTopDown() ? srcY : bitmap.getHeight() - 1 - srcY;
-
-    if (bmpY != lastBmpY) {
-      if (bitmap.readRow(bitmapOutputRow_, bitmapRowBytes_, bmpY) != BmpReaderError::Ok) {
-        Serial.printf("[%lu] [GFX] Failed to read row %d from bitmap\n", millis(), bmpY);
+    if (srcY != lastSrcY) {
+      if (bitmap.readRow(bitmapOutputRow_, bitmapRowBytes_, srcY) != BmpReaderError::Ok) {
+        Serial.printf("[%lu] [GFX] Failed to read row %d from bitmap\n", millis(), srcY);
         return;
       }
-      lastBmpY = bmpY;
+      lastSrcY = srcY;
     }
 
     for (int destX = 0; destX < destWidth; destX++) {
