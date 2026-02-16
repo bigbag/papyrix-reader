@@ -107,7 +107,6 @@ void FileListState::loadFiles(Core& core) {
   // Collect all entries (no hard limit during collection)
   while ((entry = dir.openNextFile())) {
     entry.getName(name, sizeof(name));
-    utf8NormalizeNfc(name, strlen(name));
 
     if (isHidden(name)) {
       entry.close();

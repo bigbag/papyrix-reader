@@ -118,5 +118,43 @@ int main() {
                     "bold_italic_fallback: returns boldItalic after setFont");
   }
 
+  // ============================================
+  // externalStyleIndex Tests
+  // External/streaming fonts only have REGULAR + BOLD
+  // ============================================
+
+  // Test 8: externalStyleIndex maps REGULAR → REGULAR
+  {
+    runner.expectEq(static_cast<int>(EpdFontFamily::REGULAR),
+                    EpdFontFamily::externalStyleIndex(EpdFontFamily::REGULAR),
+                    "externalStyleIndex: REGULAR → REGULAR");
+  }
+
+  // Test 9: externalStyleIndex maps BOLD → BOLD
+  {
+    runner.expectEq(static_cast<int>(EpdFontFamily::BOLD),
+                    EpdFontFamily::externalStyleIndex(EpdFontFamily::BOLD),
+                    "externalStyleIndex: BOLD → BOLD");
+  }
+
+  // Test 10: externalStyleIndex maps ITALIC → REGULAR
+  {
+    runner.expectEq(static_cast<int>(EpdFontFamily::REGULAR),
+                    EpdFontFamily::externalStyleIndex(EpdFontFamily::ITALIC),
+                    "externalStyleIndex: ITALIC → REGULAR");
+  }
+
+  // Test 11: externalStyleIndex maps BOLD_ITALIC → BOLD
+  {
+    runner.expectEq(static_cast<int>(EpdFontFamily::BOLD),
+                    EpdFontFamily::externalStyleIndex(EpdFontFamily::BOLD_ITALIC),
+                    "externalStyleIndex: BOLD_ITALIC → BOLD");
+  }
+
+  // Test 12: kExternalStyleCount is 2 (REGULAR + BOLD)
+  {
+    runner.expectEq(2, EpdFontFamily::kExternalStyleCount, "kExternalStyleCount is 2");
+  }
+
   return runner.allPassed() ? 0 : 1;
 }
