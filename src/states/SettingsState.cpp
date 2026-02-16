@@ -132,9 +132,7 @@ StateTransition SettingsState::update(Core& core) {
                 if (deviceView_.buttons.isActive(2)) handleLeftRight(-1);
                 break;
               case SettingsScreen::ConfirmDialog:
-                pendingAction_ = 0;
-                currentScreen_ = SettingsScreen::Cleanup;
-                cleanupView_.needsRender = true;
+                confirmView_.toggleSelection();
                 needsRender_ = true;
                 break;
               default:
@@ -150,6 +148,10 @@ StateTransition SettingsState::update(Core& core) {
                 break;
               case SettingsScreen::Device:
                 if (deviceView_.buttons.isActive(3)) handleLeftRight(+1);
+                break;
+              case SettingsScreen::ConfirmDialog:
+                confirmView_.toggleSelection();
+                needsRender_ = true;
                 break;
               default:
                 break;

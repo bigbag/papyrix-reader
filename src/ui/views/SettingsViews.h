@@ -252,7 +252,7 @@ struct ConfirmDialogView {
   static constexpr int MAX_TITLE_LEN = 32;
   static constexpr int MAX_LINE_LEN = 48;
 
-  ButtonBar buttons{"Back", "Confirm", "", ""};
+  ButtonBar buttons{"Back", "Confirm", "<<", ">>"};
   char title[MAX_TITLE_LEN] = "Confirm?";
   char line1[MAX_LINE_LEN] = "";
   char line2[MAX_LINE_LEN] = "";
