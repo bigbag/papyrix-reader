@@ -50,6 +50,7 @@ This project is **not affiliated with Xteink**; it's built as a community projec
 - [x] Paragraph alignment (Justified/Left/Center/Right)
 - [x] Text layout presets (Compact/Standard/Large) for indentation and spacing
 - [x] Soft hyphen support for text layout
+- [x] Native Vietnamese, Thai, and Greek support in builtin fonts
 - [x] CJK (Chinese/Japanese/Korean) text layout
 - [x] Thai text rendering with proper mark positioning
 - [x] Arabic text shaping - contextual forms, Lam-Alef ligatures with RTL layout (book text only, not UI or File manager)

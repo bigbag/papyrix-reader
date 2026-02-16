@@ -361,11 +361,11 @@ By default, the font converter includes:
 - Combining diacritical marks
 - Math operators and arrows
 
-Vietnamese fonts work with standard `.epdfont` format since they use Latin script with additional diacritics.
+The built-in fonts include Vietnamese diacritics natively, so no custom font is needed. If you prefer a different typeface, Vietnamese fonts work with standard `.epdfont` format since they use Latin script with additional diacritics.
 
 ### Thai Fonts
 
-Thai fonts can be generated using the `--thai` flag:
+The built-in fonts include Thai script natively, so no custom font is needed. If you prefer a different typeface, Thai fonts can be generated using the `--thai` flag:
 
 ```bash
 # Thai font with Thai script support
@@ -397,8 +397,8 @@ If a custom font file is missing, corrupted, or exceeds size limits:
 - `.bin` external fonts: max 32MB file size, max 64x64 pixel glyphs
 
 Built-in fonts are always available:
-- **Reader** - Reader font (3 sizes)
-- **UI** - UI font
+- **Reader** - Reader font (3 sizes) with Latin, Cyrillic, Vietnamese, Thai, and Greek coverage
+- **UI** - UI font with Latin, Cyrillic, Vietnamese, Thai, and Greek coverage
 - **Small** - Small text
 
 > **Note:** Custom font loading is optional. The device works perfectly with built-in fonts if no custom fonts are configured.

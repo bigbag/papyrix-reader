@@ -33,6 +33,17 @@ Papyrix ensures you can always read your books, even if a custom font fails:
 
 If you notice missing characters, try switching to a different font in Settings. The built-in font is always available as a reliable fallback.
 
+### Built-in Font Coverage
+
+The built-in fonts include native support for:
+
+- **Latin** - Western and Eastern European languages, including Vietnamese diacritics
+- **Cyrillic** - Russian, Ukrainian, and other Cyrillic-script languages
+- **Thai** - Full Thai script with proper mark positioning
+- **Greek** - Modern Greek alphabet
+
+No custom fonts are needed for these scripts - they work out of the box.
+
 ## Font Samples
 
 ### PT Serif
@@ -107,25 +118,6 @@ A typeface designed to increase readability for readers with dyslexia. Features 
 
 ![OpenDyslexic Sample](examples/images/opendyslexic-sample.png)
 
-### Noto Serif Vietnamese
-
-Noto Serif with full Vietnamese diacritic support for reading Vietnamese texts.
-
-- **Styles**: Regular, Italic
-- **Theme**: `light-vietnamese.theme`
-- **License**: OFL (Open Font License)
-
-![Noto Serif Vietnamese Sample](examples/images/noto-serif-vn-sample.png)
-
-### Noto Sans Thai
-
-A sans-serif font with complete Thai script support.
-
-- **Styles**: Regular
-- **Theme**: `light-thai.theme`
-- **License**: OFL (Open Font License)
-
-![Noto Sans Thai Sample](examples/images/noto-sans-thai-sample.png)
 
 ### Noto Sans Arabic
 
