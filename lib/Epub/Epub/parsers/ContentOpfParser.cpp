@@ -143,6 +143,9 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   }
 
   if (self->state == IN_METADATA && strcmp(name, "dc:creator") == 0) {
+    if (!self->author.empty()) {
+      self->author.append(", ");
+    }
     self->state = IN_BOOK_AUTHOR;
     return;
   }

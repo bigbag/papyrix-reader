@@ -110,6 +110,15 @@ foreach(TEST_SRC ${TEST_SOURCES})
     )
     target_compile_definitions(${TEST_NAME} PRIVATE XML_GE=0 XML_DTD)
     target_link_libraries(${TEST_NAME} PRIVATE EXPAT::EXPAT)
+  elseif(TEST_NAME STREQUAL "ContentOpfParserTest")
+    find_package(EXPAT REQUIRED)
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/Utf8/Utf8Nfc.cpp
+      ${TEST_HELPERS}
+    )
+    target_compile_definitions(${TEST_NAME} PRIVATE XML_GE=0)
+    target_link_libraries(${TEST_NAME} PRIVATE EXPAT::EXPAT)
   else()
     add_executable(${TEST_NAME} ${TEST_SRC} ${TEST_HELPERS})
   endif()
