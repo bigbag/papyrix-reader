@@ -32,7 +32,7 @@ static constexpr int kCacheTaskStopTimeoutMs = 10000;  // 10s - generous for slo
 
 namespace {
 constexpr int horizontalPadding = 5;
-constexpr int statusBarMargin = 19;
+constexpr int statusBarMargin = 23;
 
 // Cache path helpers
 inline std::string epubSectionCachePath(const std::string& epubCachePath, int spineIndex) {

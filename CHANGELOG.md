@@ -3,6 +3,11 @@
 ## v1.7.0 (2026-02-16)
 
 *  Add UTF-8 NFC normalization and extend builtin font coverage with Vietnamese, Thai and Greek [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Elements: Fix reader status bar vertical alignment [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Fix FileListState NFC normalization, add EpdFontFamily external style index   tests [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Update docs [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Update CHANGELOG.md [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
 
 
 ## v1.6.5 (2026-02-16)

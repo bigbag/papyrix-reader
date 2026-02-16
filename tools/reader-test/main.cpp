@@ -172,7 +172,7 @@ int main(int argc, char* argv[]) {
   RenderConfig config;
   config.fontId = 1818981670;
   config.viewportWidth = 464;   // 480 - 2*(3+5)
-  config.viewportHeight = 769;  // 800 - 9 - (3+19)
+  config.viewportHeight = 765;  // 800 - 9 - (3+23)
   config.paragraphAlignment = 0;
   config.spacingLevel = 1;
   config.lineCompression = 1.0f;
