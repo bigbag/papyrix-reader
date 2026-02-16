@@ -429,8 +429,9 @@ class HomeState : public State {
 ### Device Emulation
 
 - **Real font metrics**: Uses `reader_2b`, `reader_bold_2b`, `reader_italic_2b` built-in fonts with per-glyph `advanceX` lookup (not fixed-width approximation)
-- **Device viewport**: 464x769 pixels (480 - 2*(3+5) x 800 - 9 - (3+19)), matching `ReaderState.cpp`
+- **Device viewport**: 464x765 pixels (480 - 2*(3+5) x 800 - 9 - (3+23)) with status bar, 464x788 without
 - **Batched caching**: `--batch 5` emulates the device's batched page cache generation with suspend/resume cycles
+- **Status bar toggle**: `--no-statusbar` removes the 23px bottom margin, matching the device viewport when status bar is hidden
 - **Font ID**: `READER_FONT_ID = 1818981670`, same as device
 
 ### Architecture
@@ -453,6 +454,9 @@ The mock `GfxRenderer` provides real text measurement (`getTextWidth`, `getSpace
 ```bash
 # Parse book with device-matching batch mode
 reader-test --dump --batch 5 book.epub /tmp/cache
+
+# Parse with status bar hidden (larger viewport)
+reader-test --dump --no-statusbar book.epub /tmp/cache
 
 # Dump text from device cache (copied from SD card)
 reader-test --cache-dump /path/to/.papyrix/epub_<hash>/

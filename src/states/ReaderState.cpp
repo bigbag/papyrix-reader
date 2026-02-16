@@ -614,7 +614,7 @@ void ReaderState::renderCurrentPage(Core& core) {
 void ReaderState::renderCachedPage(Core& core) {
   Theme& theme = THEME_MANAGER.mutableCurrent();
   ContentType type = core.content.metadata().type;
-  const auto vp = getReaderViewport();
+  const auto vp = getReaderViewport(core.settings.statusBar != 0);
 
   // Handle EPUB bounds
   if (type == ContentType::Epub) {
@@ -778,7 +778,7 @@ void ReaderState::loadCacheFromDisk(Core& core) {
   const Theme& theme = THEME_MANAGER.current();
   ContentType type = core.content.metadata().type;
 
-  const auto vp = getReaderViewport();
+  const auto vp = getReaderViewport(core.settings.statusBar != 0);
   const auto config = core.settings.getRenderConfig(theme, vp.width, vp.height);
 
   std::string cachePath;
@@ -809,7 +809,7 @@ void ReaderState::createOrExtendCache(Core& core) {
   const Theme& theme = THEME_MANAGER.current();
   ContentType type = core.content.metadata().type;
 
-  const auto vp = getReaderViewport();
+  const auto vp = getReaderViewport(core.settings.statusBar != 0);
   const auto config = core.settings.getRenderConfig(theme, vp.width, vp.height);
 
   std::string cachePath;
@@ -927,12 +927,14 @@ void ReaderState::displayWithRefresh(Core& core) {
   }
 }
 
-ReaderState::Viewport ReaderState::getReaderViewport() const {
+ReaderState::Viewport ReaderState::getReaderViewport(bool showStatusBar) const {
   Viewport vp{};
   renderer_.getOrientedViewableTRBL(&vp.marginTop, &vp.marginRight, &vp.marginBottom, &vp.marginLeft);
   vp.marginLeft += horizontalPadding;
   vp.marginRight += horizontalPadding;
-  vp.marginBottom += statusBarMargin;
+  if (showStatusBar) {
+    vp.marginBottom += statusBarMargin;
+  }
   vp.width = renderer_.getScreenWidth() - vp.marginLeft - vp.marginRight;
   vp.height = renderer_.getScreenHeight() - vp.marginTop - vp.marginBottom;
   return vp;
@@ -947,7 +949,7 @@ bool ReaderState::renderCoverPage(Core& core) {
   }
 
   Serial.printf("[%lu] [RDR] Rendering cover page from: %s\n", millis(), coverPath.c_str());
-  const auto vp = getReaderViewport();
+  const auto vp = getReaderViewport(core.settings.statusBar != 0);
   int pagesUntilRefresh = pagesUntilFullRefresh_;
   const bool turnOffScreen = core.settings.sunlightFadingFix != 0;
 
@@ -1004,7 +1006,7 @@ void ReaderState::startBackgroundCaching(Core& core) {
 
         // Build cache if it doesn't exist
         if (!pageCache_ && !cacheTask_.shouldStop()) {
-          const auto vp = getReaderViewport();
+          const auto vp = getReaderViewport(coreRef.settings.statusBar != 0);
           const auto config = coreRef.settings.getRenderConfig(theme, vp.width, vp.height);
           std::string cachePath;
 

@@ -123,7 +123,7 @@ class ReaderState : public State {
     int width;
     int height;
   };
-  Viewport getReaderViewport() const;
+  Viewport getReaderViewport(bool showStatusBar) const;
 
   // Get first content spine index (skips cover document when appropriate)
   static int calcFirstContentSpine(bool hasCover, int textStartIndex, size_t spineCount);

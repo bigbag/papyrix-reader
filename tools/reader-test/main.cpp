@@ -111,12 +111,13 @@ static void dumpCacheDir(const std::string& dir) {
 }
 
 static void usage() {
-  fprintf(stderr, "Usage: reader-test [--dump] [--batch N] <file.epub|.md|.txt> [output_dir]\n");
+  fprintf(stderr, "Usage: reader-test [--dump] [--batch N] [--no-statusbar] <file.epub|.md|.txt> [output_dir]\n");
   fprintf(stderr, "       reader-test --cache-dump <cache_dir>\n");
-  fprintf(stderr, "  --dump       Print parsed text content of each page\n");
-  fprintf(stderr, "  --batch N    Cache N pages per batch (default: 5, matching device)\n");
-  fprintf(stderr, "               Use 0 for unlimited (no suspend/resume)\n");
-  fprintf(stderr, "  --cache-dump Dump text from existing device cache directory\n");
+  fprintf(stderr, "  --dump           Print parsed text content of each page\n");
+  fprintf(stderr, "  --batch N        Cache N pages per batch (default: 5, matching device)\n");
+  fprintf(stderr, "                   Use 0 for unlimited (no suspend/resume)\n");
+  fprintf(stderr, "  --no-statusbar   Use full viewport height (no status bar margin)\n");
+  fprintf(stderr, "  --cache-dump     Dump text from existing device cache directory\n");
   fprintf(stderr, "  output_dir defaults to /tmp/papyrix-cache/\n");
 }
 
@@ -127,11 +128,15 @@ int main(int argc, char* argv[]) {
   }
 
   bool dump = false;
+  bool showStatusBar = true;
   uint16_t batchSize = 5;
   int argIdx = 1;
   while (argIdx < argc && argv[argIdx][0] == '-') {
     if (strcmp(argv[argIdx], "--dump") == 0) {
       dump = true;
+      argIdx++;
+    } else if (strcmp(argv[argIdx], "--no-statusbar") == 0) {
+      showStatusBar = false;
       argIdx++;
     } else if (strcmp(argv[argIdx], "--batch") == 0 && argIdx + 1 < argc) {
       batchSize = static_cast<uint16_t>(atoi(argv[argIdx + 1]));
@@ -171,8 +176,8 @@ int main(int argc, char* argv[]) {
 
   RenderConfig config;
   config.fontId = 1818981670;
-  config.viewportWidth = 464;   // 480 - 2*(3+5)
-  config.viewportHeight = 765;  // 800 - 9 - (3+23)
+  config.viewportWidth = 464;                        // 480 - 2*(3+5)
+  config.viewportHeight = showStatusBar ? 765 : 788;  // 800 - 9 - (3+23) or 800 - 9 - 3
   config.paragraphAlignment = 0;
   config.spacingLevel = 1;
   config.lineCompression = 1.0f;
