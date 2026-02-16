@@ -1,5 +1,26 @@
 
 
+## v1.7.0 (2026-02-16)
+
+*  Add UTF-8 NFC normalization and extend builtin font coverage with Vietnamese, Thai and Greek [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.6.5 (2026-02-16)
+
+*  SlimParser: Fix text loss at batch boundaries; reader-test uses real font metrics  . Issue #48 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  ParsedText: Skip paragraph indentation for center-aligned text. Issue #50 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  GfxRenderer: Centralize external font style mapping and lazy-load bold variant on text width/draw. Issue #49 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.6.4 (2026-02-15)
+
+*  Update changelog [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  GfxRenderer: Free cache capacity on clear; fix addrinfo leak on DNS failure [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  SlimParser: Drop unknown entities and non-content XML in default handler [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
 ## v1.6.3 (2026-02-15)
 
 *  Update docs [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
