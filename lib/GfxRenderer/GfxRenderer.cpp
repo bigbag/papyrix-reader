@@ -325,17 +325,47 @@ void GfxRenderer::clearArea(const int x, const int y, const int width, const int
     return;
   }
 
+  // Rotate logical rectangle to physical coordinates
+  int physX, physY, physW, physH;
+  switch (orientation) {
+    case Portrait:
+      physX = y;
+      physY = EInkDisplay::DISPLAY_HEIGHT - 1 - (x + width - 1);
+      physW = height;
+      physH = width;
+      break;
+    case LandscapeClockwise:
+      physX = EInkDisplay::DISPLAY_WIDTH - 1 - (x + width - 1);
+      physY = EInkDisplay::DISPLAY_HEIGHT - 1 - (y + height - 1);
+      physW = width;
+      physH = height;
+      break;
+    case PortraitInverted:
+      physX = EInkDisplay::DISPLAY_WIDTH - 1 - (y + height - 1);
+      physY = x;
+      physW = height;
+      physH = width;
+      break;
+    case LandscapeCounterClockwise:
+    default:
+      physX = x;
+      physY = y;
+      physW = width;
+      physH = height;
+      break;
+  }
+
   // Validate bounds - region entirely outside display
-  if (x >= static_cast<int>(EInkDisplay::DISPLAY_WIDTH) || y >= static_cast<int>(EInkDisplay::DISPLAY_HEIGHT) ||
-      x + width <= 0 || y + height <= 0) {
+  if (physX >= static_cast<int>(EInkDisplay::DISPLAY_WIDTH) || physY >= static_cast<int>(EInkDisplay::DISPLAY_HEIGHT) ||
+      physX + physW <= 0 || physY + physH <= 0) {
     return;
   }
 
   // Clamp to display boundaries
-  const int x_start = std::max(x, 0);
-  const int y_start = std::max(y, 0);
-  const int x_end = std::min(x + width - 1, static_cast<int>(EInkDisplay::DISPLAY_WIDTH - 1));
-  const int y_end = std::min(y + height - 1, static_cast<int>(EInkDisplay::DISPLAY_HEIGHT - 1));
+  const int x_start = std::max(physX, 0);
+  const int y_start = std::max(physY, 0);
+  const int x_end = std::min(physX + physW - 1, static_cast<int>(EInkDisplay::DISPLAY_WIDTH - 1));
+  const int y_end = std::min(physY + physH - 1, static_cast<int>(EInkDisplay::DISPLAY_HEIGHT - 1));
 
   // Calculate byte boundaries (8 pixels per byte)
   const int x_byte_start = x_start / 8;

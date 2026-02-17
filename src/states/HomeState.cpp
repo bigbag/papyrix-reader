@@ -172,6 +172,10 @@ void HomeState::render(Core& core) {
 
       // Render cover inside card (first time only)
       if (!coverRendered_) {
+        // Clear cover area with white so bitmap is visible in dark mode
+        const auto coverArea = card.getCoverArea();
+        renderer_.clearArea(coverArea.x, coverArea.y, coverArea.width, coverArea.height, 0xFF);
+
         renderCoverToCard();
         if (!coverLoadFailed_) {
           // Store compressed thumbnail after first successful render
