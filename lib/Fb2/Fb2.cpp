@@ -1,0 +1,459 @@
+/**
+ * Fb2.cpp
+ *
+ * FictionBook 2.0 XML e-book handler implementation for Papyrix Reader
+ */
+
+#include "Fb2.h"
+
+#include <CoverHelpers.h>
+#include <FsHelpers.h>
+#include <HardwareSerial.h>
+#include <SDCardManager.h>
+
+#include <cstring>
+
+Fb2::Fb2(std::string filepath, const std::string& cacheDir)
+    : filepath(std::move(filepath)), fileSize(0), loaded(false) {
+  // Create cache key based on filepath (same as Epub/Xtc/Txt)
+  cachePath = cacheDir + "/fb2_" + std::to_string(std::hash<std::string>{}(this->filepath));
+
+  // Extract title from filename
+  size_t lastSlash = this->filepath.find_last_of('/');
+  size_t lastDot = this->filepath.find_last_of('.');
+
+  if (lastSlash == std::string::npos) {
+    lastSlash = 0;
+  } else {
+    lastSlash++;
+  }
+
+  if (lastDot == std::string::npos || lastDot <= lastSlash) {
+    title = this->filepath.substr(lastSlash);
+  } else {
+    title = this->filepath.substr(lastSlash, lastDot - lastSlash);
+  }
+}
+
+Fb2::~Fb2() {
+  if (xmlParser_) {
+    XML_ParserFree(xmlParser_);
+    xmlParser_ = nullptr;
+  }
+}
+
+bool Fb2::load() {
+  Serial.printf("[%lu] [FB2] Loading FB2: %s\n", millis(), filepath.c_str());
+
+  if (!SdMan.exists(filepath.c_str())) {
+    Serial.printf("[%lu] [FB2] File does not exist\n", millis());
+    return false;
+  }
+
+  FsFile file;
+  if (!SdMan.openFileForRead("FB2", filepath, file)) {
+    Serial.printf("[%lu] [FB2] Failed to open file\n", millis());
+    return false;
+  }
+
+  fileSize = file.size();
+  file.close();
+
+  // Stream-parse in chunks (file may exceed available RAM)
+  if (!parseXmlStream()) {
+    Serial.printf("[%lu] [FB2] Failed to parse XML\n", millis());
+    return false;
+  }
+
+  loaded = true;
+  Serial.printf("[%lu] [FB2] Loaded FB2: %s (title: '%s', author: '%s')\n", millis(), filepath.c_str(), title.c_str(),
+                author.c_str());
+  return true;
+}
+
+void XMLCALL Fb2::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
+  auto* self = static_cast<Fb2*>(userData);
+
+  self->depth++;
+
+  // Prevent stack overflow from deeply nested XML
+  if (self->depth >= 100) {
+    return;
+  }
+
+  // Skip content inside <binary> tags (embedded images)
+  if (self->skipUntilDepth < self->depth) {
+    return;
+  }
+
+  // FB2 uses namespaces, strip prefix if present
+  const char* tag = strrchr(name, ':');
+  if (tag) {
+    tag++;
+  } else {
+    tag = name;
+  }
+
+  // Skip binary content (base64-encoded images)
+  if (strcmp(tag, "binary") == 0) {
+    self->skipUntilDepth = self->depth - 1;
+    return;
+  }
+
+  // Description / Metadata
+  if (strcmp(tag, "book-title") == 0) {
+    self->inBookTitle = true;
+    self->title.clear();
+  } else if (strcmp(tag, "author") == 0) {
+    self->inAuthor = true;
+    self->currentAuthorFirst.clear();
+    self->currentAuthorLast.clear();
+  } else if (strcmp(tag, "first-name") == 0) {
+    self->inFirstName = true;
+  } else if (strcmp(tag, "last-name") == 0) {
+    self->inLastName = true;
+  } else if (strcmp(tag, "coverpage") == 0) {
+    self->inCoverPage = true;
+  } else if (strcmp(tag, "image") == 0 && self->inCoverPage) {
+    // Look for l:href or href attribute
+    if (atts) {
+      for (int i = 0; atts[i]; i += 2) {
+        const char* attrName = atts[i];
+        const char* attrValue = atts[i + 1];
+
+        // Handle both l:href and href
+        const char* attr = strrchr(attrName, ':');
+        if (attr)
+          attr++;
+        else
+          attr = attrName;
+
+        if ((strcmp(attr, "href") == 0 || strcmp(attrName, "l:href") == 0) && attrValue) {
+          // Store the reference (remove # prefix)
+          if (attrValue[0] == '#') {
+            self->coverPath = attrValue + 1;
+          } else {
+            self->coverPath = attrValue;
+          }
+          Serial.printf("[%lu] [FB2] Found cover reference: %s\n", millis(), self->coverPath.c_str());
+          break;
+        }
+      }
+    }
+  } else if (strcmp(tag, "body") == 0) {
+    self->bodyCount_++;
+    self->inBody = (self->bodyCount_ == 1);
+  } else if (strcmp(tag, "section") == 0 && self->inBody) {
+    self->sectionCounter_++;
+  } else if (strcmp(tag, "title") == 0 && self->inBody && self->sectionCounter_ > 0) {
+    self->inSectionTitle_ = true;
+    self->sectionTitleDepth_ = self->depth;
+    self->currentSectionTitle_.clear();
+  }
+}
+
+void XMLCALL Fb2::endElement(void* userData, const XML_Char* name) {
+  auto* self = static_cast<Fb2*>(userData);
+
+  // FB2 uses namespaces, strip prefix if present
+  const char* tag = strrchr(name, ':');
+  if (tag) {
+    tag++;
+  } else {
+    tag = name;
+  }
+
+  if (strcmp(tag, "book-title") == 0) {
+    self->inBookTitle = false;
+  } else if (strcmp(tag, "first-name") == 0) {
+    self->inFirstName = false;
+  } else if (strcmp(tag, "last-name") == 0) {
+    self->inLastName = false;
+  } else if (strcmp(tag, "author") == 0 && self->inAuthor) {
+    // Combine first and last name for author
+    std::string fullAuthor;
+    if (!self->currentAuthorFirst.empty()) {
+      fullAuthor = self->currentAuthorFirst;
+      if (!self->currentAuthorLast.empty()) {
+        fullAuthor += " ";
+      }
+    }
+    fullAuthor += self->currentAuthorLast;
+
+    if (!fullAuthor.empty()) {
+      if (!self->author.empty()) {
+        self->author += ", ";
+      }
+      self->author += fullAuthor;
+    }
+
+    self->inAuthor = false;
+    self->currentAuthorFirst.clear();
+    self->currentAuthorLast.clear();
+  } else if (strcmp(tag, "coverpage") == 0) {
+    self->inCoverPage = false;
+  } else if (strcmp(tag, "binary") == 0) {
+    // Exit binary tag - stop skipping
+    self->skipUntilDepth = INT_MAX;
+  } else if (strcmp(tag, "body") == 0) {
+    self->inBody = false;
+  } else if (strcmp(tag, "title") == 0 && self->inSectionTitle_ && self->depth == self->sectionTitleDepth_) {
+    self->inSectionTitle_ = false;
+
+    // Trim whitespace and replace newlines with spaces
+    std::string& t = self->currentSectionTitle_;
+    for (size_t i = 0; i < t.size(); i++) {
+      if (t[i] == '\n' || t[i] == '\r') {
+        t[i] = ' ';
+      }
+    }
+    // Trim leading whitespace
+    size_t start = 0;
+    while (start < t.size() && isspace(static_cast<unsigned char>(t[start]))) {
+      start++;
+    }
+    // Trim trailing whitespace
+    size_t end = t.size();
+    while (end > start && isspace(static_cast<unsigned char>(t[end - 1]))) {
+      end--;
+    }
+    if (start > 0 || end < t.size()) {
+      t = t.substr(start, end - start);
+    }
+
+    if (!t.empty()) {
+      self->tocItems_.push_back({t, self->sectionCounter_ - 1});
+    }
+  }
+
+  self->depth--;
+}
+
+void XMLCALL Fb2::characterData(void* userData, const XML_Char* s, int len) {
+  auto* self = static_cast<Fb2*>(userData);
+
+  // Skip if inside binary tags
+  if (self->skipUntilDepth < self->depth) {
+    return;
+  }
+
+  // Collect section title text for TOC
+  if (self->inSectionTitle_) {
+    self->currentSectionTitle_.append(s, len);
+  }
+
+  // Extract metadata based on current context
+  if (self->inBookTitle) {
+    self->title.append(s, len);
+  } else if (self->inFirstName) {
+    self->currentAuthorFirst.append(s, len);
+  } else if (self->inLastName) {
+    self->currentAuthorLast.append(s, len);
+  }
+}
+
+bool Fb2::parseXmlStream() {
+  Serial.printf("[%lu] [FB2] Starting streaming XML parse\n", millis());
+
+  FsFile file;
+  if (!SdMan.openFileForRead("FB2", filepath, file)) {
+    return false;
+  }
+
+  xmlParser_ = XML_ParserCreate("UTF-8");
+  if (!xmlParser_) {
+    Serial.printf("[%lu] [FB2] Failed to create XML parser\n", millis());
+    file.close();
+    return false;
+  }
+
+  XML_SetUserData(xmlParser_, this);
+  XML_SetElementHandler(xmlParser_, startElement, endElement);
+  XML_SetCharacterDataHandler(xmlParser_, characterData);
+
+  constexpr size_t kChunkSize = 4096;
+  uint8_t buffer[kChunkSize];
+  bool success = true;
+
+  while (file.available() > 0) {
+    const size_t bytesRead = file.read(buffer, kChunkSize);
+    if (bytesRead == 0) break;
+
+    const int done = (file.available() == 0) ? 1 : 0;
+    if (XML_Parse(xmlParser_, reinterpret_cast<const char*>(buffer), static_cast<int>(bytesRead), done) ==
+        XML_STATUS_ERROR) {
+      Serial.printf("[%lu] [FB2] XML parse error: %s\n", millis(), XML_ErrorString(XML_GetErrorCode(xmlParser_)));
+      success = false;
+      break;
+    }
+  }
+
+  file.close();
+
+  if (success) {
+    postProcessMetadata();
+  }
+
+  XML_ParserFree(xmlParser_);
+  xmlParser_ = nullptr;
+  return success;
+}
+
+void Fb2::postProcessMetadata() {
+  // Clean up title (remove newlines and extra whitespace)
+  while (!title.empty() && isspace(static_cast<unsigned char>(title.back()))) {
+    title.pop_back();
+  }
+  while (!title.empty() && isspace(static_cast<unsigned char>(title.front()))) {
+    title.erase(title.begin());
+  }
+
+  // Replace newlines in title with spaces
+  for (size_t i = 0; i < title.size(); i++) {
+    if (title[i] == '\n' || title[i] == '\r') {
+      title[i] = ' ';
+    }
+  }
+
+  Serial.printf("[%lu] [FB2] XML parsing complete: title='%s', author='%s'\n", millis(), title.c_str(), author.c_str());
+}
+
+bool Fb2::clearCache() const {
+  if (!SdMan.exists(cachePath.c_str())) {
+    Serial.printf("[%lu] [FB2] Cache does not exist, no action needed\n", millis());
+    return true;
+  }
+
+  if (!SdMan.removeDir(cachePath.c_str())) {
+    Serial.printf("[%lu] [FB2] Failed to clear cache\n", millis());
+    return false;
+  }
+
+  Serial.printf("[%lu] [FB2] Cache cleared successfully\n", millis());
+  return true;
+}
+
+void Fb2::setupCacheDir() const {
+  if (SdMan.exists(cachePath.c_str())) {
+    return;
+  }
+
+  // Create directories recursively
+  for (size_t i = 1; i < cachePath.length(); i++) {
+    if (cachePath[i] == '/') {
+      SdMan.mkdir(cachePath.substr(0, i).c_str());
+    }
+  }
+  SdMan.mkdir(cachePath.c_str());
+}
+
+std::string Fb2::getCoverBmpPath() const { return cachePath + "/cover.bmp"; }
+
+std::string Fb2::findCoverImage() const {
+  // Extract directory path
+  size_t lastSlash = filepath.find_last_of('/');
+  std::string dirPath = (lastSlash == std::string::npos) ? "/" : filepath.substr(0, lastSlash);
+  if (dirPath.empty()) {
+    dirPath = "/";
+  }
+
+  return CoverHelpers::findCoverImage(dirPath, title);
+}
+
+bool Fb2::generateCoverBmp(bool use1BitDithering) const {
+  const auto coverPath = getCoverBmpPath();
+  const auto failedMarkerPath = cachePath + "/.cover.failed";
+
+  // Already generated
+  if (SdMan.exists(coverPath.c_str())) {
+    return true;
+  }
+
+  // Previously failed, don't retry
+  if (SdMan.exists(failedMarkerPath.c_str())) {
+    return false;
+  }
+
+  // Find a cover image
+  std::string coverImagePath = findCoverImage();
+  if (coverImagePath.empty()) {
+    Serial.printf("[%lu] [FB2] No cover image found\n", millis());
+    // Create failure marker
+    FsFile marker;
+    if (SdMan.openFileForWrite("FB2", failedMarkerPath, marker)) {
+      marker.close();
+    }
+    return false;
+  }
+
+  // Setup cache directory
+  setupCacheDir();
+
+  // Convert to BMP using shared helper
+  const bool success = CoverHelpers::convertImageToBmp(coverImagePath, coverPath, "FB2", use1BitDithering);
+  if (!success) {
+    // Create failure marker
+    FsFile marker;
+    if (SdMan.openFileForWrite("FB2", failedMarkerPath, marker)) {
+      marker.close();
+    }
+  }
+  return success;
+}
+
+std::string Fb2::getThumbBmpPath() const { return cachePath + "/thumb.bmp"; }
+
+bool Fb2::generateThumbBmp() const {
+  const auto thumbPath = getThumbBmpPath();
+  const auto failedMarkerPath = cachePath + "/.thumb.failed";
+
+  if (SdMan.exists(thumbPath.c_str())) {
+    return true;
+  }
+
+  // Previously failed, don't retry
+  if (SdMan.exists(failedMarkerPath.c_str())) {
+    return false;
+  }
+
+  if (!SdMan.exists(getCoverBmpPath().c_str()) && !generateCoverBmp(true)) {
+    // Create failure marker
+    FsFile marker;
+    if (SdMan.openFileForWrite("FB2", failedMarkerPath, marker)) {
+      marker.close();
+    }
+    return false;
+  }
+
+  setupCacheDir();
+
+  const bool success = CoverHelpers::generateThumbFromCover(getCoverBmpPath(), thumbPath, "FB2");
+  if (!success) {
+    // Create failure marker
+    FsFile marker;
+    if (SdMan.openFileForWrite("FB2", failedMarkerPath, marker)) {
+      marker.close();
+    }
+  }
+  return success;
+}
+
+size_t Fb2::readContent(uint8_t* buffer, size_t offset, size_t length) const {
+  if (!loaded) {
+    return 0;
+  }
+
+  FsFile file;
+  if (!SdMan.openFileForRead("FB2", filepath, file)) {
+    return 0;
+  }
+
+  if (offset > 0) {
+    file.seek(offset);
+  }
+
+  const size_t bytesRead = file.read(buffer, length);
+  file.close();
+
+  return bytesRead;
+}

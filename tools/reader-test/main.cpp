@@ -12,6 +12,8 @@
 #include <EpdFont.h>
 #include <Epub.h>
 #include <EpubChapterParser.h>
+#include <Fb2.h>
+#include <Fb2Parser.h>
 #include <Epub/Page.h>
 #include <GfxRenderer.h>
 #include <Markdown.h>
@@ -33,7 +35,7 @@ MockLittleFS LittleFS;
 // GfxRenderer static frame buffer
 uint8_t GfxRenderer::frameBuffer_[EInkDisplay::BUFFER_SIZE];
 
-enum ContentType { EPUB, MARKDOWN, TXT_FILE, UNKNOWN };
+enum ContentType { EPUB, MARKDOWN, TXT_FILE, FB2_FILE, UNKNOWN };
 
 static ContentType detectType(const std::string& path) {
   auto ext = path.substr(path.find_last_of('.') + 1);
@@ -41,6 +43,7 @@ static ContentType detectType(const std::string& path) {
   if (ext == "epub") return EPUB;
   if (ext == "md" || ext == "markdown") return MARKDOWN;
   if (ext == "txt") return TXT_FILE;
+  if (ext == "fb2") return FB2_FILE;
   return UNKNOWN;
 }
 
@@ -111,7 +114,7 @@ static void dumpCacheDir(const std::string& dir) {
 }
 
 static void usage() {
-  fprintf(stderr, "Usage: reader-test [--dump] [--batch N] [--no-statusbar] <file.epub|.md|.txt> [output_dir]\n");
+  fprintf(stderr, "Usage: reader-test [--dump] [--batch N] [--no-statusbar] <file.epub|.md|.txt|.fb2> [output_dir]\n");
   fprintf(stderr, "       reader-test --cache-dump <cache_dir>\n");
   fprintf(stderr, "  --dump           Print parsed text content of each page\n");
   fprintf(stderr, "  --batch N        Cache N pages per batch (default: 5, matching device)\n");
@@ -226,6 +229,26 @@ int main(int argc, char* argv[]) {
     PageCache cache(cachePath);
     cache.create(parser, config, 0);
     printf("Markdown: %d pages -> %s\n", cache.pageCount(), cachePath.c_str());
+    if (dump) dumpPages(cache);
+
+  } else if (type == FB2_FILE) {
+    Fb2 fb2file(filepath, outputDir);
+    if (!fb2file.load()) {
+      fprintf(stderr, "Failed to load FB2: %s\n", filepath.c_str());
+      return 1;
+    }
+    fb2file.setupCacheDir();
+    printf("FB2: \"%s\" by %s (%d TOC entries)\n", fb2file.getTitle().c_str(), fb2file.getAuthor().c_str(),
+           fb2file.tocCount());
+
+    Fb2Parser parser(filepath, gfx, config);
+    std::string cachePath = outputDir + "/pages_0.bin";
+    PageCache cache(cachePath);
+    cache.create(parser, config, batchSize);
+    while (batchSize > 0 && cache.isPartial()) {
+      cache.extend(parser, batchSize);
+    }
+    printf("FB2: %d pages -> %s\n", cache.pageCount(), cachePath.c_str());
     if (dump) dumpPages(cache);
 
   } else {

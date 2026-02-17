@@ -192,6 +192,7 @@ bool FileListState::isSupportedFile(const char* name) const {
   if (strcasecmp(ext, "txt") == 0) return true;
   if (strcasecmp(ext, "md") == 0) return true;
   if (strcasecmp(ext, "markdown") == 0) return true;
+  if (strcasecmp(ext, "fb2") == 0) return true;
   return false;
 }
 

@@ -24,6 +24,9 @@ ContentType detectContentType(const char* path) {
   if (strcasecmp(ext, ".md") == 0 || strcasecmp(ext, ".markdown") == 0) {
     return ContentType::Markdown;
   }
+  if (strcasecmp(ext, ".fb2") == 0) {
+    return ContentType::Fb2;
+  }
 
   return ContentType::None;
 }

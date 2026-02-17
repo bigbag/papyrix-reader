@@ -16,3 +16,4 @@ test/build/*
 tools/monitor/build/
 tools/reader-test/build/
 /monitor
+.worktrees/

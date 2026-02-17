@@ -62,6 +62,7 @@ class ZipFile {
   bool open();
   bool close();
   bool loadAllFileStatSlims();
+  const std::unordered_map<std::string, FileStatSlim>& getFileStatSlimCache() const { return fileStatSlimCache; }
   uint16_t getTotalEntries();
   bool getInflatedFileSize(const char* filename, size_t* size);
   // Batch lookup: scan ZIP central dir once and fill sizes for matching targets.

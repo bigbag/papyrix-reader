@@ -15,6 +15,8 @@ add_executable(reader-test
   # Content handlers
   ${PROJECT_ROOT}/lib/Txt/Txt.cpp
   ${PROJECT_ROOT}/lib/Markdown/Markdown.cpp
+  ${PROJECT_ROOT}/lib/Fb2/Fb2.cpp
+  ${PROJECT_ROOT}/lib/Fb2/Fb2Parser.cpp
 
   # Text layout
   ${PROJECT_ROOT}/lib/Epub/Epub/ParsedText.cpp
@@ -71,6 +73,7 @@ target_include_directories(reader-test PRIVATE
   ${PROJECT_ROOT}/lib/ScriptDetector
   ${PROJECT_ROOT}/lib/Markdown
   ${PROJECT_ROOT}/lib/Txt
+  ${PROJECT_ROOT}/lib/Fb2
   ${PROJECT_ROOT}/lib/GfxRenderer
   ${PROJECT_ROOT}/lib/EpdFont
   ${PROJECT_ROOT}/lib/EpdFont/builtinFonts
