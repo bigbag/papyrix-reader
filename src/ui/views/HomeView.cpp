@@ -20,7 +20,7 @@ void render(const GfxRenderer& r, const Theme& t, const HomeView& v) {
   brandTitle(r, t, 10, "Papyrix");
 
   // Battery indicator - top right
-  battery(r, t, pageWidth - 80, 10, v.batteryPercent);
+  battery(r, t, pageWidth - 90, 10, v.batteryPercent);
 
   // Book card dimensions (70% width, centered)
   const auto card = CardDimensions::calculate(pageWidth, pageHeight);

@@ -370,16 +370,18 @@ void battery(const GfxRenderer& r, const Theme& t, int x, int y, int percent) {
   const int tipW = 3;
   const int tipH = 6;
 
+  const int iconY = y + 3;  // shift icon down to align with text
+
   // Battery body outline
-  r.drawRect(x, y, battW, battH, t.primaryTextBlack);
+  r.drawRect(x, iconY, battW, battH, t.primaryTextBlack);
 
   // Battery tip (positive terminal)
-  r.fillRect(x + battW, y + (battH - tipH) / 2, tipW, tipH, t.primaryTextBlack);
+  r.fillRect(x + battW, iconY + (battH - tipH) / 2, tipW, tipH, t.primaryTextBlack);
 
   // Fill level
   const int fillW = ((battW - 4) * percent) / 100;
   if (fillW > 0) {
-    r.fillRect(x + 2, y + 2, fillW, battH - 4, t.primaryTextBlack);
+    r.fillRect(x + 2, iconY + 2, fillW, battH - 4, t.primaryTextBlack);
   }
 
   // Percentage text
@@ -683,7 +685,7 @@ void readerStatusBar(const GfxRenderer& r, const Theme& t, int marginLeft, int m
   constexpr int batteryWidth = 15;
   constexpr int batteryHeight = 10;
   const int x = marginLeft;
-  const int y = screenHeight - marginBottom + 1;
+  const int y = textY + 5;
 
   // Draw battery outline
   r.drawLine(x, y, x + batteryWidth - 4, y, t.primaryTextBlack);
