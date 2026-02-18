@@ -19,7 +19,7 @@
 #include "Serialization.h"
 
 namespace {
-constexpr uint8_t kMetaCacheVersion = 1;
+constexpr uint8_t kMetaCacheVersion = 2;
 }
 
 struct TocItem {

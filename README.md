@@ -37,6 +37,7 @@ This project is **not affiliated with Xteink**; it's built as a community projec
 ### Reading & Format Support
 - [x] EPUB 2 and EPUB 3 parsing (nav.xhtml with NCX fallback)
 - [x] CSS stylesheet parsing (text-align, font-style, font-weight, text-indent, margins, direction)
+- [x] FB2 (FictionBook 2.0) support with metadata, TOC navigation, and metadata caching (no inline images)
 - [x] XTC/XTCH native format support
 - [x] Markdown (.md, .markdown) file support with formatting
 - [x] Plain text (.txt, .text) file support
@@ -317,7 +318,7 @@ Papyrix is designed for the ESP32-C3's ~380KB RAM constraint. See [docs/architec
 
 - **State Machine**: 10 pre-allocated states (Home, Reader, Settings, etc.) with lifecycle hooks
 - **Dual-Boot System**: UI mode (full features) vs Reader mode (minimal, maximum RAM) - device restarts between modes
-- **Content Providers**: Unified `ContentHandle` interface for EPUB, XTC, TXT, and Markdown formats
+- **Content Providers**: Unified `ContentHandle` interface for EPUB, XTC, TXT, Markdown, and FB2 formats
 - **PageCache**: Partial page caching with background pre-rendering
 
 ### WiFi and Memory
@@ -356,6 +357,15 @@ The first time chapters of a book are loaded, they are cached to the SD card. Su
 │   └── images/          # Cached inline images (converted to 2-bit BMP)
 │       ├── 123456.bmp   # Images named by hash of source path
 │       └── ...
+│
+├── fb2_55667788/        # Each FB2 file is cached to a subdirectory named `fb2_<hash>`
+│   ├── meta.bin         # Cached metadata (title, author, TOC) for faster reloads
+│   ├── progress.bin     # Stores reading progress
+│   ├── cover.bmp        # Cover image (converted from adjacent image file)
+│   ├── sections/        # Cached chapter pages (same format as EPUB sections)
+│   │   ├── 0.bin
+│   │   └── ...
+│
 │
 ├── txt_98765432/        # Each TXT file is cached to a subdirectory named `txt_<hash>`
 │   ├── progress.bin     # Stores current page number (4-byte uint32)

@@ -26,6 +26,7 @@ class Fb2Parser : public ContentParser {
   bool hasMoreContent() const override { return hasMore_; }
   bool canResume() const override { return false; }
   void reset() override;
+  const std::vector<std::pair<std::string, uint16_t>>& getAnchorMap() const override { return anchorMap_; }
 
  private:
   std::string filepath_;
@@ -60,6 +61,9 @@ class Fb2Parser : public ContentParser {
   std::unique_ptr<ParsedText> currentTextBlock_;
   std::unique_ptr<Page> currentPage_;
   int16_t currentPageNextY_ = 0;
+
+  // Anchor map for TOC navigation (section_N → page index)
+  std::vector<std::pair<std::string, uint16_t>> anchorMap_;
 
   // Callback state
   std::function<void(std::unique_ptr<Page>)> onPageComplete_;

@@ -27,6 +27,7 @@ class TestFb2Parser {
   int skipUntilDepth = INT_MAX;
 
   // Metadata state
+  bool inTitleInfo = false;
   bool inBookTitle = false;
   bool inFirstName = false;
   bool inLastName = false;
@@ -60,15 +61,19 @@ class TestFb2Parser {
       tag = name;
     }
 
-    if (strcmp(tag, "book-title") == 0) {
+    if (strcmp(tag, "title-info") == 0) {
+      self->inTitleInfo = true;
+    }
+
+    if (strcmp(tag, "book-title") == 0 && self->inTitleInfo) {
       self->inBookTitle = true;
-    } else if (strcmp(tag, "author") == 0) {
+    } else if (strcmp(tag, "author") == 0 && self->inTitleInfo) {
       self->inAuthor = true;
       self->currentAuthorFirst.clear();
       self->currentAuthorLast.clear();
-    } else if (strcmp(tag, "first-name") == 0) {
+    } else if (strcmp(tag, "first-name") == 0 && self->inAuthor) {
       self->inFirstName = true;
-    } else if (strcmp(tag, "last-name") == 0) {
+    } else if (strcmp(tag, "last-name") == 0 && self->inAuthor) {
       self->inLastName = true;
     } else if (strcmp(tag, "body") == 0) {
       self->bodyCount_++;
@@ -90,6 +95,10 @@ class TestFb2Parser {
       tag++;
     } else {
       tag = name;
+    }
+
+    if (strcmp(tag, "title-info") == 0) {
+      self->inTitleInfo = false;
     }
 
     if (strcmp(tag, "book-title") == 0) {
@@ -434,6 +443,76 @@ int main() {
     bool ok = parser.parse(makeFb2("<book-title>Book</book-title>", "<p>Just text, no sections</p>"));
     runner.expectTrue(ok, "toc_empty: parses successfully");
     runner.expectEq(static_cast<size_t>(0), parser.tocItems.size(), "toc_empty: no items");
+  }
+
+  // ============================================
+  // Author filtering: only from <title-info>
+  // ============================================
+
+  // Test: <document-info><author> should NOT be included
+  {
+    std::string xml =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        "<FictionBook xmlns=\"http://www.gribuser.ru/xml/fictionbook/2.0\">"
+        "<description>"
+        "<title-info>"
+        "<author><first-name>Robert</first-name><last-name>Heinlein</last-name></author>"
+        "<book-title>Starship Troopers</book-title>"
+        "</title-info>"
+        "<document-info>"
+        "<author><first-name>MCat78</first-name></author>"
+        "</document-info>"
+        "</description>"
+        "<body><section><p>Text</p></section></body>"
+        "</FictionBook>";
+    TestFb2Parser parser;
+    bool ok = parser.parse(xml);
+    runner.expectTrue(ok, "doc_info_author_excluded: parses successfully");
+    runner.expectEqual("Robert Heinlein", parser.author, "doc_info_author_excluded: only title-info author");
+  }
+
+  // Test: Multiple <title-info><author> entries still work
+  {
+    std::string xml =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        "<FictionBook xmlns=\"http://www.gribuser.ru/xml/fictionbook/2.0\">"
+        "<description>"
+        "<title-info>"
+        "<author><first-name>Author</first-name><last-name>One</last-name></author>"
+        "<author><first-name>Author</first-name><last-name>Two</last-name></author>"
+        "<book-title>Collab</book-title>"
+        "</title-info>"
+        "<document-info>"
+        "<author><first-name>Editor</first-name></author>"
+        "</document-info>"
+        "</description>"
+        "<body><section><p>Text</p></section></body>"
+        "</FictionBook>";
+    TestFb2Parser parser;
+    bool ok = parser.parse(xml);
+    runner.expectTrue(ok, "multi_title_info_authors: parses successfully");
+    runner.expectEqual("Author One, Author Two", parser.author, "multi_title_info_authors: both included, editor excluded");
+  }
+
+  // Test: <book-title> from <publish-info> should NOT override
+  {
+    std::string xml =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        "<FictionBook xmlns=\"http://www.gribuser.ru/xml/fictionbook/2.0\">"
+        "<description>"
+        "<title-info>"
+        "<book-title>Real Title</book-title>"
+        "</title-info>"
+        "<publish-info>"
+        "<book-name>Publisher Title</book-name>"
+        "</publish-info>"
+        "</description>"
+        "<body><section><p>Text</p></section></body>"
+        "</FictionBook>";
+    TestFb2Parser parser;
+    bool ok = parser.parse(xml);
+    runner.expectTrue(ok, "publish_info_title_ignored: parses successfully");
+    runner.expectEqual("Real Title", parser.title, "publish_info_title_ignored: only title-info title");
   }
 
   // ============================================

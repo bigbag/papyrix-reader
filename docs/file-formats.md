@@ -1,6 +1,6 @@
 # File Formats
 
-This document describes the binary cache formats used by Papyrix for EPUB, TXT, and Markdown files.
+This document describes the binary cache formats used by Papyrix for EPUB, TXT, Markdown, and FB2 files.
 
 ## TXT Cache Files
 
@@ -98,6 +98,61 @@ The image is converted to 1-bit dithered BMP format for display.
 - **Images** - Placeholder `[Image]` shown
 - **Code blocks** - Placeholder `[Code: ...]` shown
 - **Tables** - Placeholder `[Table omitted]` shown
+
+---
+
+## FB2 Cache Files
+
+FB2 (FictionBook 2.0) files use a cache format stored in `.papyrix/fb2_<hash>/`.
+
+### `meta.bin`
+
+Caches parsed metadata (title, author, cover reference, TOC) to avoid re-parsing the full XML on subsequent loads. Invalidated by version changes.
+
+```
+Offset  Size        Description
+0x00    1           Version (uint8_t) — currently 2
+0x01    4+N         Title (length-prefixed UTF-8 string)
+...     4+N         Author (length-prefixed UTF-8 string)
+...     4+N         Cover path (length-prefixed UTF-8 string)
+...     4           File size (uint32_t)
+...     2           Section count (uint16_t)
+...     2           TOC item count (uint16_t)
+...     [repeating] TOC items:
+          4+N         Title (length-prefixed UTF-8 string)
+          2           Section index (int16_t, 0-based)
+```
+
+### `progress.bin`
+
+Stores the current reading position (same format as EPUB).
+
+### `sections/`
+
+Cached chapter pages, same format as EPUB section files. Files named by section index (`0.bin`, `1.bin`, etc.).
+
+### `cover.bmp`
+
+Optional cover image, discovered by searching for (case-insensitive):
+1. `<filename>.jpg`, `<filename>.jpeg`, `<filename>.png`, or `<filename>.bmp` (matching the FB2 filename)
+2. `cover.jpg`, `cover.jpeg`, `cover.png`, or `cover.bmp` in the same directory
+
+The image is converted to 1-bit dithered BMP format for display.
+
+### Supported FB2 Features
+
+- **Metadata** — Title from `<book-title>`, author from `<first-name>` + `<last-name>` (from `<title-info>` only)
+- **Sections** — `<section>` elements treated as chapters with page breaks between them
+- **Titles/Subtitles** — Rendered bold and centered
+- **Paragraphs** (`<p>`) — Standard paragraph layout with configurable alignment
+- **Emphasis** (`<emphasis>`) — Italic font style
+- **Strong** (`<strong>`) — Bold font style
+- **Empty lines** (`<empty-line>`) — Vertical spacing
+- **TOC navigation** — Built from section titles, supports jumping to sections
+- **RTL detection** — Arabic text detected from first chunk, enables RTL layout
+- **Namespace handling** — Strips XML namespace prefixes for compatibility
+- **Binary skip** — `<binary>` tags (embedded images) skipped to save memory
+- **Images** — Not supported (inline images are skipped)
 
 ---
 

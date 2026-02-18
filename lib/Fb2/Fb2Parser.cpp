@@ -56,6 +56,7 @@ void Fb2Parser::reset() {
   pagesCreated_ = 0;
   hitMaxPages_ = false;
   fileSize_ = 0;
+  anchorMap_.clear();
 }
 
 bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint16_t maxPages,
@@ -211,6 +212,8 @@ void XMLCALL Fb2Parser::startElement(void* userData, const XML_Char* name, const
       self->startNewPage();
     }
     self->firstSection_ = false;
+    // Record anchor for TOC navigation: section_N → page where this section starts
+    self->anchorMap_.emplace_back("section_" + std::to_string(self->sectionCounter_ - 1), self->pagesCreated_);
   } else if (strcmp(localName, "title") == 0) {
     self->inTitle_ = true;
     self->boldUntilDepth_ = std::min(self->boldUntilDepth_, self->depth_);

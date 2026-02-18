@@ -45,6 +45,7 @@ class Fb2 {
   bool inFirstName = false;
   bool inLastName = false;
   bool inAuthor = false;
+  bool inTitleInfo = false;
   bool inCoverPage = false;
   std::string currentAuthorFirst;
   std::string currentAuthorLast;

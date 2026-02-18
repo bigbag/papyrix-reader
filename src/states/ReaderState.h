@@ -131,6 +131,7 @@ class ReaderState : public State {
   // Anchor-to-page persistence for intra-spine TOC navigation
   static void saveAnchorMap(const ContentParser& parser, const std::string& cachePath);
   static int loadAnchorPage(const std::string& cachePath, const std::string& anchor);
+  static std::vector<std::pair<std::string, uint16_t>> loadAnchorMap(const std::string& cachePath);
 
   // Source state (where reader was opened from)
   StateId sourceState_ = StateId::Home;

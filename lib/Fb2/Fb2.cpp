@@ -15,7 +15,7 @@
 #include <cstring>
 
 namespace {
-constexpr uint8_t kMetaCacheVersion = 1;
+constexpr uint8_t kMetaCacheVersion = 2;
 constexpr char kMetaCacheFile[] = "/meta.bin";
 }  // namespace
 
@@ -116,17 +116,22 @@ void XMLCALL Fb2::startElement(void* userData, const XML_Char* name, const XML_C
     return;
   }
 
-  // Description / Metadata
-  if (strcmp(tag, "book-title") == 0) {
+  // Track <title-info> to only collect metadata from it (not <document-info>)
+  if (strcmp(tag, "title-info") == 0) {
+    self->inTitleInfo = true;
+  }
+
+  // Description / Metadata (only from <title-info>)
+  if (strcmp(tag, "book-title") == 0 && self->inTitleInfo) {
     self->inBookTitle = true;
     self->title.clear();
-  } else if (strcmp(tag, "author") == 0) {
+  } else if (strcmp(tag, "author") == 0 && self->inTitleInfo) {
     self->inAuthor = true;
     self->currentAuthorFirst.clear();
     self->currentAuthorLast.clear();
-  } else if (strcmp(tag, "first-name") == 0) {
+  } else if (strcmp(tag, "first-name") == 0 && self->inAuthor) {
     self->inFirstName = true;
-  } else if (strcmp(tag, "last-name") == 0) {
+  } else if (strcmp(tag, "last-name") == 0 && self->inAuthor) {
     self->inLastName = true;
   } else if (strcmp(tag, "coverpage") == 0) {
     self->inCoverPage = true;
@@ -177,6 +182,10 @@ void XMLCALL Fb2::endElement(void* userData, const XML_Char* name) {
     tag++;
   } else {
     tag = name;
+  }
+
+  if (strcmp(tag, "title-info") == 0) {
+    self->inTitleInfo = false;
   }
 
   if (strcmp(tag, "book-title") == 0) {

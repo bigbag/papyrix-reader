@@ -12,7 +12,7 @@ Papyrix is organized around a **state machine** architecture with **singleton ma
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  StateMachine (10 States)  │  Managers (Font, Theme, Input)                 │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  ContentHandle (EPUB, XTC, TXT, Markdown)  │  PageCache                     │
+│  ContentHandle (EPUB, XTC, TXT, Markdown, FB2)  │  PageCache                │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  GfxRenderer  │  EpdFont  │  ThaiShaper  │  ArabicShaper  │  ScriptDetector │
 ├─────────────────────────────────────────────────────────────────────────────┤
@@ -75,6 +75,7 @@ The boot mode is stored in RTC memory and persists across ESP restarts. When lau
 `ContentHandle` is a tagged union that manages one content provider at a time, supporting:
 
 - **EPUB** — `EpubProvider` — `.epub`
+- **FB2** — `Fb2Provider` — `.fb2`
 - **XTC** — `XtcProvider` — `.xtc`, `.xtch`
 - **TXT** — `TxtProvider` — `.txt`, `.text`
 - **Markdown** — `MarkdownProvider` — `.md`, `.markdown`
@@ -424,7 +425,7 @@ class HomeState : public State {
 
 ## Desktop Testing (reader-test)
 
-`tools/reader-test/` is a desktop tool that runs the full content parsing pipeline (EPUB/TXT/Markdown) without hardware. It uses the same built-in fonts and viewport dimensions as the device to produce identical page boundaries.
+`tools/reader-test/` is a desktop tool that runs the full content parsing pipeline (EPUB/TXT/Markdown/FB2) without hardware. It uses the same built-in fonts and viewport dimensions as the device to produce identical page boundaries.
 
 ### Device Emulation
 
@@ -499,6 +500,7 @@ The `--batch 5` flag is critical for reproducing suspend/resume bugs that only t
 
 - **`ContentHandle.h`** — Tagged union for providers
 - **`EpubProvider.h`** — EPUB format support
+- **`Fb2Provider.h`** — FB2 (FictionBook 2.0) format support
 - **`XtcProvider.h`** — XTC/XTCH format support
 - **`TxtProvider.h`** — Plain text support
 - **`MarkdownProvider.h`** — Markdown format support
@@ -516,6 +518,7 @@ The `--batch 5` flag is critical for reproducing suspend/resume bugs that only t
 ### Libraries (`/lib/`)
 
 - **`Epub/`** — EPUB parsing, CSS, TOC
+- **`Fb2/`** — FB2 (FictionBook 2.0) parsing, metadata extraction, TOC
 - **`Xtc/`** — XTC/XTCH native format
 - **`Txt/`** — Plain text file handling
 - **`Markdown/`** — Markdown format support

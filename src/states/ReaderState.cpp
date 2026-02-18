@@ -96,6 +96,25 @@ int ReaderState::loadAnchorPage(const std::string& cachePath, const std::string&
   return -1;
 }
 
+std::vector<std::pair<std::string, uint16_t>> ReaderState::loadAnchorMap(const std::string& cachePath) {
+  std::vector<std::pair<std::string, uint16_t>> anchors;
+  std::string anchorPath = cachePath + ".anchors";
+  FsFile file;
+  if (!SdMan.openFileForRead("RDR", anchorPath, file)) return anchors;
+
+  uint16_t count;
+  if (serialization::readPodChecked(file, count)) {
+    for (uint16_t i = 0; i < count; i++) {
+      std::string anchorId;
+      uint16_t page;
+      if (!serialization::readString(file, anchorId) || !serialization::readPodChecked(file, page)) break;
+      anchors.emplace_back(std::move(anchorId), page);
+    }
+  }
+  file.close();
+  return anchors;
+}
+
 int ReaderState::calcFirstContentSpine(bool hasCover, int textStartIndex, size_t spineCount) {
   if (hasCover && textStartIndex == 0 && spineCount > 1) {
     return 1;
@@ -1214,23 +1233,7 @@ int ReaderState::findCurrentTocEntry(Core& core) {
 
     // Load anchor map once from disk (avoids reopening file per TOC entry)
     std::string cachePath = epubSectionCachePath(epub->getCachePath(), currentSpineIndex_);
-    std::string anchorPath = cachePath + ".anchors";
-    std::vector<std::pair<std::string, uint16_t>> anchors;
-    {
-      FsFile file;
-      if (SdMan.openFileForRead("RDR", anchorPath, file)) {
-        uint16_t count;
-        if (serialization::readPodChecked(file, count)) {
-          for (uint16_t j = 0; j < count; j++) {
-            std::string id;
-            uint16_t page;
-            if (!serialization::readString(file, id) || !serialization::readPodChecked(file, page)) break;
-            anchors.emplace_back(std::move(id), page);
-          }
-        }
-        file.close();
-      }
-    }
+    auto anchors = loadAnchorMap(cachePath);
 
     // Refine: find the latest TOC entry whose anchor page <= current page
     const int tocCount = epub->getTocItemsCount();
@@ -1270,7 +1273,36 @@ int ReaderState::findCurrentTocEntry(Core& core) {
       }
     }
     return lastMatch;
-  } else if (type == ContentType::Fb2 || type == ContentType::Markdown || type == ContentType::Txt) {
+  } else if (type == ContentType::Fb2) {
+    // For FB2, TOC entries store section indices — resolve to pages via anchor map
+    const Theme& theme = THEME_MANAGER.current();
+    const auto vp = getReaderViewport(core.settings.statusBar != 0);
+    const auto config = core.settings.getRenderConfig(theme, vp.width, vp.height);
+    std::string cachePath = contentCachePath(core.content.cacheDir(), config.fontId);
+
+    auto anchors = loadAnchorMap(cachePath);
+
+    const uint16_t count = core.content.tocCount();
+    int lastMatch = -1;
+    for (uint16_t i = 0; i < count; i++) {
+      auto result = core.content.getTocEntry(i);
+      if (!result.ok()) continue;
+
+      std::string anchor = "section_" + std::to_string(result.value.pageIndex);
+      int entryPage = -1;
+      for (const auto& a : anchors) {
+        if (a.first == anchor) {
+          entryPage = a.second;
+          break;
+        }
+      }
+      if (entryPage < 0) continue;
+      if (entryPage <= currentSectionPage_) {
+        lastMatch = i;
+      }
+    }
+    return lastMatch;
+  } else if (type == ContentType::Markdown || type == ContentType::Txt) {
     // For flat-page formats, find chapter whose pageIndex <= current section page
     const uint16_t count = core.content.tocCount();
     int lastMatch = -1;
@@ -1343,7 +1375,34 @@ void ReaderState::jumpToTocEntry(Core& core, int tocIndex) {
   } else if (type == ContentType::Xtc) {
     // For XTC, pageNum is page index
     currentPage_ = chapter.pageNum;
-  } else if (type == ContentType::Fb2 || type == ContentType::Markdown || type == ContentType::Txt) {
+  } else if (type == ContentType::Fb2) {
+    // For FB2, pageNum is the section index — use anchor map to find the actual page
+    const Theme& theme = THEME_MANAGER.current();
+    const auto vp = getReaderViewport(core.settings.statusBar != 0);
+    const auto config = core.settings.getRenderConfig(theme, vp.width, vp.height);
+    std::string cachePath = contentCachePath(core.content.cacheDir(), config.fontId);
+    std::string anchor = "section_" + std::to_string(chapter.pageNum);
+
+    int page = loadAnchorPage(cachePath, anchor);
+
+    if (page < 0) {
+      renderer_.clearScreen(theme.backgroundColor);
+      ui::centeredMessage(renderer_, theme, core.settings.getReaderFontId(theme), "Indexing...");
+      renderer_.displayBuffer();
+
+      createOrExtendCache(core);
+      page = loadAnchorPage(cachePath, anchor);
+
+      while (page < 0 && pageCache_ && pageCache_->isPartial()) {
+        const size_t pagesBefore = pageCache_->pageCount();
+        createOrExtendCache(core);
+        if (!pageCache_ || pageCache_->pageCount() <= pagesBefore) break;
+        page = loadAnchorPage(cachePath, anchor);
+      }
+    }
+
+    currentSectionPage_ = (page >= 0) ? page : 0;
+  } else if (type == ContentType::Markdown || type == ContentType::Txt) {
     // For flat-page formats, pageNum is the section page index
     currentSectionPage_ = chapter.pageNum;
   }

@@ -76,7 +76,7 @@ The Files screen acts as a folder and file browser.
 * **Delete Item:** Press the **Right** button to delete the selected file or folder. A confirmation dialog will appear;
   select **Yes** to confirm deletion or **No** to cancel.
 
-> **Note:** EPUB (.epub), XTC (.xtc, .xtch), Markdown (.md, .markdown), and plain text (.txt, .text) file formats are supported. EPUB 2 and EPUB 3 formats are fully supported. Markdown files render with basic formatting (headers, bold, italic, lists). The device supports both FAT32 and exFAT formatted SD cards.
+> **Note:** EPUB (.epub), FB2 (.fb2), XTC (.xtc, .xtch), Markdown (.md, .markdown), and plain text (.txt, .text) file formats are supported. EPUB 2 and EPUB 3 formats are fully supported. FB2 files support metadata, TOC navigation, and text formatting (no inline images). Markdown files render with basic formatting (headers, bold, italic, lists). The device supports both FAT32 and exFAT formatted SD cards.
 
 > **Note:** The following folders are automatically hidden from the file browser:
 > - `System Volume Information`, `LOST.DIR`, `$RECYCLE.BIN` — OS system folders
