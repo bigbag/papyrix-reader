@@ -236,6 +236,13 @@ void PapyrixWebServer::handleUpload() {
     if (!filePath.endsWith("/")) filePath += "/";
     filePath += upload_.fileName;
 
+    if (!FsHelpers::isSupportedBookFile(upload_.fileName.c_str()) &&
+        !FsHelpers::isImageFile(upload_.fileName.c_str())) {
+      upload_.error = "Unsupported file type";
+      Serial.printf("[WEB] Rejected upload: %s (unsupported type)\n", upload_.fileName.c_str());
+      return;
+    }
+
     if (SdMan.exists(filePath.c_str())) {
       SdMan.remove(filePath.c_str());
     }

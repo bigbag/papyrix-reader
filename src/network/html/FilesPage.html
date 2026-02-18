@@ -532,7 +532,7 @@
     <h3>📤 Upload file</h3>
     <div class="upload-form">
       <p class="file-info">Select a file to upload to <strong id="uploadPathDisplay"></strong></p>
-      <input type="file" id="fileInput" onchange="validateFile()">
+      <input type="file" id="fileInput" onchange="validateFile()" accept=".epub,.fb2,.xtc,.xtch,.xtg,.xth,.txt,.text,.md,.markdown,.jpg,.jpeg,.png,.bmp">
       <button id="uploadBtn" class="upload-btn" onclick="uploadFile()" disabled>Upload</button>
       <div id="progress-container">
         <div id="progress-bar"><div id="progress-fill"></div></div>
@@ -715,20 +715,40 @@
     document.getElementById('folderModal').classList.remove('open');
   }
 
+  var ALLOWED_EXTENSIONS = ['.epub','.fb2','.xtc','.xtch','.xtg','.xth','.txt','.text','.md','.markdown','.jpg','.jpeg','.png','.bmp'];
+
   function validateFile() {
     const fileInput = document.getElementById('fileInput');
     const uploadBtn = document.getElementById('uploadBtn');
     const file = fileInput.files[0];
-    uploadBtn.disabled = !file;
+    if (!file) { uploadBtn.disabled = true; return; }
+    const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+    if (ALLOWED_EXTENSIONS.indexOf(ext) === -1) {
+      alert('Unsupported file type. Allowed: ' + ALLOWED_EXTENSIONS.join(', '));
+      fileInput.value = '';
+      uploadBtn.disabled = true;
+      return;
+    }
+    uploadBtn.disabled = false;
   }
 
   function uploadFile() {
     const fileInput = document.getElementById('fileInput');
-    const file = fileInput.files[0];
+    var file = fileInput.files[0];
 
     if (!file) {
       alert('Please select a file first!');
       return;
+    }
+
+    // Normalize extension to lowercase (e.g., Book.EPUB → Book.epub)
+    const dotIdx = file.name.lastIndexOf('.');
+    if (dotIdx !== -1) {
+      const name = file.name.substring(0, dotIdx);
+      const ext = file.name.substring(dotIdx).toLowerCase();
+      if (file.name.substring(dotIdx) !== ext) {
+        file = new File([file], name + ext, {type: file.type});
+      }
     }
 
     const formData = new FormData();
