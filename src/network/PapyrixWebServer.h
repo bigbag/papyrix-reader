@@ -52,6 +52,9 @@ class PapyrixWebServer {
   void handleUploadPost();
   void handleCreateFolder();
   void handleDelete();
+  void handleSleepScreens();
+  void handleSleepScreensData();
+  void handleSleepScreenDelete();
 };
 
 }  // namespace papyrix

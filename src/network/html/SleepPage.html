@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Papyrix Reader - Sleep Screens</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      Oxygen, Ubuntu, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f5f5f5;
+      color: #333;
+    }
+    h1 {
+      color: #2c3e50;
+      margin-bottom: 5px;
+    }
+    h2 {
+      color: #34495e;
+      margin-top: 0;
+    }
+    .card {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 15px 0;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 15px;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid #3498db;
+    }
+    .nav-links {
+      margin: 20px 0;
+    }
+    .nav-links a {
+      display: inline-block;
+      padding: 10px 20px;
+      background-color: #3498db;
+      color: white;
+      text-decoration: none;
+      border-radius: 4px;
+      margin-right: 10px;
+    }
+    .nav-links a:hover {
+      background-color: #2980b9;
+    }
+    .action-btn {
+      color: white;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.95em;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .upload-action-btn {
+      background-color: #27ae60;
+    }
+    .upload-action-btn:hover {
+      background-color: #219a52;
+    }
+    .info-text {
+      color: #7f8c8d;
+      font-size: 0.9em;
+      margin: 0 0 15px 0;
+      line-height: 1.5;
+    }
+    .file-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .file-table th,
+    .file-table td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #eee;
+    }
+    .file-table th {
+      background-color: #f8f9fa;
+      font-weight: 600;
+      color: #7f8c8d;
+    }
+    .file-table tr:hover {
+      background-color: #f8f9fa;
+    }
+    .file-icon {
+      margin-right: 8px;
+    }
+    .no-files {
+      text-align: center;
+      color: #95a5a6;
+      padding: 40px;
+      font-style: italic;
+    }
+    .contents-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .contents-title {
+      font-size: 1.1em;
+      font-weight: 600;
+      color: #34495e;
+      margin: 0;
+    }
+    .summary-inline {
+      color: #7f8c8d;
+      font-size: 0.9em;
+    }
+    /* Delete button */
+    .delete-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 1.1em;
+      padding: 4px 8px;
+      border-radius: 4px;
+      color: #95a5a6;
+      transition: all 0.15s;
+    }
+    .delete-btn:hover {
+      background-color: #fee;
+      color: #e74c3c;
+    }
+    .actions-col {
+      width: 60px;
+      text-align: center;
+    }
+    /* Modals */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 200;
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-overlay.open {
+      display: flex;
+    }
+    .modal {
+      background: white;
+      border-radius: 8px;
+      padding: 25px;
+      max-width: 450px;
+      width: 90%;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    }
+    .modal h3 {
+      margin: 0 0 15px 0;
+      color: #2c3e50;
+    }
+    .modal-close {
+      float: right;
+      background: none;
+      border: none;
+      font-size: 1.5em;
+      cursor: pointer;
+      color: #7f8c8d;
+      line-height: 1;
+    }
+    .modal-close:hover {
+      color: #2c3e50;
+    }
+    .upload-form {
+      margin-top: 10px;
+    }
+    .upload-form input[type="file"] {
+      margin: 10px 0;
+      width: 100%;
+    }
+    .upload-btn {
+      background-color: #27ae60;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1em;
+      width: 100%;
+    }
+    .upload-btn:hover {
+      background-color: #219a52;
+    }
+    .upload-btn:disabled {
+      background-color: #95a5a6;
+      cursor: not-allowed;
+    }
+    .file-info {
+      color: #7f8c8d;
+      font-size: 0.85em;
+      margin: 8px 0;
+    }
+    #progress-container {
+      display: none;
+      margin-top: 10px;
+    }
+    #progress-bar {
+      width: 100%;
+      height: 20px;
+      background-color: #e0e0e0;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    #progress-fill {
+      height: 100%;
+      background-color: #27ae60;
+      width: 0%;
+      transition: width 0.3s;
+    }
+    #progress-text {
+      text-align: center;
+      margin-top: 5px;
+      font-size: 0.9em;
+      color: #7f8c8d;
+    }
+    .delete-warning {
+      color: #e74c3c;
+      font-weight: 600;
+      margin: 10px 0;
+    }
+    .delete-item-name {
+      font-weight: 600;
+      color: #2c3e50;
+      word-break: break-all;
+    }
+    .delete-btn-confirm {
+      background-color: #e74c3c;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1em;
+      width: 100%;
+    }
+    .delete-btn-confirm:hover {
+      background-color: #c0392b;
+    }
+    .delete-btn-cancel {
+      background-color: #95a5a6;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1em;
+      width: 100%;
+      margin-top: 10px;
+    }
+    .delete-btn-cancel:hover {
+      background-color: #7f8c8d;
+    }
+    .loader-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 20px 0;
+    }
+    .loader {
+      width: 48px;
+      height: 48px;
+      border: 5px solid #AAA;
+      border-bottom-color: transparent;
+      border-radius: 50%;
+      display: inline-block;
+      box-sizing: border-box;
+      animation: rotation 1s linear infinite;
+    }
+    @keyframes rotation {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    @media (max-width: 600px) {
+      body {
+        padding: 10px;
+        font-size: 14px;
+      }
+      .card {
+        padding: 12px;
+        margin: 10px 0;
+      }
+      .page-header {
+        gap: 10px;
+        margin-bottom: 12px;
+        padding-bottom: 10px;
+      }
+      h1 {
+        font-size: 1.3em;
+      }
+      .nav-links a {
+        padding: 8px 12px;
+        margin-right: 6px;
+        font-size: 0.9em;
+      }
+      .action-btn {
+        padding: 8px 10px;
+        font-size: 0.85em;
+      }
+      .file-table th,
+      .file-table td {
+        padding: 8px 6px;
+        font-size: 0.9em;
+      }
+      .file-table th {
+        font-size: 0.85em;
+      }
+      .file-icon {
+        margin-right: 4px;
+      }
+      .contents-header {
+        margin-bottom: 8px;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .contents-title {
+        font-size: 1em;
+      }
+      .summary-inline {
+        font-size: 0.8em;
+      }
+      .modal {
+        padding: 15px;
+      }
+      .modal h3 {
+        font-size: 1.1em;
+      }
+      .actions-col {
+        width: 40px;
+      }
+      .delete-btn {
+        font-size: 1em;
+        padding: 2px 4px;
+      }
+      .no-files {
+        padding: 20px;
+        font-size: 0.9em;
+      }
+    }
+  </style>
+</head>
+<body>
+<div class="nav-links">
+  <a href="/">Home</a>
+  <a href="/files">File Manager</a>
+  <a href="/sleep">Sleep Screens</a>
+</div>
+
+<div class="page-header">
+  <h1>🌙 Sleep Screens</h1>
+  <button class="action-btn upload-action-btn" onclick="openUploadModal()">📤 Upload</button>
+</div>
+
+<div class="card">
+  <p class="info-text">Upload BMP images to use as custom sleep screens. Set sleep mode to "Custom" in device settings. A random image will be shown each time the device sleeps.</p>
+
+  <div class="contents-header">
+    <h2 class="contents-title">Images</h2>
+    <span class="summary-inline" id="file-summary"></span>
+  </div>
+
+  <div id="file-table">
+    <div class="loader-container">
+      <span class="loader"></span>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <p style="text-align: center; color: #95a5a6; margin: 0;">
+    <a href="https://github.com/bigbag/papyrix-reader" style="color: #7f8c8d;">Papyrix Reader</a>
+  </p>
+</div>
+
+<!-- Upload Modal -->
+<div class="modal-overlay" id="uploadModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeUploadModal()">&times;</button>
+    <h3>📤 Upload Sleep Screen</h3>
+    <div class="upload-form">
+      <p class="file-info">Select a BMP image to upload as a sleep screen.</p>
+      <input type="file" id="fileInput" accept=".bmp" onchange="validateFile()">
+      <button id="uploadBtn" class="upload-btn" onclick="uploadFile()" disabled>Upload</button>
+      <div id="progress-container">
+        <div id="progress-bar"><div id="progress-fill"></div></div>
+        <div id="progress-text"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
+    <h3>🗑️ Delete Sleep Screen</h3>
+    <div>
+      <p class="delete-warning">⚠️ This action cannot be undone!</p>
+      <p class="file-info">Are you sure you want to delete:</p>
+      <p class="delete-item-name" id="deleteItemName"></p>
+      <input type="hidden" id="deleteItemName_val">
+      <button class="delete-btn-confirm" onclick="confirmDelete()">Delete</button>
+      <button class="delete-btn-cancel" onclick="closeDeleteModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)).toLocaleString() + ' ' + sizes[i];
+  }
+
+  function renderFileTable(files) {
+    var fileTable = document.getElementById('file-table');
+    var totalSize = 0;
+    files.forEach(function(file) { totalSize += file.size; });
+    document.getElementById('file-summary').textContent = files.length + ' image' + (files.length !== 1 ? 's' : '') + ', ' + formatFileSize(totalSize);
+
+    if (files.length === 0) {
+      fileTable.textContent = '';
+      var empty = document.createElement('div');
+      empty.className = 'no-files';
+      empty.textContent = 'No sleep screens uploaded yet. Upload a BMP image to get started.';
+      fileTable.appendChild(empty);
+      return;
+    }
+
+    files.sort(function(a, b) { return a.name.localeCompare(b.name); });
+
+    var table = document.createElement('table');
+    table.className = 'file-table';
+    var thead = document.createElement('tr');
+    ['Name', 'Size', ''].forEach(function(text, i) {
+      var th = document.createElement('th');
+      th.textContent = text;
+      if (i === 2) th.className = 'actions-col';
+      thead.appendChild(th);
+    });
+    table.appendChild(thead);
+
+    files.forEach(function(file) {
+      var tr = document.createElement('tr');
+
+      var tdName = document.createElement('td');
+      var icon = document.createElement('span');
+      icon.className = 'file-icon';
+      icon.textContent = '🖼️';
+      tdName.appendChild(icon);
+      tdName.appendChild(document.createTextNode(file.name));
+      tr.appendChild(tdName);
+
+      var tdSize = document.createElement('td');
+      tdSize.textContent = formatFileSize(file.size);
+      tr.appendChild(tdSize);
+
+      var tdActions = document.createElement('td');
+      tdActions.className = 'actions-col';
+      var btn = document.createElement('button');
+      btn.className = 'delete-btn';
+      btn.textContent = '🗑️';
+      btn.title = 'Delete';
+      btn.setAttribute('data-name', file.name);
+      btn.addEventListener('click', function() { openDeleteModal(this.getAttribute('data-name')); });
+      tdActions.appendChild(btn);
+      tr.appendChild(tdActions);
+
+      table.appendChild(tr);
+    });
+
+    fileTable.textContent = '';
+    fileTable.appendChild(table);
+  }
+
+  async function hydrate() {
+    document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
+      overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) {
+          overlay.classList.remove('open');
+        }
+      });
+    });
+
+    var files = [];
+    try {
+      var response = await fetch('/api/sleep-screens');
+      if (!response.ok) {
+        throw new Error('Failed to load files: ' + response.status);
+      }
+      files = await response.json();
+    } catch (e) {
+      console.error(e);
+      var fileTable = document.getElementById('file-table');
+      fileTable.textContent = '';
+      var errDiv = document.createElement('div');
+      errDiv.className = 'no-files';
+      errDiv.textContent = 'An error occurred while loading sleep screens';
+      fileTable.appendChild(errDiv);
+      return;
+    }
+
+    renderFileTable(files);
+  }
+
+  function openUploadModal() {
+    document.getElementById('uploadModal').classList.add('open');
+  }
+
+  function closeUploadModal() {
+    document.getElementById('uploadModal').classList.remove('open');
+    document.getElementById('fileInput').value = '';
+    document.getElementById('uploadBtn').disabled = true;
+    document.getElementById('progress-container').style.display = 'none';
+    document.getElementById('progress-fill').style.width = '0%';
+    document.getElementById('progress-fill').style.backgroundColor = '#27ae60';
+  }
+
+  function validateFile() {
+    var fileInput = document.getElementById('fileInput');
+    var uploadBtn = document.getElementById('uploadBtn');
+    var file = fileInput.files[0];
+    uploadBtn.disabled = !file;
+  }
+
+  function ensureSleepDir() {
+    return new Promise(function(resolve) {
+      var formData = new FormData();
+      formData.append('name', 'sleep');
+      formData.append('path', '/');
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', '/mkdir', true);
+      xhr.onload = function() { resolve(); };
+      xhr.onerror = function() { resolve(); };
+      xhr.send(formData);
+    });
+  }
+
+  async function uploadFile() {
+    var fileInput = document.getElementById('fileInput');
+    var file = fileInput.files[0];
+
+    if (!file) {
+      alert('Please select a file first!');
+      return;
+    }
+
+    if (!file.name.toLowerCase().endsWith('.bmp')) {
+      alert('Only BMP files are supported.');
+      return;
+    }
+
+    var progressContainer = document.getElementById('progress-container');
+    var progressFill = document.getElementById('progress-fill');
+    var progressText = document.getElementById('progress-text');
+    var uploadBtn = document.getElementById('uploadBtn');
+
+    progressContainer.style.display = 'block';
+    uploadBtn.disabled = true;
+    progressText.textContent = 'Preparing...';
+
+    await ensureSleepDir();
+
+    var formData = new FormData();
+    formData.append('file', file);
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '/upload?path=/sleep', true);
+
+    xhr.upload.onprogress = function(e) {
+      if (e.lengthComputable) {
+        var percent = Math.round((e.loaded / e.total) * 100);
+        progressFill.style.width = percent + '%';
+        progressText.textContent = 'Uploading: ' + percent + '%';
+      }
+    };
+
+    xhr.onload = function() {
+      if (xhr.status === 200) {
+        progressText.textContent = 'Upload complete!';
+        setTimeout(function() { window.location.reload(); }, 1000);
+      } else {
+        progressText.textContent = 'Upload failed: ' + xhr.responseText;
+        progressFill.style.backgroundColor = '#e74c3c';
+        uploadBtn.disabled = false;
+      }
+    };
+
+    xhr.onerror = function() {
+      progressText.textContent = 'Upload failed - network error';
+      progressFill.style.backgroundColor = '#e74c3c';
+      uploadBtn.disabled = false;
+    };
+
+    xhr.send(formData);
+  }
+
+  function openDeleteModal(name) {
+    document.getElementById('deleteItemName').textContent = '🖼️ ' + name;
+    document.getElementById('deleteItemName_val').value = name;
+    document.getElementById('deleteModal').classList.add('open');
+  }
+
+  function closeDeleteModal() {
+    document.getElementById('deleteModal').classList.remove('open');
+  }
+
+  function confirmDelete() {
+    var name = document.getElementById('deleteItemName_val').value;
+
+    var formData = new FormData();
+    formData.append('name', name);
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '/sleep/delete', true);
+
+    xhr.onload = function() {
+      if (xhr.status === 200) {
+        window.location.reload();
+      } else {
+        alert('Failed to delete: ' + xhr.responseText);
+        closeDeleteModal();
+      }
+    };
+
+    xhr.onerror = function() {
+      alert('Failed to delete - network error');
+      closeDeleteModal();
+    };
+
+    xhr.send(formData);
+  }
+
+  hydrate();
+</script>
+</body>
+</html>

@@ -10,6 +10,7 @@
 #include "../config.h"
 #include "html/FilesPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
+#include "html/SleepPageHtml.generated.h"
 
 namespace papyrix {
 
@@ -68,6 +69,9 @@ void PapyrixWebServer::begin() {
   server_->on("/upload", HTTP_POST, [this] { handleUploadPost(); }, [this] { handleUpload(); });
   server_->on("/mkdir", HTTP_POST, [this] { handleCreateFolder(); });
   server_->on("/delete", HTTP_POST, [this] { handleDelete(); });
+  server_->on("/sleep", HTTP_GET, [this] { handleSleepScreens(); });
+  server_->on("/api/sleep-screens", HTTP_GET, [this] { handleSleepScreensData(); });
+  server_->on("/sleep/delete", HTTP_POST, [this] { handleSleepScreenDelete(); });
   server_->onNotFound([this] { handleNotFound(); });
 
   server_->begin();
@@ -396,6 +400,98 @@ void PapyrixWebServer::handleDelete() {
 
   if (success) {
     Serial.printf("[WEB] Deleted: %s\n", itemPath.c_str());
+    server_->send(200, "text/plain", "Deleted");
+  } else {
+    server_->send(500, "text/plain", "Failed to delete");
+  }
+}
+
+void PapyrixWebServer::handleSleepScreens() { sendGzipHtml(server_.get(), SleepPageHtml, SleepPageHtmlCompressedSize); }
+
+void PapyrixWebServer::handleSleepScreensData() {
+  FsFile root = SdMan.open("/sleep");
+  if (!root || !root.isDirectory()) {
+    server_->send(200, "application/json", "[]");
+    if (root) root.close();
+    return;
+  }
+
+  server_->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server_->send(200, "application/json", "");
+  server_->sendContent("[");
+
+  char name[256];
+  bool seenFirst = false;
+  FsFile file = root.openNextFile();
+
+  while (file) {
+    file.getName(name, sizeof(name));
+
+    if (name[0] != '.' && !file.isDirectory()) {
+      // Only include .bmp files
+      const char* dot = strrchr(name, '.');
+      if (dot && (strcasecmp(dot, ".bmp") == 0)) {
+        JsonDocument doc;
+        doc["name"] = name;
+        doc["size"] = file.size();
+
+        char output[512];
+        size_t written = serializeJson(doc, output, sizeof(output));
+        if (written < sizeof(output)) {
+          if (seenFirst) {
+            server_->sendContent(",");
+          } else {
+            seenFirst = true;
+          }
+          server_->sendContent(output);
+        }
+      }
+    }
+
+    file.close();
+    file = root.openNextFile();
+  }
+
+  root.close();
+  server_->sendContent("]");
+  server_->sendContent("");
+}
+
+void PapyrixWebServer::handleSleepScreenDelete() {
+  if (!server_->hasArg("name")) {
+    server_->send(400, "text/plain", "Missing file name");
+    return;
+  }
+
+  String name = server_->arg("name");
+  if (name.isEmpty()) {
+    server_->send(400, "text/plain", "File name cannot be empty");
+    return;
+  }
+
+  // Security: reject path traversal
+  if (name.indexOf('/') >= 0 || name.indexOf("..") >= 0) {
+    server_->send(400, "text/plain", "Invalid file name");
+    return;
+  }
+
+  // Only allow .bmp files
+  String lower = name;
+  lower.toLowerCase();
+  if (!lower.endsWith(".bmp")) {
+    server_->send(400, "text/plain", "Only BMP files can be deleted");
+    return;
+  }
+
+  String filePath = "/sleep/" + name;
+
+  if (!SdMan.exists(filePath.c_str())) {
+    server_->send(404, "text/plain", "File not found");
+    return;
+  }
+
+  if (SdMan.remove(filePath.c_str())) {
+    Serial.printf("[WEB] Deleted sleep screen: %s\n", filePath.c_str());
     server_->send(200, "text/plain", "Deleted");
   } else {
     server_->send(500, "text/plain", "Failed to delete");
