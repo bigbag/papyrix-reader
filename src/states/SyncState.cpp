@@ -40,7 +40,6 @@ StateTransition SyncState::update(Core& core) {
             needsRender_ = true;
             break;
 
-          case Button::Left:
           case Button::Back:
             goHome_ = true;
             break;

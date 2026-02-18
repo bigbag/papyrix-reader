@@ -121,10 +121,6 @@ StateTransition SettingsState::update(Core& core) {
 
           case Button::Left:
             switch (currentScreen_) {
-              case SettingsScreen::Menu:
-                core.settings.save(core.storage);
-                goHome_ = true;
-                break;
               case SettingsScreen::Reader:
                 if (readerView_.buttons.isActive(2)) handleLeftRight(-1);
                 break;
@@ -134,9 +130,6 @@ StateTransition SettingsState::update(Core& core) {
               case SettingsScreen::ConfirmDialog:
                 confirmView_.toggleSelection();
                 needsRender_ = true;
-                break;
-              default:
-                goBack(core);
                 break;
             }
             break;

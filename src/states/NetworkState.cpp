@@ -234,7 +234,6 @@ void NetworkState::handleModeSelect(Core& core, Button button) {
       }
       break;
 
-    case Button::Left:
     case Button::Back:
       if (modeView_.buttons.isActive(0)) {
         goBack_ = true;
@@ -289,7 +288,6 @@ void NetworkState::handleWifiList(Core& core, Button button) {
       }
       break;
 
-    case Button::Left:
     case Button::Back:
       if (wifiListView_.buttons.isActive(0)) {
         currentScreen_ = NetworkScreen::ModeSelect;
@@ -348,7 +346,7 @@ void NetworkState::handlePasswordEntry(Core& core, Button button) {
 }
 
 void NetworkState::handleConnecting(Core& core, Button button) {
-  if (button == Button::Left || button == Button::Back) {
+  if (button == Button::Back) {
     if (connectingView_.buttons.isActive(0)) {
       if (connectingView_.status == ui::WifiConnectingView::Status::Failed ||
           connectingView_.status == ui::WifiConnectingView::Status::Connected) {
@@ -427,7 +425,7 @@ void NetworkState::handleSavePrompt(Core& core, Button button) {
 }
 
 void NetworkState::handleServerRunning(Core& core, Button button) {
-  if (button == Button::Left || button == Button::Back) {
+  if (button == Button::Back) {
     if (serverView_.buttons.isActive(0)) {
       stopWebServer(core);
       goBack_ = true;
