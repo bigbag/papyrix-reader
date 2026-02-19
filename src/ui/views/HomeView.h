@@ -222,7 +222,7 @@ void render(const GfxRenderer& r, const Theme& t, const FileListView& v);
 // ============================================================================
 
 struct ChapterListView {
-  static constexpr int MAX_CHAPTERS = 64;
+  static constexpr int MAX_CHAPTERS = 256;
   static constexpr int TITLE_LEN = 64;
 
   struct Chapter {
@@ -233,10 +233,10 @@ struct ChapterListView {
 
   ButtonBar buttons{"Back", "Go", "", ""};
   Chapter chapters[MAX_CHAPTERS];
-  uint8_t chapterCount = 0;
-  uint8_t currentChapter = 0;  // The chapter user is currently reading
-  uint8_t selected = 0;
-  uint8_t scrollOffset = 0;  // First visible item
+  uint16_t chapterCount = 0;
+  uint16_t currentChapter = 0;  // The chapter user is currently reading
+  uint16_t selected = 0;
+  uint16_t scrollOffset = 0;  // First visible item
   bool needsRender = true;
 
   void clear() {
@@ -258,7 +258,7 @@ struct ChapterListView {
     return false;
   }
 
-  void setCurrentChapter(uint8_t idx) {
+  void setCurrentChapter(uint16_t idx) {
     currentChapter = idx;
     selected = idx;
     scrollOffset = idx;  // Start with current chapter at top
@@ -286,7 +286,7 @@ struct ChapterListView {
   void movePageDown(int count) {
     if (chapterCount == 0 || count <= 0) return;
     int target = selected + count;
-    selected = (target < chapterCount) ? static_cast<uint8_t>(target) : chapterCount - 1;
+    selected = (target < chapterCount) ? static_cast<uint16_t>(target) : chapterCount - 1;
     needsRender = true;
   }
 
@@ -296,9 +296,9 @@ struct ChapterListView {
     const int sel = selected;
     const int off = scrollOffset;
     if (sel < off) {
-      scrollOffset = static_cast<uint8_t>(sel);
+      scrollOffset = static_cast<uint16_t>(sel);
     } else if (sel >= off + visibleCount) {
-      scrollOffset = static_cast<uint8_t>(sel - visibleCount + 1);
+      scrollOffset = static_cast<uint16_t>(sel - visibleCount + 1);
     }
   }
 };

@@ -5,7 +5,7 @@
 
 // Inline ChapterListView to avoid firmware/graphics dependencies
 struct ChapterListView {
-  static constexpr int MAX_CHAPTERS = 64;
+  static constexpr int MAX_CHAPTERS = 256;
   static constexpr int TITLE_LEN = 64;
 
   struct Chapter {
@@ -15,10 +15,10 @@ struct ChapterListView {
   };
 
   Chapter chapters[MAX_CHAPTERS];
-  uint8_t chapterCount = 0;
-  uint8_t currentChapter = 0;
-  uint8_t selected = 0;
-  uint8_t scrollOffset = 0;
+  uint16_t chapterCount = 0;
+  uint16_t currentChapter = 0;
+  uint16_t selected = 0;
+  uint16_t scrollOffset = 0;
   bool needsRender = true;
 
   void clear() {
@@ -40,7 +40,7 @@ struct ChapterListView {
     return false;
   }
 
-  void setCurrentChapter(uint8_t idx) {
+  void setCurrentChapter(uint16_t idx) {
     currentChapter = idx;
     selected = idx;
     scrollOffset = idx;
@@ -68,7 +68,7 @@ struct ChapterListView {
   void movePageDown(int count) {
     if (chapterCount == 0 || count <= 0) return;
     int target = selected + count;
-    selected = (target < chapterCount) ? static_cast<uint8_t>(target) : chapterCount - 1;
+    selected = (target < chapterCount) ? static_cast<uint16_t>(target) : chapterCount - 1;
     needsRender = true;
   }
 
@@ -77,9 +77,9 @@ struct ChapterListView {
     const int sel = selected;
     const int off = scrollOffset;
     if (sel < off) {
-      scrollOffset = static_cast<uint8_t>(sel);
+      scrollOffset = static_cast<uint16_t>(sel);
     } else if (sel >= off + visibleCount) {
-      scrollOffset = static_cast<uint8_t>(sel - visibleCount + 1);
+      scrollOffset = static_cast<uint16_t>(sel - visibleCount + 1);
     }
   }
 };
@@ -92,7 +92,7 @@ int main() {
     ChapterListView view;
     bool added = view.addChapter("Introduction", 1, 0);
     runner.expectTrue(added, "addChapter returns true");
-    runner.expectEq(uint8_t(1), view.chapterCount, "chapterCount incremented");
+    runner.expectEq(uint16_t(1), view.chapterCount, "chapterCount incremented");
     runner.expectTrue(strcmp(view.chapters[0].title, "Introduction") == 0, "title stored correctly");
     runner.expectEq(uint16_t(1), view.chapters[0].pageNum, "pageNum stored correctly");
     runner.expectEq(uint8_t(0), view.chapters[0].depth, "depth stored correctly");
@@ -104,7 +104,7 @@ int main() {
     view.addChapter("Part 1", 0, 0);
     view.addChapter("Chapter 1", 1, 1);
     view.addChapter("Section 1.1", 5, 2);
-    runner.expectEq(uint8_t(3), view.chapterCount, "3 chapters added");
+    runner.expectEq(uint16_t(3), view.chapterCount, "3 chapters added");
     runner.expectEq(uint8_t(1), view.chapters[1].depth, "depth=1 stored");
     runner.expectEq(uint8_t(2), view.chapters[2].depth, "depth=2 stored");
   }
@@ -117,9 +117,9 @@ int main() {
       snprintf(title, sizeof(title), "Ch%d", i);
       runner.expectTrue(view.addChapter(title, static_cast<uint16_t>(i)), "addChapter succeeds up to MAX");
     }
-    runner.expectEq(uint8_t(ChapterListView::MAX_CHAPTERS), view.chapterCount, "chapterCount at MAX");
+    runner.expectEq(uint16_t(ChapterListView::MAX_CHAPTERS), view.chapterCount, "chapterCount at MAX");
     runner.expectFalse(view.addChapter("Overflow", 99), "addChapter fails when full");
-    runner.expectEq(uint8_t(ChapterListView::MAX_CHAPTERS), view.chapterCount, "chapterCount unchanged");
+    runner.expectEq(uint16_t(ChapterListView::MAX_CHAPTERS), view.chapterCount, "chapterCount unchanged");
   }
 
   // --- addChapter title truncation ---
@@ -142,9 +142,9 @@ int main() {
     }
     view.needsRender = false;
     view.setCurrentChapter(5);
-    runner.expectEq(uint8_t(5), view.currentChapter, "currentChapter set");
-    runner.expectEq(uint8_t(5), view.selected, "selected set to currentChapter");
-    runner.expectEq(uint8_t(5), view.scrollOffset, "scrollOffset set to currentChapter");
+    runner.expectEq(uint16_t(5), view.currentChapter, "currentChapter set");
+    runner.expectEq(uint16_t(5), view.selected, "selected set to currentChapter");
+    runner.expectEq(uint16_t(5), view.scrollOffset, "scrollOffset set to currentChapter");
     runner.expectTrue(view.needsRender, "setCurrentChapter sets needsRender");
   }
 
@@ -157,9 +157,9 @@ int main() {
     view.scrollOffset = 1;
     view.needsRender = false;
     view.clear();
-    runner.expectEq(uint8_t(0), view.chapterCount, "clear resets chapterCount");
-    runner.expectEq(uint8_t(0), view.selected, "clear resets selected");
-    runner.expectEq(uint8_t(0), view.scrollOffset, "clear resets scrollOffset");
+    runner.expectEq(uint16_t(0), view.chapterCount, "clear resets chapterCount");
+    runner.expectEq(uint16_t(0), view.selected, "clear resets selected");
+    runner.expectEq(uint16_t(0), view.scrollOffset, "clear resets scrollOffset");
     runner.expectTrue(view.needsRender, "clear sets needsRender");
   }
 
@@ -168,11 +168,11 @@ int main() {
     ChapterListView view;
     view.needsRender = false;
     view.moveDown();
-    runner.expectEq(uint8_t(0), view.selected, "moveDown on empty is no-op");
+    runner.expectEq(uint16_t(0), view.selected, "moveDown on empty is no-op");
     runner.expectFalse(view.needsRender, "moveDown on empty doesn't set needsRender");
 
     view.moveUp();
-    runner.expectEq(uint8_t(0), view.selected, "moveUp on empty is no-op");
+    runner.expectEq(uint16_t(0), view.selected, "moveUp on empty is no-op");
     runner.expectFalse(view.needsRender, "moveUp on empty doesn't set needsRender");
   }
 
@@ -183,27 +183,27 @@ int main() {
     view.addChapter("Ch1", 1);
     view.addChapter("Ch2", 2);
 
-    runner.expectEq(uint8_t(0), view.selected, "initial selected is 0");
+    runner.expectEq(uint16_t(0), view.selected, "initial selected is 0");
 
     view.needsRender = false;
     view.moveDown();
-    runner.expectEq(uint8_t(1), view.selected, "moveDown increments");
+    runner.expectEq(uint16_t(1), view.selected, "moveDown increments");
     runner.expectTrue(view.needsRender, "moveDown sets needsRender");
 
     view.moveDown();
-    runner.expectEq(uint8_t(2), view.selected, "moveDown to last");
+    runner.expectEq(uint16_t(2), view.selected, "moveDown to last");
 
     view.moveDown();
-    runner.expectEq(uint8_t(0), view.selected, "moveDown wraps to 0");
+    runner.expectEq(uint16_t(0), view.selected, "moveDown wraps to 0");
 
     view.moveUp();
-    runner.expectEq(uint8_t(2), view.selected, "moveUp wraps to last");
+    runner.expectEq(uint16_t(2), view.selected, "moveUp wraps to last");
 
     view.moveUp();
-    runner.expectEq(uint8_t(1), view.selected, "moveUp decrements");
+    runner.expectEq(uint16_t(1), view.selected, "moveUp decrements");
 
     view.moveUp();
-    runner.expectEq(uint8_t(0), view.selected, "moveUp to first");
+    runner.expectEq(uint16_t(0), view.selected, "moveUp to first");
   }
 
   // --- movePageUp on empty list ---
@@ -211,7 +211,7 @@ int main() {
     ChapterListView view;
     view.needsRender = false;
     view.movePageUp(5);
-    runner.expectEq(uint8_t(0), view.selected, "movePageUp on empty is no-op");
+    runner.expectEq(uint16_t(0), view.selected, "movePageUp on empty is no-op");
     runner.expectFalse(view.needsRender, "movePageUp on empty doesn't set needsRender");
   }
 
@@ -220,7 +220,7 @@ int main() {
     ChapterListView view;
     view.needsRender = false;
     view.movePageDown(5);
-    runner.expectEq(uint8_t(0), view.selected, "movePageDown on empty is no-op");
+    runner.expectEq(uint16_t(0), view.selected, "movePageDown on empty is no-op");
     runner.expectFalse(view.needsRender, "movePageDown on empty doesn't set needsRender");
   }
 
@@ -233,18 +233,18 @@ int main() {
     view.needsRender = false;
 
     view.movePageUp(0);
-    runner.expectEq(uint8_t(1), view.selected, "movePageUp(0) is no-op");
+    runner.expectEq(uint16_t(1), view.selected, "movePageUp(0) is no-op");
     runner.expectFalse(view.needsRender, "movePageUp(0) doesn't set needsRender");
 
     view.movePageDown(0);
-    runner.expectEq(uint8_t(1), view.selected, "movePageDown(0) is no-op");
+    runner.expectEq(uint16_t(1), view.selected, "movePageDown(0) is no-op");
     runner.expectFalse(view.needsRender, "movePageDown(0) doesn't set needsRender");
 
     view.movePageUp(-1);
-    runner.expectEq(uint8_t(1), view.selected, "movePageUp(-1) is no-op");
+    runner.expectEq(uint16_t(1), view.selected, "movePageUp(-1) is no-op");
 
     view.movePageDown(-1);
-    runner.expectEq(uint8_t(1), view.selected, "movePageDown(-1) is no-op");
+    runner.expectEq(uint16_t(1), view.selected, "movePageDown(-1) is no-op");
   }
 
   // --- movePageDown basic ---
@@ -258,20 +258,20 @@ int main() {
 
     view.needsRender = false;
     view.movePageDown(5);
-    runner.expectEq(uint8_t(5), view.selected, "movePageDown(5) from 0 -> 5");
+    runner.expectEq(uint16_t(5), view.selected, "movePageDown(5) from 0 -> 5");
     runner.expectTrue(view.needsRender, "movePageDown sets needsRender");
 
     view.movePageDown(5);
-    runner.expectEq(uint8_t(10), view.selected, "movePageDown(5) from 5 -> 10");
+    runner.expectEq(uint16_t(10), view.selected, "movePageDown(5) from 5 -> 10");
 
     view.movePageDown(5);
-    runner.expectEq(uint8_t(15), view.selected, "movePageDown(5) from 10 -> 15");
+    runner.expectEq(uint16_t(15), view.selected, "movePageDown(5) from 10 -> 15");
 
     view.movePageDown(5);
-    runner.expectEq(uint8_t(19), view.selected, "movePageDown clamps to last");
+    runner.expectEq(uint16_t(19), view.selected, "movePageDown clamps to last");
 
     view.movePageDown(5);
-    runner.expectEq(uint8_t(19), view.selected, "movePageDown at last stays at last");
+    runner.expectEq(uint16_t(19), view.selected, "movePageDown at last stays at last");
   }
 
   // --- movePageUp basic ---
@@ -286,20 +286,20 @@ int main() {
 
     view.needsRender = false;
     view.movePageUp(5);
-    runner.expectEq(uint8_t(14), view.selected, "movePageUp(5) from 19 -> 14");
+    runner.expectEq(uint16_t(14), view.selected, "movePageUp(5) from 19 -> 14");
     runner.expectTrue(view.needsRender, "movePageUp sets needsRender");
 
     view.movePageUp(5);
-    runner.expectEq(uint8_t(9), view.selected, "movePageUp(5) from 14 -> 9");
+    runner.expectEq(uint16_t(9), view.selected, "movePageUp(5) from 14 -> 9");
 
     view.movePageUp(5);
-    runner.expectEq(uint8_t(4), view.selected, "movePageUp(5) from 9 -> 4");
+    runner.expectEq(uint16_t(4), view.selected, "movePageUp(5) from 9 -> 4");
 
     view.movePageUp(5);
-    runner.expectEq(uint8_t(0), view.selected, "movePageUp clamps to 0");
+    runner.expectEq(uint16_t(0), view.selected, "movePageUp clamps to 0");
 
     view.movePageUp(5);
-    runner.expectEq(uint8_t(0), view.selected, "movePageUp at 0 stays at 0");
+    runner.expectEq(uint16_t(0), view.selected, "movePageUp at 0 stays at 0");
   }
 
   // --- movePageDown clamps exactly at last ---
@@ -312,7 +312,7 @@ int main() {
     }
     view.selected = 4;
     view.movePageDown(5);
-    runner.expectEq(uint8_t(6), view.selected, "movePageDown clamps when partial page remains");
+    runner.expectEq(uint16_t(6), view.selected, "movePageDown clamps when partial page remains");
   }
 
   // --- movePageUp clamps exactly at first ---
@@ -325,7 +325,7 @@ int main() {
     }
     view.selected = 2;
     view.movePageUp(5);
-    runner.expectEq(uint8_t(0), view.selected, "movePageUp clamps when near start");
+    runner.expectEq(uint16_t(0), view.selected, "movePageUp clamps when near start");
   }
 
   // --- movePageDown with count=1 (same as moveDown but without wrap) ---
@@ -336,11 +336,11 @@ int main() {
     view.addChapter("Ch2", 2);
 
     view.movePageDown(1);
-    runner.expectEq(uint8_t(1), view.selected, "movePageDown(1) moves by 1");
+    runner.expectEq(uint16_t(1), view.selected, "movePageDown(1) moves by 1");
     view.movePageDown(1);
-    runner.expectEq(uint8_t(2), view.selected, "movePageDown(1) to last");
+    runner.expectEq(uint16_t(2), view.selected, "movePageDown(1) to last");
     view.movePageDown(1);
-    runner.expectEq(uint8_t(2), view.selected, "movePageDown(1) clamps at last (no wrap)");
+    runner.expectEq(uint16_t(2), view.selected, "movePageDown(1) clamps at last (no wrap)");
   }
 
   // --- movePageUp with count=1 ---
@@ -352,11 +352,11 @@ int main() {
     view.selected = 2;
 
     view.movePageUp(1);
-    runner.expectEq(uint8_t(1), view.selected, "movePageUp(1) moves by 1");
+    runner.expectEq(uint16_t(1), view.selected, "movePageUp(1) moves by 1");
     view.movePageUp(1);
-    runner.expectEq(uint8_t(0), view.selected, "movePageUp(1) to first");
+    runner.expectEq(uint16_t(0), view.selected, "movePageUp(1) to first");
     view.movePageUp(1);
-    runner.expectEq(uint8_t(0), view.selected, "movePageUp(1) clamps at first (no wrap)");
+    runner.expectEq(uint16_t(0), view.selected, "movePageUp(1) clamps at first (no wrap)");
   }
 
   // --- ensureVisible: selected below visible range ---
@@ -370,7 +370,7 @@ int main() {
     view.scrollOffset = 0;
     view.selected = 12;
     view.ensureVisible(5);
-    runner.expectEq(uint8_t(8), view.scrollOffset, "ensureVisible scrolls down: offset = selected - visible + 1");
+    runner.expectEq(uint16_t(8), view.scrollOffset, "ensureVisible scrolls down: offset = selected - visible + 1");
   }
 
   // --- ensureVisible: selected above visible range ---
@@ -384,7 +384,7 @@ int main() {
     view.scrollOffset = 10;
     view.selected = 5;
     view.ensureVisible(5);
-    runner.expectEq(uint8_t(5), view.scrollOffset, "ensureVisible scrolls up: offset = selected");
+    runner.expectEq(uint16_t(5), view.scrollOffset, "ensureVisible scrolls up: offset = selected");
   }
 
   // --- ensureVisible: selected within visible range ---
@@ -398,7 +398,7 @@ int main() {
     view.scrollOffset = 5;
     view.selected = 7;
     view.ensureVisible(5);
-    runner.expectEq(uint8_t(5), view.scrollOffset, "ensureVisible no change when visible");
+    runner.expectEq(uint16_t(5), view.scrollOffset, "ensureVisible no change when visible");
   }
 
   // --- ensureVisible with invalid inputs ---
@@ -406,15 +406,15 @@ int main() {
     ChapterListView view;
     view.scrollOffset = 3;
     view.ensureVisible(5);
-    runner.expectEq(uint8_t(3), view.scrollOffset, "ensureVisible on empty list is no-op");
+    runner.expectEq(uint16_t(3), view.scrollOffset, "ensureVisible on empty list is no-op");
 
     view.addChapter("Ch0", 0);
     view.scrollOffset = 0;
     view.ensureVisible(0);
-    runner.expectEq(uint8_t(0), view.scrollOffset, "ensureVisible with visibleCount=0 is no-op");
+    runner.expectEq(uint16_t(0), view.scrollOffset, "ensureVisible with visibleCount=0 is no-op");
 
     view.ensureVisible(-1);
-    runner.expectEq(uint8_t(0), view.scrollOffset, "ensureVisible with negative visibleCount is no-op");
+    runner.expectEq(uint16_t(0), view.scrollOffset, "ensureVisible with negative visibleCount is no-op");
   }
 
   // --- movePageDown + ensureVisible integration ---
@@ -430,13 +430,13 @@ int main() {
 
     view.movePageDown(visibleCount);
     view.ensureVisible(visibleCount);
-    runner.expectEq(uint8_t(8), view.selected, "page down selects item 8");
-    runner.expectEq(uint8_t(1), view.scrollOffset, "ensureVisible adjusts scroll after page down");
+    runner.expectEq(uint16_t(8), view.selected, "page down selects item 8");
+    runner.expectEq(uint16_t(1), view.scrollOffset, "ensureVisible adjusts scroll after page down");
 
     view.movePageDown(visibleCount);
     view.ensureVisible(visibleCount);
-    runner.expectEq(uint8_t(16), view.selected, "second page down selects item 16");
-    runner.expectEq(uint8_t(9), view.scrollOffset, "scroll adjusted for second page down");
+    runner.expectEq(uint16_t(16), view.selected, "second page down selects item 16");
+    runner.expectEq(uint16_t(9), view.scrollOffset, "scroll adjusted for second page down");
   }
 
   runner.printSummary();

@@ -1145,7 +1145,7 @@ void ReaderState::enterTocMode(Core& core) {
   populateTocView(core);
   int currentIdx = findCurrentTocEntry(core);
   if (currentIdx >= 0) {
-    tocView_.setCurrentChapter(static_cast<uint8_t>(currentIdx));
+    tocView_.setCurrentChapter(static_cast<uint16_t>(currentIdx));
   }
 
   tocView_.buttons = ui::ButtonBar("Back", "Go", "<<", ">>");
