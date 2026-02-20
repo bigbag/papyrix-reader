@@ -18,9 +18,19 @@ class SDCardManager {
 
   bool exists(const char* path) { return files_.find(path) != files_.end(); }
 
+  // Failure injection: first N open() calls for a path return an invalid FsFile
+  void setOpenFailCount(int count) { openFailCount_ = count; }
+
+  // Failure injection: first N openFileForRead() calls for a path fail
+  void setOpenFileForReadFailCount(int count) { openFileForReadFailCount_ = count; }
+
   FsFile open(const char* path, int mode = O_RDONLY) {
     (void)mode;
     FsFile file;
+    if (openFailCount_ > 0) {
+      openFailCount_--;
+      return file;  // Returns invalid FsFile (operator bool = false)
+    }
     auto it = files_.find(path);
     if (it != files_.end()) {
       file.setBuffer(it->second);
@@ -30,6 +40,10 @@ class SDCardManager {
 
   bool openFileForRead(const char* moduleName, const char* path, FsFile& file) {
     (void)moduleName;
+    if (openFileForReadFailCount_ > 0) {
+      openFileForReadFailCount_--;
+      return false;
+    }
     auto it = files_.find(path);
     if (it != files_.end()) {
       file.setBuffer(it->second);
@@ -69,6 +83,8 @@ class SDCardManager {
  private:
   std::map<std::string, std::string> files_;
   std::map<std::string, std::shared_ptr<std::string>> writtenFiles_;
+  int openFailCount_ = 0;
+  int openFileForReadFailCount_ = 0;
 };
 
 #define SdMan SDCardManager::getInstance()

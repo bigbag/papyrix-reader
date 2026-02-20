@@ -202,5 +202,82 @@ int main() {
     EpdFontLoader::freeStreamingResult(result);
   }
 
+  // ============================================
+  // Retry Logic Tests
+  // ============================================
+
+  // Test 11: loadForStreaming retries on transient open failure
+  {
+    SdMan.clearFiles();
+    std::string fontData = TestFontData::generateBasicAsciiFont(20);
+    SdMan.registerFile("/fonts/test.epdfont", fontData);
+    SdMan.setOpenFailCount(2);  // First 2 opens fail, 3rd succeeds
+
+    auto result = EpdFontLoader::loadForStreaming("/fonts/test.epdfont");
+
+    runner.expectTrue(result.success, "loadForStreaming_retry_open: succeeds after transient failures");
+    runner.expectTrue(result.glyphs != nullptr, "loadForStreaming_retry_open: glyphs allocated");
+
+    EpdFontLoader::freeStreamingResult(result);
+  }
+
+  // Test 12: loadForStreaming fails after all retries exhausted
+  {
+    SdMan.clearFiles();
+    std::string fontData = TestFontData::generateBasicAsciiFont(20);
+    SdMan.registerFile("/fonts/test.epdfont", fontData);
+    SdMan.setOpenFailCount(3);  // All 3 attempts fail
+
+    auto result = EpdFontLoader::loadForStreaming("/fonts/test.epdfont");
+
+    runner.expectFalse(result.success, "loadForStreaming_retry_exhausted: fails after 3 attempts");
+    runner.expectTrue(result.glyphs == nullptr, "loadForStreaming_retry_exhausted: no leak");
+
+    SdMan.setOpenFailCount(0);  // Reset
+  }
+
+  // Test 13: loadFromFile retries on transient open failure
+  {
+    SdMan.clearFiles();
+    std::string fontData = TestFontData::generateBasicAsciiFont(20);
+    SdMan.registerFile("/fonts/test.epdfont", fontData);
+    SdMan.setOpenFailCount(1);  // First open fails, 2nd succeeds
+
+    auto result = EpdFontLoader::loadFromFile("/fonts/test.epdfont");
+
+    runner.expectTrue(result.success, "loadFromFile_retry_open: succeeds after 1 transient failure");
+    runner.expectTrue(result.bitmap != nullptr, "loadFromFile_retry_open: bitmap allocated");
+    runner.expectTrue(result.glyphs != nullptr, "loadFromFile_retry_open: glyphs allocated");
+
+    EpdFontLoader::freeLoadResult(result);
+  }
+
+  // Test 14: loadFromFile fails after all retries exhausted
+  {
+    SdMan.clearFiles();
+    std::string fontData = TestFontData::generateBasicAsciiFont(20);
+    SdMan.registerFile("/fonts/test.epdfont", fontData);
+    SdMan.setOpenFailCount(3);
+
+    auto result = EpdFontLoader::loadFromFile("/fonts/test.epdfont");
+
+    runner.expectFalse(result.success, "loadFromFile_retry_exhausted: fails after 3 attempts");
+    runner.expectTrue(result.bitmap == nullptr, "loadFromFile_retry_exhausted: no leak");
+
+    SdMan.setOpenFailCount(0);
+  }
+
+  // Test 15: loadForStreaming invalid magic does NOT retry (non-transient)
+  {
+    SdMan.clearFiles();
+    std::string badData = "NOTAFONT" + std::string(100, '\0');
+    SdMan.registerFile("/fonts/bad.epdfont", badData);
+    SdMan.setOpenFailCount(0);
+
+    auto result = EpdFontLoader::loadForStreaming("/fonts/bad.epdfont");
+
+    runner.expectFalse(result.success, "loadForStreaming_no_retry_bad_magic: fails immediately");
+  }
+
   return runner.allPassed() ? 0 : 1;
 }

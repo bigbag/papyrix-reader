@@ -291,7 +291,15 @@ bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const Ab
     std::vector<uint32_t> lut;
     if (!loadLut(lut)) return false;
 
-    if (!file_.open(cachePath_.c_str(), O_RDWR)) {
+    bool opened = false;
+    for (int attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) delay(50);
+      if (file_.open(cachePath_.c_str(), O_RDWR)) {
+        opened = true;
+        break;
+      }
+    }
+    if (!opened) {
       Serial.printf("[CACHE] Failed to open cache file for hot extend\n");
       return false;
     }
@@ -350,42 +358,48 @@ std::unique_ptr<Page> PageCache::loadPage(uint16_t pageNum) {
     return nullptr;
   }
 
-  if (!SdMan.openFileForRead("CACHE", cachePath_, file_)) {
-    return nullptr;
-  }
+  for (int attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) delay(50);
 
-  const size_t fileSize = file_.size();
+    if (!SdMan.openFileForRead("CACHE", cachePath_, file_)) {
+      continue;
+    }
 
-  // Read LUT offset from header
-  file_.seek(HEADER_SIZE - 4);
-  uint32_t lutOffset;
-  serialization::readPod(file_, lutOffset);
+    const size_t fileSize = file_.size();
 
-  // Validate LUT offset
-  if (lutOffset < HEADER_SIZE || lutOffset >= fileSize) {
-    Serial.printf("[CACHE] Invalid LUT offset: %u (file size: %zu)\n", lutOffset, fileSize);
+    // Read LUT offset from header
+    file_.seek(HEADER_SIZE - 4);
+    uint32_t lutOffset;
+    serialization::readPod(file_, lutOffset);
+
+    // Validate LUT offset
+    if (lutOffset < HEADER_SIZE || lutOffset >= fileSize) {
+      Serial.printf("[CACHE] Invalid LUT offset: %u (file size: %zu)\n", lutOffset, fileSize);
+      file_.close();
+      continue;
+    }
+
+    // Read page position from LUT
+    file_.seek(lutOffset + static_cast<size_t>(pageNum) * sizeof(uint32_t));
+    uint32_t pagePos;
+    serialization::readPod(file_, pagePos);
+
+    // Validate page position
+    if (pagePos < HEADER_SIZE || pagePos >= fileSize) {
+      Serial.printf("[CACHE] Invalid page position: %u (file size: %zu)\n", pagePos, fileSize);
+      file_.close();
+      continue;
+    }
+
+    // Read page
+    file_.seek(pagePos);
+    auto page = Page::deserialize(file_);
     file_.close();
-    return nullptr;
+
+    if (page) return page;
   }
 
-  // Read page position from LUT
-  file_.seek(lutOffset + static_cast<size_t>(pageNum) * sizeof(uint32_t));
-  uint32_t pagePos;
-  serialization::readPod(file_, pagePos);
-
-  // Validate page position
-  if (pagePos < HEADER_SIZE || pagePos >= fileSize) {
-    Serial.printf("[CACHE] Invalid page position: %u (file size: %zu)\n", pagePos, fileSize);
-    file_.close();
-    return nullptr;
-  }
-
-  // Read page
-  file_.seek(pagePos);
-  auto page = Page::deserialize(file_);
-  file_.close();
-
-  return page;
+  return nullptr;
 }
 
 bool PageCache::clear() const {

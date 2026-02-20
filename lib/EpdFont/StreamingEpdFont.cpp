@@ -205,18 +205,15 @@ bool StreamingEpdFont::loadGlyphBitmap(uint32_t glyphIndex, CachedBitmap& entry)
   }
 
   // Calculate file position: bitmapOffset + glyph's dataOffset
+  // Retry seek+read on transient SD card failures (file handle stays valid)
   uint32_t filePos = _bitmapOffset + glyph.dataOffset;
-  if (!_fontFile.seek(filePos)) {
-    return false;
+  for (int attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) delay(50);
+    if (!_fontFile.seek(filePos)) continue;
+    if (_fontFile.read(entry.bitmap, dataLen) == dataLen) return true;
   }
 
-  // Read bitmap data - return false on partial read (SD card error)
-  size_t bytesRead = _fontFile.read(entry.bitmap, dataLen);
-  if (bytesRead != dataLen) {
-    return false;
-  }
-
-  return true;
+  return false;
 }
 
 const uint8_t* StreamingEpdFont::getGlyphBitmap(const EpdGlyph* glyph) {
