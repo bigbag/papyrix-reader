@@ -116,7 +116,14 @@ StateTransition NetworkState::update(Core& core) {
 
   Event e;
   while (core.events.pop(e)) {
-    if (e.type != EventType::ButtonPress) continue;
+    if (e.type == EventType::ButtonRepeat) {
+      // Repeat only for navigational screens
+      if (currentScreen_ != NetworkScreen::ModeSelect && currentScreen_ != NetworkScreen::WifiList &&
+          currentScreen_ != NetworkScreen::PasswordEntry)
+        continue;
+    } else if (e.type != EventType::ButtonPress) {
+      continue;
+    }
 
     switch (currentScreen_) {
       case NetworkScreen::ModeSelect:

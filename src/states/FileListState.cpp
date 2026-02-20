@@ -201,6 +201,15 @@ StateTransition FileListState::update(Core& core) {
   Event e;
   while (core.events.pop(e)) {
     switch (e.type) {
+      case EventType::ButtonRepeat:
+        if (currentScreen_ != Screen::ConfirmDelete) {
+          if (e.button == Button::Up)
+            navigateUp(core);
+          else if (e.button == Button::Down)
+            navigateDown(core);
+        }
+        break;
+
       case EventType::ButtonPress:
         if (currentScreen_ == Screen::ConfirmDelete) {
           // Confirmation dialog input

@@ -89,20 +89,31 @@ void Input::checkButton(Button btn, uint8_t mask) {
 
   // Button just pressed
   if (isDown && !wasDown) {
-    pressStartMs_[idx] = millis();
+    uint32_t now = millis();
+    pressStartMs_[idx] = now;
+    lastRepeatMs_[idx] = now;
+    longPressFired_[idx] = false;
     queue_->push(Event::buttonPress(btn));
-    lastActivityMs_ = millis();
+    lastActivityMs_ = now;
   }
 
-  // Button held - check for long press
+  // Button held - check for long press and repeat
   if (isDown && wasDown) {
-    uint32_t heldMs = millis() - pressStartMs_[idx];
-    if (heldMs >= LONG_PRESS_MS) {
-      // Only fire once per press
-      if (pressStartMs_[idx] != 0) {
-        queue_->push(Event::buttonLongPress(btn));
-        pressStartMs_[idx] = 0;  // Mark as fired
+    uint32_t now = millis();
+    uint32_t heldMs = now - pressStartMs_[idx];
+
+    // Directional buttons use repeat instead of long press
+    if (mask & REPEAT_BUTTON_MASK) {
+      uint32_t sinceLastRepeat = now - lastRepeatMs_[idx];
+      uint32_t threshold = (lastRepeatMs_[idx] == pressStartMs_[idx]) ? REPEAT_START_MS : REPEAT_INTERVAL_MS;
+      if (sinceLastRepeat >= threshold) {
+        queue_->push(Event::buttonRepeat(btn));
+        lastRepeatMs_[idx] = now;
+        lastActivityMs_ = now;
       }
+    } else if (!longPressFired_[idx] && heldMs >= LONG_PRESS_MS) {
+      queue_->push(Event::buttonLongPress(btn));
+      longPressFired_[idx] = true;
     }
   }
 

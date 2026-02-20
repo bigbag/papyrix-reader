@@ -37,6 +37,7 @@ enum class EventType : uint8_t {
   None = 0,
   ButtonPress,
   ButtonLongPress,
+  ButtonRepeat,
   ButtonRelease,
   BatteryLow,
   UsbConnected,
@@ -67,6 +68,13 @@ struct Event {
   static Event buttonLongPress(Button btn) {
     Event e;
     e.type = EventType::ButtonLongPress;
+    e.button = btn;
+    return e;
+  }
+
+  static Event buttonRepeat(Button btn) {
+    Event e;
+    e.type = EventType::ButtonRepeat;
     e.button = btn;
     return e;
   }
@@ -355,6 +363,17 @@ int main() {
   {
     Event e = Event::none();
     runner.expectTrue(e.type == EventType::None, "Event::none() has None type");
+  }
+
+  // Test 15: Event::buttonRepeat()
+  {
+    EventQueue queue;
+    queue.push(Event::buttonRepeat(Button::Down));
+
+    Event out;
+    queue.pop(out);
+    runner.expectTrue(out.type == EventType::ButtonRepeat, "Event type: ButtonRepeat");
+    runner.expectTrue(out.button == Button::Down, "ButtonRepeat preserves button");
   }
 
   return runner.allPassed() ? 0 : 1;

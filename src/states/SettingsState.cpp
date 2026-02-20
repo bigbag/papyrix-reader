@@ -71,6 +71,7 @@ StateTransition SettingsState::update(Core& core) {
   Event e;
   while (core.events.pop(e)) {
     switch (e.type) {
+      case EventType::ButtonRepeat:
       case EventType::ButtonPress:
         switch (e.button) {
           case Button::Up:

@@ -1186,7 +1186,7 @@ void ReaderState::exitTocMode() {
 }
 
 void ReaderState::handleTocInput(Core& core, const Event& e) {
-  if (e.type != EventType::ButtonPress) {
+  if (e.type != EventType::ButtonPress && e.type != EventType::ButtonRepeat) {
     return;
   }
 
