@@ -742,11 +742,36 @@ void ReaderState::renderCachedPage(Core& core) {
   renderPageContents(core, *page, vp.marginTop, vp.marginRight, vp.marginBottom, vp.marginLeft);
   renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
 
-  displayWithRefresh(core);
+  const bool aaEnabled = core.settings.textAntiAliasing && !FONT_MANAGER.isUsingCustomReaderFont() &&
+                         renderer_.fontSupportsGrayscale(fontId);
+  const bool imagePageWithAA = aaEnabled && page->hasImages();
+
+  if (imagePageWithAA) {
+    // Double FAST_REFRESH with selective image blanking:
+    // HALF_REFRESH sets e-ink particles too firmly for the grayscale LUT to adjust.
+    // Instead, blank only the image area and do two fast refreshes (~1200ms total
+    // vs ~1720ms for HALF_REFRESH) with better visual quality.
+    const bool turnOffScreen = core.settings.sunlightFadingFix != 0;
+    int16_t imgX, imgY, imgW, imgH;
+    if (page->getImageBoundingBox(imgX, imgY, imgW, imgH)) {
+      // Step 1: Display page with image area blanked (text appears, image area white)
+      renderer_.fillRect(imgX + vp.marginLeft, imgY + vp.marginTop, imgW, imgH, !theme.primaryTextBlack);
+      renderer_.displayBuffer(EInkDisplay::FAST_REFRESH, turnOffScreen);
+
+      // Step 2: Re-render with images and display again (images appear clean)
+      renderPageContents(core, *page, vp.marginTop, vp.marginRight, vp.marginBottom, vp.marginLeft);
+      renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
+      renderer_.displayBuffer(EInkDisplay::FAST_REFRESH, turnOffScreen);
+    } else {
+      renderer_.displayBuffer(EInkDisplay::HALF_REFRESH, turnOffScreen);
+    }
+    // Double FAST_REFRESH handles ghosting; don't count toward full refresh cadence
+  } else {
+    displayWithRefresh(core);
+  }
 
   // Grayscale text rendering (anti-aliasing) - skip for custom fonts (saves ~48KB)
-  if (core.settings.textAntiAliasing && !FONT_MANAGER.isUsingCustomReaderFont() &&
-      renderer_.fontSupportsGrayscale(fontId) && renderer_.storeBwBuffer()) {
+  if (aaEnabled && renderer_.storeBwBuffer()) {
     renderer_.clearScreen(0x00);
     renderer_.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     page->render(renderer_, fontId, vp.marginLeft, vp.marginTop, theme.primaryTextBlack);

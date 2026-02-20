@@ -543,6 +543,22 @@ void loop() {
     }
   }
 
+  // CPU frequency scaling: drop to 10 MHz after idle to save battery,
+  // restore full speed on any activity. Must run BEFORE stateMachine.update()
+  // so rendering always happens at full CPU/SPI speed after wake.
+  // Idea: CrossPoint HalPowerManager by @ngxson (https://github.com/ngxson)
+  static constexpr unsigned long kIdlePowerSavingMs = 3000;
+  static bool cpuThrottled = false;
+  const bool isIdle = papyrix::core.input.idleTimeMs() >= kIdlePowerSavingMs;
+
+  if (isIdle && !cpuThrottled) {
+    setCpuFrequencyMhz(10);
+    cpuThrottled = true;
+  } else if (!isIdle && cpuThrottled) {
+    setCpuFrequencyMhz(160);
+    cpuThrottled = false;
+  }
+
   // Update state machine (handles transitions and rendering)
   const unsigned long activityStartTime = millis();
   stateMachine.update(papyrix::core);
@@ -560,8 +576,7 @@ void loop() {
   // Add delay at the end of the loop to prevent tight spinning
   // Increase delay after idle to save power (~4x less CPU load)
   // Idea: https://github.com/crosspoint-reader/crosspoint-reader/commit/0991782 by @ngxson (https://github.com/ngxson)
-  static constexpr unsigned long kIdlePowerSavingMs = 3000;
-  if (papyrix::core.input.idleTimeMs() >= kIdlePowerSavingMs) {
+  if (isIdle) {
     delay(50);
   } else {
     delay(10);
