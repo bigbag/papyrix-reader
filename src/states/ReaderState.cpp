@@ -742,8 +742,7 @@ void ReaderState::renderCachedPage(Core& core) {
   renderPageContents(core, *page, vp.marginTop, vp.marginRight, vp.marginBottom, vp.marginLeft);
   renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
 
-  const bool aaEnabled = core.settings.textAntiAliasing && !FONT_MANAGER.isUsingCustomReaderFont() &&
-                         renderer_.fontSupportsGrayscale(fontId);
+  const bool aaEnabled = core.settings.textAntiAliasing && renderer_.fontSupportsGrayscale(fontId);
   const bool imagePageWithAA = aaEnabled && page->hasImages();
 
   if (imagePageWithAA) {
@@ -770,8 +769,8 @@ void ReaderState::renderCachedPage(Core& core) {
     displayWithRefresh(core);
   }
 
-  // Grayscale text rendering (anti-aliasing) - skip for custom fonts (saves ~48KB)
-  if (aaEnabled && renderer_.storeBwBuffer()) {
+  // Grayscale text rendering (anti-aliasing)
+  if (aaEnabled) {
     renderer_.clearScreen(0x00);
     renderer_.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     page->render(renderer_, fontId, vp.marginLeft, vp.marginTop, theme.primaryTextBlack);
@@ -785,7 +784,12 @@ void ReaderState::renderCachedPage(Core& core) {
     const bool turnOffScreen = core.settings.sunlightFadingFix != 0;
     renderer_.displayGrayBuffer(turnOffScreen);
     renderer_.setRenderMode(GfxRenderer::BW);
-    renderer_.restoreBwBuffer();
+
+    // Re-render BW instead of restoring from backup (saves 48KB peak allocation)
+    renderer_.clearScreen(theme.backgroundColor);
+    renderPageContents(core, *page, vp.marginTop, vp.marginRight, vp.marginBottom, vp.marginLeft);
+    renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
+    renderer_.cleanupGrayscaleWithFrameBuffer();
   }
 
   Serial.printf("[READER] Rendered page %d/%d\n", currentSectionPage_ + 1, pageCount);

@@ -248,6 +248,13 @@ void SleepState::renderBitmapSleepScreen(const Bitmap& bitmap) const {
 
     renderer_.displayGrayBuffer();
     renderer_.setRenderMode(GfxRenderer::BW);
+
+    // Restore BW frame buffer and clean up RED RAM so e-ink controller
+    // doesn't show grayscale residue as ghosting during deep sleep
+    bitmap.rewindToData();
+    renderer_.clearScreen();
+    renderer_.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height);
+    renderer_.cleanupGrayscaleWithFrameBuffer();
   }
 }
 
