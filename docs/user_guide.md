@@ -328,6 +328,10 @@ You can customize the sleep screen by placing custom images in specific location
 > [!TIP]
 > The **Cover** sleep screen option displays the cover of the currently open book when the device sleeps.
 
+Cover mode:
+
+![Sleep Screen: Cover](images/sleep-screen-cover.jpg)
+
 ---
 
 ## 4. Reading Mode
