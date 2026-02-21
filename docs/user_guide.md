@@ -46,23 +46,22 @@ Empty:
 ![Home Screen: Empty](images/home-screen.jpg)
 
 
-The Home Screen displays the app title "Papyrix Reader" at the top with a **battery indicator** in the top-right corner.
+The Home Screen displays the title "Papyrix" at the top with a **battery indicator** in the top-right corner.
 
-#### Book Card
-The center of the screen features a **book card** - a dark rectangle with a bookmark icon at the top:
-- **With a book open:** Displays the book title, author, and "Continue Reading" text
+#### Book Display
+The center of the screen shows the cover of the currently open book, with the book title and author displayed below it.
 - **No book open:** Displays "No book open"
 
-Press **Confirm** on the book card to continue reading your current book.
-
-#### Menu Items
-Below the book card are two bordered menu items:
+#### Bottom Bar
+Four buttons at the bottom of the screen:
+- **Read** — Continue reading the current book
 - **Files** — Browse and select books from the SD card
-- **Settings** — Device settings and file transfer
+- **Sync** — File transfer over WiFi or Calibre wireless sync
+- **Settings** — Device settings
 
 **Navigation:**
-* Use **Left/Right** or **Volume Up/Down** to move between items
-* Press **Confirm** to select an item
+* Use **Left/Right** or **Volume Up/Down** to move between buttons
+* Press **Confirm** to select
 
 ### 3.2 Book Selection (Files)
 
@@ -98,6 +97,14 @@ Test:
 Images:
 
 ![Reading View: Image](images/reading-image.jpg)
+
+Arabic (RTL):
+
+![Reading View: Arabic](images/reading-arabic.jpg)
+
+Landscape:
+
+![Reading View: Landscape](images/reading-landscape.jpg)
 
 See [4. Reading Mode](#4-reading-mode) below for more information.
 
@@ -346,6 +353,10 @@ Once you have opened a book, the button layout changes to facilitate reading.
 ## 5. Chapter Selection Screen
 
 ![Table of Contents](images/table-of-contents.jpg)
+
+Arabic (RTL):
+
+![Table of Contents: Arabic](images/table-of-contents-arabic.jpg)
 
 Accessible by pressing **Confirm** while inside a book. The screen header displays the book title.
 
