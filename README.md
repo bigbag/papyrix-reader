@@ -57,7 +57,7 @@ This project is **not affiliated with Xteink**; it's built as a community projec
 - [x] Thai text rendering with proper mark positioning
 - [x] Arabic text shaping - contextual forms, Lam-Alef ligatures with RTL layout
 - [x] Knuth-Plass line breaking algorithm (TeX-quality justified text)
-- [x] Text anti-aliasing toggle (grayscale text rendering for builtin fonts)
+- [x] Text anti-aliasing toggle (grayscale text rendering for builtin and custom fonts)
 - [x] Pages per refresh setting (1/5/10/15/30)
 - [x] Sunlight fading fix (powers down display after refresh to prevent UV fading)
 - [x] 4 screen orientations

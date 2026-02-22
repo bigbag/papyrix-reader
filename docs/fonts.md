@@ -69,7 +69,7 @@ Amazon's custom font designed specifically for e-readers. Optimized for readabil
 
 A contemporary serif typeface designed for long-form reading. Features excellent legibility and a warm, inviting character.
 
-- **Styles**: Regular
+- **Styles**: Regular, Bold, Italic
 - **License**: OFL (Open Font License)
 
 ![Literata Sample](examples/images/literata-sample.png)

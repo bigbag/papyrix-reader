@@ -162,8 +162,8 @@ Reading and display settings:
   - Adjusting line spacing can improve readability for different fonts and preferences
 
 - **Text Anti-Aliasing** (default: OFF)
-  - Enable grayscale text rendering for smoother font edges on builtin fonts
-  - Has no effect when using custom fonts loaded from SD card
+  - Enable grayscale text rendering for smoother font edges
+  - Works with both builtin fonts and custom fonts converted with `--2bit`
   - Disable for faster page turns and to eliminate the brief "thick text" flash during transitions
 
 - **Paragraph Alignment** (default: Justified)
