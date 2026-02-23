@@ -740,6 +740,38 @@ int main() {
     runner.expectFalse(parser.hasRtlElement(), "dir_default: no dir attribute = LTR");
   }
 
+  // Test 27b: dir="rtl" on html element marks heading (first block) as RTL
+  // Regression test: the first text block is created before <html dir="rtl"> is
+  // parsed, so the empty-block reuse path must propagate the RTL flag.
+  {
+    TestParser parser;
+    bool ok = parser.parse(
+        "<html dir=\"rtl\"><body>"
+        "<h1>الكتاب الأول</h1>"
+        "<p>Body text</p>"
+        "</body></html>");
+    runner.expectTrue(ok, "dir_rtl_heading: parses successfully");
+    runner.expectTrue(parser.isAllTextRtl(), "dir_rtl_heading: heading and body are RTL");
+    // Verify the heading element specifically is RTL
+    bool headingIsRtl = false;
+    for (const auto& elem : parser.elements) {
+      if (elem.type == TestParser::ParsedElement::TEXT &&
+          elem.content.find("\xd8\xa7\xd9\x84\xd9\x83\xd8\xaa\xd8\xa7\xd8\xa8") != std::string::npos) {
+        headingIsRtl = elem.isRtl;
+        break;
+      }
+    }
+    runner.expectTrue(headingIsRtl, "dir_rtl_heading: first heading block is RTL");
+  }
+
+  // Test 27c: dir="rtl" on html with heading-only content
+  {
+    TestParser parser;
+    bool ok = parser.parse("<html dir=\"rtl\"><body><h2>عنوان</h2></body></html>");
+    runner.expectTrue(ok, "dir_rtl_h2_only: parses successfully");
+    runner.expectTrue(parser.hasRtlElement(), "dir_rtl_h2_only: heading is RTL");
+  }
+
   // ============================================
   // Tiny decorative image skip tests
   // ============================================

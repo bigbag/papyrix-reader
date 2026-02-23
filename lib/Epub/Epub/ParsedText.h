@@ -55,6 +55,7 @@ class ParsedText {
 
   void addWord(std::string word, EpdFontFamily::Style fontStyle);
   void setStyle(const TextBlock::BLOCK_STYLE style) { this->style = style; }
+  void setRtl(const bool rtl) { isRtl = rtl; }
   void setUseGreedyBreaking(const bool greedy) { useGreedyBreaking = greedy; }
   TextBlock::BLOCK_STYLE getStyle() const { return style; }
   size_t size() const { return words.size(); }
