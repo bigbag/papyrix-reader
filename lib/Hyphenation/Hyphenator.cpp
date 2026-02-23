@@ -1,8 +1,10 @@
 #include "Hyphenator.h"
 
+#include <algorithm>
 #include <vector>
 
 #include "HyphenationCommon.h"
+#include "LanguageHyphenator.h"
 #include "LanguageRegistry.h"
 
 const LanguageHyphenator* Hyphenator::cachedHyphenator_ = nullptr;
@@ -55,6 +57,32 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
 
   auto explicitBreakInfos = buildExplicitBreakInfos(cps);
   if (!explicitBreakInfos.empty()) {
+    if (hyphenator) {
+      // Also run language patterns on alphabetic segments between explicit hyphens
+      std::vector<Hyphenator::BreakInfo> merged = explicitBreakInfos;
+      size_t segStart = 0;
+      for (size_t i = 0; i <= cps.size(); ++i) {
+        const bool atEnd = (i == cps.size());
+        const bool atHyphen = !atEnd && isExplicitHyphen(cps[i].value);
+        if (atEnd || atHyphen) {
+          if (i > segStart) {
+            std::vector<CodepointInfo> seg(cps.begin() + segStart, cps.begin() + i);
+            auto segIndexes = hyphenator->breakIndexes(seg);
+            for (const size_t idx : segIndexes) {
+              const size_t globalIdx = segStart + idx;
+              merged.push_back({byteOffsetForIndex(cps, globalIdx), true});
+            }
+          }
+          segStart = i + 1;
+        }
+      }
+      std::sort(merged.begin(), merged.end(),
+                [](const BreakInfo& a, const BreakInfo& b) { return a.byteOffset < b.byteOffset; });
+      merged.erase(std::unique(merged.begin(), merged.end(),
+                               [](const BreakInfo& a, const BreakInfo& b) { return a.byteOffset == b.byteOffset; }),
+                   merged.end());
+      return merged;
+    }
     return explicitBreakInfos;
   }
 

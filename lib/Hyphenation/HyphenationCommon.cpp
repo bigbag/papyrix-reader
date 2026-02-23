@@ -164,6 +164,62 @@ void trimSurroundingPunctuationAndFootnote(std::vector<CodepointInfo>& cps) {
   }
 }
 
+namespace {
+
+uint32_t composeNfc(const uint32_t base, const uint32_t combining) {
+  // clang-format off
+  switch (combining) {
+    case 0x0300:  // combining grave
+      switch (base) {
+        case 'A': return 0x00C0; case 'E': return 0x00C8; case 'I': return 0x00CC;
+        case 'O': return 0x00D2; case 'U': return 0x00D9;
+        case 'a': return 0x00E0; case 'e': return 0x00E8; case 'i': return 0x00EC;
+        case 'o': return 0x00F2; case 'u': return 0x00F9;
+        default: return 0;
+      }
+    case 0x0301:  // combining acute
+      switch (base) {
+        case 'A': return 0x00C1; case 'E': return 0x00C9; case 'I': return 0x00CD;
+        case 'O': return 0x00D3; case 'U': return 0x00DA; case 'Y': return 0x00DD;
+        case 'a': return 0x00E1; case 'e': return 0x00E9; case 'i': return 0x00ED;
+        case 'o': return 0x00F3; case 'u': return 0x00FA; case 'y': return 0x00FD;
+        default: return 0;
+      }
+    case 0x0302:  // combining circumflex
+      switch (base) {
+        case 'A': return 0x00C2; case 'E': return 0x00CA; case 'I': return 0x00CE;
+        case 'O': return 0x00D4; case 'U': return 0x00DB;
+        case 'a': return 0x00E2; case 'e': return 0x00EA; case 'i': return 0x00EE;
+        case 'o': return 0x00F4; case 'u': return 0x00FB;
+        default: return 0;
+      }
+    case 0x0303:  // combining tilde
+      switch (base) {
+        case 'A': return 0x00C3; case 'N': return 0x00D1; case 'O': return 0x00D5;
+        case 'a': return 0x00E3; case 'n': return 0x00F1; case 'o': return 0x00F5;
+        default: return 0;
+      }
+    case 0x0308:  // combining diaeresis
+      switch (base) {
+        case 'A': return 0x00C4; case 'E': return 0x00CB; case 'I': return 0x00CF;
+        case 'O': return 0x00D6; case 'U': return 0x00DC;
+        case 'a': return 0x00E4; case 'e': return 0x00EB; case 'i': return 0x00EF;
+        case 'o': return 0x00F6; case 'u': return 0x00FC; case 'y': return 0x00FF;
+        default: return 0;
+      }
+    case 0x0327:  // combining cedilla
+      switch (base) {
+        case 'C': return 0x00C7; case 'c': return 0x00E7;
+        default: return 0;
+      }
+    default:
+      return 0;
+  }
+  // clang-format on
+}
+
+}  // namespace
+
 std::vector<CodepointInfo> collectCodepoints(const std::string& word) {
   std::vector<CodepointInfo> cps;
   cps.reserve(word.size());
@@ -173,6 +229,15 @@ std::vector<CodepointInfo> collectCodepoints(const std::string& word) {
   while (*ptr != 0) {
     const unsigned char* current = ptr;
     const uint32_t cp = utf8NextCodepoint(&ptr);
+
+    if (!cps.empty() && cp >= 0x0300 && cp <= 0x036F) {
+      const uint32_t composed = composeNfc(cps.back().value, cp);
+      if (composed != 0) {
+        cps.back().value = composed;
+        continue;
+      }
+    }
+
     cps.push_back({cp, static_cast<size_t>(current - base)});
   }
 

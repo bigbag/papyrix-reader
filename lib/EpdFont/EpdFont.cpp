@@ -18,6 +18,8 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
 
   int cursorX = startX;
   const int cursorY = startY;
+  int lastBaseX = startX;
+  int lastBaseAdvance = 0;
   uint32_t cp;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&string)))) {
     const EpdGlyph* glyph = getGlyph(cp);
@@ -32,11 +34,21 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
       continue;
     }
 
-    *minX = min(*minX, cursorX + glyph->left);
-    *maxX = max(*maxX, cursorX + glyph->left + glyph->width);
-    *minY = min(*minY, cursorY + glyph->top - glyph->height);
-    *maxY = max(*maxY, cursorY + glyph->top);
-    cursorX += glyph->advanceX;
+    if (utf8IsCombiningMark(cp)) {
+      const int centerX = lastBaseX + lastBaseAdvance / 2 - glyph->width / 2;
+      *minX = min(*minX, centerX + glyph->left);
+      *maxX = max(*maxX, centerX + glyph->left + glyph->width);
+      *minY = min(*minY, cursorY + glyph->top - glyph->height);
+      *maxY = max(*maxY, cursorY + glyph->top);
+    } else {
+      *minX = min(*minX, cursorX + glyph->left);
+      *maxX = max(*maxX, cursorX + glyph->left + glyph->width);
+      *minY = min(*minY, cursorY + glyph->top - glyph->height);
+      *maxY = max(*maxY, cursorY + glyph->top);
+      lastBaseX = cursorX;
+      lastBaseAdvance = glyph->advanceX;
+      cursorX += glyph->advanceX;
+    }
   }
 }
 

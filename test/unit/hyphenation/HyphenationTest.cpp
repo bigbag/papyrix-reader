@@ -330,6 +330,69 @@ int main() {
     runner.expectTrue(breaks.empty(), "en: punctuation only not hyphenated");
   }
 
+  // ============================================
+  // Decomposed diacritic composition in collectCodepoints
+  // ============================================
+
+  {
+    // "Österreich" as decomposed: O + combining diaeresis (U+0308) + sterreich
+    auto cps = collectCodepoints("O\xCC\x88sterreich");
+    // Should compose to Ö (U+00D6) + sterreich = 10 codepoints
+    runner.expectEq(static_cast<size_t>(10), cps.size(), "compose: O+diaeresis = 10 cps");
+    runner.expectEq(static_cast<uint32_t>(0x00D6), cps[0].value, "compose: first cp is Ö");
+  }
+
+  {
+    // Decomposed café: e + combining acute (U+0301)
+    auto cps = collectCodepoints("caf\x65\xCC\x81");
+    runner.expectEq(static_cast<size_t>(4), cps.size(), "compose: cafe with decomposed e-acute = 4 cps");
+    runner.expectEq(static_cast<uint32_t>(0x00E9), cps[3].value, "compose: last cp is é");
+  }
+
+  {
+    // Decomposed "naïve": i + combining diaeresis
+    auto cps = collectCodepoints("na\x69\xCC\x88ve");
+    runner.expectEq(static_cast<size_t>(5), cps.size(), "compose: naive with decomposed i-diaeresis = 5 cps");
+    runner.expectEq(static_cast<uint32_t>(0x00EF), cps[2].value, "compose: middle cp is ï");
+  }
+
+  // ============================================
+  // Decomposed diacritics + hyphenation patterns
+  // ============================================
+
+  {
+    Hyphenation::setLanguage("de");
+    // "Österreich" decomposed should hyphenate like precomposed
+    auto breaksDecomposed = Hyphenation::breakOffsets("O\xCC\x88sterreich", false);
+    auto breaksPrecomposed = Hyphenation::breakOffsets("\xC3\x96sterreich", false);
+    runner.expectTrue(!breaksDecomposed.empty(), "de: decomposed Österreich has breaks");
+    runner.expectEq(breaksPrecomposed.size(), breaksDecomposed.size(),
+                    "de: decomposed and precomposed Österreich same break count");
+  }
+
+  // ============================================
+  // Explicit hyphen + pattern breaks (compound words)
+  // ============================================
+
+  {
+    Hyphenation::setLanguage("de");
+    auto breaks = Hyphenation::breakOffsets("US-Satellitensystem", false);
+    // Should have the explicit hyphen break AND pattern breaks within "Satellitensystem"
+    runner.expectTrue(breaks.size() > 1, "de: US-Satellitensystem has >1 break (explicit + patterns)");
+    // First break should be at the explicit hyphen (byte offset 3, after "US-")
+    runner.expectEq(static_cast<size_t>(3), breaks[0].byteOffset, "de: first break at explicit hyphen");
+    runner.expectFalse(breaks[0].requiresInsertedHyphen, "de: explicit hyphen break doesn't need insertion");
+    // Subsequent breaks should require inserted hyphens (from patterns)
+    bool hasPatternBreak = false;
+    for (size_t i = 1; i < breaks.size(); ++i) {
+      if (breaks[i].requiresInsertedHyphen) {
+        hasPatternBreak = true;
+        break;
+      }
+    }
+    runner.expectTrue(hasPatternBreak, "de: has pattern-based breaks within Satellitensystem");
+  }
+
   // Reset to English for consistent state
   Hyphenation::setLanguage("en");
 

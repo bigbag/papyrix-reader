@@ -323,6 +323,8 @@ void StreamingEpdFont::getTextDimensions(const char* string, int* w, int* h) con
   int minX = 0, minY = 0, maxX = 0, maxY = 0;
   int cursorX = 0;
   const int cursorY = 0;
+  int lastBaseX = 0;
+  int lastBaseAdvance = 0;
 
   if (!string || *string == '\0') {
     *w = 0;
@@ -340,11 +342,21 @@ void StreamingEpdFont::getTextDimensions(const char* string, int* w, int* h) con
       continue;
     }
 
-    minX = std::min(minX, cursorX + glyph->left);
-    maxX = std::max(maxX, cursorX + glyph->left + glyph->width);
-    minY = std::min(minY, cursorY + glyph->top - glyph->height);
-    maxY = std::max(maxY, cursorY + glyph->top);
-    cursorX += glyph->advanceX;
+    if (utf8IsCombiningMark(cp)) {
+      const int centerX = lastBaseX + lastBaseAdvance / 2 - glyph->width / 2;
+      minX = std::min(minX, centerX + glyph->left);
+      maxX = std::max(maxX, centerX + glyph->left + glyph->width);
+      minY = std::min(minY, cursorY + glyph->top - glyph->height);
+      maxY = std::max(maxY, cursorY + glyph->top);
+    } else {
+      minX = std::min(minX, cursorX + glyph->left);
+      maxX = std::max(maxX, cursorX + glyph->left + glyph->width);
+      minY = std::min(minY, cursorY + glyph->top - glyph->height);
+      maxY = std::max(maxY, cursorY + glyph->top);
+      lastBaseX = cursorX;
+      lastBaseAdvance = glyph->advanceX;
+      cursorX += glyph->advanceX;
+    }
   }
 
   *w = maxX - minX;

@@ -185,10 +185,23 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   // Standard rendering path for non-Thai text
   const int yPos = y + getFontAscenderSize(fontId);
   int xpos = x;
+  int lastBaseX = x;
+  int lastBaseAdvance = 0;
 
   uint32_t cp;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
-    renderChar(font, cp, &xpos, &yPos, black, style, fontId);
+    if (utf8IsCombiningMark(cp)) {
+      const EpdGlyph* glyph = font.getGlyph(cp, style);
+      if (glyph) {
+        int combX = lastBaseX + lastBaseAdvance / 2 - glyph->width / 2;
+        int combY = yPos - 1;
+        renderChar(font, cp, &combX, &combY, black, style, fontId);
+      }
+    } else {
+      lastBaseX = xpos;
+      renderChar(font, cp, &xpos, &yPos, black, style, fontId);
+      lastBaseAdvance = xpos - lastBaseX;
+    }
   }
 }
 
@@ -863,7 +876,9 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
     }
   }
 
-  *x += glyph->advanceX;
+  if (!utf8IsCombiningMark(cp)) {
+    *x += glyph->advanceX;
+  }
 }
 
 void GfxRenderer::getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const {
