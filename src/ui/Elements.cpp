@@ -727,18 +727,10 @@ void readerStatusBar(const GfxRenderer& r, const Theme& t, int marginLeft, int m
     std::string titleStr = data.title;
     int titleWidth = r.getTextWidth(t.smallFontId, titleStr.c_str());
 
-    // Truncate title if too wide
-    if (titleWidth > availableTextWidth && titleStr.length() > 3) {
-      const int ellipsisWidth = r.getTextWidth(t.smallFontId, "...");
-      if (ellipsisWidth > availableTextWidth) {
-        return;  // Can't fit even ellipsis, skip title
-      }
-      while (titleWidth + ellipsisWidth > availableTextWidth && titleStr.length() > 0) {
-        titleStr.pop_back();
-        titleWidth = r.getTextWidth(t.smallFontId, titleStr.c_str());
-      }
-      titleStr += "...";
-      titleWidth += ellipsisWidth;
+    // Truncate title if too wide (using truncatedText for UTF-8 safety)
+    if (titleWidth > availableTextWidth) {
+      titleStr = r.truncatedText(t.smallFontId, titleStr.c_str(), availableTextWidth);
+      titleWidth = r.getTextWidth(t.smallFontId, titleStr.c_str());
     }
 
     r.drawText(t.smallFontId, titleMarginLeft + (availableTextWidth - titleWidth) / 2, textY, titleStr.c_str(),

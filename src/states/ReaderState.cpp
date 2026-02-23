@@ -790,6 +790,19 @@ void ReaderState::renderCachedPage(Core& core) {
     renderPageContents(core, *page, vp.marginTop, vp.marginRight, vp.marginBottom, vp.marginLeft);
     renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
     renderer_.cleanupGrayscaleWithFrameBuffer();
+
+    // Status bar is 1-bit and excluded from grayscale passes, so it needs
+    // an explicit blank-then-draw cycle to prevent ghost accumulation.
+    if (core.settings.statusBar != 0) {
+      const int statusBarY = renderer_.getScreenHeight() - vp.marginBottom;
+      const int statusBarH = vp.marginBottom;
+
+      renderer_.fillRect(0, statusBarY, renderer_.getScreenWidth(), statusBarH, !theme.primaryTextBlack);
+      renderer_.displayWindow(0, statusBarY, renderer_.getScreenWidth(), statusBarH, turnOffScreen);
+
+      renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
+      renderer_.displayWindow(0, statusBarY, renderer_.getScreenWidth(), statusBarH, turnOffScreen);
+    }
   }
 
   Serial.printf("[READER] Rendered page %d/%d\n", currentSectionPage_ + 1, pageCount);
