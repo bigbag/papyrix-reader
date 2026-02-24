@@ -83,6 +83,21 @@ std::string stripSoftHyphens(const std::string& word) {
   return result;
 }
 
+// Check if word ends with a soft hyphen marker (U+00AD = 0xC2 0xAD)
+bool hasTrailingSoftHyphen(const std::string& word) {
+  return word.size() >= 2 && static_cast<unsigned char>(word[word.size() - 2]) == SOFT_HYPHEN_BYTE1 &&
+         static_cast<unsigned char>(word[word.size() - 1]) == SOFT_HYPHEN_BYTE2;
+}
+
+// Replace trailing soft hyphen with visible ASCII hyphen for rendering
+std::string replaceTrailingSoftHyphen(std::string word) {
+  if (hasTrailingSoftHyphen(word)) {
+    word.resize(word.size() - 2);
+    word += '-';
+  }
+  return word;
+}
+
 // Get word prefix before soft hyphen position (stripped) + visible hyphen
 std::string getWordPrefix(const std::string& word, size_t softHyphenPos) {
   std::string prefix = word.substr(0, softHyphenPos);
@@ -227,6 +242,26 @@ bool ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
 
   const int pageWidth = viewportWidth;
   const int spaceWidth = renderer.getSpaceWidth(fontId);
+
+  // Rejoin words that were split by a previous interrupted greedy layout pass.
+  // Split prefixes are marked with trailing U+00AD; rejoin with the following suffix word.
+  {
+    auto it = words.begin();
+    auto sIt = wordStyles.begin();
+    while (it != words.end()) {
+      auto nextIt = std::next(it);
+      if (nextIt != words.end() && hasTrailingSoftHyphen(*it)) {
+        it->resize(it->size() - 2);  // Remove trailing U+00AD
+        *it += *nextIt;              // Rejoin with suffix
+        words.erase(nextIt);
+        wordStyles.erase(std::next(sIt));
+        // Don't advance - check if rejoined word also has marker (nested splits)
+      } else {
+        ++it;
+        ++sIt;
+      }
+    }
+  }
 
   // Pre-split oversized words at soft hyphen positions
   if (hyphenationEnabled) {
@@ -474,7 +509,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
       const uint16_t currentWordWidth = wordWidths[lastBreakAt + wordIdx];
       xpos -= currentWordWidth;
-      lineData.push_back({std::move(*wordIt), xpos, *styleIt});
+      lineData.push_back({replaceTrailingSoftHyphen(std::move(*wordIt)), xpos, *styleIt});
 
       auto nextWordIt = wordIt;
       ++nextWordIt;
@@ -494,7 +529,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
     for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
       const uint16_t currentWordWidth = wordWidths[lastBreakAt + wordIdx];
-      lineData.push_back({std::move(*wordIt), xpos, *styleIt});
+      lineData.push_back({replaceTrailingSoftHyphen(std::move(*wordIt)), xpos, *styleIt});
 
       auto nextWordIt = wordIt;
       ++nextWordIt;
@@ -678,9 +713,13 @@ bool ParsedText::trySplitWordForLineEnd(const GfxRenderer& renderer, const int f
   // Find rightmost break where prefix+hyphen fits in remainingWidth
   for (int i = static_cast<int>(breaks.size()) - 1; i >= 0; --i) {
     std::string prefix = word.substr(0, breaks[i].byteOffset);
-    if (breaks[i].requiresInsertedHyphen) prefix += "-";
-    const int prefixWidth = renderer.getTextWidth(fontId, prefix.c_str(), fontStyle);
+    // Measure with visible hyphen for accurate layout
+    const std::string displayPrefix = breaks[i].requiresInsertedHyphen ? prefix + "-" : prefix;
+    const int prefixWidth = renderer.getTextWidth(fontId, displayPrefix.c_str(), fontStyle);
     if (prefixWidth <= remainingWidth) {
+      // Store with soft hyphen MARKER (not visible hyphen) so interrupted layouts
+      // can rejoin the fragments on resume (calculateWordWidths strips U+00AD)
+      if (breaks[i].requiresInsertedHyphen) prefix += "\xC2\xAD";
       std::string suffix = word.substr(breaks[i].byteOffset);
       const int suffixWidth = renderer.getTextWidth(fontId, suffix.c_str(), fontStyle);
 

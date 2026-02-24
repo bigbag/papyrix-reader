@@ -866,5 +866,141 @@ int main() {
     runner.expectEq(static_cast<uint16_t>(60), positions[2], "RTL fill: C at 60");
   }
 
+  // ============================================
+  // hasTrailingSoftHyphen() tests
+  // ============================================
+
+  // Helper: check if word ends with soft hyphen marker (U+00AD = 0xC2 0xAD)
+  auto hasTrailingSoftHyphen = [](const std::string& word) -> bool {
+    return word.size() >= 2 && static_cast<unsigned char>(word[word.size() - 2]) == SOFT_HYPHEN_BYTE1 &&
+           static_cast<unsigned char>(word[word.size() - 1]) == SOFT_HYPHEN_BYTE2;
+  };
+
+  // Helper: replace trailing soft hyphen with visible ASCII hyphen
+  auto replaceTrailingSoftHyphen = [&hasTrailingSoftHyphen](std::string word) -> std::string {
+    if (hasTrailingSoftHyphen(word)) {
+      word.resize(word.size() - 2);
+      word += '-';
+    }
+    return word;
+  };
+
+  // Test: word without soft hyphen
+  runner.expectFalse(hasTrailingSoftHyphen("hello"), "hasTrailingSoftHyphen: plain word");
+  runner.expectFalse(hasTrailingSoftHyphen("hello-"), "hasTrailingSoftHyphen: trailing ASCII hyphen");
+  runner.expectFalse(hasTrailingSoftHyphen(""), "hasTrailingSoftHyphen: empty string");
+
+  // Test: word with trailing soft hyphen marker
+  {
+    std::string word = "hel\xC2\xAD";
+    runner.expectTrue(hasTrailingSoftHyphen(word), "hasTrailingSoftHyphen: trailing U+00AD");
+  }
+
+  // Test: word with embedded soft hyphen (not trailing) is false
+  {
+    std::string word = "hel\xC2\xADlo";
+    runner.expectFalse(hasTrailingSoftHyphen(word), "hasTrailingSoftHyphen: embedded U+00AD");
+  }
+
+  // ============================================
+  // replaceTrailingSoftHyphen() tests
+  // ============================================
+
+  // Test: no trailing soft hyphen - unchanged
+  runner.expectEqual("hello", replaceTrailingSoftHyphen("hello"),
+                     "replaceTrailingSoftHyphen: plain word unchanged");
+  runner.expectEqual("hello-", replaceTrailingSoftHyphen("hello-"),
+                     "replaceTrailingSoftHyphen: ASCII hyphen unchanged");
+
+  // Test: trailing soft hyphen replaced with visible hyphen
+  {
+    std::string word = "hel\xC2\xAD";
+    runner.expectEqual("hel-", replaceTrailingSoftHyphen(word),
+                       "replaceTrailingSoftHyphen: U+00AD becomes -");
+  }
+
+  // Test: Cyrillic word with trailing soft hyphen
+  {
+    // "зда" in UTF-8 + soft hyphen marker
+    std::string word = "\xD0\xB7\xD0\xB4\xD0\xB0\xC2\xAD";
+    std::string result = replaceTrailingSoftHyphen(word);
+    runner.expectEqual("\xD0\xB7\xD0\xB4\xD0\xB0-", result,
+                       "replaceTrailingSoftHyphen: Cyrillic зда + U+00AD becomes зда-");
+  }
+
+  // ============================================
+  // Rejoin logic tests
+  // These test the rejoin step that runs at the start of layoutAndExtractLines
+  // to undo splits from a previous interrupted greedy pass
+  // ============================================
+
+  // Helper: rejoin words with trailing soft hyphen markers (mirrors layoutAndExtractLines logic)
+  auto rejoinSplitWords = [&hasTrailingSoftHyphen](std::vector<std::string>& words) {
+    auto it = words.begin();
+    while (it != words.end()) {
+      auto nextIt = std::next(it);
+      if (nextIt != words.end() && hasTrailingSoftHyphen(*it)) {
+        it->resize(it->size() - 2);  // Remove trailing U+00AD
+        *it += *nextIt;              // Rejoin with suffix
+        words.erase(nextIt);
+        // Don't advance - check for nested splits
+      } else {
+        ++it;
+      }
+    }
+  };
+
+  // Test: no splits - words unchanged
+  {
+    std::vector<std::string> words = {"hello", "world"};
+    rejoinSplitWords(words);
+    runner.expectEq(static_cast<size_t>(2), words.size(), "rejoin: no splits, size unchanged");
+    runner.expectEqual("hello", words[0], "rejoin: no splits, word 0 unchanged");
+    runner.expectEqual("world", words[1], "rejoin: no splits, word 1 unchanged");
+  }
+
+  // Test: single split pair rejoined
+  {
+    std::vector<std::string> words = {"hel\xC2\xAD", "lo", "world"};
+    rejoinSplitWords(words);
+    runner.expectEq(static_cast<size_t>(2), words.size(), "rejoin: single split, size = 2");
+    runner.expectEqual("hello", words[0], "rejoin: single split, rejoined word");
+    runner.expectEqual("world", words[1], "rejoin: single split, next word intact");
+  }
+
+  // Test: Cyrillic split pair rejoined (the actual bug scenario)
+  {
+    // "зда" + U+00AD marker, then "ний"
+    std::vector<std::string> words = {"\xD0\xB7\xD0\xB4\xD0\xB0\xC2\xAD", "\xD0\xBD\xD0\xB8\xD0\xB9"};
+    rejoinSplitWords(words);
+    runner.expectEq(static_cast<size_t>(1), words.size(), "rejoin: Cyrillic split, size = 1");
+    runner.expectEqual("\xD0\xB7\xD0\xB4\xD0\xB0\xD0\xBD\xD0\xB8\xD0\xB9", words[0],
+                       "rejoin: Cyrillic зда+ний = зданий");
+  }
+
+  // Test: multiple consecutive splits rejoined
+  {
+    std::vector<std::string> words = {"in\xC2\xAD", "ter\xC2\xAD", "national"};
+    rejoinSplitWords(words);
+    runner.expectEq(static_cast<size_t>(1), words.size(), "rejoin: nested splits, size = 1");
+    runner.expectEqual("international", words[0], "rejoin: nested splits rejoined");
+  }
+
+  // Test: split at end of word list
+  {
+    std::vector<std::string> words = {"before", "hel\xC2\xAD", "lo"};
+    rejoinSplitWords(words);
+    runner.expectEq(static_cast<size_t>(2), words.size(), "rejoin: split at end, size = 2");
+    runner.expectEqual("before", words[0], "rejoin: split at end, first word intact");
+    runner.expectEqual("hello", words[1], "rejoin: split at end, rejoined");
+  }
+
+  // Test: empty word list
+  {
+    std::vector<std::string> words = {};
+    rejoinSplitWords(words);
+    runner.expectEq(static_cast<size_t>(0), words.size(), "rejoin: empty list stays empty");
+  }
+
   return runner.allPassed() ? 0 : 1;
 }
