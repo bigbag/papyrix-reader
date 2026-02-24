@@ -1,8 +1,10 @@
 #include "ImageConverter.h"
 
 #include <FsHelpers.h>
-#include <HardwareSerial.h>
 #include <JpegToBmpConverter.h>
+#include <Logging.h>
+
+#define TAG "IMG_CONV"
 #include <PngToBmpConverter.h>
 #include <SDCardManager.h>
 
@@ -85,20 +87,20 @@ bool ImageConverterFactory::convertToBmp(const std::string& inputPath, const std
                                          const ImageConvertConfig& config) {
   ImageConverter* converter = getConverter(inputPath);
   if (!converter) {
-    Serial.printf("[%lu] [%s] Unsupported image format: %s\n", millis(), config.logTag, inputPath.c_str());
+    LOG_ERR(config.logTag, "Unsupported image format: %s", inputPath.c_str());
     return false;
   }
 
   FsFile inputFile;
   if (!SdMan.openFileForRead(config.logTag, inputPath, inputFile)) {
-    Serial.printf("[%lu] [%s] Failed to open input file: %s\n", millis(), config.logTag, inputPath.c_str());
+    LOG_ERR(config.logTag, "Failed to open input file: %s", inputPath.c_str());
     return false;
   }
 
   FsFile outputFile;
   if (!SdMan.openFileForWrite(config.logTag, outputPath, outputFile)) {
     inputFile.close();
-    Serial.printf("[%lu] [%s] Failed to create output file: %s\n", millis(), config.logTag, outputPath.c_str());
+    LOG_ERR(config.logTag, "Failed to create output file: %s", outputPath.c_str());
     return false;
   }
 
@@ -108,10 +110,9 @@ bool ImageConverterFactory::convertToBmp(const std::string& inputPath, const std
   outputFile.close();
 
   if (success) {
-    Serial.printf("[%lu] [%s] Converted %s to BMP: %s\n", millis(), config.logTag, converter->formatName(),
-                  outputPath.c_str());
+    LOG_INF(config.logTag, "Converted %s to BMP: %s", converter->formatName(), outputPath.c_str());
   } else {
-    Serial.printf("[%lu] [%s] Failed to convert %s to BMP\n", millis(), config.logTag, converter->formatName());
+    LOG_ERR(config.logTag, "Failed to convert %s to BMP", converter->formatName());
     SdMan.remove(outputPath.c_str());
   }
 

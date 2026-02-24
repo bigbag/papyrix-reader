@@ -108,6 +108,14 @@ class FontManager {
   bool loadExternalFont(const char* filename);
 
   /**
+   * Defer external font loading until a CJK character is actually encountered.
+   * Registers a lazy-load callback with GfxRenderer instead of loading immediately.
+   * Saves ~13KB for non-CJK books.
+   * @param filename Filename under /config/fonts/
+   */
+  void deferExternalFont(const char* filename);
+
+  /**
    * Unload the external font and free memory.
    */
   void unloadExternalFont();
@@ -211,6 +219,10 @@ class FontManager {
 
   // External font for CJK fallback (pointer to avoid 54KB allocation when unused)
   ExternalFont* _externalFont = nullptr;
+
+  // Deferred external font filename (for lazy loading on first CJK codepoint)
+  char _deferredExternalFontName[48] = {};
+  static void externalFontResolverCallback(void* ctx);
 
   LoadedFont loadSingleFont(const char* path);
   LoadedFont loadStreamingFont(const char* path);

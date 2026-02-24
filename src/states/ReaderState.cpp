@@ -7,6 +7,7 @@
 #include <Fb2.h>
 #include <Fb2Parser.h>
 #include <GfxRenderer.h>
+#include <Logging.h>
 #include <MarkdownParser.h>
 #include <Page.h>
 #include <PageCache.h>
@@ -26,6 +27,8 @@
 #include "../core/Core.h"
 #include "../ui/Elements.h"
 #include "ThemeManager.h"
+
+#define TAG "READER"
 
 namespace papyrix {
 
@@ -169,7 +172,7 @@ void ReaderState::backgroundCacheImpl(ContentParser& parser, const std::string& 
 
   // Check for early abort before doing anything
   if (cacheTask_.shouldStop()) {
-    Serial.println("[READER] Background cache aborted before start");
+    LOG_DBG(TAG, "Background cache aborted before start");
     return;
   }
 
@@ -185,7 +188,7 @@ void ReaderState::backgroundCacheImpl(ContentParser& parser, const std::string& 
   // Check for abort after setup
   if (cacheTask_.shouldStop()) {
     pageCache_.reset();
-    Serial.println("[READER] Background cache aborted after setup");
+    LOG_DBG(TAG, "Background cache aborted after setup");
     return;
   }
 
@@ -203,7 +206,7 @@ void ReaderState::backgroundCacheImpl(ContentParser& parser, const std::string& 
     }
 
     if (!success || cacheTask_.shouldStop()) {
-      Serial.println("[READER] Cache creation failed or aborted, clearing pageCache");
+      LOG_ERR(TAG, "Cache creation failed or aborted, clearing pageCache");
       pageCache_.reset();
     }
   }
@@ -260,10 +263,10 @@ void ReaderState::enter(Core& core) {
   sourceState_ =
       (transition.isValid() && transition.returnTo == ReturnTo::FILE_MANAGER) ? StateId::FileList : StateId::Home;
 
-  Serial.printf("[READER] Entering with path: %s\n", contentPath_);
+  LOG_INF(TAG, "Entering with path: %s", contentPath_);
 
   if (contentPath_[0] == '\0') {
-    Serial.println("[READER] No content path set");
+    LOG_ERR(TAG, "No content path set");
     return;
   }
 
@@ -289,7 +292,7 @@ void ReaderState::enter(Core& core) {
   // Open content using ContentHandle
   auto result = core.content.open(contentPath_, PAPYRIX_CACHE_DIR);
   if (!result.ok()) {
-    Serial.printf("[READER] Failed to open content: %s\n", errorToString(result.err));
+    LOG_ERR(TAG, "Failed to open content: %s", errorToString(result.err));
     // Store error message for ErrorState to display
     snprintf(core.buf.text, sizeof(core.buf.text), "Cannot open file:\n%s", errorToString(result.err));
     loadFailed_ = true;  // Mark as failed for update() to transition to error state
@@ -316,7 +319,7 @@ void ReaderState::enter(Core& core) {
         epub->setupCacheDir();
         // Get the spine index for the first text content (from <guide> element)
         textStartIndex_ = epub->getSpineIndexForTextReference();
-        Serial.printf("[READER] Text starts at spine index %d\n", textStartIndex_);
+        LOG_DBG(TAG, "Text starts at spine index %d", textStartIndex_);
       }
       break;
     }
@@ -362,7 +365,7 @@ void ReaderState::enter(Core& core) {
   lastRenderedSpineIndex_ = currentSpineIndex_;
   lastRenderedSectionPage_ = currentSectionPage_;
 
-  Serial.printf("[READER] Loaded: %s\n", core.content.metadata().title);
+  LOG_INF(TAG, "Loaded: %s", core.content.metadata().title);
 
   // Start background caching (includes thumbnail generation)
   // This runs once per book open regardless of starting position
@@ -370,7 +373,7 @@ void ReaderState::enter(Core& core) {
 }
 
 void ReaderState::exit(Core& core) {
-  Serial.println("[READER] Exiting");
+  LOG_INF(TAG, "Exiting");
 
   // Stop background caching task first - BackgroundTask::stop() waits properly
   stopBackgroundCaching();
@@ -728,7 +731,7 @@ void ReaderState::renderCachedPage(Core& core) {
   auto page = pageCache_ ? pageCache_->loadPage(currentSectionPage_) : nullptr;
 
   if (!page) {
-    Serial.println("[READER] Failed to load page, clearing cache");
+    LOG_ERR(TAG, "Failed to load page, clearing cache");
     if (pageCache_) {
       pageCache_->clear();
       pageCache_.reset();
@@ -805,7 +808,7 @@ void ReaderState::renderCachedPage(Core& core) {
     }
   }
 
-  Serial.printf("[READER] Rendered page %d/%d\n", currentSectionPage_ + 1, pageCount);
+  LOG_DBG(TAG, "Rendered page %d/%d", currentSectionPage_ + 1, pageCount);
 }
 
 bool ReaderState::ensurePageCached(Core& core, uint16_t pageNum) {
@@ -822,7 +825,7 @@ bool ReaderState::ensurePageCached(Core& core, uint16_t pageNum) {
   if (pageNum < pageCount) {
     // Check if we should pre-extend (approaching end of partial cache)
     if (needsExtension) {
-      Serial.printf("[READER] Pre-extending cache at page %d\n", pageNum);
+      LOG_DBG(TAG, "Pre-extending cache at page %d", pageNum);
       createOrExtendCache(core);
     }
     return true;
@@ -830,11 +833,11 @@ bool ReaderState::ensurePageCached(Core& core, uint16_t pageNum) {
 
   // Page not cached yet - need to extend
   if (!isPartial) {
-    Serial.printf("[READER] Page %d not available (cache complete at %d pages)\n", pageNum, pageCount);
+    LOG_DBG(TAG, "Page %d not available (cache complete at %d pages)", pageNum, pageCount);
     return false;
   }
 
-  Serial.printf("[READER] Extending cache for page %d\n", pageNum);
+  LOG_DBG(TAG, "Extending cache for page %d", pageNum);
 
   const Theme& theme = THEME_MANAGER.current();
   ui::centeredMessage(renderer_, theme, core.settings.getReaderFontId(theme), "Loading...");
@@ -856,14 +859,14 @@ void ReaderState::loadCacheFromDisk(Core& core) {
   if (type == ContentType::Epub) {
     auto* provider = core.content.asEpub();
     if (!provider || !provider->getEpub()) {
-      Serial.println("[READER] loadCacheFromDisk: no epub provider");
+      LOG_ERR(TAG, "loadCacheFromDisk: no epub provider");
       return;
     }
     cachePath = epubSectionCachePath(provider->getEpub()->getCachePath(), currentSpineIndex_);
   } else if (type == ContentType::Markdown || type == ContentType::Txt || type == ContentType::Fb2) {
     cachePath = contentCachePath(core.content.cacheDir(), config.fontId);
   } else {
-    Serial.printf("[READER] loadCacheFromDisk: unsupported content type %d\n", static_cast<int>(type));
+    LOG_ERR(TAG, "loadCacheFromDisk: unsupported content type %d", static_cast<int>(type));
     return;
   }
 
@@ -1038,14 +1041,14 @@ ReaderState::Viewport ReaderState::getReaderViewport(bool showStatusBar) const {
 }
 
 bool ReaderState::renderCoverPage(Core& core) {
-  Serial.printf("[%lu] [RDR] Generating cover for reader...\n", millis());
+  LOG_DBG(TAG, "Generating cover for reader...");
   std::string coverPath = core.content.generateCover(true);  // Always 1-bit in reader (saves ~48KB grayscale buffer)
   if (coverPath.empty()) {
-    Serial.printf("[%lu] [RDR] No cover available, skipping cover page\n", millis());
+    LOG_DBG(TAG, "No cover available, skipping cover page");
     return false;
   }
 
-  Serial.printf("[%lu] [RDR] Rendering cover page from: %s\n", millis(), coverPath.c_str());
+  LOG_DBG(TAG, "Rendering cover page from: %s", coverPath.c_str());
   const auto vp = getReaderViewport(core.settings.statusBar != 0);
   int pagesUntilRefresh = pagesUntilFullRefresh_;
   const bool turnOffScreen = core.settings.sunlightFadingFix != 0;
@@ -1073,11 +1076,11 @@ void ReaderState::startBackgroundCaching(Core& core) {
 
   // BackgroundTask handles safe restart via CAS loop
   if (cacheTask_.isRunning()) {
-    Serial.println("[READER] Warning: Previous cache task still running, stopping first");
+    LOG_ERR(TAG, "Warning: Previous cache task still running, stopping first");
     stopBackgroundCaching();
   }
 
-  Serial.println("[READER] Starting background page cache task");
+  LOG_INF(TAG, "Starting background page cache task");
   coreForCacheTask_ = &core;
 
   // Snapshot state for the background task
@@ -1090,16 +1093,16 @@ void ReaderState::startBackgroundCaching(Core& core) {
       "PageCache", kCacheTaskStackSize,
       [this, sectionPage, spineIndex, coverExists, textStart]() {
         const Theme& theme = THEME_MANAGER.current();
-        Serial.println("[READER] Background cache task started");
+        LOG_INF(TAG, "Background cache task started");
 
         if (cacheTask_.shouldStop()) {
-          Serial.println("[READER] Background cache task aborted (stop requested)");
+          LOG_DBG(TAG, "Background cache task aborted (stop requested)");
           return;
         }
 
         Core* corePtr = coreForCacheTask_;
         if (!corePtr) {
-          Serial.println("[READER] Background cache task aborted (no core)");
+          LOG_ERR(TAG, "Background cache task aborted (no core)");
           return;
         }
 
@@ -1163,9 +1166,9 @@ void ReaderState::startBackgroundCaching(Core& core) {
         }
 
         if (!cacheTask_.shouldStop()) {
-          Serial.println("[READER] Background cache task completed");
+          LOG_INF(TAG, "Background cache task completed");
         } else {
-          Serial.println("[READER] Background cache task stopped");
+          LOG_DBG(TAG, "Background cache task stopped");
         }
       },
       0);  // priority 0 (idle)
@@ -1179,8 +1182,8 @@ void ReaderState::stopBackgroundCaching() {
   // BackgroundTask::stop() uses event-based waiting (no polling)
   // and NEVER force-deletes the task
   if (!cacheTask_.stop(kCacheTaskStopTimeoutMs)) {
-    Serial.println("[READER] WARNING: Cache task did not stop within timeout");
-    Serial.println("[READER] Task may be blocked on SD card I/O");
+    LOG_ERR(TAG, "Cache task did not stop within timeout");
+    LOG_ERR(TAG, "Task may be blocked on SD card I/O");
   }
 
   // Yield to allow FreeRTOS idle task to clean up the deleted task's TCB.
@@ -1213,13 +1216,13 @@ void ReaderState::enterTocMode(Core& core) {
   tocView_.buttons = ui::ButtonBar("Back", "Go", "<<", ">>");
   tocMode_ = true;
   needsRender_ = true;
-  Serial.println("[READER] Entered TOC mode");
+  LOG_DBG(TAG, "Entered TOC mode");
 }
 
 void ReaderState::exitTocMode() {
   tocMode_ = false;
   needsRender_ = true;
-  Serial.println("[READER] Exited TOC mode");
+  LOG_DBG(TAG, "Exited TOC mode");
 }
 
 void ReaderState::handleTocInput(Core& core, const Event& e) {
@@ -1470,7 +1473,7 @@ void ReaderState::jumpToTocEntry(Core& core, int tocIndex) {
   }
 
   needsRender_ = true;
-  Serial.printf("[READER] Jumped to TOC entry %d (spine/page %d)\n", tocIndex, chapter.pageNum);
+  LOG_DBG(TAG, "Jumped to TOC entry %d (spine/page %d)", tocIndex, chapter.pageNum);
 }
 
 int ReaderState::tocVisibleCount() const {
@@ -1513,7 +1516,7 @@ void ReaderState::renderTocOverlay(Core& core) {
 }
 
 void ReaderState::exitToUI(Core& core) {
-  Serial.println("[READER] Exiting to UI mode via restart");
+  LOG_INF(TAG, "Exiting to UI mode via restart");
 
   // Stop background caching first - BackgroundTask::stop() waits properly
   stopBackgroundCaching();

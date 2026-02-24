@@ -5,6 +5,7 @@
 #include <CoverHelpers.h>
 #include <GfxRenderer.h>
 #include <Group5.h>
+#include <Logging.h>
 #include <SDCardManager.h>
 #include <esp_system.h>
 
@@ -16,6 +17,8 @@
 #include "MappedInputManager.h"
 #include "ThemeManager.h"
 
+#define TAG "HOME"
+
 namespace papyrix {
 
 HomeState::HomeState(GfxRenderer& renderer) : renderer_(renderer) {}
@@ -23,7 +26,7 @@ HomeState::HomeState(GfxRenderer& renderer) : renderer_(renderer) {}
 HomeState::~HomeState() { freeCoverThumbnail(); }
 
 void HomeState::enter(Core& core) {
-  Serial.println("[HOME] Entering");
+  LOG_INF(TAG, "Entering");
 
   // Load last book info if content is still open
   loadLastBook(core);
@@ -35,7 +38,7 @@ void HomeState::enter(Core& core) {
 }
 
 void HomeState::exit(Core& core) {
-  Serial.println("[HOME] Exiting");
+  LOG_INF(TAG, "Exiting");
   freeCoverThumbnail();
   view_.clear();
 }
@@ -58,7 +61,7 @@ void HomeState::loadLastBook(Core& core) {
       coverBmpPath_ = core.content.getThumbnailPath();
       if (!coverBmpPath_.empty() && SdMan.exists(coverBmpPath_.c_str())) {
         hasCoverImage_ = true;
-        Serial.printf("[%lu] [HOME] Using cached thumbnail: %s\n", millis(), coverBmpPath_.c_str());
+        LOG_DBG(TAG, "Using cached thumbnail: %s", coverBmpPath_.c_str());
       }
     }
     view_.hasCoverBmp = hasCoverImage_;
@@ -82,7 +85,7 @@ void HomeState::loadLastBook(Core& core) {
         coverBmpPath_ = core.content.getThumbnailPath();
         if (!coverBmpPath_.empty() && SdMan.exists(coverBmpPath_.c_str())) {
           hasCoverImage_ = true;
-          Serial.printf("[%lu] [HOME] Using cached thumbnail: %s\n", millis(), coverBmpPath_.c_str());
+          LOG_DBG(TAG, "Using cached thumbnail: %s", coverBmpPath_.c_str());
         }
       }
       view_.hasCoverBmp = hasCoverImage_;
@@ -203,7 +206,7 @@ void HomeState::renderCoverToCard() {
   FsFile file;
   if (!SdMan.openFileForRead("HOME", coverBmpPath_, file)) {
     coverLoadFailed_ = true;
-    Serial.printf("[%lu] [HOME] Failed to open cover BMP: %s\n", millis(), coverBmpPath_.c_str());
+    LOG_ERR(TAG, "Failed to open cover BMP: %s", coverBmpPath_.c_str());
     return;
   }
 
@@ -211,7 +214,7 @@ void HomeState::renderCoverToCard() {
   if (bitmap.parseHeaders() != BmpReaderError::Ok) {
     file.close();
     coverLoadFailed_ = true;
-    Serial.printf("[%lu] [HOME] Failed to parse cover BMP: %s\n", millis(), coverBmpPath_.c_str());
+    LOG_ERR(TAG, "Failed to parse cover BMP: %s", coverBmpPath_.c_str());
     return;
   }
 
@@ -239,7 +242,7 @@ bool HomeState::storeCoverThumbnail() {
 
   // Verify cover area is large enough for thumbnail
   if (coverArea.width < COVER_CACHE_WIDTH || coverArea.height < COVER_CACHE_HEIGHT) {
-    Serial.println("[HOME] Cover area too small for thumbnail");
+    LOG_DBG(TAG, "Cover area too small for thumbnail");
     return false;
   }
 
@@ -252,7 +255,7 @@ bool HomeState::storeCoverThumbnail() {
   const int screenWidth = renderer_.getScreenWidth();
   const int screenHeight = renderer_.getScreenHeight();
   if (srcX < 0 || srcY < 0 || srcX + COVER_CACHE_WIDTH > screenWidth || srcY + COVER_CACHE_HEIGHT > screenHeight) {
-    Serial.println("[HOME] Thumbnail position out of bounds");
+    LOG_DBG(TAG, "Thumbnail position out of bounds");
     return false;
   }
 
@@ -271,14 +274,14 @@ bool HomeState::storeCoverThumbnail() {
   const int srcByteX = srcX / 8;
   const int bytesNeeded = thumbWidthBytes + (srcBitOffset != 0 ? 1 : 0);
   if (srcByteX + bytesNeeded > screenWidthBytes) {
-    Serial.println("[HOME] Insufficient source bytes for thumbnail extraction");
+    LOG_DBG(TAG, "Insufficient source bytes for thumbnail extraction");
     return false;
   }
 
   // Allocate temporary buffer for uncompressed thumbnail
   uint8_t* thumbBuffer = static_cast<uint8_t*>(malloc(thumbUncompressedSize));
   if (!thumbBuffer) {
-    Serial.println("[HOME] Failed to allocate temp thumbnail buffer");
+    LOG_ERR(TAG, "Failed to allocate temp thumbnail buffer");
     return false;
   }
 
@@ -305,7 +308,7 @@ bool HomeState::storeCoverThumbnail() {
   compressedThumb_ = static_cast<uint8_t*>(malloc(MAX_COVER_CACHE_SIZE));
   if (!compressedThumb_) {
     free(thumbBuffer);
-    Serial.println("[HOME] Failed to allocate compressed thumbnail buffer");
+    LOG_ERR(TAG, "Failed to allocate compressed thumbnail buffer");
     return false;
   }
 
@@ -316,7 +319,7 @@ bool HomeState::storeCoverThumbnail() {
     free(compressedThumb_);
     compressedThumb_ = nullptr;
     compressedSize_ = 0;
-    Serial.println("[HOME] Group5 encoder init failed");
+    LOG_ERR(TAG, "Group5 encoder init failed");
     return false;
   }
 
@@ -327,7 +330,7 @@ bool HomeState::storeCoverThumbnail() {
       free(compressedThumb_);
       compressedThumb_ = nullptr;
       compressedSize_ = 0;
-      Serial.printf("[HOME] Group5 encode failed at row %d\n", row);
+      LOG_ERR(TAG, "Group5 encode failed at row %d", row);
       return false;
     }
   }
@@ -337,15 +340,15 @@ bool HomeState::storeCoverThumbnail() {
 
   // Verify compressed size fits in allocated buffer
   if (compressedSize_ > MAX_COVER_CACHE_SIZE) {
-    Serial.printf("[HOME] Compressed size %zu exceeds max %zu\n", compressedSize_, MAX_COVER_CACHE_SIZE);
+    LOG_ERR(TAG, "Compressed size %zu exceeds max %zu", compressedSize_, MAX_COVER_CACHE_SIZE);
     free(compressedThumb_);
     compressedThumb_ = nullptr;
     compressedSize_ = 0;
     return false;
   }
 
-  Serial.printf("[HOME] Stored compressed thumbnail (%zu -> %zu bytes, %.1f%% ratio)\n", thumbUncompressedSize,
-                compressedSize_, 100.0f * compressedSize_ / thumbUncompressedSize);
+  LOG_DBG(TAG, "Stored compressed thumbnail (%zu -> %zu bytes, %.1f%% ratio)", thumbUncompressedSize, compressedSize_,
+          100.0f * compressedSize_ / thumbUncompressedSize);
   return true;
 }
 
@@ -369,14 +372,14 @@ bool HomeState::restoreCoverThumbnail() {
   const size_t thumbUncompressedSize = thumbWidthBytes * COVER_CACHE_HEIGHT;
   uint8_t* thumbBuffer = static_cast<uint8_t*>(malloc(thumbUncompressedSize));
   if (!thumbBuffer) {
-    Serial.println("[HOME] Failed to allocate decompress buffer");
+    LOG_ERR(TAG, "Failed to allocate decompress buffer");
     return false;
   }
 
   G5DECODER decoder;
   if (decoder.init(COVER_CACHE_WIDTH, COVER_CACHE_HEIGHT, compressedThumb_, compressedSize_) != G5_SUCCESS) {
     free(thumbBuffer);
-    Serial.println("[HOME] Group5 decoder init failed");
+    LOG_ERR(TAG, "Group5 decoder init failed");
     return false;
   }
 
@@ -384,7 +387,7 @@ bool HomeState::restoreCoverThumbnail() {
     int result = decoder.decodeLine(thumbBuffer + row * thumbWidthBytes);
     if (result != G5_SUCCESS && result != G5_DECODE_COMPLETE) {
       free(thumbBuffer);
-      Serial.printf("[HOME] Group5 decode failed at row %d\n", row);
+      LOG_ERR(TAG, "Group5 decode failed at row %d", row);
       return false;
     }
   }
@@ -400,7 +403,7 @@ bool HomeState::restoreCoverThumbnail() {
   if (thumbX_ < 0 || thumbY_ < 0 || thumbX_ + COVER_CACHE_WIDTH > screenWidth ||
       thumbY_ + COVER_CACHE_HEIGHT > screenHeight) {
     free(thumbBuffer);
-    Serial.println("[HOME] Thumbnail position out of bounds for restore");
+    LOG_DBG(TAG, "Thumbnail position out of bounds for restore");
     return false;
   }
 
@@ -408,7 +411,7 @@ bool HomeState::restoreCoverThumbnail() {
   const int bytesNeeded = thumbWidthBytes + (dstBitOffset != 0 ? 1 : 0);
   if (dstByteX + bytesNeeded > screenWidthBytes) {
     free(thumbBuffer);
-    Serial.println("[HOME] Insufficient destination bytes for thumbnail restore");
+    LOG_DBG(TAG, "Insufficient destination bytes for thumbnail restore");
     return false;
   }
 

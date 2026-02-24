@@ -2,6 +2,7 @@
 
 #include <ArabicShaper.h>
 #include <ExternalFont.h>
+#include <Logging.h>
 #include <ScriptDetector.h>
 #include <StreamingEpdFont.h>
 #include <ThaiShaper.h>
@@ -9,12 +10,24 @@
 
 #include <cassert>
 
+#define TAG "GFX"
+
 void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) { fontMap.insert({fontId, font}); }
 
 void GfxRenderer::removeFont(const int fontId) {
   fontMap.erase(fontId);
   _streamingFonts.erase(fontId);
-  std::unordered_map<uint64_t, int16_t>().swap(wordWidthCache);
+  clearWidthCache();
+}
+
+bool GfxRenderer::tryResolveExternalFont() const {
+  if (_externalFont) return true;
+  if (!_externalFontResolver) return false;
+  _externalFontResolver(_externalFontResolverCtx);
+  // Resolver cleared after use — only triggers once
+  _externalFontResolver = nullptr;
+  _externalFontResolverCtx = nullptr;
+  return _externalFont != nullptr;
 }
 
 static inline void rotateCoordinates(const GfxRenderer::Orientation orientation, const int x, const int y,
@@ -62,7 +75,7 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
   // Bounds checking against physical panel dimensions
   if (rotatedX < 0 || rotatedX >= EInkDisplay::DISPLAY_WIDTH || rotatedY < 0 ||
       rotatedY >= EInkDisplay::DISPLAY_HEIGHT) {
-    Serial.printf("[%lu] [GFX] !! Outside range (%d, %d) -> (%d, %d)\n", millis(), x, y, rotatedX, rotatedY);
+    LOG_ERR(TAG, "!! Outside range (%d, %d) -> (%d, %d)", x, y, rotatedX, rotatedY);
     return;
   }
 
@@ -81,7 +94,7 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
   if (!text || !*text) return 0;
 
   if (fontMap.count(fontId) == 0) {
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+    LOG_ERR(TAG, "Font %d not found", fontId);
     return 0;
   }
 
@@ -92,9 +105,13 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
 
   // Check cache first (significant speedup during EPUB section creation)
   const uint64_t key = makeWidthCacheKey(fontId, text, style);
-  auto it = wordWidthCache.find(key);
-  if (it != wordWidthCache.end()) {
-    return it->second;
+  size_t slot = key % MAX_WIDTH_CACHE_SIZE;
+  for (size_t i = 0; i < MAX_WIDTH_CACHE_SIZE; i++) {
+    if (widthCacheKeys_[slot] == key) {
+      return widthCacheValues_[slot];
+    }
+    if (widthCacheKeys_[slot] == 0) break;  // Empty slot — not in cache
+    slot = (slot + 1) % MAX_WIDTH_CACHE_SIZE;
   }
 
   // Check if text contains Arabic or Thai - use specialized width calculation
@@ -104,7 +121,7 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
   } else if (ScriptDetector::containsThai(text)) {
     w = getThaiTextWidth(fontId, text, style);
   } else if (_externalFont && _externalFont->isLoaded()) {
-    // Character-by-character calculation with external font fallback
+    // Character-by-character calculation with external font fallback (already loaded)
     const auto& font = fontMap.at(fontId);
     const char* ptr = text;
     uint32_t cp;
@@ -131,12 +148,22 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
     fontMap.at(fontId).getTextDimensions(text, &w, &h, style);
   }
 
-  // Limit cache size to prevent heap fragmentation
-  if (wordWidthCache.size() >= MAX_WIDTH_CACHE_SIZE) {
-    std::unordered_map<uint64_t, int16_t>().swap(wordWidthCache);
+  // Insert into flat hash table; clear if full
+  if (widthCacheCount_ >= MAX_WIDTH_CACHE_SIZE) {
+    clearWidthCache();
   }
 
-  wordWidthCache[key] = static_cast<int16_t>(w);
+  slot = key % MAX_WIDTH_CACHE_SIZE;
+  for (size_t i = 0; i < MAX_WIDTH_CACHE_SIZE; i++) {
+    if (widthCacheKeys_[slot] == 0) {
+      widthCacheKeys_[slot] = key;
+      widthCacheValues_[slot] = static_cast<int16_t>(w);
+      widthCacheCount_++;
+      break;
+    }
+    slot = (slot + 1) % MAX_WIDTH_CACHE_SIZE;
+  }
+
   return w;
 }
 
@@ -154,7 +181,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   }
 
   if (fontMap.count(fontId) == 0) {
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+    LOG_ERR(TAG, "Font %d not found", fontId);
     return;
   }
 
@@ -271,13 +298,13 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   const size_t rowBytesSize = static_cast<size_t>(bitmap.getRowBytes());
 
   if (!bitmapOutputRow_ || !bitmapRowBytes_) {
-    Serial.printf("[%lu] [GFX] !! Bitmap row buffers not allocated\n", millis());
+    LOG_ERR(TAG, "!! Bitmap row buffers not allocated");
     return;
   }
 
   if (outputRowSize > BITMAP_OUTPUT_ROW_SIZE || rowBytesSize > BITMAP_ROW_BYTES_SIZE) {
-    Serial.printf("[%lu] [GFX] !! Bitmap too large for pre-allocated buffers (%zu > %zu or %zu > %zu)\n", millis(),
-                  outputRowSize, BITMAP_OUTPUT_ROW_SIZE, rowBytesSize, BITMAP_ROW_BYTES_SIZE);
+    LOG_ERR(TAG, "!! Bitmap too large for pre-allocated buffers (%zu > %zu or %zu > %zu)", outputRowSize,
+            BITMAP_OUTPUT_ROW_SIZE, rowBytesSize, BITMAP_ROW_BYTES_SIZE);
     return;
   }
 
@@ -299,7 +326,7 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
 
     if (srcY != lastSrcY) {
       if (bitmap.readRow(bitmapOutputRow_, bitmapRowBytes_, srcY) != BmpReaderError::Ok) {
-        Serial.printf("[%lu] [GFX] Failed to read row %d from bitmap\n", millis(), srcY);
+        LOG_ERR(TAG, "Failed to read row %d from bitmap", srcY);
         return;
       }
       lastSrcY = srcY;
@@ -400,7 +427,7 @@ void GfxRenderer::invertScreen() const {
 
 void GfxRenderer::displayBuffer(const EInkDisplay::RefreshMode refreshMode, bool turnOffScreen) const {
   if (renderStartMs > 0) {
-    Serial.printf("[%lu] [GFX] Render took %lu ms\n", millis(), millis() - renderStartMs);
+    LOG_DBG(TAG, "Render took %lu ms", millis() - renderStartMs);
     renderStartMs = 0;
   }
   einkDisplay.displayBuffer(refreshMode, turnOffScreen);
@@ -622,7 +649,7 @@ int GfxRenderer::getScreenHeight() const {
 int GfxRenderer::getSpaceWidth(const int fontId) const {
   auto it = fontMap.find(fontId);
   if (it == fontMap.end()) {
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+    LOG_ERR(TAG, "Font %d not found", fontId);
     return 0;
   }
 
@@ -632,7 +659,7 @@ int GfxRenderer::getSpaceWidth(const int fontId) const {
 
 int GfxRenderer::getFontAscenderSize(const int fontId) const {
   if (fontMap.count(fontId) == 0) {
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+    LOG_ERR(TAG, "Font %d not found", fontId);
     return 0;
   }
 
@@ -641,7 +668,7 @@ int GfxRenderer::getFontAscenderSize(const int fontId) const {
 
 int GfxRenderer::getLineHeight(const int fontId) const {
   if (fontMap.count(fontId) == 0) {
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+    LOG_ERR(TAG, "Font %d not found", fontId);
     return 0;
   }
 
@@ -711,8 +738,7 @@ bool GfxRenderer::storeBwBuffer() {
   for (size_t i = 0; i < BW_BUFFER_NUM_CHUNKS; i++) {
     // Check if any chunks are already allocated
     if (bwBufferChunks[i]) {
-      Serial.printf("[%lu] [GFX] !! BW buffer chunk %zu already stored - this is likely a bug, freeing chunk\n",
-                    millis(), i);
+      LOG_ERR(TAG, "!! BW buffer chunk %zu already stored - this is likely a bug, freeing chunk", i);
       free(bwBufferChunks[i]);
       bwBufferChunks[i] = nullptr;
     }
@@ -721,8 +747,7 @@ bool GfxRenderer::storeBwBuffer() {
     bwBufferChunks[i] = static_cast<uint8_t*>(malloc(BW_BUFFER_CHUNK_SIZE));
 
     if (!bwBufferChunks[i]) {
-      Serial.printf("[%lu] [GFX] !! Failed to allocate BW buffer chunk %zu (%zu bytes)\n", millis(), i,
-                    BW_BUFFER_CHUNK_SIZE);
+      LOG_ERR(TAG, "!! Failed to allocate BW buffer chunk %zu (%zu bytes)", i, BW_BUFFER_CHUNK_SIZE);
       // Free previously allocated chunks
       freeBwBufferChunks();
       return false;
@@ -731,8 +756,7 @@ bool GfxRenderer::storeBwBuffer() {
     memcpy(bwBufferChunks[i], frameBuffer + offset, BW_BUFFER_CHUNK_SIZE);
   }
 
-  Serial.printf("[%lu] [GFX] Stored BW buffer in %zu chunks (%zu bytes each)\n", millis(), BW_BUFFER_NUM_CHUNKS,
-                BW_BUFFER_CHUNK_SIZE);
+  LOG_DBG(TAG, "Stored BW buffer in %zu chunks (%zu bytes each)", BW_BUFFER_NUM_CHUNKS, BW_BUFFER_CHUNK_SIZE);
   return true;
 }
 
@@ -759,7 +783,7 @@ void GfxRenderer::restoreBwBuffer() {
   for (size_t i = 0; i < BW_BUFFER_NUM_CHUNKS; i++) {
     // Check if chunk is missing
     if (!bwBufferChunks[i]) {
-      Serial.printf("[%lu] [GFX] !! BW buffer chunks not stored - this is likely a bug\n", millis());
+      LOG_ERR(TAG, "!! BW buffer chunks not stored - this is likely a bug");
       freeBwBufferChunks();
       return;
     }
@@ -771,7 +795,7 @@ void GfxRenderer::restoreBwBuffer() {
   einkDisplay.cleanupGrayscaleBuffers(frameBuffer);
 
   freeBwBufferChunks();
-  Serial.printf("[%lu] [GFX] Restored and freed BW buffer chunks\n", millis());
+  LOG_DBG(TAG, "Restored and freed BW buffer chunks");
 }
 
 /**
@@ -784,8 +808,9 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
                              const bool pixelState, const EpdFontFamily::Style style, const int fontId) const {
   const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
   if (!glyph) {
-    // Try external font fallback (for CJK characters)
-    if (_externalFont && _externalFont->isLoaded()) {
+    // Try external font fallback (for CJK characters) — may trigger lazy load
+    if ((_externalFont || (ScriptDetector::isCjkCodepoint(cp) && tryResolveExternalFont())) &&
+        _externalFont->isLoaded()) {
       renderExternalGlyph(cp, x, *y, pixelState);
       return;
     }
@@ -804,7 +829,7 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
 
   // no glyph?
   if (!glyph) {
-    Serial.printf("[%lu] [GFX] No glyph for codepoint %d\n", millis(), cp);
+    LOG_ERR(TAG, "No glyph for codepoint %d", cp);
     return;
   }
 
@@ -915,7 +940,7 @@ void GfxRenderer::allocateBitmapRowBuffers() {
   bitmapRowBytes_ = static_cast<uint8_t*>(malloc(BITMAP_ROW_BYTES_SIZE));
 
   if (!bitmapOutputRow_ || !bitmapRowBytes_) {
-    Serial.printf("[%lu] [GFX] !! Failed to allocate bitmap row buffers\n", millis());
+    LOG_ERR(TAG, "!! Failed to allocate bitmap row buffers");
     freeBitmapRowBuffers();
   }
 }
@@ -975,6 +1000,9 @@ void GfxRenderer::renderExternalGlyph(const uint32_t cp, int* x, const int y, co
 }
 
 int GfxRenderer::getExternalGlyphWidth(const uint32_t cp) const {
+  if (!_externalFont && ScriptDetector::isCjkCodepoint(cp)) {
+    tryResolveExternalFont();
+  }
   if (!_externalFont || !_externalFont->isLoaded()) {
     return 0;
   }
@@ -1005,7 +1033,7 @@ int GfxRenderer::getThaiTextWidth(const int fontId, const char* text, const EpdF
   }
 
   if (fontMap.count(fontId) == 0) {
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+    LOG_ERR(TAG, "Font %d not found", fontId);
     return 0;
   }
 
@@ -1035,7 +1063,7 @@ int GfxRenderer::getThaiTextWidth(const int fontId, const char* text, const EpdF
 void GfxRenderer::drawThaiText(const int fontId, const int x, const int y, const char* text, const bool black,
                                const EpdFontFamily::Style style) const {
   if (fontMap.count(fontId) == 0) {
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+    LOG_ERR(TAG, "Font %d not found", fontId);
     return;
   }
 
@@ -1157,7 +1185,7 @@ int GfxRenderer::getArabicTextWidth(const int fontId, const char* text, const Ep
   if (text == nullptr || *text == '\0') return 0;
 
   if (fontMap.count(fontId) == 0) {
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+    LOG_ERR(TAG, "Font %d not found", fontId);
     return 0;
   }
 
@@ -1182,7 +1210,7 @@ int GfxRenderer::getArabicTextWidth(const int fontId, const char* text, const Ep
 void GfxRenderer::drawArabicText(const int fontId, const int x, const int y, const char* text, const bool black,
                                  const EpdFontFamily::Style style) const {
   if (fontMap.count(fontId) == 0) {
-    Serial.printf("[%lu] [GFX] Font %d not found\n", millis(), fontId);
+    LOG_ERR(TAG, "Font %d not found", fontId);
     return;
   }
 

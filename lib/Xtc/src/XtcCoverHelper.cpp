@@ -1,20 +1,22 @@
 #include "XtcCoverHelper.h"
 
 #include <FsHelpers.h>
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <SDCardManager.h>
+
+#define TAG "XTC_COVER"
 
 namespace xtc {
 
 bool generateCoverBmpFromParser(XtcParser& parser, const std::string& coverBmpPath) {
   if (parser.getPageCount() == 0) {
-    Serial.printf("[%lu] [XTC] No pages in XTC file\n", millis());
+    LOG_ERR(TAG, "No pages in XTC file");
     return false;
   }
 
   PageInfo pageInfo;
   if (!parser.getPageInfo(0, pageInfo)) {
-    Serial.printf("[%lu] [XTC] Failed to get first page info\n", millis());
+    LOG_ERR(TAG, "Failed to get first page info");
     return false;
   }
 
@@ -25,7 +27,7 @@ bool generateCoverBmpFromParser(XtcParser& parser, const std::string& coverBmpPa
 
   if (pageInfo.width == 0 || pageInfo.height == 0 || pageInfo.width > MAX_DIMENSION ||
       pageInfo.height > MAX_DIMENSION) {
-    Serial.printf("[%lu] [XTC] Invalid dimensions: %ux%u\n", millis(), pageInfo.width, pageInfo.height);
+    LOG_ERR(TAG, "Invalid dimensions: %ux%u", pageInfo.width, pageInfo.height);
     return false;
   }
 
@@ -37,26 +39,26 @@ bool generateCoverBmpFromParser(XtcParser& parser, const std::string& coverBmpPa
   }
 
   if (bitmapSize > MAX_BITMAP_SIZE) {
-    Serial.printf("[%lu] [XTC] Bitmap too large: %zu bytes\n", millis(), bitmapSize);
+    LOG_ERR(TAG, "Bitmap too large: %zu bytes", bitmapSize);
     return false;
   }
 
   uint8_t* pageBuffer = static_cast<uint8_t*>(malloc(bitmapSize));
   if (!pageBuffer) {
-    Serial.printf("[%lu] [XTC] Failed to allocate page buffer (%zu bytes)\n", millis(), bitmapSize);
+    LOG_ERR(TAG, "Failed to allocate page buffer (%zu bytes)", bitmapSize);
     return false;
   }
 
   size_t bytesRead = parser.loadPage(0, pageBuffer, bitmapSize);
   if (bytesRead == 0) {
-    Serial.printf("[%lu] [XTC] Failed to load cover page\n", millis());
+    LOG_ERR(TAG, "Failed to load cover page");
     free(pageBuffer);
     return false;
   }
 
   FsFile coverBmp;
   if (!SdMan.openFileForWrite("XTC", coverBmpPath, coverBmp)) {
-    Serial.printf("[%lu] [XTC] Failed to create cover BMP file\n", millis());
+    LOG_ERR(TAG, "Failed to create cover BMP file");
     free(pageBuffer);
     return false;
   }
@@ -169,7 +171,7 @@ bool generateCoverBmpFromParser(XtcParser& parser, const std::string& coverBmpPa
   coverBmp.close();
   free(pageBuffer);
 
-  Serial.printf("[%lu] [XTC] Generated cover BMP: %s\n", millis(), coverBmpPath.c_str());
+  LOG_INF(TAG, "Generated cover BMP: %s", coverBmpPath.c_str());
   return true;
 }
 

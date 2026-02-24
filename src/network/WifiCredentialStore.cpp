@@ -1,11 +1,14 @@
 #include "WifiCredentialStore.h"
 
 #include <Arduino.h>
+#include <Logging.h>
 #include <SDCardManager.h>
 
 #include <cstring>
 
 #include "../config.h"
+
+#define TAG "WIFI_CRED"
 
 namespace papyrix {
 
@@ -33,7 +36,7 @@ bool WifiCredentialStore::saveToFile() const {
 
   FsFile file;
   if (!SdMan.openFileForWrite("WCS", PAPYRIX_WIFI_FILE, file)) {
-    Serial.println("[WCS] Failed to open wifi.bin for write");
+    LOG_ERR(TAG, "Failed to open wifi.bin for write");
     return false;
   }
 
@@ -58,7 +61,7 @@ bool WifiCredentialStore::saveToFile() const {
   }
 
   file.close();
-  Serial.printf("[WCS] Saved %d credentials\n", count_);
+  LOG_INF(TAG, "Saved %d credentials", count_);
   return true;
 }
 
@@ -70,20 +73,20 @@ bool WifiCredentialStore::loadFromFile() {
 
   uint8_t version = file.read();
   if (version != WIFI_FILE_VERSION) {
-    Serial.printf("[WCS] Unknown file version: %d\n", version);
+    LOG_ERR(TAG, "Unknown file version: %d", version);
     file.close();
     return false;
   }
 
   if (file.available() < 1) {
-    Serial.println("[WCS] File truncated: missing count");
+    LOG_ERR(TAG, "File truncated: missing count");
     file.close();
     return false;
   }
 
   int countByte = file.read();
   if (countByte < 0) {
-    Serial.println("[WCS] Failed to read count");
+    LOG_ERR(TAG, "Failed to read count");
     file.close();
     return false;
   }
@@ -96,7 +99,7 @@ bool WifiCredentialStore::loadFromFile() {
     // Read SSID length
     int ssidLenByte = file.read();
     if (ssidLenByte < 0) {
-      Serial.printf("[WCS] Failed to read SSID length for credential %d\n", i);
+      LOG_ERR(TAG, "Failed to read SSID length for credential %d", i);
       count_ = i;
       break;
     }
@@ -111,7 +114,7 @@ bool WifiCredentialStore::loadFromFile() {
     // Read password length
     int pwdLenByte = file.read();
     if (pwdLenByte < 0) {
-      Serial.printf("[WCS] Failed to read password length for credential %d\n", i);
+      LOG_ERR(TAG, "Failed to read password length for credential %d", i);
       count_ = i;
       break;
     }
@@ -126,7 +129,7 @@ bool WifiCredentialStore::loadFromFile() {
   }
 
   file.close();
-  Serial.printf("[WCS] Loaded %d credentials\n", count_);
+  LOG_INF(TAG, "Loaded %d credentials", count_);
   return true;
 }
 
@@ -136,14 +139,14 @@ bool WifiCredentialStore::addCredential(const char* ssid, const char* password) 
     if (strcmp(credentials_[i].ssid, ssid) == 0) {
       strncpy(credentials_[i].password, password, sizeof(credentials_[i].password) - 1);
       credentials_[i].password[sizeof(credentials_[i].password) - 1] = '\0';
-      Serial.printf("[WCS] Updated credentials for: %s\n", ssid);
+      LOG_INF(TAG, "Updated credentials for: %s", ssid);
       return saveToFile();
     }
   }
 
   // Check limit
   if (count_ >= MAX_NETWORKS) {
-    Serial.println("[WCS] Cannot add more networks, limit reached");
+    LOG_ERR(TAG, "Cannot add more networks, limit reached");
     return false;
   }
 
@@ -154,7 +157,7 @@ bool WifiCredentialStore::addCredential(const char* ssid, const char* password) 
   credentials_[count_].password[sizeof(credentials_[count_].password) - 1] = '\0';
   count_++;
 
-  Serial.printf("[WCS] Added credentials for: %s\n", ssid);
+  LOG_INF(TAG, "Added credentials for: %s", ssid);
   return saveToFile();
 }
 
@@ -166,7 +169,7 @@ bool WifiCredentialStore::removeCredential(const char* ssid) {
         credentials_[j] = credentials_[j + 1];
       }
       count_--;
-      Serial.printf("[WCS] Removed credentials for: %s\n", ssid);
+      LOG_INF(TAG, "Removed credentials for: %s", ssid);
       return saveToFile();
     }
   }
@@ -187,7 +190,7 @@ bool WifiCredentialStore::hasSavedCredential(const char* ssid) const { return fi
 void WifiCredentialStore::clearAll() {
   count_ = 0;
   saveToFile();
-  Serial.println("[WCS] Cleared all credentials");
+  LOG_INF(TAG, "Cleared all credentials");
 }
 
 }  // namespace papyrix

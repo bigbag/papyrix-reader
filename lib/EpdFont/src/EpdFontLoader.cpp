@@ -1,9 +1,12 @@
 #include "EpdFontLoader.h"
 
 #include <LittleFS.h>
+#include <Logging.h>
 #include <SDCardManager.h>
 
 #include <cstring>
+
+#define TAG "FONT_LOAD"
 
 static constexpr uint32_t MAX_BITMAP_SIZE = 512 * 1024;  // 512KB
 
@@ -13,8 +16,8 @@ static constexpr int GLYPH_BINARY_SIZE = 14;
 
 bool EpdFontLoader::validateMetricsAndMemory(const FileMetrics& metrics) {
   if (metrics.intervalCount > 10000 || metrics.glyphCount > 100000 || metrics.bitmapSize > MAX_BITMAP_SIZE) {
-    Serial.printf("[FONTLOAD] Font exceeds size limits (bitmap=%u, max=%u). Using default font.\n", metrics.bitmapSize,
-                  MAX_BITMAP_SIZE);
+    LOG_ERR(TAG, "Font exceeds size limits (bitmap=%u, max=%u). Using default font.", metrics.bitmapSize,
+            MAX_BITMAP_SIZE);
     return false;
   }
 
@@ -22,8 +25,7 @@ bool EpdFontLoader::validateMetricsAndMemory(const FileMetrics& metrics) {
                           metrics.bitmapSize + sizeof(EpdFontData);
   size_t availableHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
   if (requiredMemory > availableHeap * 0.8) {
-    Serial.printf("[FONTLOAD] Insufficient memory: need %zu, available %zu. Using default font.\n", requiredMemory,
-                  availableHeap);
+    LOG_ERR(TAG, "Insufficient memory: need %zu, available %zu. Using default font.", requiredMemory, availableHeap);
     return false;
   }
 
@@ -38,26 +40,26 @@ EpdFontLoader::LoadResult EpdFontLoader::loadFromFile(const char* path) {
 
     FsFile file = SdMan.open(path, O_RDONLY);
     if (!file) {
-      Serial.printf("[FONTLOAD] Cannot open file: %s (attempt %d)\n", path, attempt + 1);
+      LOG_ERR(TAG, "Cannot open file: %s (attempt %d)", path, attempt + 1);
       continue;
     }
 
     // Read and validate header
     FileHeader header;
     if (file.read(reinterpret_cast<uint8_t*>(&header), sizeof(header)) != sizeof(header)) {
-      Serial.println("[FONTLOAD] Failed to read header");
+      LOG_ERR(TAG, "Failed to read header");
       file.close();
       continue;
     }
 
     if (header.magic != MAGIC) {
-      Serial.printf("[FONTLOAD] Invalid magic: 0x%08X (expected 0x%08X)\n", header.magic, MAGIC);
+      LOG_ERR(TAG, "Invalid magic: 0x%08X (expected 0x%08X)", header.magic, MAGIC);
       file.close();
       return result;  // Not a transient error
     }
 
     if (header.version != VERSION) {
-      Serial.printf("[FONTLOAD] Unsupported version: %d (expected %d)\n", header.version, VERSION);
+      LOG_ERR(TAG, "Unsupported version: %d (expected %d)", header.version, VERSION);
       file.close();
       return result;  // Not a transient error
     }
@@ -67,14 +69,13 @@ EpdFontLoader::LoadResult EpdFontLoader::loadFromFile(const char* path) {
     // Read metrics
     FileMetrics metrics;
     if (file.read(reinterpret_cast<uint8_t*>(&metrics), sizeof(metrics)) != sizeof(metrics)) {
-      Serial.println("[FONTLOAD] Failed to read metrics");
+      LOG_ERR(TAG, "Failed to read metrics");
       file.close();
       continue;
     }
 
-    Serial.printf("[FONTLOAD] Font: advanceY=%d, ascender=%d, descender=%d, intervals=%u, glyphs=%u, bitmap=%u\n",
-                  metrics.advanceY, metrics.ascender, metrics.descender, metrics.intervalCount, metrics.glyphCount,
-                  metrics.bitmapSize);
+    LOG_INF(TAG, "Font: advanceY=%d, ascender=%d, descender=%d, intervals=%u, glyphs=%u, bitmap=%u", metrics.advanceY,
+            metrics.ascender, metrics.descender, metrics.intervalCount, metrics.glyphCount, metrics.bitmapSize);
 
     if (!validateMetricsAndMemory(metrics)) {
       file.close();
@@ -88,7 +89,7 @@ EpdFontLoader::LoadResult EpdFontLoader::loadFromFile(const char* path) {
     result.fontData = new (std::nothrow) EpdFontData;
 
     if (!result.intervals || !result.glyphs || !result.bitmap || !result.fontData) {
-      Serial.println("[FONTLOAD] Memory allocation failed");
+      LOG_ERR(TAG, "Memory allocation failed");
       freeLoadResult(result);
       file.close();
       return result;  // Not a transient error
@@ -97,7 +98,7 @@ EpdFontLoader::LoadResult EpdFontLoader::loadFromFile(const char* path) {
     // Read intervals
     size_t intervalsSize = metrics.intervalCount * sizeof(EpdUnicodeInterval);
     if (file.read(reinterpret_cast<uint8_t*>(result.intervals), intervalsSize) != intervalsSize) {
-      Serial.println("[FONTLOAD] Failed to read intervals");
+      LOG_ERR(TAG, "Failed to read intervals");
       freeLoadResult(result);
       file.close();
       continue;
@@ -108,7 +109,7 @@ EpdFontLoader::LoadResult EpdFontLoader::loadFromFile(const char* path) {
     for (uint32_t i = 0; i < metrics.glyphCount; i++) {
       uint8_t glyphData[GLYPH_BINARY_SIZE];
       if (file.read(glyphData, GLYPH_BINARY_SIZE) != GLYPH_BINARY_SIZE) {
-        Serial.printf("[FONTLOAD] Failed to read glyph %u\n", i);
+        LOG_ERR(TAG, "Failed to read glyph %u", i);
         glyphReadFailed = true;
         break;
       }
@@ -131,7 +132,7 @@ EpdFontLoader::LoadResult EpdFontLoader::loadFromFile(const char* path) {
 
     // Read bitmap
     if (file.read(result.bitmap, metrics.bitmapSize) != metrics.bitmapSize) {
-      Serial.println("[FONTLOAD] Failed to read bitmap");
+      LOG_ERR(TAG, "Failed to read bitmap");
       freeLoadResult(result);
       file.close();
       continue;
@@ -155,8 +156,8 @@ EpdFontLoader::LoadResult EpdFontLoader::loadFromFile(const char* path) {
     result.success = true;
     file.close();
 
-    Serial.printf("[FONTLOAD] Loaded %s: %zu bytes (bitmap=%u, glyphs=%zu, intervals=%zu)\n", path, result.totalSize(),
-                  metrics.bitmapSize, result.glyphsSize, result.intervalsSize);
+    LOG_INF(TAG, "Loaded %s: %zu bytes (bitmap=%u, glyphs=%zu, intervals=%zu)", path, result.totalSize(),
+            metrics.bitmapSize, result.glyphsSize, result.intervalsSize);
     return result;
   }
 
@@ -296,26 +297,26 @@ EpdFontLoader::LoadResult EpdFontLoader::loadFromLittleFS(const char* path) {
 
   File file = LittleFS.open(path, "r");
   if (!file) {
-    Serial.printf("[FONTLOAD] Cannot open LittleFS file: %s\n", path);
+    LOG_ERR(TAG, "Cannot open LittleFS file: %s", path);
     return result;
   }
 
   // Read and validate header
   FileHeader header;
   if (file.read(reinterpret_cast<uint8_t*>(&header), sizeof(header)) != sizeof(header)) {
-    Serial.println("[FONTLOAD] Failed to read header from LittleFS");
+    LOG_ERR(TAG, "Failed to read header from LittleFS");
     file.close();
     return result;
   }
 
   if (header.magic != MAGIC) {
-    Serial.printf("[FONTLOAD] Invalid magic: 0x%08X (expected 0x%08X)\n", header.magic, MAGIC);
+    LOG_ERR(TAG, "Invalid magic: 0x%08X (expected 0x%08X)", header.magic, MAGIC);
     file.close();
     return result;
   }
 
   if (header.version != VERSION) {
-    Serial.printf("[FONTLOAD] Unsupported version: %d (expected %d)\n", header.version, VERSION);
+    LOG_ERR(TAG, "Unsupported version: %d (expected %d)", header.version, VERSION);
     file.close();
     return result;
   }
@@ -325,14 +326,13 @@ EpdFontLoader::LoadResult EpdFontLoader::loadFromLittleFS(const char* path) {
   // Read metrics
   FileMetrics metrics;
   if (file.read(reinterpret_cast<uint8_t*>(&metrics), sizeof(metrics)) != sizeof(metrics)) {
-    Serial.println("[FONTLOAD] Failed to read metrics from LittleFS");
+    LOG_ERR(TAG, "Failed to read metrics from LittleFS");
     file.close();
     return result;
   }
 
-  Serial.printf("[FONTLOAD] Font: advanceY=%d, ascender=%d, descender=%d, intervals=%u, glyphs=%u, bitmap=%u\n",
-                metrics.advanceY, metrics.ascender, metrics.descender, metrics.intervalCount, metrics.glyphCount,
-                metrics.bitmapSize);
+  LOG_INF(TAG, "Font: advanceY=%d, ascender=%d, descender=%d, intervals=%u, glyphs=%u, bitmap=%u", metrics.advanceY,
+          metrics.ascender, metrics.descender, metrics.intervalCount, metrics.glyphCount, metrics.bitmapSize);
 
   if (!validateMetricsAndMemory(metrics)) {
     file.close();
@@ -346,7 +346,7 @@ EpdFontLoader::LoadResult EpdFontLoader::loadFromLittleFS(const char* path) {
   result.fontData = new (std::nothrow) EpdFontData;
 
   if (!result.intervals || !result.glyphs || !result.bitmap || !result.fontData) {
-    Serial.println("[FONTLOAD] Memory allocation failed");
+    LOG_ERR(TAG, "Memory allocation failed");
     freeLoadResult(result);
     file.close();
     return result;
@@ -355,7 +355,7 @@ EpdFontLoader::LoadResult EpdFontLoader::loadFromLittleFS(const char* path) {
   // Read intervals
   size_t intervalsSize = metrics.intervalCount * sizeof(EpdUnicodeInterval);
   if (file.read(reinterpret_cast<uint8_t*>(result.intervals), intervalsSize) != intervalsSize) {
-    Serial.println("[FONTLOAD] Failed to read intervals from LittleFS");
+    LOG_ERR(TAG, "Failed to read intervals from LittleFS");
     freeLoadResult(result);
     file.close();
     return result;
@@ -365,7 +365,7 @@ EpdFontLoader::LoadResult EpdFontLoader::loadFromLittleFS(const char* path) {
   for (uint32_t i = 0; i < metrics.glyphCount; i++) {
     uint8_t glyphData[GLYPH_BINARY_SIZE];
     if (file.read(glyphData, GLYPH_BINARY_SIZE) != GLYPH_BINARY_SIZE) {
-      Serial.printf("[FONTLOAD] Failed to read glyph %u from LittleFS\n", i);
+      LOG_ERR(TAG, "Failed to read glyph %u from LittleFS", i);
       freeLoadResult(result);
       file.close();
       return result;
@@ -384,7 +384,7 @@ EpdFontLoader::LoadResult EpdFontLoader::loadFromLittleFS(const char* path) {
 
   // Read bitmap
   if (file.read(result.bitmap, metrics.bitmapSize) != metrics.bitmapSize) {
-    Serial.println("[FONTLOAD] Failed to read bitmap from LittleFS");
+    LOG_ERR(TAG, "Failed to read bitmap from LittleFS");
     freeLoadResult(result);
     file.close();
     return result;
@@ -408,7 +408,7 @@ EpdFontLoader::LoadResult EpdFontLoader::loadFromLittleFS(const char* path) {
   result.success = true;
   file.close();
 
-  Serial.printf("[FONTLOAD] Loaded %s: %zu bytes (bitmap=%u, glyphs=%zu, intervals=%zu)\n", path, result.totalSize(),
-                metrics.bitmapSize, result.glyphsSize, result.intervalsSize);
+  LOG_INF(TAG, "Loaded %s: %zu bytes (bitmap=%u, glyphs=%zu, intervals=%zu)", path, result.totalSize(),
+          metrics.bitmapSize, result.glyphsSize, result.intervalsSize);
   return result;
 }

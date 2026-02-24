@@ -9,7 +9,7 @@
 
 #include <EpdFontFamily.h>
 #include <GfxRenderer.h>
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <Page.h>
 #include <ParsedText.h>
 #include <SDCardManager.h>
@@ -20,6 +20,8 @@
 #include <utility>
 
 #include "md_parser.h"
+
+#define TAG "MD_PARSE"
 
 namespace {
 bool isWhitespaceChar(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
@@ -110,12 +112,12 @@ bool MarkdownParser::addLineToPage(ParseContext& ctx, std::shared_ptr<TextBlock>
   if (ctx.pageNextY + lineHeight > config_.viewportHeight) {
     if (ctx.onPageComplete) {
       const size_t freeHeap = heap_caps_get_free_size(MALLOC_CAP_8BIT);
-      Serial.printf("[MD] Page %d complete, heap: %zu free\n", ctx.pagesCreated, freeHeap);
+      LOG_DBG(TAG, "Page %d complete, heap: %zu free", ctx.pagesCreated, freeHeap);
       ctx.onPageComplete(std::move(ctx.currentPage));
       ctx.pagesCreated++;
 
       if (freeHeap < 12000) {
-        Serial.printf("[MD] Stopping early due to low memory (%zu bytes)\n", freeHeap);
+        LOG_ERR(TAG, "Stopping early due to low memory (%zu bytes)", freeHeap);
         ctx.hitMaxPages = true;
         ctx.currentPage.reset(new Page());
         ctx.pageNextY = 0;
@@ -326,13 +328,13 @@ bool MarkdownParser::parsePages(const std::function<void(std::unique_ptr<Page>)>
                                 const AbortCallback& shouldAbort) {
   FsFile file;
   if (!SdMan.openFileForRead("MD", filepath_, file)) {
-    Serial.printf("[MD] Failed to open file: %s\n", filepath_.c_str());
+    LOG_ERR(TAG, "Failed to open file: %s", filepath_.c_str());
     return false;
   }
 
   fileSize_ = file.size();
   if (fileSize_ == 0) {
-    Serial.printf("[MD] Empty markdown file\n");
+    LOG_ERR(TAG, "Empty markdown file");
     file.close();
     hasMore_ = false;
     return true;
@@ -347,8 +349,8 @@ bool MarkdownParser::parsePages(const std::function<void(std::unique_ptr<Page>)>
     file.seekSet(currentOffset_);
   }
 
-  Serial.printf("[MD] Parsing from offset %zu, file size %zu\n", currentOffset_, fileSize_);
-  Serial.printf("[MD] Heap: %zu free\n", heap_caps_get_free_size(MALLOC_CAP_8BIT));
+  LOG_INF(TAG, "Parsing from offset %zu, file size %zu", currentOffset_, fileSize_);
+  LOG_DBG(TAG, "Heap: %zu free", heap_caps_get_free_size(MALLOC_CAP_8BIT));
 
   // Initialize parsing context
   ParseContext ctx{};
@@ -378,7 +380,7 @@ bool MarkdownParser::parsePages(const std::function<void(std::unique_ptr<Page>)>
   while (!ctx.hitMaxPages) {
     // Check for external abort every few lines
     if (shouldAbort && (++abortCheckCounter % 20 == 0) && shouldAbort()) {
-      Serial.printf("[MD] Aborted by external request\n");
+      LOG_INF(TAG, "Aborted by external request");
       ctx.hitMaxPages = true;
       break;
     }
@@ -420,7 +422,7 @@ bool MarkdownParser::parsePages(const std::function<void(std::unique_ptr<Page>)>
     if (ctx.textBlock && ctx.textBlock->size() > 300) {
       const size_t freeBlock = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
       if (freeBlock < 25000) {
-        Serial.printf("[MD] Low memory (%zu free), flushing early\n", freeBlock);
+        LOG_ERR(TAG, "Low memory (%zu free), flushing early", freeBlock);
         ctx.textBlock->layoutAndExtractLines(
             renderer_, config_.fontId, config_.viewportWidth,
             [this, &ctx](const std::shared_ptr<TextBlock>& textBlock) {
@@ -445,7 +447,6 @@ bool MarkdownParser::parsePages(const std::function<void(std::unique_ptr<Page>)>
   currentOffset_ += bytesProcessed;
   hasMore_ = ctx.hitMaxPages || (currentOffset_ < fileSize_);
 
-  Serial.printf("[MD] Parsed %d pages, offset %zu/%zu, hasMore=%d\n", ctx.pagesCreated, currentOffset_, fileSize_,
-                hasMore_);
+  LOG_INF(TAG, "Parsed %d pages, offset %zu/%zu, hasMore=%d", ctx.pagesCreated, currentOffset_, fileSize_, hasMore_);
   return true;
 }

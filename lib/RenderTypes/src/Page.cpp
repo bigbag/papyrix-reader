@@ -1,8 +1,10 @@
 #include "Page.h"
 
 #include <GfxRenderer.h>
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <Serialization.h>
+
+#define TAG "PAGE"
 
 void PageLine::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset, const bool black) {
   block->render(renderer, fontId, xPos + xOffset, yPos + yOffset, black);
@@ -24,7 +26,7 @@ std::unique_ptr<PageLine> PageLine::deserialize(FsFile& file) {
 
   auto tb = TextBlock::deserialize(file);
   if (!tb) {
-    Serial.printf("[%lu] [PGE] Deserialization failed: TextBlock is null\n", millis());
+    LOG_ERR(TAG, "Deserialization failed: TextBlock is null");
     return nullptr;
   }
   return std::unique_ptr<PageLine>(new PageLine(std::move(tb), xPos, yPos));
@@ -89,7 +91,7 @@ std::unique_ptr<Page> Page::deserialize(FsFile& file) {
 
   // Validate element count to prevent memory exhaustion
   if (count > MAX_PAGE_ELEMENTS) {
-    Serial.printf("[%lu] [PGE] Element count %u exceeds limit %u\n", millis(), count, MAX_PAGE_ELEMENTS);
+    LOG_ERR(TAG, "Element count %u exceeds limit %u", count, MAX_PAGE_ELEMENTS);
     return nullptr;
   }
 
@@ -100,19 +102,19 @@ std::unique_ptr<Page> Page::deserialize(FsFile& file) {
     if (tag == TAG_PageLine) {
       auto pl = PageLine::deserialize(file);
       if (!pl) {
-        Serial.printf("[%lu] [PGE] Deserialization failed: PageLine is null\n", millis());
+        LOG_ERR(TAG, "Deserialization failed: PageLine is null");
         return nullptr;
       }
       page->elements.push_back(std::move(pl));
     } else if (tag == TAG_PageImage) {
       auto pi = PageImage::deserialize(file);
       if (!pi) {
-        Serial.printf("[%lu] [PGE] Deserialization failed: PageImage is null\n", millis());
+        LOG_ERR(TAG, "Deserialization failed: PageImage is null");
         return nullptr;
       }
       page->elements.push_back(std::move(pi));
     } else {
-      Serial.printf("[%lu] [PGE] Deserialization failed: Unknown tag %u\n", millis(), tag);
+      LOG_ERR(TAG, "Deserialization failed: Unknown tag %u", tag);
       return nullptr;
     }
   }

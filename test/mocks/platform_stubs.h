@@ -121,6 +121,18 @@ extern MockESP ESP;
 // Host millis() declaration
 unsigned long millis();
 
+// Logging macros for test builds (bypass HWCDC dependency)
+#ifndef LOG_LEVEL
+#define LOG_LEVEL 2
+#endif
+#define ENABLE_SERIAL_LOG
+#define LOG_ERR(origin, format, ...) ::printf("[ERR] [%s] " format "\n", origin, ##__VA_ARGS__)
+#define LOG_INF(origin, format, ...) ::printf("[INF] [%s] " format "\n", origin, ##__VA_ARGS__)
+#define LOG_DBG(origin, format, ...) ::printf("[DBG] [%s] " format "\n", origin, ##__VA_ARGS__)
+
+// logSerial reference for test builds — aliases to Serial mock
+static MockSerial& logSerial = Serial;
+
 // strcasecmp for Windows
 #ifdef _WIN32
 #define strcasecmp _stricmp

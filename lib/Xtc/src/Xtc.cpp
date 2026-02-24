@@ -8,12 +8,14 @@
 #include "Xtc.h"
 
 #include <FsHelpers.h>
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <SDCardManager.h>
+
+#define TAG "XTC"
 #include <XtcCoverHelper.h>
 
 bool Xtc::load() {
-  Serial.printf("[%lu] [XTC] Loading XTC: %s\n", millis(), filepath.c_str());
+  LOG_INF(TAG, "Loading XTC: %s", filepath.c_str());
 
   // Initialize parser
   parser.reset(new xtc::XtcParser());
@@ -21,28 +23,28 @@ bool Xtc::load() {
   // Open XTC file
   xtc::XtcError err = parser->open(filepath.c_str());
   if (err != xtc::XtcError::OK) {
-    Serial.printf("[%lu] [XTC] Failed to load: %s\n", millis(), xtc::errorToString(err));
+    LOG_ERR(TAG, "Failed to load: %s", xtc::errorToString(err));
     parser.reset();
     return false;
   }
 
   loaded = true;
-  Serial.printf("[%lu] [XTC] Loaded XTC: %s (%lu pages)\n", millis(), filepath.c_str(), parser->getPageCount());
+  LOG_INF(TAG, "Loaded XTC: %s (%lu pages)", filepath.c_str(), parser->getPageCount());
   return true;
 }
 
 bool Xtc::clearCache() const {
   if (!SdMan.exists(cachePath.c_str())) {
-    Serial.printf("[%lu] [XTC] Cache does not exist, no action needed\n", millis());
+    LOG_DBG(TAG, "Cache does not exist, no action needed");
     return true;
   }
 
   if (!SdMan.removeDir(cachePath.c_str())) {
-    Serial.printf("[%lu] [XTC] Failed to clear cache\n", millis());
+    LOG_ERR(TAG, "Failed to clear cache");
     return false;
   }
 
-  Serial.printf("[%lu] [XTC] Cache cleared successfully\n", millis());
+  LOG_INF(TAG, "Cache cleared successfully");
   return true;
 }
 
@@ -111,7 +113,7 @@ bool Xtc::generateCoverBmp() const {
   }
 
   if (!loaded || !parser) {
-    Serial.printf("[%lu] [XTC] Cannot generate cover BMP, file not loaded\n", millis());
+    LOG_ERR(TAG, "Cannot generate cover BMP, file not loaded");
     return false;
   }
 

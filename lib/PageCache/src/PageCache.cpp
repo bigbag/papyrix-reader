@@ -1,5 +1,9 @@
 #include "PageCache.h"
 
+#include <Logging.h>
+
+#define TAG "CACHE"
+
 #include <Page.h>
 #include <SDCardManager.h>
 #include <Serialization.h>
@@ -51,7 +55,7 @@ bool PageCache::writeLut(const std::vector<uint32_t>& lut) {
 
   for (const uint32_t pos : lut) {
     if (pos == 0) {
-      Serial.printf("[CACHE] Invalid page position in LUT\n");
+      LOG_ERR(TAG, "Invalid page position in LUT");
       return false;
     }
     serialization::writePod(file_, pos);
@@ -73,7 +77,7 @@ bool PageCache::loadLut(std::vector<uint32_t>& lut) {
 
   const size_t fileSize = file_.size();
   if (fileSize < HEADER_SIZE) {
-    Serial.printf("[CACHE] File too small: %zu (need %u)\n", fileSize, HEADER_SIZE);
+    LOG_ERR(TAG, "File too small: %zu (need %u)", fileSize, HEADER_SIZE);
     file_.close();
     return false;
   }
@@ -84,7 +88,7 @@ bool PageCache::loadLut(std::vector<uint32_t>& lut) {
 
   // Validate lutOffset before seeking
   if (lutOffset_ < HEADER_SIZE || lutOffset_ >= fileSize) {
-    Serial.printf("[CACHE] Invalid lutOffset: %u (file size: %zu)\n", lutOffset_, fileSize);
+    LOG_ERR(TAG, "Invalid lutOffset: %u (file size: %zu)", lutOffset_, fileSize);
     file_.close();
     return false;
   }
@@ -115,7 +119,7 @@ bool PageCache::loadRaw() {
   serialization::readPod(file_, version);
   if (version != CACHE_FILE_VERSION) {
     file_.close();
-    Serial.printf("[CACHE] Version mismatch: got %u, expected %u\n", version, CACHE_FILE_VERSION);
+    LOG_ERR(TAG, "Version mismatch: got %u, expected %u", version, CACHE_FILE_VERSION);
     return false;
   }
 
@@ -140,7 +144,7 @@ bool PageCache::load(const RenderConfig& config) {
   serialization::readPod(file_, version);
   if (version != CACHE_FILE_VERSION) {
     file_.close();
-    Serial.printf("[CACHE] Version mismatch: got %u, expected %u\n", version, CACHE_FILE_VERSION);
+    LOG_ERR(TAG, "Version mismatch: got %u, expected %u", version, CACHE_FILE_VERSION);
     clear();
     return false;
   }
@@ -158,7 +162,7 @@ bool PageCache::load(const RenderConfig& config) {
 
   if (config != fileConfig) {
     file_.close();
-    Serial.printf("[CACHE] Config mismatch, invalidating cache\n");
+    LOG_INF(TAG, "Config mismatch, invalidating cache");
     clear();
     return false;
   }
@@ -170,7 +174,7 @@ bool PageCache::load(const RenderConfig& config) {
   config_ = config;
 
   file_.close();
-  Serial.printf("[CACHE] Loaded: %d pages, partial=%d\n", pageCount_, isPartial_);
+  LOG_INF(TAG, "Loaded: %d pages, partial=%d", pageCount_, isPartial_);
   return true;
 }
 
@@ -183,20 +187,20 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
   if (skipPages > 0) {
     // Extending: load existing LUT
     if (!loadLut(lut)) {
-      Serial.printf("[CACHE] Failed to load existing LUT for extend\n");
+      LOG_ERR(TAG, "Failed to load existing LUT for extend");
       return false;
     }
 
     // Append new pages AFTER old LUT (crash-safe: old LUT remains valid until header update)
     if (!file_.open(cachePath_.c_str(), O_RDWR)) {
-      Serial.printf("[CACHE] Failed to open cache file for append\n");
+      LOG_ERR(TAG, "Failed to open cache file for append");
       return false;
     }
     file_.seekEnd();  // Append after old LUT
   } else {
     // Fresh create
     if (!SdMan.openFileForWrite("CACHE", cachePath_, file_)) {
-      Serial.printf("[CACHE] Failed to open cache file for writing\n");
+      LOG_ERR(TAG, "Failed to open cache file for writing");
       return false;
     }
 
@@ -211,7 +215,7 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
   // Check for abort before starting expensive parsing
   if (shouldAbort && shouldAbort()) {
     file_.close();
-    Serial.printf("[CACHE] Aborted before parsing\n");
+    LOG_INF(TAG, "Aborted before parsing");
     return false;
   }
 
@@ -233,13 +237,13 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
         // Serialize new page
         const uint32_t position = file_.position();
         if (!page->serialize(file_)) {
-          Serial.printf("[CACHE] Failed to serialize page %d\n", pageCount_);
+          LOG_ERR(TAG, "Failed to serialize page %d", pageCount_);
           return;
         }
 
         lut.push_back(position);
         pageCount_++;
-        Serial.printf("[%lu] [CACHE] Page %d cached\n", millis(), pageCount_ - 1);
+        LOG_DBG(TAG, "Page %d cached", pageCount_ - 1);
 
         if (maxPages > 0 && pageCount_ >= maxPages) {
           hitMaxPages = true;
@@ -250,14 +254,14 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
   // Check if we were aborted
   if (shouldAbort && shouldAbort()) {
     aborted = true;
-    Serial.printf("[CACHE] Aborted during parsing\n");
+    LOG_INF(TAG, "Aborted during parsing");
   }
 
   if ((!success && pageCount_ == 0) || aborted) {
     file_.close();
     // Remove file to prevent corrupt/incomplete cache
     SdMan.remove(cachePath_.c_str());
-    Serial.printf("[CACHE] Parsing failed or aborted with %d pages\n", pageCount_);
+    LOG_ERR(TAG, "Parsing failed or aborted with %d pages", pageCount_);
     return false;
   }
 
@@ -270,13 +274,13 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
   }
 
   file_.close();
-  Serial.printf("[CACHE] Created in %lu ms: %d pages, partial=%d\n", millis() - startMs, pageCount_, isPartial_);
+  LOG_INF(TAG, "Created in %lu ms: %d pages, partial=%d", millis() - startMs, pageCount_, isPartial_);
   return true;
 }
 
 bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const AbortCallback& shouldAbort) {
   if (!isPartial_) {
-    Serial.printf("[CACHE] Cache is complete, nothing to extend\n");
+    LOG_INF(TAG, "Cache is complete, nothing to extend");
     return true;
   }
 
@@ -286,7 +290,7 @@ bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const Ab
   if (parser.canResume()) {
     // HOT PATH: Parser has live session from previous extend, just append new pages.
     // No re-parsing — O(chunk) work instead of O(totalPages).
-    Serial.printf("[CACHE] Hot extend from %d pages (+%d)\n", currentPages, chunk);
+    LOG_INF(TAG, "Hot extend from %d pages (+%d)", currentPages, chunk);
 
     std::vector<uint32_t> lut;
     if (!loadLut(lut)) return false;
@@ -300,7 +304,7 @@ bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const Ab
       }
     }
     if (!opened) {
-      Serial.printf("[CACHE] Failed to open cache file for hot extend\n");
+      LOG_ERR(TAG, "Failed to open cache file for hot extend");
       return false;
     }
     file_.seekEnd();
@@ -319,7 +323,7 @@ bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const Ab
 
     if (!parseOk && pageCount_ == pagesBefore) {
       file_.close();
-      Serial.printf("[CACHE] Hot extend failed with no new pages\n");
+      LOG_ERR(TAG, "Hot extend failed with no new pages");
       return false;
     }
 
@@ -330,13 +334,13 @@ bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const Ab
     }
 
     file_.close();
-    Serial.printf("[CACHE] Hot extend done: %d pages, partial=%d\n", pageCount_, isPartial_);
+    LOG_INF(TAG, "Hot extend done: %d pages, partial=%d", pageCount_, isPartial_);
     return true;
   }
 
   // COLD PATH: Fresh parser (after exit/reboot) — re-parse from start, skip cached pages.
   const uint16_t targetPages = pageCount_ + chunk;
-  Serial.printf("[CACHE] Cold extend from %d to %d pages\n", currentPages, targetPages);
+  LOG_INF(TAG, "Cold extend from %d to %d pages", currentPages, targetPages);
 
   parser.reset();
   bool result = create(parser, config_, targetPages, currentPages, shouldAbort);
@@ -345,7 +349,7 @@ bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const Ab
   // Without the hasMoreContent() check, an aborted extend (timeout/memory pressure)
   // would permanently mark the chapter as complete, truncating it.
   if (result && pageCount_ <= currentPages && !parser.hasMoreContent()) {
-    Serial.printf("[CACHE] No progress during extend (%d pages), marking complete\n", pageCount_);
+    LOG_INF(TAG, "No progress during extend (%d pages), marking complete", pageCount_);
     isPartial_ = false;
   }
 
@@ -354,7 +358,7 @@ bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const Ab
 
 std::unique_ptr<Page> PageCache::loadPage(uint16_t pageNum) {
   if (pageNum >= pageCount_) {
-    Serial.printf("[CACHE] Page %d out of range (max %d)\n", pageNum, pageCount_);
+    LOG_ERR(TAG, "Page %d out of range (max %d)", pageNum, pageCount_);
     return nullptr;
   }
 
@@ -374,7 +378,7 @@ std::unique_ptr<Page> PageCache::loadPage(uint16_t pageNum) {
 
     // Validate LUT offset
     if (lutOffset < HEADER_SIZE || lutOffset >= fileSize) {
-      Serial.printf("[CACHE] Invalid LUT offset: %u (file size: %zu)\n", lutOffset, fileSize);
+      LOG_ERR(TAG, "Invalid LUT offset: %u (file size: %zu)", lutOffset, fileSize);
       file_.close();
       continue;
     }
@@ -386,7 +390,7 @@ std::unique_ptr<Page> PageCache::loadPage(uint16_t pageNum) {
 
     // Validate page position
     if (pagePos < HEADER_SIZE || pagePos >= fileSize) {
-      Serial.printf("[CACHE] Invalid page position: %u (file size: %zu)\n", pagePos, fileSize);
+      LOG_ERR(TAG, "Invalid page position: %u (file size: %zu)", pagePos, fileSize);
       file_.close();
       continue;
     }

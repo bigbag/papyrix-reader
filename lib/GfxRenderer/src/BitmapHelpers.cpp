@@ -151,8 +151,10 @@ uint8_t quantize(int gray, int x, int y) {
 uint8_t quantize1bit(int gray, int x, int y) { return gray < 128 ? 0 : 1; }
 
 // BMP scaling implementation
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <SdFat.h>
+
+#define TAG "BITMAP"
 
 #include "SDCardManager.h"
 
@@ -299,13 +301,13 @@ class RawAtkinson1BitDitherer {
 bool bmpTo1BitBmpScaled(const char* srcPath, const char* dstPath, int targetMaxWidth, int targetMaxHeight) {
   FsFile srcFile;
   if (!SdMan.openFileForRead("BMP", srcPath, srcFile)) {
-    Serial.printf("[%lu] [BMP] Failed to open source: %s\n", millis(), srcPath);
+    LOG_ERR(TAG, "Failed to open source: %s", srcPath);
     return false;
   }
 
   // Parse BMP header
   if (readLE16(srcFile) != 0x4D42) {
-    Serial.printf("[%lu] [BMP] Not a BMP file\n", millis());
+    LOG_ERR(TAG, "Not a BMP file");
     srcFile.close();
     return false;
   }
@@ -315,7 +317,7 @@ bool bmpTo1BitBmpScaled(const char* srcPath, const char* dstPath, int targetMaxW
 
   const uint32_t dibSize = readLE32(srcFile);
   if (dibSize < 40) {
-    Serial.printf("[%lu] [BMP] Unsupported DIB header\n", millis());
+    LOG_ERR(TAG, "Unsupported DIB header");
     srcFile.close();
     return false;
   }
@@ -327,7 +329,7 @@ bool bmpTo1BitBmpScaled(const char* srcPath, const char* dstPath, int targetMaxW
   // Positive height = bottom-up BMP (rows stored bottom to top)
   // We only support top-down BMPs since that's what our cover.bmp generator produces
   if (rawHeight >= 0) {
-    Serial.printf("[%lu] [BMP] Bottom-up BMP not supported, expected top-down\n", millis());
+    LOG_ERR(TAG, "Bottom-up BMP not supported, expected top-down");
     srcFile.close();
     return false;
   }
@@ -337,12 +339,12 @@ bool bmpTo1BitBmpScaled(const char* srcPath, const char* dstPath, int targetMaxW
   const uint16_t bpp = readLE16(srcFile);
 
   if (bpp != 1 && bpp != 2) {
-    Serial.printf("[%lu] [BMP] Expected 1 or 2-bit BMP, got %d-bit\n", millis(), bpp);
+    LOG_ERR(TAG, "Expected 1 or 2-bit BMP, got %d-bit", bpp);
     srcFile.close();
     return false;
   }
 
-  Serial.printf("[%lu] [BMP] Scaling %dx%d %d-bit BMP to 1-bit thumbnail\n", millis(), srcWidth, srcHeight, bpp);
+  LOG_DBG(TAG, "Scaling %dx%d %d-bit BMP to 1-bit thumbnail", srcWidth, srcHeight, bpp);
 
   // Calculate output dimensions (scale to fit target while maintaining aspect)
   int outWidth = srcWidth;
@@ -366,8 +368,8 @@ bool bmpTo1BitBmpScaled(const char* srcPath, const char* dstPath, int targetMaxW
   // Calculate max source rows needed per output row (ceiling of scaleY)
   const int maxSrcRowsPerOut = ((scaleY_fp + 0xFFFF) >> 16) + 1;
 
-  Serial.printf("[%lu] [BMP] Output: %dx%d, scale_fp: %lu x %lu\n", millis(), outWidth, outHeight,
-                static_cast<unsigned long>(scaleX_fp), static_cast<unsigned long>(scaleY_fp));
+  LOG_DBG(TAG, "Output: %dx%d, scale_fp: %lu x %lu", outWidth, outHeight, static_cast<unsigned long>(scaleX_fp),
+          static_cast<unsigned long>(scaleY_fp));
 
   // Calculate row sizes
   const int srcRowBytes = (srcWidth * bpp + 31) / 32 * 4;  // bpp-bit source, 4-byte aligned
@@ -377,7 +379,7 @@ bool bmpTo1BitBmpScaled(const char* srcPath, const char* dstPath, int targetMaxW
   auto* srcRows = static_cast<uint8_t*>(malloc(srcRowBytes * maxSrcRowsPerOut));
   auto* outRow = static_cast<uint8_t*>(malloc(outRowBytes));
   if (!srcRows || !outRow) {
-    Serial.printf("[%lu] [BMP] Failed to allocate buffers\n", millis());
+    LOG_ERR(TAG, "Failed to allocate buffers");
     free(srcRows);
     free(outRow);
     srcFile.close();
@@ -387,7 +389,7 @@ bool bmpTo1BitBmpScaled(const char* srcPath, const char* dstPath, int targetMaxW
   // Open destination file
   FsFile dstFile;
   if (!SdMan.openFileForWrite("BMP", dstPath, dstFile)) {
-    Serial.printf("[%lu] [BMP] Failed to open destination: %s\n", millis(), dstPath);
+    LOG_ERR(TAG, "Failed to open destination: %s", dstPath);
     free(srcRows);
     free(outRow);
     srcFile.close();
@@ -401,7 +403,7 @@ bool bmpTo1BitBmpScaled(const char* srcPath, const char* dstPath, int targetMaxW
 
   // Seek to pixel data
   if (!srcFile.seek(pixelOffset)) {
-    Serial.printf("[%lu] [BMP] Failed to seek to pixel data\n", millis());
+    LOG_ERR(TAG, "Failed to seek to pixel data");
     free(srcRows);
     free(outRow);
     srcFile.close();
@@ -435,7 +437,7 @@ bool bmpTo1BitBmpScaled(const char* srcPath, const char* dstPath, int targetMaxW
       // Read this row into the appropriate buffer slot
       const int bufferSlot = srcY - srcYStart;
       if (srcFile.read(srcRows + bufferSlot * srcRowBytes, srcRowBytes) != srcRowBytes) {
-        Serial.printf("[%lu] [BMP] Failed to read row %d\n", millis(), srcY);
+        LOG_ERR(TAG, "Failed to read row %d", srcY);
         free(srcRows);
         free(outRow);
         srcFile.close();
@@ -499,6 +501,6 @@ bool bmpTo1BitBmpScaled(const char* srcPath, const char* dstPath, int targetMaxW
   srcFile.close();
   dstFile.close();
 
-  Serial.printf("[%lu] [BMP] Successfully created thumbnail: %s\n", millis(), dstPath);
+  LOG_INF(TAG, "Successfully created thumbnail: %s", dstPath);
   return true;
 }

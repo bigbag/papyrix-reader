@@ -3,9 +3,11 @@
 #include <Bitmap.h>
 #include <BitmapHelpers.h>
 #include <GfxRenderer.h>
-#include <HardwareSerial.h>
 #include <ImageConverter.h>
+#include <Logging.h>
 #include <SDCardManager.h>
+
+#define TAG "COVER"
 
 #include "../../src/config.h"
 
@@ -21,7 +23,7 @@ bool renderCoverWithFallback(GfxRenderer& renderer, const std::string& coverPath
   }
   // Fall back to preview
   if (SdMan.exists(previewPath.c_str())) {
-    Serial.printf("[%lu] [CVR] Using preview cover (full cover not ready)\n", millis());
+    LOG_DBG(TAG, "Using preview cover (full cover not ready)");
     return renderCoverFromBmp(renderer, previewPath, marginTop, marginRight, marginBottom, marginLeft,
                               pagesUntilFullRefresh, pagesPerRefreshValue, turnOffScreen);
   }
@@ -33,14 +35,14 @@ bool renderCoverFromBmp(GfxRenderer& renderer, const std::string& bmpPath, int m
                         bool turnOffScreen) {
   FsFile coverFile;
   if (!SdMan.openFileForRead("CVR", bmpPath, coverFile)) {
-    Serial.printf("[%lu] [CVR] Failed to open cover BMP: %s\n", millis(), bmpPath.c_str());
+    LOG_ERR(TAG, "Failed to open cover BMP: %s", bmpPath.c_str());
     return false;
   }
 
   Bitmap bitmap(coverFile);
   if (bitmap.parseHeaders() != BmpReaderError::Ok) {
     coverFile.close();
-    Serial.printf("[%lu] [CVR] Failed to parse cover BMP headers\n", millis());
+    LOG_ERR(TAG, "Failed to parse cover BMP headers");
     return false;
   }
 
@@ -83,7 +85,7 @@ bool renderCoverFromBmp(GfxRenderer& renderer, const std::string& bmpPath, int m
   }
 
   coverFile.close();
-  Serial.printf("[%lu] [CVR] Rendered cover from BMP\n", millis());
+  LOG_DBG(TAG, "Rendered cover from BMP");
   return true;
 }
 
@@ -95,7 +97,7 @@ std::string findCoverImage(const std::string& dirPath, const std::string& baseNa
   for (const char* ext : extensions) {
     std::string imagePath = dirPath + "/" + baseName + ext;
     if (SdMan.exists(imagePath.c_str())) {
-      Serial.printf("[%lu] [CVR] Found cover image: %s\n", millis(), imagePath.c_str());
+      LOG_DBG(TAG, "Found cover image: %s", imagePath.c_str());
       return imagePath;
     }
   }
@@ -104,7 +106,7 @@ std::string findCoverImage(const std::string& dirPath, const std::string& baseNa
   for (const char* ext : extensions) {
     std::string imagePath = dirPath + "/cover" + ext;
     if (SdMan.exists(imagePath.c_str())) {
-      Serial.printf("[%lu] [CVR] Found cover image: %s\n", millis(), imagePath.c_str());
+      LOG_DBG(TAG, "Found cover image: %s", imagePath.c_str());
       return imagePath;
     }
   }
@@ -130,7 +132,7 @@ bool generateThumbFromCover(const std::string& coverBmpPath, const std::string& 
     if (tempFile) {
       tempFile.rename(thumbBmpPath.c_str());
       tempFile.close();
-      Serial.printf("[%lu] [%s] Generated thumbnail\n", millis(), logTag);
+      LOG_INF(logTag, "Generated thumbnail");
       return true;
     }
   }

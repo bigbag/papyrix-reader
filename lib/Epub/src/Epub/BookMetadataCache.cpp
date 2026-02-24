@@ -1,9 +1,11 @@
 #include "BookMetadataCache.h"
 
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <Serialization.h>
 
 #include <vector>
+
+#define TAG "META_CACHE"
 
 namespace {
 constexpr uint8_t BOOK_CACHE_VERSION = 6;
@@ -18,12 +20,12 @@ bool BookMetadataCache::beginWrite() {
   buildMode = true;
   spineCount = 0;
   tocCount = 0;
-  Serial.printf("[%lu] [BMC] Entering write mode\n", millis());
+  LOG_DBG(TAG, "Entering write mode");
   return true;
 }
 
 bool BookMetadataCache::beginContentOpfPass() {
-  Serial.printf("[%lu] [BMC] Beginning content opf pass\n", millis());
+  LOG_DBG(TAG, "Beginning content opf pass");
 
   // Open spine file for writing
   return SdMan.openFileForWrite("BMC", cachePath + tmpSpineBinFile, spineFile);
@@ -35,7 +37,7 @@ bool BookMetadataCache::endContentOpfPass() {
 }
 
 bool BookMetadataCache::beginTocPass() {
-  Serial.printf("[%lu] [BMC] Beginning toc pass\n", millis());
+  LOG_DBG(TAG, "Beginning toc pass");
 
   // Open spine file for reading
   if (!SdMan.openFileForRead("BMC", cachePath + tmpSpineBinFile, spineFile)) {
@@ -54,7 +56,7 @@ bool BookMetadataCache::beginTocPass() {
     auto entry = readSpineEntry(spineFile);
     spineHrefIndex[entry.href] = i;
   }
-  Serial.printf("[%lu] [BMC] Cached %d spine hrefs for fast lookup\n", millis(), spineCount);
+  LOG_DBG(TAG, "Cached %d spine hrefs for fast lookup", spineCount);
 
   return true;
 }
@@ -71,12 +73,12 @@ bool BookMetadataCache::endTocPass() {
 
 bool BookMetadataCache::endWrite() {
   if (!buildMode) {
-    Serial.printf("[%lu] [BMC] endWrite called but not in build mode\n", millis());
+    LOG_ERR(TAG, "endWrite called but not in build mode");
     return false;
   }
 
   buildMode = false;
-  Serial.printf("[%lu] [BMC] Wrote %d spine, %d TOC entries\n", millis(), spineCount, tocCount);
+  LOG_INF(TAG, "Wrote %d spine, %d TOC entries", spineCount, tocCount);
   return true;
 }
 
@@ -159,9 +161,8 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
 
     // Not a huge deal if we don't find a TOC entry for the spine entry, this is expected behaviour for EPUBs
     if (spineEntry.tocIndex == -1) {
-      Serial.printf(
-          "[%lu] [BMC] Warning: Could not find TOC entry for spine item %d: %s, using title from last section\n",
-          millis(), i, spineEntry.href.c_str());
+      LOG_DBG(TAG, "Warning: Could not find TOC entry for spine item %d: %s, using title from last section", i,
+              spineEntry.href.c_str());
       spineEntry.tocIndex = lastSpineTocIndex;
     }
     lastSpineTocIndex = spineEntry.tocIndex;
@@ -180,7 +181,7 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   spineFile.close();
   tocFile.close();
 
-  Serial.printf("[%lu] [BMC] Successfully built book.bin\n", millis());
+  LOG_INF(TAG, "Successfully built book.bin");
   return true;
 }
 
@@ -215,7 +216,7 @@ uint32_t BookMetadataCache::writeTocEntry(FsFile& file, const TocEntry& entry) c
 // this is because in this function we're marking positions of the items
 void BookMetadataCache::createSpineEntry(const std::string& href) {
   if (!buildMode || !spineFile) {
-    Serial.printf("[%lu] [BMC] createSpineEntry called but not in build mode\n", millis());
+    LOG_ERR(TAG, "createSpineEntry called but not in build mode");
     return;
   }
 
@@ -227,7 +228,7 @@ void BookMetadataCache::createSpineEntry(const std::string& href) {
 void BookMetadataCache::createTocEntry(const std::string& title, const std::string& href, const std::string& anchor,
                                        const uint8_t level) {
   if (!buildMode || !tocFile) {
-    Serial.printf("[%lu] [BMC] createTocEntry called but not in build mode\n", millis());
+    LOG_ERR(TAG, "createTocEntry called but not in build mode");
     return;
   }
 
@@ -239,7 +240,7 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
   }
 
   if (spineIndex == -1) {
-    Serial.printf("[%lu] [BMC] addTocEntry: Could not find spine item for TOC href %s\n", millis(), href.c_str());
+    LOG_DBG(TAG, "addTocEntry: Could not find spine item for TOC href %s", href.c_str());
   }
 
   const TocEntry entry(title, href, anchor, level, spineIndex);
@@ -257,7 +258,7 @@ bool BookMetadataCache::load() {
   uint8_t version;
   serialization::readPod(bookFile, version);
   if (version != BOOK_CACHE_VERSION) {
-    Serial.printf("[%lu] [BMC] Cache version mismatch: expected %d, got %d\n", millis(), BOOK_CACHE_VERSION, version);
+    LOG_ERR(TAG, "Cache version mismatch: expected %d, got %d", BOOK_CACHE_VERSION, version);
     bookFile.close();
     return false;
   }
@@ -271,23 +272,23 @@ bool BookMetadataCache::load() {
       !serialization::readString(bookFile, coreMetadata.language) ||
       !serialization::readString(bookFile, coreMetadata.coverItemHref) ||
       !serialization::readString(bookFile, coreMetadata.textReferenceHref)) {
-    Serial.printf("[%lu] [BMC] Failed to read metadata strings\n", millis());
+    LOG_ERR(TAG, "Failed to read metadata strings");
     return false;
   }
 
   loaded = true;
-  Serial.printf("[%lu] [BMC] Loaded cache data: %d spine, %d TOC entries\n", millis(), spineCount, tocCount);
+  LOG_INF(TAG, "Loaded cache data: %d spine, %d TOC entries", spineCount, tocCount);
   return true;
 }
 
 BookMetadataCache::SpineEntry BookMetadataCache::getSpineEntry(const int index) {
   if (!loaded) {
-    Serial.printf("[%lu] [BMC] getSpineEntry called but cache not loaded\n", millis());
+    LOG_ERR(TAG, "getSpineEntry called but cache not loaded");
     return {};
   }
 
   if (index < 0 || index >= static_cast<int>(spineCount)) {
-    Serial.printf("[%lu] [BMC] getSpineEntry index %d out of range\n", millis(), index);
+    LOG_ERR(TAG, "getSpineEntry index %d out of range", index);
     return {};
   }
 
@@ -301,12 +302,12 @@ BookMetadataCache::SpineEntry BookMetadataCache::getSpineEntry(const int index) 
 
 BookMetadataCache::TocEntry BookMetadataCache::getTocEntry(const int index) {
   if (!loaded) {
-    Serial.printf("[%lu] [BMC] getTocEntry called but cache not loaded\n", millis());
+    LOG_ERR(TAG, "getTocEntry called but cache not loaded");
     return {};
   }
 
   if (index < 0 || index >= static_cast<int>(tocCount)) {
-    Serial.printf("[%lu] [BMC] getTocEntry index %d out of range\n", millis(), index);
+    LOG_ERR(TAG, "getTocEntry index %d out of range", index);
     return {};
   }
 

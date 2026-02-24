@@ -163,6 +163,19 @@ foreach(TEST_SRC ${TEST_SOURCES})
     target_include_directories(${TEST_NAME} PRIVATE
       ${PROJECT_ROOT}/lib/Fb2/src
     )
+  elseif(TEST_NAME STREQUAL "LoggingTest")
+    # Self-contained test with its own HardwareSerial.h mock (no TEST_HELPERS —
+    # platform_stubs.h conflicts with the real Logging.h's logSerial/LOG_* defs).
+    # BEFORE ensures our local mock and real Logging.h are found before test/mocks/.
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/Logging/src/Logging.cpp
+    )
+    target_include_directories(${TEST_NAME} BEFORE PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/unit/logging   # Local HWCDC mock (before test/mocks/)
+      ${PROJECT_ROOT}/lib/Logging/src             # Real Logging.h
+    )
+    target_compile_definitions(${TEST_NAME} PRIVATE ENABLE_SERIAL_LOG LOG_LEVEL=2)
   elseif(TEST_NAME STREQUAL "InflateReaderTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}

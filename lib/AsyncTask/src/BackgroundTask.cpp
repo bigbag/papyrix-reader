@@ -1,13 +1,15 @@
 #include "BackgroundTask.h"
 
-#include <Arduino.h>
+#include <Logging.h>
+
+#define TAG "TASK"
 
 BackgroundTask::BackgroundTask() {
   // Create event group upfront - it must exist before task starts
   // and outlive the task for safe signaling
   eventGroup_ = xEventGroupCreate();
   if (!eventGroup_) {
-    Serial.println("[TASK] WARNING: Failed to create event group");
+    LOG_ERR(TAG, "WARNING: Failed to create event group");
   }
 }
 
@@ -32,12 +34,12 @@ bool BackgroundTask::start(const char* name, uint32_t stackSize, TaskFunction fu
       continue;
     }
     // Task is currently running or starting
-    Serial.printf("[TASK] %s: already running (state=%d)\n", name, static_cast<int>(expected));
+    LOG_ERR(TAG, "%s: already running (state=%d)", name, static_cast<int>(expected));
     return false;
   }
 
   if (!eventGroup_) {
-    Serial.printf("[TASK] %s: no event group\n", name);
+    LOG_ERR(TAG, "%s: no event group", name);
     state_.store(State::ERROR, std::memory_order_release);
     return false;
   }
@@ -52,13 +54,13 @@ bool BackgroundTask::start(const char* name, uint32_t stackSize, TaskFunction fu
   BaseType_t result = xTaskCreate(&BackgroundTask::trampoline, name, stackSize, this, priority, &handle_);
 
   if (result != pdPASS || !handle_) {
-    Serial.printf("[TASK] %s: creation failed\n", name);
+    LOG_ERR(TAG, "%s: creation failed", name);
     state_.store(State::ERROR, std::memory_order_release);
     return false;
   }
 
   state_.store(State::RUNNING, std::memory_order_release);
-  Serial.printf("[TASK] %s: started (handle=%p)\n", name, handle_);
+  LOG_INF(TAG, "%s: started (handle=%p)", name, handle_);
   return true;
 }
 
@@ -73,7 +75,7 @@ bool BackgroundTask::stop(uint32_t maxWaitMs) {
 
   // Check event group exists (could have failed in constructor)
   if (!eventGroup_) {
-    Serial.println("[TASK] stop: no event group, cannot wait for task");
+    LOG_ERR(TAG, "stop: no event group, cannot wait for task");
     // Set stop flag anyway so task exits on next shouldStop() check
     stopRequested_.store(true, std::memory_order_release);
     return false;
@@ -84,7 +86,7 @@ bool BackgroundTask::stop(uint32_t maxWaitMs) {
   stopRequested_.store(true, std::memory_order_release);
 
   const char* taskName = name_.empty() ? "?" : name_.c_str();
-  Serial.printf("[TASK] %s: requesting stop (handle=%p)\n", taskName, handle_);
+  LOG_INF(TAG, "%s: requesting stop (handle=%p)", taskName, handle_);
 
   // Wait for task to signal exit via event group (efficient, no polling)
   TickType_t waitTicks = (maxWaitMs == 0) ? portMAX_DELAY : pdMS_TO_TICKS(maxWaitMs);
@@ -96,12 +98,12 @@ bool BackgroundTask::stop(uint32_t maxWaitMs) {
 
   if (bits & EVENT_EXITED) {
     handle_ = nullptr;
-    Serial.printf("[TASK] %s: stopped cleanly via self-delete\n", taskName);
+    LOG_INF(TAG, "%s: stopped cleanly via self-delete", taskName);
     return true;
   }
 
-  Serial.printf("[TASK] %s: WARNING - stop timeout, task may be stuck\n", taskName);
-  Serial.println("[TASK] NOT force-deleting to prevent mutex corruption");
+  LOG_ERR(TAG, "%s: WARNING - stop timeout, task may be stuck", taskName);
+  LOG_ERR(TAG, "NOT force-deleting to prevent mutex corruption");
   // DO NOT call vTaskDelete(handle_) - this causes crashes!
   return false;
 }

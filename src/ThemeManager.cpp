@@ -1,5 +1,6 @@
 #include "ThemeManager.h"
 
+#include <Logging.h>
 #include <SDCardManager.h>
 
 #include <algorithm>
@@ -7,6 +8,8 @@
 
 #include "IniParser.h"
 #include "config.h"
+
+#define TAG "THEME"
 
 ThemeManager& ThemeManager::instance() {
   static ThemeManager instance;
@@ -255,7 +258,7 @@ std::vector<std::string> ThemeManager::listAvailableThemes(bool forceRefresh) {
         // Skip themes with names too long for buffer
         char themeNameBuf[32];
         if (nameLen >= sizeof(themeNameBuf)) {
-          Serial.printf("[THEME] Skipping theme with name too long: %s\n", name);
+          LOG_INF(TAG, "Skipping theme with name too long: %s", name);
           entry.close();
           continue;
         }
@@ -264,7 +267,7 @@ std::vector<std::string> ThemeManager::listAvailableThemes(bool forceRefresh) {
         themeNameBuf[nameLen] = '\0';
 
         if (!isValidThemeName(themeNameBuf, nameLen)) {
-          Serial.printf("[THEME] Skipping theme with invalid name: %s\n", name);
+          LOG_INF(TAG, "Skipping theme with invalid name: %s", name);
           entry.close();
           continue;
         }
@@ -279,7 +282,7 @@ std::vector<std::string> ThemeManager::listAvailableThemes(bool forceRefresh) {
             if (loadFromFileToTheme(path, cachedTheme)) {
               themeCache[themeNameBuf] = cachedTheme;
             } else {
-              Serial.printf("[THEME] Failed to load theme '%s', skipping\n", themeNameBuf);
+              LOG_ERR(TAG, "Failed to load theme '%s', skipping", themeNameBuf);
               entry.close();
               continue;
             }
@@ -289,7 +292,7 @@ std::vector<std::string> ThemeManager::listAvailableThemes(bool forceRefresh) {
 
           // Stop if we've reached the maximum theme limit
           if (themes.size() >= MAX_CACHED_THEMES) {
-            Serial.printf("[THEME] Maximum theme limit (%d) reached, skipping remaining\n", MAX_CACHED_THEMES);
+            LOG_INF(TAG, "Maximum theme limit (%d) reached, skipping remaining", MAX_CACHED_THEMES);
             entry.close();
             break;
           }

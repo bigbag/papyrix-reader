@@ -1,5 +1,9 @@
 #include "EInkDisplay.h"
 
+#include <Logging.h>
+
+#define TAG "DISPLAY"
+
 #include <cstring>
 #include <fstream>
 #include <vector>
@@ -122,13 +126,12 @@ EInkDisplay::EInkDisplay(int8_t sclk, int8_t mosi, int8_t cs, int8_t dc, int8_t 
       customLutActive(false),
       inGrayscaleMode(false),
       drawGrayscale(false) {
-  if (Serial) Serial.printf("[%lu] EInkDisplay: Constructor called\n", millis());
-  if (Serial)
-    Serial.printf("[%lu]   SCLK=%d, MOSI=%d, CS=%d, DC=%d, RST=%d, BUSY=%d\n", millis(), sclk, mosi, cs, dc, rst, busy);
+  LOG_INF(TAG, "Constructor called");
+  LOG_INF(TAG, "SCLK=%d, MOSI=%d, CS=%d, DC=%d, RST=%d, BUSY=%d", sclk, mosi, cs, dc, rst, busy);
 }
 
 void EInkDisplay::begin() {
-  if (Serial) Serial.printf("[%lu] EInkDisplay: begin() called\n", millis());
+  LOG_INF(TAG, "begin() called");
 
   // CRITICAL: Reset isScreenOn flag to ensure display is properly initialized
   // This is especially important after deep sleep wake-up where the display
@@ -143,18 +146,18 @@ void EInkDisplay::begin() {
   // Initialize to white
   memset(frameBuffer0, 0xFF, BUFFER_SIZE);
 #ifdef EINK_DISPLAY_SINGLE_BUFFER_MODE
-  if (Serial) Serial.printf("[%lu]   Static frame buffer (%lu bytes = 48KB)\n", millis(), BUFFER_SIZE);
+  LOG_INF(TAG, "Static frame buffer (%lu bytes = 48KB)", BUFFER_SIZE);
 #else
   memset(frameBuffer1, 0xFF, BUFFER_SIZE);
-  if (Serial) Serial.printf("[%lu]   Static frame buffers (2 x %lu bytes = 96KB)\n", millis(), BUFFER_SIZE);
+  LOG_INF(TAG, "Static frame buffers (2 x %lu bytes = 96KB)", BUFFER_SIZE);
 #endif
 
-  if (Serial) Serial.printf("[%lu]   Initializing e-ink display driver...\n", millis());
+  LOG_INF(TAG, "Initializing e-ink display driver...");
 
   // Initialize SPI with custom pins
   SPI.begin(_sclk, -1, _mosi, _cs);
   spiSettings = SPISettings(40000000, MSBFIRST, SPI_MODE0);  // MODE0 is standard for SSD1677
-  if (Serial) Serial.printf("[%lu]   SPI initialized at 40 MHz, Mode 0\n", millis());
+  LOG_INF(TAG, "SPI initialized at 40 MHz, Mode 0");
 
   // Setup GPIO pins
   pinMode(_cs, OUTPUT);
@@ -165,7 +168,7 @@ void EInkDisplay::begin() {
   digitalWrite(_cs, HIGH);
   digitalWrite(_dc, HIGH);
 
-  if (Serial) Serial.printf("[%lu]   GPIO pins configured\n", millis());
+  LOG_INF(TAG, "GPIO pins configured");
 
   // Reset display
   resetDisplay();
@@ -173,7 +176,7 @@ void EInkDisplay::begin() {
   // Initialize display controller
   initDisplayController();
 
-  if (Serial) Serial.printf("[%lu]   E-ink display driver initialized\n", millis());
+  LOG_INF(TAG, "E-ink display driver initialized");
 }
 
 // ============================================================================
@@ -181,14 +184,14 @@ void EInkDisplay::begin() {
 // ============================================================================
 
 void EInkDisplay::resetDisplay() {
-  if (Serial) Serial.printf("[%lu]   Resetting display...\n", millis());
+  LOG_DBG(TAG, "Resetting display...");
   digitalWrite(_rst, HIGH);
   delay(20);
   digitalWrite(_rst, LOW);
   delay(2);
   digitalWrite(_rst, HIGH);
   delay(20);
-  if (Serial) Serial.printf("[%lu]   Display reset complete\n", millis());
+  LOG_DBG(TAG, "Display reset complete");
 }
 
 void EInkDisplay::sendCommand(uint8_t command) {
@@ -223,17 +226,17 @@ void EInkDisplay::waitWhileBusy(const char* comment) {
   while (digitalRead(_busy) == HIGH) {
     delay(1);
     if (millis() - start > 10000) {
-      if (Serial) Serial.printf("[%lu]   Timeout waiting for busy%s\n", millis(), comment ? comment : "");
+      LOG_ERR(TAG, "Timeout waiting for busy%s", comment ? comment : "");
       break;
     }
   }
   if (comment) {
-    if (Serial) Serial.printf("[%lu]   Wait complete: %s (%lu ms)\n", millis(), comment, millis() - start);
+    LOG_DBG(TAG, "Wait complete: %s (%lu ms)", comment, millis() - start);
   }
 }
 
 void EInkDisplay::initDisplayController() {
-  if (Serial) Serial.printf("[%lu]   Initializing SSD1677 controller...\n", millis());
+  LOG_INF(TAG, "Initializing SSD1677 controller...");
 
   const uint8_t TEMP_SENSOR_INTERNAL = 0x80;
 
@@ -267,7 +270,7 @@ void EInkDisplay::initDisplayController() {
   // Set up full screen RAM area
   setRamArea(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
-  if (Serial) Serial.printf("[%lu]   Clearing RAM buffers...\n", millis());
+  LOG_DBG(TAG, "Clearing RAM buffers...");
   sendCommand(CMD_AUTO_WRITE_BW_RAM);  // Auto write BW RAM
   sendData(0xF7);
   waitWhileBusy(" CMD_AUTO_WRITE_BW_RAM");
@@ -276,7 +279,7 @@ void EInkDisplay::initDisplayController() {
   sendData(0xF7);                       // Fill with white pattern
   waitWhileBusy(" CMD_AUTO_WRITE_RED_RAM");
 
-  if (Serial) Serial.printf("[%lu]   SSD1677 controller initialized\n", millis());
+  LOG_INF(TAG, "SSD1677 controller initialized");
 }
 
 void EInkDisplay::setRamArea(const uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
@@ -319,7 +322,7 @@ void EInkDisplay::clearScreen(const uint8_t color) const { memset(frameBuffer, c
 void EInkDisplay::drawImage(const uint8_t* imageData, const uint16_t x, const uint16_t y, const uint16_t w,
                             const uint16_t h, const bool fromProgmem) const {
   if (!frameBuffer) {
-    if (Serial) Serial.printf("[%lu]   ERROR: Frame buffer not allocated!\n", millis());
+    LOG_ERR(TAG, "Frame buffer not allocated!");
     return;
   }
 
@@ -345,19 +348,19 @@ void EInkDisplay::drawImage(const uint8_t* imageData, const uint16_t x, const ui
     }
   }
 
-  if (Serial) Serial.printf("[%lu]   Image drawn to frame buffer\n", millis());
+  LOG_DBG(TAG, "Image drawn to frame buffer");
 }
 
 void EInkDisplay::writeRamBuffer(uint8_t ramBuffer, const uint8_t* data, uint32_t size) {
   const char* bufferName = (ramBuffer == CMD_WRITE_RAM_BW) ? "BW" : "RED";
   const unsigned long startTime = millis();
-  if (Serial) Serial.printf("[%lu]   Writing frame buffer to %s RAM (%lu bytes)...\n", startTime, bufferName, size);
+  LOG_DBG(TAG, "Writing frame buffer to %s RAM (%lu bytes)...", bufferName, size);
 
   sendCommand(ramBuffer);
   sendData(data, size);
 
   const unsigned long duration = millis() - startTime;
-  if (Serial) Serial.printf("[%lu]   %s RAM write complete (%lu ms)\n", millis(), bufferName, duration);
+  LOG_DBG(TAG, "%s RAM write complete (%lu ms)", bufferName, duration);
 }
 
 void EInkDisplay::setFramebuffer(const uint8_t* bwBuffer) const { memcpy(frameBuffer, bwBuffer, BUFFER_SIZE); }
@@ -460,22 +463,22 @@ void EInkDisplay::displayBuffer(RefreshMode mode, bool turnOffScreen) {
 // Displays only a rectangular region of the frame buffer, preserving the rest of the screen.
 // Requirements: x and w must be byte-aligned (multiples of 8 pixels)
 void EInkDisplay::displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, bool turnOffScreen) {
-  if (Serial) Serial.printf("[%lu]   Displaying window at (%d,%d) size (%dx%d)\n", millis(), x, y, w, h);
+  LOG_DBG(TAG, "Displaying window at (%d,%d) size (%dx%d)", x, y, w, h);
 
   // Validate bounds
   if (x + w > DISPLAY_WIDTH || y + h > DISPLAY_HEIGHT) {
-    if (Serial) Serial.printf("[%lu]   ERROR: Window bounds exceed display dimensions!\n", millis());
+    LOG_ERR(TAG, "Window bounds exceed display dimensions!");
     return;
   }
 
   // Validate byte alignment
   if (x % 8 != 0 || w % 8 != 0) {
-    if (Serial) Serial.printf("[%lu]   ERROR: Window x and width must be byte-aligned (multiples of 8)!\n", millis());
+    LOG_ERR(TAG, "Window x and width must be byte-aligned (multiples of 8)!");
     return;
   }
 
   if (!frameBuffer) {
-    if (Serial) Serial.printf("[%lu]   ERROR: Frame buffer not allocated!\n", millis());
+    LOG_ERR(TAG, "Frame buffer not allocated!");
     return;
   }
 
@@ -489,8 +492,7 @@ void EInkDisplay::displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, 
   const uint16_t windowWidthBytes = w / 8;
   const uint32_t windowBufferSize = windowWidthBytes * h;
 
-  if (Serial)
-    Serial.printf("[%lu]   Window buffer size: %lu bytes (%d x %d pixels)\n", millis(), windowBufferSize, w, h);
+  LOG_DBG(TAG, "Window buffer size: %lu bytes (%d x %d pixels)", windowBufferSize, w, h);
 
   // Allocate temporary buffer on stack
   std::vector<uint8_t> windowBuffer(windowBufferSize);
@@ -530,7 +532,7 @@ void EInkDisplay::displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, 
   writeRamBuffer(CMD_WRITE_RAM_RED, windowBuffer.data(), windowBufferSize);
 #endif
 
-  if (Serial) Serial.printf("[%lu]   Window display complete\n", millis());
+  LOG_DBG(TAG, "Window display complete");
 }
 
 void EInkDisplay::displayGrayBuffer(const bool turnOffScreen) {
@@ -588,20 +590,20 @@ void EInkDisplay::refreshDisplay(const RefreshMode mode, const bool turnOffScree
 
   // Power on and refresh display
   const char* refreshType = (mode == FULL_REFRESH) ? "full" : (mode == HALF_REFRESH) ? "half" : "fast";
-  if (Serial) Serial.printf("[%lu]   Powering on display 0x%02X (%s refresh)...\n", millis(), displayMode, refreshType);
+  LOG_DBG(TAG, "Powering on display 0x%02X (%s refresh)...", displayMode, refreshType);
   sendCommand(CMD_DISPLAY_UPDATE_CTRL2);
   sendData(displayMode);
 
   sendCommand(CMD_MASTER_ACTIVATION);
 
   // Wait for display to finish updating
-  if (Serial) Serial.printf("[%lu]   Waiting for display refresh...\n", millis());
+  LOG_DBG(TAG, "Waiting for display refresh...");
   waitWhileBusy(refreshType);
 }
 
 void EInkDisplay::setCustomLUT(const bool enabled, const unsigned char* lutData) {
   if (enabled) {
-    if (Serial) Serial.printf("[%lu]   Loading custom LUT...\n", millis());
+    LOG_DBG(TAG, "Loading custom LUT...");
 
     // Load custom LUT (first 105 bytes: VS + TP/RP + frame rate)
     sendCommand(CMD_WRITE_LUT);
@@ -622,15 +624,15 @@ void EInkDisplay::setCustomLUT(const bool enabled, const unsigned char* lutData)
     sendData(pgm_read_byte(&lutData[109]));
 
     customLutActive = true;
-    if (Serial) Serial.printf("[%lu]   Custom LUT loaded\n", millis());
+    LOG_DBG(TAG, "Custom LUT loaded");
   } else {
     customLutActive = false;
-    if (Serial) Serial.printf("[%lu]   Custom LUT disabled\n", millis());
+    LOG_DBG(TAG, "Custom LUT disabled");
   }
 }
 
 void EInkDisplay::deepSleep() {
-  if (Serial) Serial.printf("[%lu]   Preparing display for deep sleep...\n", millis());
+  LOG_INF(TAG, "Preparing display for deep sleep...");
 
   // First, power down the display properly
   // This shuts down the analog power rails and clock
@@ -650,7 +652,7 @@ void EInkDisplay::deepSleep() {
   }
 
   // Now enter deep sleep mode
-  if (Serial) Serial.printf("[%lu]   Entering deep sleep mode...\n", millis());
+  LOG_INF(TAG, "Entering deep sleep mode...");
   sendCommand(CMD_DEEP_SLEEP);
   sendData(0x01);  // Enter deep sleep
 }
@@ -661,7 +663,7 @@ void EInkDisplay::saveFrameBufferAsPBM(const char* filename) {
 
   std::ofstream file(filename, std::ios::binary);
   if (!file) {
-    if (Serial) Serial.printf("Failed to open %s for writing\n", filename);
+    LOG_ERR(TAG, "Failed to open %s for writing", filename);
     return;
   }
 
@@ -697,9 +699,9 @@ void EInkDisplay::saveFrameBufferAsPBM(const char* filename) {
 
   file.write(reinterpret_cast<const char*>(rotatedBuffer.data()), rotatedBuffer.size());
   file.close();
-  if (Serial) Serial.printf("Saved framebuffer to %s\n", filename);
+  LOG_INF(TAG, "Saved framebuffer to %s", filename);
 #else
   (void)filename;
-  if (Serial) Serial.println("saveFrameBufferAsPBM is not supported on Arduino builds.");
+  LOG_ERR(TAG, "saveFrameBufferAsPBM is not supported on Arduino builds.");
 #endif
 }

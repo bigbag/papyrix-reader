@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <GfxRenderer.h>
+#include <Logging.h>
 
 #include <new>
 
@@ -11,6 +12,8 @@
 #include "../network/WifiCredentialStore.h"
 #include "../ui/Elements.h"
 #include "ThemeManager.h"
+
+#define TAG "NET_STATE"
 
 namespace papyrix {
 
@@ -37,7 +40,7 @@ NetworkState::~NetworkState() {
 }
 
 void NetworkState::enter(Core& core) {
-  Serial.println("[NET-STATE] Entering");
+  LOG_INF(TAG, "Entering");
 
   currentScreen_ = NetworkScreen::ModeSelect;
   modeView_.selected = 0;
@@ -55,7 +58,7 @@ void NetworkState::enter(Core& core) {
 }
 
 void NetworkState::exit(Core& core) {
-  Serial.println("[NET-STATE] Exiting");
+  LOG_INF(TAG, "Exiting");
 
   // Stop web server if running
   stopWebServer(core);
@@ -94,7 +97,7 @@ StateTransition NetworkState::update(Core& core) {
 
       if (count == 0 && scanRetryCount_ < MAX_SCAN_RETRIES) {
         scanRetryCount_++;
-        Serial.printf("[NET-STATE] Scan returned 0 results, retry %d/%d\n", scanRetryCount_, MAX_SCAN_RETRIES);
+        LOG_DBG(TAG, "Scan returned 0 results, retry %d/%d", scanRetryCount_, MAX_SCAN_RETRIES);
         wifiListView_.setScanning(true, "Initializing WiFi...");
         scanRetryAt_ = millis() + 500;
         needsRender_ = true;
@@ -441,7 +444,7 @@ void NetworkState::handleServerRunning(Core& core, Button button) {
 }
 
 void NetworkState::startWifiScan(Core& core) {
-  Serial.println("[NET-STATE] Starting WiFi scan");
+  LOG_INF(TAG, "Starting WiFi scan");
 
   scanRetryCount_ = 0;
   scanRetryAt_ = 0;
@@ -450,13 +453,13 @@ void NetworkState::startWifiScan(Core& core) {
 
   auto result = core.network.startScan();
   if (!result.ok()) {
-    Serial.println("[NET-STATE] Failed to start scan");
+    LOG_ERR(TAG, "Failed to start scan");
     wifiListView_.setScanning(false);
   }
 }
 
 void NetworkState::connectToNetwork(Core& core, const char* ssid, const char* password) {
-  Serial.printf("[NET-STATE] Connecting to: %s\n", ssid);
+  LOG_INF(TAG, "Connecting to: %s", ssid);
 
   connectingView_.setSsid(ssid);
   connectingView_.setConnecting();
@@ -473,17 +476,17 @@ void NetworkState::connectToNetwork(Core& core, const char* ssid, const char* pa
     char ip[46];  // INET6_ADDRSTRLEN = 46 for IPv6 addresses
     core.network.getIpAddress(ip, sizeof(ip));
     connectingView_.setConnected(ip);
-    Serial.printf("[NET-STATE] Connected, IP: %s\n", ip);
+    LOG_INF(TAG, "Connected, IP: %s", ip);
   } else {
     connectingView_.setFailed("Connection failed");
-    Serial.println("[NET-STATE] Connection failed");
+    LOG_ERR(TAG, "Connection failed");
   }
 
   needsRender_ = true;
 }
 
 void NetworkState::startHotspot(Core& core) {
-  Serial.println("[NET-STATE] Starting hotspot");
+  LOG_INF(TAG, "Starting hotspot");
 
   // Show connecting message
   connectingView_.setSsid(AP_SSID);
@@ -501,25 +504,25 @@ void NetworkState::startHotspot(Core& core) {
     char ip[16];
     core.network.getAPIP(ip, sizeof(ip));
     connectingView_.setConnected(ip);
-    Serial.printf("[NET-STATE] AP started, IP: %s\n", ip);
+    LOG_INF(TAG, "AP started, IP: %s", ip);
 
     // Small delay then start web server
     delay(500);
     startWebServer(core);
   } else {
     connectingView_.setFailed("Failed to start hotspot");
-    Serial.println("[NET-STATE] Failed to start AP");
+    LOG_ERR(TAG, "Failed to start AP");
     needsRender_ = true;
   }
 }
 
 void NetworkState::startWebServer(Core& core) {
-  Serial.println("[NET-STATE] Starting web server");
+  LOG_INF(TAG, "Starting web server");
 
   if (!server_) {
     server_.reset(new PapyrixWebServer());
     if (!server_) {
-      Serial.println("[NET-STATE] Failed to allocate web server");
+      LOG_ERR(TAG, "Failed to allocate web server");
       goBack_ = true;
       return;
     }
@@ -544,7 +547,7 @@ void NetworkState::startWebServer(Core& core) {
 
 void NetworkState::stopWebServer(Core& /* core */) {
   if (server_) {
-    Serial.println("[NET-STATE] Stopping web server");
+    LOG_INF(TAG, "Stopping web server");
     server_->stop();
     server_.reset();
   }

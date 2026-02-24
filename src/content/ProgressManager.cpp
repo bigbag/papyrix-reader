@@ -1,12 +1,15 @@
 #include "ProgressManager.h"
 
 #include <Arduino.h>
+#include <Logging.h>
 #include <SdFat.h>
 
 #include <cstdio>
 
 #include "../content/ContentHandle.h"
 #include "../core/Core.h"
+
+#define TAG "PROGRESS"
 
 namespace papyrix {
 
@@ -21,7 +24,7 @@ bool ProgressManager::save(Core& core, const char* cacheDir, ContentType type, c
   FsFile file;
   auto result = core.storage.openWrite(progressPath, file);
   if (!result.ok()) {
-    Serial.printf("[PROGRESS] Failed to save progress to %s\n", progressPath);
+    LOG_ERR(TAG, "Failed to save progress to %s", progressPath);
     return false;
   }
 
@@ -34,7 +37,7 @@ bool ProgressManager::save(Core& core, const char* cacheDir, ContentType type, c
     data[2] = progress.sectionPage & 0xFF;
     data[3] = (progress.sectionPage >> 8) & 0xFF;
     file.write(data, 4);
-    Serial.printf("[PROGRESS] Saved EPUB: spine=%d page=%d\n", progress.spineIndex, progress.sectionPage);
+    LOG_DBG(TAG, "Saved EPUB: spine=%d page=%d", progress.spineIndex, progress.sectionPage);
   } else if (type == ContentType::Xtc) {
     // XTC: save flat page number (4 bytes)
     data[0] = progress.flatPage & 0xFF;
@@ -42,7 +45,7 @@ bool ProgressManager::save(Core& core, const char* cacheDir, ContentType type, c
     data[2] = (progress.flatPage >> 16) & 0xFF;
     data[3] = (progress.flatPage >> 24) & 0xFF;
     file.write(data, 4);
-    Serial.printf("[PROGRESS] Saved XTC: page %u\n", progress.flatPage);
+    LOG_DBG(TAG, "Saved XTC: page %u", progress.flatPage);
   } else {
     // TXT/Markdown: save section page (4 bytes)
     data[0] = progress.sectionPage & 0xFF;
@@ -50,7 +53,7 @@ bool ProgressManager::save(Core& core, const char* cacheDir, ContentType type, c
     data[2] = 0;
     data[3] = 0;
     file.write(data, 4);
-    Serial.printf("[PROGRESS] Saved text: page %d\n", progress.sectionPage);
+    LOG_DBG(TAG, "Saved text: page %d", progress.sectionPage);
   }
 
   file.close();
@@ -71,20 +74,20 @@ ProgressManager::Progress ProgressManager::load(Core& core, const char* cacheDir
   FsFile file;
   auto result = core.storage.openRead(progressPath, file);
   if (!result.ok()) {
-    Serial.println("[PROGRESS] No saved progress found");
+    LOG_DBG(TAG, "No saved progress found");
     return progress;
   }
 
   // Validate file size before reading
   if (file.size() < 4) {
-    Serial.println("[PROGRESS] Corrupted file (too small), using defaults");
+    LOG_ERR(TAG, "Corrupted file (too small), using defaults");
     file.close();
     return progress;
   }
 
   uint8_t data[4];
   if (file.read(data, 4) != 4) {
-    Serial.println("[PROGRESS] Read failed, using defaults");
+    LOG_ERR(TAG, "Read failed, using defaults");
     file.close();
     return progress;
   }
@@ -92,14 +95,14 @@ ProgressManager::Progress ProgressManager::load(Core& core, const char* cacheDir
   if (type == ContentType::Epub) {
     progress.spineIndex = data[0] | (data[1] << 8);
     progress.sectionPage = data[2] | (data[3] << 8);
-    Serial.printf("[PROGRESS] Loaded EPUB: spine=%d page=%d\n", progress.spineIndex, progress.sectionPage);
+    LOG_DBG(TAG, "Loaded EPUB: spine=%d page=%d", progress.spineIndex, progress.sectionPage);
   } else if (type == ContentType::Xtc) {
     progress.flatPage = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
-    Serial.printf("[PROGRESS] Loaded XTC: page %u\n", progress.flatPage);
+    LOG_DBG(TAG, "Loaded XTC: page %u", progress.flatPage);
   } else {
     // TXT/Markdown
     progress.sectionPage = data[0] | (data[1] << 8);
-    Serial.printf("[PROGRESS] Loaded text: page %d\n", progress.sectionPage);
+    LOG_DBG(TAG, "Loaded text: page %d", progress.sectionPage);
   }
 
   file.close();

@@ -1,6 +1,6 @@
 #include "PapyrixSettings.h"
 
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <SDCardManager.h>
 #include <SdFat.h>
 #include <Serialization.h>
@@ -9,6 +9,8 @@
 #include "../Theme.h"
 #include "../config.h"
 #include "../drivers/Storage.h"
+
+#define TAG "SETTINGS"
 
 namespace papyrix {
 
@@ -65,7 +67,7 @@ Result<void> Settings::save(drivers::Storage& storage) const {
   serialization::writePod(outputFile, frontButtonLayout);
   outputFile.close();
 
-  Serial.printf("[%lu] [SET] Settings saved to file\n", millis());
+  LOG_INF(TAG, "Settings saved to file");
   return Ok();
 }
 
@@ -80,7 +82,7 @@ Result<void> Settings::load(drivers::Storage& storage) {
   uint32_t magic;
   serialization::readPod(inputFile, magic);
   if (magic != SETTINGS_MAGIC) {
-    Serial.printf("[%lu] [SET] Invalid settings file (wrong magic 0x%08X), deleting\n", millis(), magic);
+    LOG_ERR(TAG, "Invalid settings file (wrong magic 0x%08X), deleting", magic);
     inputFile.close();
     storage.remove(PAPYRIX_SETTINGS_FILE);
     return ErrVoid(Error::UnsupportedVersion);
@@ -89,7 +91,7 @@ Result<void> Settings::load(drivers::Storage& storage) {
   uint8_t version;
   serialization::readPod(inputFile, version);
   if (version < MIN_SETTINGS_VERSION || version > SETTINGS_FILE_VERSION) {
-    Serial.printf("[%lu] [SET] Deserialization failed: Unknown version %u\n", millis(), version);
+    LOG_ERR(TAG, "Deserialization failed: Unknown version %u", version);
     inputFile.close();
     return ErrVoid(Error::UnsupportedVersion);
   }
@@ -99,8 +101,7 @@ Result<void> Settings::load(drivers::Storage& storage) {
 
   // Cap fileSettingsCount to prevent reading garbage from corrupted files
   if (fileSettingsCount > SETTINGS_COUNT) {
-    Serial.printf("[%lu] [SET] fileSettingsCount %u exceeds max %u, capping\n", millis(), fileSettingsCount,
-                  SETTINGS_COUNT);
+    LOG_ERR(TAG, "fileSettingsCount %u exceeds max %u, capping", fileSettingsCount, SETTINGS_COUNT);
     fileSettingsCount = SETTINGS_COUNT;
   }
 
@@ -174,7 +175,7 @@ Result<void> Settings::load(drivers::Storage& storage) {
   }
 
   inputFile.close();
-  Serial.printf("[%lu] [SET] Settings loaded from file\n", millis());
+  LOG_INF(TAG, "Settings loaded from file");
   return Ok();
 }
 
@@ -256,7 +257,7 @@ bool Settings::saveToFile() const {
   serialization::writePod(outputFile, frontButtonLayout);
   outputFile.close();
 
-  Serial.printf("[%lu] [SET] Settings saved to file\n", millis());
+  LOG_INF(TAG, "Settings saved to file");
   return true;
 }
 
@@ -270,7 +271,7 @@ bool Settings::loadFromFile() {
   uint32_t magic;
   serialization::readPod(inputFile, magic);
   if (magic != SETTINGS_MAGIC) {
-    Serial.printf("[%lu] [SET] Invalid settings file (wrong magic 0x%08X), deleting\n", millis(), magic);
+    LOG_ERR(TAG, "Invalid settings file (wrong magic 0x%08X), deleting", magic);
     inputFile.close();
     SdMan.remove(PAPYRIX_SETTINGS_FILE);
     return false;
@@ -279,7 +280,7 @@ bool Settings::loadFromFile() {
   uint8_t version;
   serialization::readPod(inputFile, version);
   if (version < MIN_SETTINGS_VERSION || version > SETTINGS_FILE_VERSION) {
-    Serial.printf("[%lu] [SET] Deserialization failed: Unknown version %u\n", millis(), version);
+    LOG_ERR(TAG, "Deserialization failed: Unknown version %u", version);
     inputFile.close();
     return false;
   }
@@ -289,8 +290,7 @@ bool Settings::loadFromFile() {
 
   // Cap fileSettingsCount to prevent reading garbage from corrupted files
   if (fileSettingsCount > SETTINGS_COUNT) {
-    Serial.printf("[%lu] [SET] fileSettingsCount %u exceeds max %u, capping\n", millis(), fileSettingsCount,
-                  SETTINGS_COUNT);
+    LOG_ERR(TAG, "fileSettingsCount %u exceeds max %u, capping", fileSettingsCount, SETTINGS_COUNT);
     fileSettingsCount = SETTINGS_COUNT;
   }
 
@@ -361,7 +361,7 @@ bool Settings::loadFromFile() {
   }
 
   inputFile.close();
-  Serial.printf("[%lu] [SET] Settings loaded from file\n", millis());
+  LOG_INF(TAG, "Settings loaded from file");
   return true;
 }
 

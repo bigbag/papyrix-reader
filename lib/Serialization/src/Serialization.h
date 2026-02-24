@@ -1,5 +1,5 @@
 #pragma once
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <SdFat.h>
 
 #include <iostream>
@@ -66,7 +66,7 @@ static void writeString(FsFile& file, const std::string& s) {
     return false;
   }
   if (len > 65536) {  // Sanity check: no string should be > 64KB
-    Serial.printf("[SER] String length %u exceeds max, file corrupt\n", len);
+    LOG_ERR("SERIAL", "String length %u exceeds max, file corrupt", len);
     s.clear();
     return false;
   }

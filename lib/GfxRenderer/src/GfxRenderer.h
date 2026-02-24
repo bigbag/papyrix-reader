@@ -7,7 +7,6 @@
 #include <array>
 #include <map>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "Bitmap.h"
@@ -53,6 +52,12 @@ class GfxRenderer {
   mutable FontStyleResolver _fontStyleResolver = nullptr;
   mutable void* _fontStyleResolverCtx = nullptr;
 
+  // Lazy external font resolver: called on first CJK codepoint encounter when
+  // _externalFont is nullptr. The callback should call setExternalFont() to register it.
+  using ExternalFontResolver = void (*)(void* ctx);
+  mutable ExternalFontResolver _externalFontResolver = nullptr;
+  mutable void* _externalFontResolverCtx = nullptr;
+
   // Pre-allocated row buffers for bitmap rendering (reduces heap fragmentation)
   // Sized for max screen dimension (800 pixels): outputRow = 800/4 = 200 bytes, rowBytes = 800*3 = 2400 bytes (24bpp)
   static constexpr size_t BITMAP_OUTPUT_ROW_SIZE = (EInkDisplay::DISPLAY_WIDTH + 3) / 4;
@@ -62,13 +67,15 @@ class GfxRenderer {
   void allocateBitmapRowBuffers();
   void freeBitmapRowBuffers();
 
-  // Word width cache for performance optimization during EPUB section creation.
+  // Word width cache: open-addressing flat hash table for O(1) lookup.
   // Key: FNV-1a hash of (fontId, text, style). Value: measured width in pixels.
-  // Limited to MAX_WIDTH_CACHE_SIZE entries to prevent heap fragmentation.
+  // Uses ~2.6KB vs ~12KB for std::unordered_map with 256 entries.
   static constexpr size_t MAX_WIDTH_CACHE_SIZE = 256;
-  mutable std::unordered_map<uint64_t, int16_t> wordWidthCache;
+  mutable uint64_t widthCacheKeys_[MAX_WIDTH_CACHE_SIZE] = {};  // 0 = empty sentinel
+  mutable int16_t widthCacheValues_[MAX_WIDTH_CACHE_SIZE] = {};
+  mutable uint16_t widthCacheCount_ = 0;
 
-  uint64_t makeWidthCacheKey(int fontId, const char* text, EpdFontFamily::Style style) const {
+  static uint64_t makeWidthCacheKey(int fontId, const char* text, EpdFontFamily::Style style) {
     // FNV-1a hash
     uint64_t hash = 14695981039346656037ULL;
     hash ^= static_cast<uint64_t>(fontId);
@@ -81,7 +88,8 @@ class GfxRenderer {
         hash *= 1099511628211ULL;
       }
     }
-    return hash;
+    // Ensure non-zero (0 is our empty sentinel)
+    return hash == 0 ? 1 : hash;
   }
 
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, const int* y, bool pixelState,
@@ -90,6 +98,7 @@ class GfxRenderer {
                          bool pixelState, EpdFontFamily::Style style, int fontId) const;
   void renderExternalGlyph(uint32_t cp, int* x, int y, bool pixelState) const;
   int getExternalGlyphWidth(uint32_t cp) const;
+  bool tryResolveExternalFont() const;
   void freeBwBufferChunks();
 
  public:
@@ -107,13 +116,20 @@ class GfxRenderer {
   void begin();
   void insertFont(int fontId, EpdFontFamily font);
   void removeFont(int fontId);
-  void clearWidthCache() { std::unordered_map<uint64_t, int16_t>().swap(wordWidthCache); }
+  void clearWidthCache() const {
+    memset(widthCacheKeys_, 0, sizeof(widthCacheKeys_));
+    widthCacheCount_ = 0;
+  }
   void setExternalFont(ExternalFont* font) { _externalFont = font; }
   ExternalFont* getExternalFont() const { return _externalFont; }
 
   void setFontStyleResolver(FontStyleResolver resolver, void* ctx) {
     _fontStyleResolver = resolver;
     _fontStyleResolverCtx = ctx;
+  }
+  void setExternalFontResolver(ExternalFontResolver resolver, void* ctx) {
+    _externalFontResolver = resolver;
+    _externalFontResolverCtx = ctx;
   }
   void updateFontFamily(int fontId, EpdFontFamily::Style style, const EpdFont* font) {
     auto it = fontMap.find(fontId);

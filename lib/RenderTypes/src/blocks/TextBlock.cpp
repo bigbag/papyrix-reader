@@ -1,7 +1,10 @@
 #include "TextBlock.h"
 
 #include <GfxRenderer.h>
+#include <Logging.h>
 #include <Serialization.h>
+
+#define TAG "TEXT_BLOCK"
 
 void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int x, const int y,
                        const bool black) const {
@@ -36,7 +39,7 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
 
   // Sanity check: prevent allocation of unreasonably large vectors (max 10000 words per block)
   if (wc > 10000) {
-    Serial.printf("[%lu] [TXB] Deserialization failed: word count %u exceeds maximum\n", millis(), wc);
+    LOG_ERR(TAG, "Deserialization failed: word count %u exceeds maximum", wc);
     return nullptr;
   }
 

@@ -20,6 +20,7 @@
 #include <builtinFonts/reader_medium_bold_2b.h>
 #include <builtinFonts/reader_medium_italic_2b.h>
 // Large font (18pt)
+#include <Logging.h>
 #include <builtinFonts/reader_large_2b.h>
 #include <builtinFonts/reader_large_bold_2b.h>
 #include <builtinFonts/reader_large_italic_2b.h>
@@ -34,6 +35,8 @@
 #include "config.h"
 #include "content/ContentTypes.h"
 #include "ui/Elements.h"
+
+#define TAG "MAIN"
 
 // New refactored core system
 #include "core/BootMode.h"
@@ -97,39 +100,37 @@ static papyrix::StateMachine stateMachine;
 
 RTC_DATA_ATTR uint16_t rtcPowerButtonDurationMs = 400;
 
-// Fonts - XSmall (12pt)
-EpdFont readerXSmallFont(&reader_xsmall_regular_2b);
-EpdFont readerXSmallBoldFont(&reader_xsmall_bold_2b);
-EpdFont readerXSmallItalicFont(&reader_xsmall_italic_2b);
-EpdFontFamily readerXSmallFontFamily(&readerXSmallFont, &readerXSmallBoldFont, &readerXSmallItalicFont,
-                                     &readerXSmallBoldFont);
-
-// Fonts - Small (14pt, default)
-EpdFont readerFont(&reader_2b);
-EpdFont readerBoldFont(&reader_bold_2b);
-EpdFont readerItalicFont(&reader_italic_2b);
-EpdFontFamily readerFontFamily(&readerFont, &readerBoldFont, &readerItalicFont, &readerBoldFont);
-
-// Fonts - Medium (16pt)
-EpdFont readerMediumFont(&reader_medium_2b);
-EpdFont readerMediumBoldFont(&reader_medium_bold_2b);
-EpdFont readerMediumItalicFont(&reader_medium_italic_2b);
-EpdFontFamily readerMediumFontFamily(&readerMediumFont, &readerMediumBoldFont, &readerMediumItalicFont,
-                                     &readerMediumBoldFont);
-
-// Fonts - Large (18pt)
-EpdFont readerLargeFont(&reader_large_2b);
-EpdFont readerLargeBoldFont(&reader_large_bold_2b);
-EpdFont readerLargeItalicFont(&reader_large_italic_2b);
-EpdFontFamily readerLargeFontFamily(&readerLargeFont, &readerLargeBoldFont, &readerLargeItalicFont,
-                                    &readerLargeBoldFont);
-
+// Always-needed fonts (UI, status bar)
 EpdFont smallFont(&small14);
 EpdFontFamily smallFontFamily(&smallFont);
 
 EpdFont ui12Font(&ui_12);
 EpdFont uiBold12Font(&ui_bold_12);
 EpdFontFamily uiFontFamily(&ui12Font, &uiBold12Font);
+
+// Reader font families — lazily constructed via static locals so only the
+// active size allocates EpdFont objects (~520 bytes each × 3 per size).
+// In READER mode this saves ~4.5KB by not instantiating unused sizes.
+static EpdFontFamily& readerFontFamilyXSmall() {
+  static EpdFont r(&reader_xsmall_regular_2b), b(&reader_xsmall_bold_2b), i(&reader_xsmall_italic_2b);
+  static EpdFontFamily f(&r, &b, &i, &b);
+  return f;
+}
+static EpdFontFamily& readerFontFamilySmall() {
+  static EpdFont r(&reader_2b), b(&reader_bold_2b), i(&reader_italic_2b);
+  static EpdFontFamily f(&r, &b, &i, &b);
+  return f;
+}
+static EpdFontFamily& readerFontFamilyMedium() {
+  static EpdFont r(&reader_medium_2b), b(&reader_medium_bold_2b), i(&reader_medium_italic_2b);
+  static EpdFontFamily f(&r, &b, &i, &b);
+  return f;
+}
+static EpdFontFamily& readerFontFamilyLarge() {
+  static EpdFont r(&reader_large_2b), b(&reader_large_bold_2b), i(&reader_large_italic_2b);
+  static EpdFontFamily f(&r, &b, &i, &b);
+  return f;
+}
 
 bool isUsbConnected() { return digitalRead(UART0_RXD) == HIGH; }
 
@@ -155,7 +156,7 @@ WakeupInfo getWakeupInfo() {
 // Verify long press on wake-up from deep sleep
 void verifyWakeupLongPress(esp_reset_reason_t resetReason) {
   if (resetReason == ESP_RST_SW) {
-    Serial.printf("[%lu] [   ] Skipping wakeup verification (software restart)\n", millis());
+    LOG_DBG(TAG, "Skipping wakeup verification (software restart)");
     return;
   }
 
@@ -164,7 +165,7 @@ void verifyWakeupLongPress(esp_reset_reason_t resetReason) {
   // where RTC memory is lost. Needed because inputManager.isPressed() may take up to
   // ~500ms to return the correct state after wake-up.
   if (papyrix::core.settings.shortPwrBtn == papyrix::Settings::PowerSleep) {
-    Serial.printf("[%lu] [   ] Skipping wakeup verification (short press mode)\n", millis());
+    LOG_DBG(TAG, "Skipping wakeup verification (short press mode)");
     return;
   }
 
@@ -209,17 +210,39 @@ void waitForPowerRelease() {
   }
 }
 
-void setupDisplayAndFonts() {
+// Register only the reader font for the active size (saves ~4.5KB in READER mode)
+void setupReaderFontForSize(papyrix::Settings::FontSize fontSize) {
+  switch (fontSize) {
+    case papyrix::Settings::FontXSmall:
+      renderer.insertFont(READER_FONT_ID_XSMALL, readerFontFamilyXSmall());
+      break;
+    case papyrix::Settings::FontMedium:
+      renderer.insertFont(READER_FONT_ID_MEDIUM, readerFontFamilyMedium());
+      break;
+    case papyrix::Settings::FontLarge:
+      renderer.insertFont(READER_FONT_ID_LARGE, readerFontFamilyLarge());
+      break;
+    default:  // FontSmall
+      renderer.insertFont(READER_FONT_ID, readerFontFamilySmall());
+      break;
+  }
+}
+
+void setupDisplayAndFonts(bool allReaderSizes = true) {
   einkDisplay.begin();
   renderer.begin();
-  Serial.printf("[%lu] [   ] Display initialized\n", millis());
-  renderer.insertFont(READER_FONT_ID_XSMALL, readerXSmallFontFamily);
-  renderer.insertFont(READER_FONT_ID, readerFontFamily);
-  renderer.insertFont(READER_FONT_ID_MEDIUM, readerMediumFontFamily);
-  renderer.insertFont(READER_FONT_ID_LARGE, readerLargeFontFamily);
+  LOG_INF(TAG, "Display initialized");
+  if (allReaderSizes) {
+    renderer.insertFont(READER_FONT_ID_XSMALL, readerFontFamilyXSmall());
+    renderer.insertFont(READER_FONT_ID, readerFontFamilySmall());
+    renderer.insertFont(READER_FONT_ID_MEDIUM, readerFontFamilyMedium());
+    renderer.insertFont(READER_FONT_ID_LARGE, readerFontFamilyLarge());
+  } else {
+    setupReaderFontForSize(static_cast<papyrix::Settings::FontSize>(papyrix::core.settings.fontSize));
+  }
   renderer.insertFont(UI_FONT_ID, uiFontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
-  Serial.printf("[%lu] [   ] Fonts setup\n", millis());
+  LOG_INF(TAG, "Fonts setup");
 }
 
 void applyThemeFonts() {
@@ -233,7 +256,7 @@ void applyThemeFonts() {
     int customUiFontId = FONT_MANAGER.getFontId(theme.uiFontFamily, UI_FONT_ID);
     if (customUiFontId != UI_FONT_ID) {
       theme.uiFontId = customUiFontId;
-      Serial.printf("[%lu] [FONT] UI font: %s (ID: %d)\n", millis(), theme.uiFontFamily, customUiFontId);
+      LOG_INF(TAG, "UI font: %s (ID: %d)", theme.uiFontFamily, customUiFontId);
     }
   }
 
@@ -273,7 +296,7 @@ void applyThemeFonts() {
     int customFontId = FONT_MANAGER.getFontId(fontFamilyName, builtinFontId);
     if (customFontId != builtinFontId) {
       *targetFontId = customFontId;
-      Serial.printf("[%lu] [FONT] Reader font: %s (ID: %d)\n", millis(), fontFamilyName, customFontId);
+      LOG_INF(TAG, "Reader font: %s (ID: %d)", fontFamilyName, customFontId);
     }
   }
 }
@@ -307,7 +330,7 @@ bool earlyInit() {
   // Initialize SPI and SD card before wakeup verification so settings are available
   SPI.begin(EPD_SCLK, SD_SPI_MISO, EPD_MOSI, EPD_CS);
   if (!SdMan.begin()) {
-    Serial.printf("[%lu] [   ] SD card initialization failed\n", millis());
+    LOG_ERR(TAG, "SD card initialization failed");
     setupDisplayAndFonts();
     showErrorScreen("SD card error");
     return false;
@@ -323,22 +346,22 @@ bool earlyInit() {
     verifyWakeupLongPress(wakeup.resetReason);
   }
 
-  Serial.printf("[%lu] [   ] Starting Papyrix version " PAPYRIX_VERSION "\n", millis());
+  LOG_INF(TAG, "Starting Papyrix version " PAPYRIX_VERSION);
 
   // Initialize battery ADC pin with proper attenuation for 0-3.3V range
   analogSetPinAttenuation(BAT_GPIO0, ADC_11db);
 
   // Initialize internal flash filesystem for font storage
   if (!LittleFS.begin(false)) {
-    Serial.printf("[%lu] [FS] LittleFS mount failed, attempting format\n", millis());
+    LOG_ERR(TAG, "LittleFS mount failed, attempting format");
     if (!LittleFS.format() || !LittleFS.begin(false)) {
-      Serial.printf("[%lu] [FS] LittleFS recovery failed\n", millis());
+      LOG_ERR(TAG, "LittleFS recovery failed");
       showErrorScreen("Internal storage error");
       return false;
     }
-    Serial.printf("[%lu] [FS] LittleFS formatted and mounted\n", millis());
+    LOG_INF(TAG, "LittleFS formatted and mounted");
   } else {
-    Serial.printf("[%lu] [FS] LittleFS mounted\n", millis());
+    LOG_INF(TAG, "LittleFS mounted");
   }
 
   return true;
@@ -346,15 +369,14 @@ bool earlyInit() {
 
 // Initialize UI mode - full state registration, all resources
 void initUIMode() {
-  Serial.printf("[%lu] [BOOT] Initializing UI mode\n", millis());
-  Serial.printf("[%lu] [BOOT] [UI mode] Free heap: %lu, Max block: %lu\n", millis(), ESP.getFreeHeap(),
-                ESP.getMaxAllocHeap());
+  LOG_INF(TAG, "Initializing UI mode");
+  LOG_DBG(TAG, "[UI mode] Free heap: %lu, Max block: %lu", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 
   // Initialize theme and font managers (full)
   FONT_MANAGER.init(renderer);
   THEME_MANAGER.loadTheme(papyrix::core.settings.themeName);
   THEME_MANAGER.createDefaultThemeFiles();
-  Serial.printf("[%lu] [   ] Theme loaded: %s\n", millis(), THEME_MANAGER.currentThemeName());
+  LOG_INF(TAG, "Theme loaded: %s", THEME_MANAGER.currentThemeName());
 
   setupDisplayAndFonts();
   applyThemeFonts();
@@ -384,12 +406,12 @@ void initUIMode() {
   // Initialize core
   auto result = papyrix::core.init();
   if (!result.ok()) {
-    Serial.printf("[%lu] [CORE] Init failed: %s\n", millis(), papyrix::errorToString(result.err));
+    LOG_ERR(TAG, "Init failed: %s", papyrix::errorToString(result.err));
     showErrorScreen("Core init failed");
     return;
   }
 
-  Serial.printf("[%lu] [CORE] State machine starting (UI mode)\n", millis());
+  LOG_INF(TAG, "State machine starting (UI mode)");
   mappedInputManager.setSettings(&papyrix::core.settings);
   ui::setFrontButtonLayout(papyrix::core.settings.frontButtonLayout);
 
@@ -399,26 +421,24 @@ void initUIMode() {
 
   if (transition.returnTo == papyrix::ReturnTo::FILE_MANAGER) {
     initialState = papyrix::StateId::FileList;
-    Serial.printf("[%lu] [BOOT] Returning to FileList from Reader\n", millis());
+    LOG_INF(TAG, "Returning to FileList from Reader");
   } else {
-    Serial.printf("[%lu] [BOOT] Starting at Home\n", millis());
+    LOG_INF(TAG, "Starting at Home");
   }
 
   stateMachine.init(papyrix::core, initialState);
 
   // Force initial render
-  Serial.printf("[%lu] [CORE] Forcing initial render\n", millis());
+  LOG_DBG(TAG, "Forcing initial render");
   stateMachine.update(papyrix::core);
 
-  Serial.printf("[%lu] [BOOT] [UI mode] After init - Free heap: %lu, Max block: %lu\n", millis(), ESP.getFreeHeap(),
-                ESP.getMaxAllocHeap());
+  LOG_DBG(TAG, "[UI mode] After init - Free heap: %lu, Max block: %lu", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 }
 
 // Initialize Reader mode - minimal state registration, single font size
 void initReaderMode() {
-  Serial.printf("[%lu] [BOOT] Initializing READER mode\n", millis());
-  Serial.printf("[%lu] [BOOT] [READER mode] Free heap: %lu, Max block: %lu\n", millis(), ESP.getFreeHeap(),
-                ESP.getMaxAllocHeap());
+  LOG_INF(TAG, "Initializing READER mode");
+  LOG_DBG(TAG, "[READER mode] Free heap: %lu, Max block: %lu", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 
   // Detect content type early to decide if we need custom fonts
   // XTC/XTCH files contain pre-rendered bitmaps and don't need fonts for page rendering
@@ -430,14 +450,14 @@ void initReaderMode() {
   FONT_MANAGER.init(renderer);
   THEME_MANAGER.loadTheme(papyrix::core.settings.themeName);
   // Skip createDefaultThemeFiles() - not needed in reader mode
-  Serial.printf("[%lu] [   ] Theme loaded: %s (reader mode)\n", millis(), THEME_MANAGER.currentThemeName());
+  LOG_INF(TAG, "Theme loaded: %s (reader mode)", THEME_MANAGER.currentThemeName());
 
-  setupDisplayAndFonts();  // Builtin fonts - always needed for UI
+  setupDisplayAndFonts(false);  // Only active reader font size
 
   if (needsCustomFonts) {
     applyThemeFonts();  // Custom fonts - skip for XTC/XTCH to save ~500KB+ RAM
   } else {
-    Serial.printf("[%lu] [BOOT] Skipping custom fonts for XTC content\n", millis());
+    LOG_DBG(TAG, "Skipping custom fonts for XTC content");
   }
 
   // Register ONLY states needed for Reader mode
@@ -448,12 +468,12 @@ void initReaderMode() {
   // Initialize core
   auto result = papyrix::core.init();
   if (!result.ok()) {
-    Serial.printf("[%lu] [CORE] Init failed: %s\n", millis(), papyrix::errorToString(result.err));
+    LOG_ERR(TAG, "Init failed: %s", papyrix::errorToString(result.err));
     showErrorScreen("Core init failed");
     return;
   }
 
-  Serial.printf("[%lu] [CORE] State machine starting (READER mode)\n", millis());
+  LOG_INF(TAG, "State machine starting (READER mode)");
   mappedInputManager.setSettings(&papyrix::core.settings);
   ui::setFrontButtonLayout(papyrix::core.settings.frontButtonLayout);
 
@@ -461,10 +481,10 @@ void initReaderMode() {
     // Copy path to shared buffer for ReaderState to consume
     strncpy(papyrix::core.buf.path, transition.bookPath, sizeof(papyrix::core.buf.path) - 1);
     papyrix::core.buf.path[sizeof(papyrix::core.buf.path) - 1] = '\0';
-    Serial.printf("[%lu] [BOOT] Opening book: %s\n", millis(), papyrix::core.buf.path);
+    LOG_INF(TAG, "Opening book: %s", papyrix::core.buf.path);
   } else {
     // No book path - fall back to UI mode to avoid boot loop
-    Serial.printf("[%lu] [BOOT] ERROR: No book path in transition, falling back to UI\n", millis());
+    LOG_ERR(TAG, "No book path in transition, falling back to UI");
     initUIMode();
     return;
   }
@@ -472,11 +492,10 @@ void initReaderMode() {
   stateMachine.init(papyrix::core, papyrix::StateId::Reader);
 
   // Force initial render
-  Serial.printf("[%lu] [CORE] Forcing initial render\n", millis());
+  LOG_DBG(TAG, "Forcing initial render");
   stateMachine.update(papyrix::core);
 
-  Serial.printf("[%lu] [BOOT] [READER mode] After init - Free heap: %lu, Max block: %lu\n", millis(), ESP.getFreeHeap(),
-                ESP.getMaxAllocHeap());
+  LOG_DBG(TAG, "[READER mode] After init - Free heap: %lu, Max block: %lu", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 }
 
 void setup() {
@@ -505,9 +524,9 @@ void loop() {
 
   inputManager.update();
 
-  if (Serial && millis() - lastMemPrint >= 10000) {
-    Serial.printf("[%lu] [MEM] Free: %d bytes, Total: %d bytes, Min Free: %d bytes\n", millis(), ESP.getFreeHeap(),
-                  ESP.getHeapSize(), ESP.getMinFreeHeap());
+  if (millis() - lastMemPrint >= 10000) {
+    LOG_DBG(TAG, "Free: %d bytes, Total: %d bytes, Min Free: %d bytes", ESP.getFreeHeap(), ESP.getHeapSize(),
+            ESP.getMinFreeHeap());
     lastMemPrint = millis();
   }
 
@@ -517,7 +536,7 @@ void loop() {
   // Auto-sleep after inactivity
   const auto autoSleepTimeout = papyrix::core.settings.getAutoSleepTimeoutMs();
   if (autoSleepTimeout > 0 && papyrix::core.input.idleTimeMs() >= autoSleepTimeout) {
-    Serial.printf("[%lu] [SLP] Auto-sleep after %lu ms idle\n", millis(), autoSleepTimeout);
+    LOG_INF(TAG, "Auto-sleep after %lu ms idle", autoSleepTimeout);
     stateMachine.init(papyrix::core, papyrix::StateId::Sleep);
     return;
   }
@@ -569,8 +588,7 @@ void loop() {
   if (loopDuration > maxLoopDuration) {
     maxLoopDuration = loopDuration;
     if (maxLoopDuration > 50) {
-      Serial.printf("[%lu] [LOOP] New max loop duration: %lu ms (activity: %lu ms)\n", millis(), maxLoopDuration,
-                    activityDuration);
+      LOG_DBG(TAG, "New max loop duration: %lu ms (activity: %lu ms)", maxLoopDuration, activityDuration);
     }
   }
 

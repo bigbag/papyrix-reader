@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <GfxRenderer.h>
+#include <Logging.h>
 #include <errno.h>
 #include <unistd.h>
 
@@ -9,6 +10,8 @@
 #include "../core/Core.h"
 #include "../ui/Elements.h"
 #include "ThemeManager.h"
+
+#define TAG "CALIBRE"
 
 namespace papyrix {
 
@@ -30,7 +33,7 @@ CalibreSyncState::CalibreSyncState(GfxRenderer& renderer)
 CalibreSyncState::~CalibreSyncState() { cleanup(); }
 
 void CalibreSyncState::enter(Core& core) {
-  Serial.println("[CAL-STATE] Entering");
+  LOG_INF(TAG, "Entering");
 
   needsRender_ = true;
   goBack_ = false;
@@ -52,7 +55,7 @@ void CalibreSyncState::initializeCalibre(Core& core) {
   // Initialize Calibre library
   calibre_err_t err = calibre_init();
   if (err != CALIBRE_OK) {
-    Serial.printf("[CAL-STATE] Failed to init library: %s\n", calibre_err_str(err));
+    LOG_ERR(TAG, "Failed to init library: %s", calibre_err_str(err));
     calibreView_.setError("Failed to initialize");
     needsRender_ = true;
     return;
@@ -84,7 +87,7 @@ void CalibreSyncState::initializeCalibre(Core& core) {
   // Create connection
   conn_ = calibre_conn_create(&config, &callbacks);
   if (!conn_) {
-    Serial.println("[CAL-STATE] Failed to create connection");
+    LOG_ERR(TAG, "Failed to create connection");
     calibreView_.setError("Connection failed");
     needsRender_ = true;
     calibre_deinit();
@@ -103,18 +106,18 @@ void CalibreSyncState::initializeCalibre(Core& core) {
   // Start discovery (broadcast to find Calibre server)
   err = calibre_start_discovery(conn_, 0);  // Port parameter not used for client mode
   if (err != CALIBRE_OK) {
-    Serial.printf("[CAL-STATE] Failed to start discovery: %s\n", calibre_err_str(err));
+    LOG_ERR(TAG, "Failed to start discovery: %s", calibre_err_str(err));
     calibreView_.setError("Discovery failed");
     needsRender_ = true;
     cleanup();
     return;
   }
 
-  Serial.printf("[CAL-STATE] Discovery started, IP: %s\n", ip);
+  LOG_INF(TAG, "Discovery started, IP: %s", ip);
 }
 
 void CalibreSyncState::exit(Core& core) {
-  Serial.println("[CAL-STATE] Exiting");
+  LOG_INF(TAG, "Exiting");
 
   cleanup();
   core.network.shutdown();
@@ -126,7 +129,7 @@ StateTransition CalibreSyncState::update(Core& core) {
     calibre_err_t err = calibre_process(conn_, CALIBRE_PROCESS_TIMEOUT_MS);
 
     if (err != CALIBRE_OK && err != CALIBRE_ERR_TIMEOUT) {
-      Serial.printf("[CAL-STATE] Process error: %s\n", calibre_err_str(err));
+      LOG_ERR(TAG, "Process error: %s", calibre_err_str(err));
 
       if (err == CALIBRE_ERR_DISCONNECTED) {
         if (booksReceived_ > 0) {
@@ -225,7 +228,7 @@ void CalibreSyncState::cleanup() {
 }
 
 void CalibreSyncState::restartConnection(Core& core) {
-  Serial.println("[CAL-STATE] Restarting Calibre connection (WiFi kept active)");
+  LOG_INF(TAG, "Restarting Calibre connection (WiFi kept active)");
 
   // Clean up only Calibre resources, keep WiFi active
   cleanup();
@@ -259,8 +262,7 @@ void CalibreSyncState::onBook(void* ctx, const calibre_book_meta_t* meta, const 
   if (!self || !meta) return;
 
   self->booksReceived_++;
-  Serial.printf("[CAL-STATE] Book received: \"%s\" -> %s\n", meta->title ? meta->title : "(null)",
-                path ? path : "(null)");
+  LOG_INF(TAG, "Book received: \"%s\" -> %s", meta->title ? meta->title : "(null)", path ? path : "(null)");
 
   // Show "received N books" status instead of stuck progress bar
   snprintf(self->calibreView_.statusMsg, ui::CalibreView::MAX_STATUS_LEN, "Received %d book(s)", self->booksReceived_);
@@ -273,7 +275,7 @@ void CalibreSyncState::onMessage(const void* ctx, const char* message) {
   const auto* self = static_cast<const CalibreSyncState*>(ctx);
   if (!self || !message) return;
 
-  Serial.printf("[CAL-STATE] Calibre message: %s\n", message);
+  LOG_DBG(TAG, "Calibre message: %s", message);
 }
 
 bool CalibreSyncState::onDelete(void* ctx, const char* lpath) {
@@ -282,31 +284,31 @@ bool CalibreSyncState::onDelete(void* ctx, const char* lpath) {
 
   /* Security: Reject path traversal and suspicious patterns BEFORE building path */
   if (strstr(lpath, "..") != nullptr) {
-    Serial.printf("[CAL-STATE] Rejected path with '..': %s\n", lpath);
+    LOG_ERR(TAG, "Rejected path with '..': %s", lpath);
     return false;
   }
   if (strchr(lpath, '~') != nullptr) {
-    Serial.printf("[CAL-STATE] Rejected path with '~': %s\n", lpath);
+    LOG_ERR(TAG, "Rejected path with '~': %s", lpath);
     return false;
   }
   if (lpath[0] == '/') {
-    Serial.printf("[CAL-STATE] Rejected absolute path: %s\n", lpath);
+    LOG_ERR(TAG, "Rejected absolute path: %s", lpath);
     return false;
   }
   /* Build full path */
   char full_path[256];
   int written = snprintf(full_path, sizeof(full_path), "%s/%s", CALIBRE_BOOKS_DIR, lpath);
   if (written < 0 || (size_t)written >= sizeof(full_path)) {
-    Serial.printf("[CAL-STATE] Path too long: %s\n", lpath);
+    LOG_ERR(TAG, "Path too long: %s", lpath);
     return false;
   }
 
   /* Delete the file */
   if (unlink(full_path) == 0) {
-    Serial.printf("[CAL-STATE] Deleted book: %s\n", full_path);
+    LOG_INF(TAG, "Deleted book: %s", full_path);
     return true;
   } else {
-    Serial.printf("[CAL-STATE] Failed to delete book: %s (errno=%d)\n", full_path, errno);
+    LOG_ERR(TAG, "Failed to delete book: %s (errno=%d)", full_path, errno);
     return false;
   }
 }

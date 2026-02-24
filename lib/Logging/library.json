@@ -1,0 +1,11 @@
+{
+  "name": "Logging",
+  "version": "1.0.0",
+  "description": "Structured logging with LOG_ERR/INF/DBG macros and Serial redirection",
+  "frameworks": ["arduino", "espidf"],
+  "platforms": ["espressif32"],
+  "build": {
+    "srcDir": "src",
+    "includeDir": "src"
+  }
+}

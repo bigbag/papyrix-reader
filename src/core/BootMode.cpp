@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <GfxRenderer.h>
+#include <Logging.h>
 #include <SDCardManager.h>
 
 #include "../ThemeManager.h"
@@ -10,6 +11,8 @@
 
 // Access global renderer from main.cpp
 extern GfxRenderer renderer;
+
+#define TAG "BOOT"
 
 namespace papyrix {
 
@@ -21,11 +24,11 @@ static ModeTransition cachedTransition = {};
 static bool transitionCached = false;
 
 BootMode detectBootMode() {
-  Serial.printf("[BOOT] Checking boot mode...\n");
+  LOG_DBG(TAG, "Checking boot mode...");
 
   // Check settings for pending UI transition (1=UI mode)
   if (core.settings.pendingTransition == 1) {
-    Serial.printf("[BOOT] Pending UI transition, returnTo=%d\n", core.settings.transitionReturnTo);
+    LOG_INF(TAG, "Pending UI transition, returnTo=%d", core.settings.transitionReturnTo);
 
     // Cache transition info before clearing (so initUIMode can detect mode transition)
     cachedTransition.magic = ModeTransition::MAGIC;
@@ -41,8 +44,8 @@ BootMode detectBootMode() {
   // Check settings for pending Reader transition (2=Reader mode)
   if (core.settings.pendingTransition == 2 && core.settings.lastBookPath[0] != '\0' &&
       SdMan.exists(core.settings.lastBookPath)) {
-    Serial.printf("[BOOT] Pending Reader transition: path=%s, returnTo=%d\n", core.settings.lastBookPath,
-                  core.settings.transitionReturnTo);
+    LOG_INF(TAG, "Pending Reader transition: path=%s, returnTo=%d", core.settings.lastBookPath,
+            core.settings.transitionReturnTo);
 
     // Set up cached transition for reader mode
     cachedTransition.magic = ModeTransition::MAGIC;
@@ -61,7 +64,7 @@ BootMode detectBootMode() {
   // No pending transition - check "Last Document" startup behavior setting
   if (core.settings.startupBehavior == Settings::StartupLastDocument && core.settings.lastBookPath[0] != '\0' &&
       SdMan.exists(core.settings.lastBookPath)) {
-    Serial.printf("[BOOT] 'Last Document' startup: %s\n", core.settings.lastBookPath);
+    LOG_INF(TAG, "'Last Document' startup: %s", core.settings.lastBookPath);
 
     // Set up cached transition for reader mode
     cachedTransition.magic = ModeTransition::MAGIC;
@@ -79,7 +82,7 @@ BootMode detectBootMode() {
     return BootMode::READER;
   }
 
-  Serial.printf("[BOOT] No transition pending, using default UI mode\n");
+  LOG_DBG(TAG, "No transition pending, using default UI mode");
   return BootMode::UI;
 }
 
@@ -98,15 +101,15 @@ void saveTransition(BootMode mode, const char* bookPath, ReturnTo returnTo) {
   core.settings.transitionReturnTo = static_cast<uint8_t>(returnTo);
   core.settings.saveToFile();
 
-  Serial.printf("[BOOT] Saved transition to settings: mode=%d, returnTo=%d, path=%s\n", static_cast<int>(mode),
-                static_cast<int>(returnTo), core.settings.lastBookPath);
+  LOG_INF(TAG, "Saved transition to settings: mode=%d, returnTo=%d, path=%s", static_cast<int>(mode),
+          static_cast<int>(returnTo), core.settings.lastBookPath);
 }
 
 void clearTransition() {
   core.settings.pendingTransition = 0;
   core.settings.transitionReturnTo = 0;
   core.settings.saveToFile();
-  Serial.printf("[BOOT] Cleared pending transition\n");
+  LOG_DBG(TAG, "Cleared pending transition");
 }
 
 void showTransitionNotification(const char* message) {
@@ -123,7 +126,7 @@ void showTransitionNotification(const char* message) {
   // Display immediately (partial refresh for speed)
   renderer.displayBuffer();
 
-  Serial.printf("[BOOT] Displayed notification: %s\n", message);
+  LOG_DBG(TAG, "Displayed notification: %s", message);
 }
 
 }  // namespace papyrix

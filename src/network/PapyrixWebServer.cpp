@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <FsHelpers.h>
+#include <Logging.h>
 #include <SDCardManager.h>
 #include <WiFi.h>
 #include <esp_heap_caps.h>
@@ -11,6 +12,8 @@
 #include "html/FilesPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
 #include "html/SleepPageHtml.generated.h"
+
+#define TAG "WEBSERVER"
 
 namespace papyrix {
 
@@ -37,7 +40,7 @@ PapyrixWebServer::~PapyrixWebServer() { stop(); }
 
 void PapyrixWebServer::begin() {
   if (running_) {
-    Serial.println("[WEB] Server already running");
+    LOG_DBG(TAG, "Server already running");
     return;
   }
 
@@ -47,17 +50,17 @@ void PapyrixWebServer::begin() {
   bool isInApMode = (wifiMode & WIFI_MODE_AP);
 
   if (!isStaConnected && !isInApMode) {
-    Serial.println("[WEB] Cannot start - no network connection");
+    LOG_ERR(TAG, "Cannot start - no network connection");
     return;
   }
 
   apMode_ = isInApMode;
 
-  Serial.printf("[WEB] Creating server on port %d (free heap: %d)\n", port_, ESP.getFreeHeap());
+  LOG_INF(TAG, "Creating server on port %d (free heap: %d)", port_, ESP.getFreeHeap());
 
   server_.reset(new WebServer(port_));
   if (!server_) {
-    Serial.println("[WEB] Failed to create WebServer");
+    LOG_ERR(TAG, "Failed to create WebServer");
     return;
   }
 
@@ -78,7 +81,7 @@ void PapyrixWebServer::begin() {
   running_ = true;
 
   String ipAddr = apMode_ ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
-  Serial.printf("[WEB] Server started at http://%s/\n", ipAddr.c_str());
+  LOG_INF(TAG, "Server started at http://%s/", ipAddr.c_str());
 }
 
 void PapyrixWebServer::stop() {
@@ -86,7 +89,7 @@ void PapyrixWebServer::stop() {
     return;
   }
 
-  Serial.printf("[WEB] Stopping server (free heap: %d)\n", ESP.getFreeHeap());
+  LOG_INF(TAG, "Stopping server (free heap: %d)", ESP.getFreeHeap());
 
   running_ = false;
   delay(100);
@@ -108,7 +111,7 @@ void PapyrixWebServer::stop() {
   upload_.buffer.clear();
   upload_.buffer.shrink_to_fit();
 
-  Serial.printf("[WEB] Server stopped (free heap: %d)\n", ESP.getFreeHeap());
+  LOG_INF(TAG, "Server stopped (free heap: %d)", ESP.getFreeHeap());
 }
 
 void PapyrixWebServer::handleClient() {
@@ -230,7 +233,7 @@ void PapyrixWebServer::handleUpload() {
       upload_.path = "/";
     }
 
-    Serial.printf("[WEB] Upload start: %s to %s\n", upload_.fileName.c_str(), upload_.path.c_str());
+    LOG_INF(TAG, "Upload start: %s to %s", upload_.fileName.c_str(), upload_.path.c_str());
 
     String filePath = upload_.path;
     if (!filePath.endsWith("/")) filePath += "/";
@@ -239,7 +242,7 @@ void PapyrixWebServer::handleUpload() {
     if (!FsHelpers::isSupportedBookFile(upload_.fileName.c_str()) &&
         !FsHelpers::isImageFile(upload_.fileName.c_str())) {
       upload_.error = "Unsupported file type";
-      Serial.printf("[WEB] Rejected upload: %s (unsupported type)\n", upload_.fileName.c_str());
+      LOG_ERR(TAG, "Rejected upload: %s (unsupported type)", upload_.fileName.c_str());
       return;
     }
 
@@ -249,7 +252,7 @@ void PapyrixWebServer::handleUpload() {
 
     if (!SdMan.openFileForWrite("WEB", filePath, upload_.file)) {
       upload_.error = "Failed to create file";
-      Serial.printf("[WEB] Failed to create: %s\n", filePath.c_str());
+      LOG_ERR(TAG, "Failed to create: %s", filePath.c_str());
       return;
     }
 
@@ -286,7 +289,7 @@ void PapyrixWebServer::handleUpload() {
       upload_.file.close();
       if (upload_.error.isEmpty()) {
         upload_.success = true;
-        Serial.printf("[WEB] Upload complete: %s (%zu bytes)\n", upload_.fileName.c_str(), upload_.size);
+        LOG_INF(TAG, "Upload complete: %s (%zu bytes)", upload_.fileName.c_str(), upload_.size);
       }
     }
     upload_.buffer.clear();
@@ -304,7 +307,7 @@ void PapyrixWebServer::handleUpload() {
       SdMan.remove(filePath.c_str());
     }
     upload_.error = "Upload aborted";
-    Serial.println("[WEB] Upload aborted");
+    LOG_ERR(TAG, "Upload aborted");
   }
 }
 
@@ -350,7 +353,7 @@ void PapyrixWebServer::handleCreateFolder() {
   }
 
   if (SdMan.mkdir(folderPath.c_str())) {
-    Serial.printf("[WEB] Created folder: %s\n", folderPath.c_str());
+    LOG_INF(TAG, "Created folder: %s", folderPath.c_str());
     server_->send(200, "text/plain", "Folder created");
   } else {
     server_->send(500, "text/plain", "Failed to create folder");
@@ -406,7 +409,7 @@ void PapyrixWebServer::handleDelete() {
   }
 
   if (success) {
-    Serial.printf("[WEB] Deleted: %s\n", itemPath.c_str());
+    LOG_INF(TAG, "Deleted: %s", itemPath.c_str());
     server_->send(200, "text/plain", "Deleted");
   } else {
     server_->send(500, "text/plain", "Failed to delete");
@@ -498,7 +501,7 @@ void PapyrixWebServer::handleSleepScreenDelete() {
   }
 
   if (SdMan.remove(filePath.c_str())) {
-    Serial.printf("[WEB] Deleted sleep screen: %s\n", filePath.c_str());
+    LOG_INF(TAG, "Deleted sleep screen: %s", filePath.c_str());
     server_->send(200, "text/plain", "Deleted");
   } else {
     server_->send(500, "text/plain", "Failed to delete");

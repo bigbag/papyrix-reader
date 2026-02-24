@@ -1,7 +1,9 @@
 #include "CssParser.h"
 
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <SDCardManager.h>
+
+#define TAG "CSS"
 
 #include <cctype>
 #include <cstdlib>
@@ -41,13 +43,13 @@ CssParser::~CssParser() {}
 bool CssParser::parseFile(const char* filepath) {
   FsFile file;
   if (!SdMan.openFileForRead("CSS", filepath, file)) {
-    Serial.printf("[%lu] [CSS] Failed to open %s\n", millis(), filepath);
+    LOG_ERR(TAG, "Failed to open %s", filepath);
     return false;
   }
 
   const size_t fileSize = file.size();
   if (fileSize > MAX_CSS_FILE_SIZE) {
-    Serial.printf("[%lu] [CSS] File too large (%zu bytes): %s\n", millis(), fileSize, filepath);
+    LOG_ERR(TAG, "File too large (%zu bytes): %s", fileSize, filepath);
     file.close();
     return false;
   }
@@ -181,10 +183,10 @@ bool CssParser::parseFile(const char* filepath) {
   }
 
   if (styleMap_.size() >= MAX_CSS_RULES) {
-    Serial.printf("[%lu] [CSS] Rule limit reached (%zu max)\n", millis(), MAX_CSS_RULES);
+    LOG_DBG(TAG, "Rule limit reached (%zu max)", MAX_CSS_RULES);
   }
   file.close();
-  Serial.printf("[%lu] [CSS] Loaded %d style rules from %s\n", millis(), static_cast<int>(styleMap_.size()), filepath);
+  LOG_INF(TAG, "Loaded %d style rules from %s", static_cast<int>(styleMap_.size()), filepath);
   return true;
 }
 

@@ -8,8 +8,10 @@
 
 #include <CoverHelpers.h>
 #include <FsHelpers.h>
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <SDCardManager.h>
+
+#define TAG "MARKDOWN"
 
 Markdown::Markdown(std::string filepath, const std::string& cacheDir)
     : filepath(std::move(filepath)), fileSize(0), loaded(false) {
@@ -34,16 +36,16 @@ Markdown::Markdown(std::string filepath, const std::string& cacheDir)
 }
 
 bool Markdown::load() {
-  Serial.printf("[%lu] [MD ] Loading Markdown: %s\n", millis(), filepath.c_str());
+  LOG_INF(TAG, "Loading Markdown: %s", filepath.c_str());
 
   if (!SdMan.exists(filepath.c_str())) {
-    Serial.printf("[%lu] [MD ] File does not exist\n", millis());
+    LOG_ERR(TAG, "File does not exist");
     return false;
   }
 
   FsFile file;
   if (!SdMan.openFileForRead("MD ", filepath, file)) {
-    Serial.printf("[%lu] [MD ] Failed to open file\n", millis());
+    LOG_ERR(TAG, "Failed to open file");
     return false;
   }
 
@@ -55,22 +57,22 @@ bool Markdown::load() {
   // Try to extract title from content (updates title member if found)
   extractTitleFromContent();
 
-  Serial.printf("[%lu] [MD ] Loaded Markdown: %s (%zu bytes)\n", millis(), filepath.c_str(), fileSize);
+  LOG_INF(TAG, "Loaded Markdown: %s (%zu bytes)", filepath.c_str(), fileSize);
   return true;
 }
 
 bool Markdown::clearCache() const {
   if (!SdMan.exists(cachePath.c_str())) {
-    Serial.printf("[%lu] [MD ] Cache does not exist, no action needed\n", millis());
+    LOG_DBG(TAG, "Cache does not exist, no action needed");
     return true;
   }
 
   if (!SdMan.removeDir(cachePath.c_str())) {
-    Serial.printf("[%lu] [MD ] Failed to clear cache\n", millis());
+    LOG_ERR(TAG, "Failed to clear cache");
     return false;
   }
 
-  Serial.printf("[%lu] [MD ] Cache cleared successfully\n", millis());
+  LOG_INF(TAG, "Cache cleared successfully");
   return true;
 }
 
@@ -116,7 +118,7 @@ bool Markdown::generateCoverBmp(bool use1BitDithering) const {
   // Find a cover image
   std::string coverImagePath = findCoverImage();
   if (coverImagePath.empty()) {
-    Serial.printf("[%lu] [MD ] No cover image found\n", millis());
+    LOG_DBG(TAG, "No cover image found");
     // Create failure marker
     FsFile marker;
     if (SdMan.openFileForWrite("MD ", failedMarkerPath, marker)) {

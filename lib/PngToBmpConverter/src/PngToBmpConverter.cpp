@@ -1,6 +1,8 @@
 #include "PngToBmpConverter.h"
 
-#include <HardwareSerial.h>
+#include <Logging.h>
+
+#define TAG "PNG"
 #include <SdFat.h>
 #include <pngle.h>
 
@@ -196,10 +198,10 @@ void pngInitCallback(pngle_t* pngle, uint32_t w, uint32_t h) {
   ctx->srcWidth = w;
   ctx->srcHeight = h;
 
-  Serial.printf("[%lu] [PNG] Image dimensions: %dx%d\n", millis(), w, h);
+  LOG_INF(TAG, "Image dimensions: %dx%d", w, h);
 
   if (w > MAX_IMAGE_WIDTH || h > MAX_IMAGE_HEIGHT) {
-    Serial.printf("[%lu] [PNG] Image too large\n", millis());
+    LOG_ERR(TAG, "Image too large");
     return;
   }
 
@@ -225,7 +227,7 @@ void pngInitCallback(pngle_t* pngle, uint32_t w, uint32_t h) {
     ctx->scaleY_fp = (static_cast<uint32_t>(h) << 16) / ctx->outHeight;
     ctx->needsScaling = true;
 
-    Serial.printf("[%lu] [PNG] Scaling %dx%d -> %dx%d\n", millis(), w, h, ctx->outWidth, ctx->outHeight);
+    LOG_INF(TAG, "Scaling %dx%d -> %dx%d", w, h, ctx->outWidth, ctx->outHeight);
   }
 
   // Allocate buffers
@@ -234,7 +236,7 @@ void pngInitCallback(pngle_t* pngle, uint32_t w, uint32_t h) {
   ctx->outRowBuffer = static_cast<uint8_t*>(malloc(ctx->bytesPerRow));
 
   if (!ctx->srcRowBuffer || !ctx->outRowBuffer) {
-    Serial.printf("[%lu] [PNG] Failed to allocate row buffers\n", millis());
+    LOG_ERR(TAG, "Failed to allocate row buffers");
     free(ctx->srcRowBuffer);  // safe if nullptr
     free(ctx->outRowBuffer);  // safe if nullptr
     ctx->srcRowBuffer = nullptr;
@@ -247,7 +249,7 @@ void pngInitCallback(pngle_t* pngle, uint32_t w, uint32_t h) {
     ctx->rowAccum = new (std::nothrow) uint32_t[ctx->outWidth]();
     ctx->rowCount = new (std::nothrow) uint16_t[ctx->outWidth]();
     if (!ctx->rowAccum || !ctx->rowCount) {
-      Serial.printf("[%lu] [PNG] Failed to allocate scaling buffers\n", millis());
+      LOG_ERR(TAG, "Failed to allocate scaling buffers");
       free(ctx->srcRowBuffer);
       free(ctx->outRowBuffer);
       delete[] ctx->rowAccum;  // safe if nullptr
@@ -266,7 +268,7 @@ void pngInitCallback(pngle_t* pngle, uint32_t w, uint32_t h) {
   if (!ctx->quickMode) {
     ctx->ditherer = new (std::nothrow) AtkinsonDitherer(ctx->outWidth);
     if (!ctx->ditherer) {
-      Serial.printf("[%lu] [PNG] Failed to allocate ditherer\n", millis());
+      LOG_ERR(TAG, "Failed to allocate ditherer");
       free(ctx->srcRowBuffer);
       free(ctx->outRowBuffer);
       delete[] ctx->rowAccum;
@@ -289,12 +291,11 @@ void pngInitCallback(pngle_t* pngle, uint32_t w, uint32_t h) {
 
 bool pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOut, int targetMaxWidth, int targetMaxHeight, bool quickMode,
                                 const std::function<bool()>& shouldAbort = nullptr) {
-  Serial.printf("[%lu] [PNG] Converting PNG to BMP (target: %dx%d)%s\n", millis(), targetMaxWidth, targetMaxHeight,
-                quickMode ? " [QUICK]" : "");
+  LOG_INF(TAG, "Converting PNG to BMP (target: %dx%d)%s", targetMaxWidth, targetMaxHeight, quickMode ? " [QUICK]" : "");
 
   pngle_t* pngle = pngle_new();
   if (!pngle) {
-    Serial.printf("[%lu] [PNG] Failed to create pngle instance\n", millis());
+    LOG_ERR(TAG, "Failed to create pngle instance");
     return false;
   }
 
@@ -319,13 +320,13 @@ bool pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOut, int targetMaxWid
 
   while ((bytesRead = pngFile.read(buffer, sizeof(buffer))) > 0) {
     if (ctx.aborted) {
-      Serial.printf("[%lu] [PNG] Abort requested during PNG conversion\n", millis());
+      LOG_INF(TAG, "Abort requested during PNG conversion");
       success = false;
       break;
     }
     int fed = pngle_feed(pngle, buffer, bytesRead);
     if (fed < 0) {
-      Serial.printf("[%lu] [PNG] pngle_feed error: %s\n", millis(), pngle_error(pngle));
+      LOG_ERR(TAG, "pngle_feed error: %s", pngle_error(pngle));
       success = false;
       break;
     }
@@ -341,7 +342,7 @@ bool pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOut, int targetMaxWid
   pngle_destroy(pngle);
 
   if (success && ctx.headerWritten) {
-    Serial.printf("[%lu] [PNG] Successfully converted PNG to BMP (%dx%d)\n", millis(), ctx.outWidth, ctx.outHeight);
+    LOG_INF(TAG, "Successfully converted PNG to BMP (%dx%d)", ctx.outWidth, ctx.outHeight);
     return true;
   }
 

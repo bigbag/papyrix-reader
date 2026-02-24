@@ -1,6 +1,8 @@
 #include "JpegToBmpConverter.h"
 
-#include <HardwareSerial.h>
+#include <Logging.h>
+
+#define TAG "JPEG"
 #include <SdFat.h>
 #include <picojpeg.h>
 
@@ -254,12 +256,12 @@ unsigned char JpegToBmpConverter::jpegReadCallback(unsigned char* pBuf, const un
 bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bmpOut, int targetWidth, int targetHeight,
                                                      bool oneBit, bool quickMode,
                                                      const std::function<bool()>& shouldAbort) {
-  Serial.printf("[%lu] [JPG] Converting JPEG to %s BMP (target: %dx%d)%s\n", millis(), oneBit ? "1-bit" : "2-bit",
-                targetWidth, targetHeight, quickMode ? " [QUICK]" : "");
+  LOG_INF(TAG, "Converting JPEG to %s BMP (target: %dx%d)%s", oneBit ? "1-bit" : "2-bit", targetWidth, targetHeight,
+          quickMode ? " [QUICK]" : "");
 
   // Check for unsupported JPEG encoding (progressive or arithmetic) before attempting decode
   if (isUnsupportedJpeg(jpegFile)) {
-    Serial.printf("[%lu] [JPG] Unsupported JPEG encoding (progressive or arithmetic), skipping\n", millis());
+    LOG_ERR(TAG, "Unsupported JPEG encoding (progressive or arithmetic), skipping");
     return false;
   }
 
@@ -270,12 +272,12 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   pjpeg_image_info_t imageInfo;
   const unsigned char status = pjpeg_decode_init(&imageInfo, jpegReadCallback, &context, 0);
   if (status != 0) {
-    Serial.printf("[%lu] [JPG] JPEG decode init failed with error code: %d\n", millis(), status);
+    LOG_ERR(TAG, "JPEG decode init failed with error code: %d", status);
     return false;
   }
 
-  Serial.printf("[%lu] [JPG] JPEG dimensions: %dx%d, components: %d, MCUs: %dx%d\n", millis(), imageInfo.m_width,
-                imageInfo.m_height, imageInfo.m_comps, imageInfo.m_MCUSPerRow, imageInfo.m_MCUSPerCol);
+  LOG_INF(TAG, "JPEG dimensions: %dx%d, components: %d, MCUs: %dx%d", imageInfo.m_width, imageInfo.m_height,
+          imageInfo.m_comps, imageInfo.m_MCUSPerRow, imageInfo.m_MCUSPerCol);
 
   // Safety limits to prevent memory issues on ESP32
   constexpr int MAX_IMAGE_WIDTH = 2048;
@@ -283,8 +285,8 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   constexpr int MAX_MCU_ROW_BYTES = 65536;
 
   if (imageInfo.m_width > MAX_IMAGE_WIDTH || imageInfo.m_height > MAX_IMAGE_HEIGHT) {
-    Serial.printf("[%lu] [JPG] Image too large (%dx%d), max supported: %dx%d\n", millis(), imageInfo.m_width,
-                  imageInfo.m_height, MAX_IMAGE_WIDTH, MAX_IMAGE_HEIGHT);
+    LOG_ERR(TAG, "Image too large (%dx%d), max supported: %dx%d", imageInfo.m_width, imageInfo.m_height,
+            MAX_IMAGE_WIDTH, MAX_IMAGE_HEIGHT);
     return false;
   }
 
@@ -316,8 +318,8 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
     scaleY_fp = (static_cast<uint32_t>(imageInfo.m_height) << 16) / outHeight;
     needsScaling = true;
 
-    Serial.printf("[%lu] [JPG] Pre-scaling %dx%d -> %dx%d (fit to %dx%d)\n", millis(), imageInfo.m_width,
-                  imageInfo.m_height, outWidth, outHeight, targetWidth, targetHeight);
+    LOG_INF(TAG, "Pre-scaling %dx%d -> %dx%d (fit to %dx%d)", imageInfo.m_width, imageInfo.m_height, outWidth,
+            outHeight, targetWidth, targetHeight);
   }
 
   // Write BMP header with output dimensions
@@ -336,7 +338,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   // Allocate row buffer
   auto* rowBuffer = static_cast<uint8_t*>(malloc(bytesPerRow));
   if (!rowBuffer) {
-    Serial.printf("[%lu] [JPG] Failed to allocate row buffer\n", millis());
+    LOG_ERR(TAG, "Failed to allocate row buffer");
     return false;
   }
 
@@ -347,15 +349,14 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
 
   // Validate MCU row buffer size before allocation
   if (mcuRowPixels > MAX_MCU_ROW_BYTES) {
-    Serial.printf("[%lu] [JPG] MCU row buffer too large (%d bytes), max: %d\n", millis(), mcuRowPixels,
-                  MAX_MCU_ROW_BYTES);
+    LOG_ERR(TAG, "MCU row buffer too large (%d bytes), max: %d", mcuRowPixels, MAX_MCU_ROW_BYTES);
     free(rowBuffer);
     return false;
   }
 
   auto* mcuRowBuffer = static_cast<uint8_t*>(malloc(mcuRowPixels));
   if (!mcuRowBuffer) {
-    Serial.printf("[%lu] [JPG] Failed to allocate MCU row buffer (%d bytes)\n", millis(), mcuRowPixels);
+    LOG_ERR(TAG, "Failed to allocate MCU row buffer (%d bytes)", mcuRowPixels);
     free(rowBuffer);
     return false;
   }
@@ -371,7 +372,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
       // For 1-bit output, use Atkinson dithering for better quality
       atkinson1BitDitherer = new (std::nothrow) Atkinson1BitDitherer(outWidth);
       if (!atkinson1BitDitherer) {
-        Serial.printf("[%lu] [JPG] Failed to allocate 1-bit ditherer\n", millis());
+        LOG_ERR(TAG, "Failed to allocate 1-bit ditherer");
         free(mcuRowBuffer);
         free(rowBuffer);
         return false;
@@ -380,7 +381,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
       if (USE_ATKINSON) {
         atkinsonDitherer = new (std::nothrow) AtkinsonDitherer(outWidth);
         if (!atkinsonDitherer) {
-          Serial.printf("[%lu] [JPG] Failed to allocate Atkinson ditherer\n", millis());
+          LOG_ERR(TAG, "Failed to allocate Atkinson ditherer");
           free(mcuRowBuffer);
           free(rowBuffer);
           return false;
@@ -388,7 +389,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
       } else if (USE_FLOYD_STEINBERG) {
         fsDitherer = new (std::nothrow) FloydSteinbergDitherer(outWidth);
         if (!fsDitherer) {
-          Serial.printf("[%lu] [JPG] Failed to allocate Floyd-Steinberg ditherer\n", millis());
+          LOG_ERR(TAG, "Failed to allocate Floyd-Steinberg ditherer");
           free(mcuRowBuffer);
           free(rowBuffer);
           return false;
@@ -416,7 +417,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
 
   for (int mcuY = 0; mcuY < imageInfo.m_MCUSPerCol; mcuY++) {
     if (shouldAbort && shouldAbort()) {
-      Serial.printf("[%lu] [JPG] Abort requested during JPEG conversion\n", millis());
+      LOG_INF(TAG, "Abort requested during JPEG conversion");
       if (rowAccum) delete[] rowAccum;
       if (rowCount) delete[] rowCount;
       if (atkinsonDitherer) delete atkinsonDitherer;
@@ -435,10 +436,9 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
       const unsigned char mcuStatus = pjpeg_decode_mcu();
       if (mcuStatus != 0) {
         if (mcuStatus == PJPG_NO_MORE_BLOCKS) {
-          Serial.printf("[%lu] [JPG] Unexpected end of blocks at MCU (%d, %d)\n", millis(), mcuX, mcuY);
+          LOG_ERR(TAG, "Unexpected end of blocks at MCU (%d, %d)", mcuX, mcuY);
         } else {
-          Serial.printf("[%lu] [JPG] JPEG decode MCU failed at (%d, %d) with error code: %d\n", millis(), mcuX, mcuY,
-                        mcuStatus);
+          LOG_ERR(TAG, "JPEG decode MCU failed at (%d, %d) with error code: %d", mcuX, mcuY, mcuStatus);
         }
         free(mcuRowBuffer);
         free(rowBuffer);
@@ -641,7 +641,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   free(mcuRowBuffer);
   free(rowBuffer);
 
-  Serial.printf("[%lu] [JPG] Successfully converted JPEG to BMP\n", millis());
+  LOG_INF(TAG, "Successfully converted JPEG to BMP");
   return true;
 }
 

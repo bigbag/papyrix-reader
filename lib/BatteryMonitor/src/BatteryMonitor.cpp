@@ -15,9 +15,7 @@ uint16_t BatteryMonitor::readMillivolts() const {
   return static_cast<uint16_t>(mv * _dividerMultiplier);
 }
 
-uint16_t BatteryMonitor::readRawMillivolts() const {
-  return analogReadMilliVolts(_adcPin);
-}
+uint16_t BatteryMonitor::readRawMillivolts() const { return analogReadMilliVolts(_adcPin); }
 
 double BatteryMonitor::readVolts() const { return static_cast<double>(readMillivolts()) / 1000.0; }
 
@@ -33,6 +31,4 @@ uint16_t BatteryMonitor::percentageFromMillivolts(uint16_t millivolts) {
   return static_cast<int>(y);
 }
 
-uint16_t BatteryMonitor::millivoltsFromRawAdc(uint16_t adc_raw) {
-  return adc_raw;
-}
+uint16_t BatteryMonitor::millivoltsFromRawAdc(uint16_t adc_raw) { return adc_raw; }

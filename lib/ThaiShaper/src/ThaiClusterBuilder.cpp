@@ -7,7 +7,8 @@
 #define THAI_CLUSTER_DEBUG_LOGGING 0
 
 #if THAI_CLUSTER_DEBUG_LOGGING
-#include <Arduino.h>
+#include <Logging.h>
+#define TAG "THAI"
 #endif
 
 namespace ThaiShaper {
@@ -48,12 +49,12 @@ std::vector<ThaiCluster> ThaiClusterBuilder::buildClusters(const char* text) {
   }
 
 #if THAI_CLUSTER_DEBUG_LOGGING
-  Serial.printf("[THAI] buildClusters input bytes: ");
+  logSerial.printf("[THAI] buildClusters input bytes: ");
   const uint8_t* debugPtr = reinterpret_cast<const uint8_t*>(text);
   for (int i = 0; i < 32 && debugPtr[i] != '\0'; i++) {
-    Serial.printf("%02X ", debugPtr[i]);
+    logSerial.printf("%02X ", debugPtr[i]);
   }
-  Serial.printf("\n");
+  logSerial.printf("\n");
 #endif
 
   const uint8_t* ptr = reinterpret_cast<const uint8_t*>(text);
@@ -66,7 +67,7 @@ std::vector<ThaiCluster> ThaiClusterBuilder::buildClusters(const char* text) {
   }
 
 #if THAI_CLUSTER_DEBUG_LOGGING
-  Serial.printf("[THAI] Built %zu clusters\n", clusters.size());
+  LOG_DBG(TAG, "Built %zu clusters", clusters.size());
 #endif
 
   return clusters;
@@ -81,11 +82,11 @@ ThaiCluster ThaiClusterBuilder::buildNextCluster(const uint8_t** text) {
 
 #if THAI_CLUSTER_DEBUG_LOGGING
   // Log raw bytes at current position
-  Serial.printf("[THAI] buildNextCluster at ptr=%p, bytes: ", (void*)*text);
+  logSerial.printf("[THAI] buildNextCluster at ptr=%p, bytes: ", (void*)*text);
   for (int i = 0; i < 6 && (*text)[i] != '\0'; i++) {
-    Serial.printf("%02X ", (*text)[i]);
+    logSerial.printf("%02X ", (*text)[i]);
   }
-  Serial.printf("\n");
+  logSerial.printf("\n");
 #endif
 
   // Peek at first codepoint to determine cluster type
@@ -93,7 +94,7 @@ ThaiCluster ThaiClusterBuilder::buildNextCluster(const uint8_t** text) {
   uint32_t firstCp = utf8NextCodepoint(&peekPtr);
 
 #if THAI_CLUSTER_DEBUG_LOGGING
-  Serial.printf("[THAI] First codepoint: U+%04X\n", firstCp);
+  LOG_DBG(TAG, "First codepoint: U+%04X", firstCp);
 #endif
 
   // Non-Thai character: return as single-glyph cluster
@@ -106,7 +107,7 @@ ThaiCluster ThaiClusterBuilder::buildNextCluster(const uint8_t** text) {
     glyph.zeroAdvance = false;
     cluster.glyphs.push_back(glyph);
 #if THAI_CLUSTER_DEBUG_LOGGING
-    Serial.printf("[THAI] Non-Thai cluster: U+%04X\n", firstCp);
+    LOG_DBG(TAG, "Non-Thai cluster: U+%04X", firstCp);
 #endif
     return cluster;
   }
@@ -307,12 +308,12 @@ done_parsing:
   }
 
 #if THAI_CLUSTER_DEBUG_LOGGING
-  Serial.printf("[THAI] Cluster built with %zu glyphs: ", cluster.glyphs.size());
+  logSerial.printf("[THAI] Cluster built with %zu glyphs: ", cluster.glyphs.size());
   for (const auto& g : cluster.glyphs) {
-    Serial.printf("U+%04X ", g.codepoint);
+    logSerial.printf("U+%04X ", g.codepoint);
   }
-  Serial.printf("(lead=%04X base=%04X above=%04X below=%04X tone=%04X follow=%04X)\n", leadingVowel, baseConsonant,
-                aboveVowel, belowVowel, toneMark, followVowel);
+  logSerial.printf("(lead=%04X base=%04X above=%04X below=%04X tone=%04X follow=%04X)\n", leadingVowel, baseConsonant,
+                   aboveVowel, belowVowel, toneMark, followVowel);
 #endif
 
   return cluster;

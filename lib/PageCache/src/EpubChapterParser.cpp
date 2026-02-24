@@ -4,8 +4,11 @@
 #include <GfxRenderer.h>
 #include <Html5Normalizer.h>
 #include <Hyphenation.h>
+#include <Logging.h>
 #include <Page.h>
 #include <SDCardManager.h>
+
+#define TAG "EPUB_CHAP"
 
 #include <utility>
 
@@ -98,7 +101,7 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
   bool success = false;
   for (int attempt = 0; attempt < 3 && !success; attempt++) {
     if (attempt > 0) {
-      Serial.printf("[EPUB] Retrying stream (attempt %d)...\n", attempt + 1);
+      LOG_ERR(TAG, "Retrying stream (attempt %d)...", attempt + 1);
       delay(50);
     }
 
@@ -121,7 +124,7 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
   }
 
   if (!success) {
-    Serial.printf("[EPUB] Failed to stream HTML to temp file\n");
+    LOG_ERR(TAG, "Failed to stream HTML to temp file");
     return false;
   }
 

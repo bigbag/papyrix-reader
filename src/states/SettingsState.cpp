@@ -3,11 +3,14 @@
 #include <Arduino.h>
 #include <GfxRenderer.h>
 #include <LittleFS.h>  // Must be before SdFat includes to avoid FILE_READ/FILE_WRITE redefinition
+#include <Logging.h>
 #include <SDCardManager.h>
 
 #include <algorithm>
 
 #include "../Battery.h"
+
+#define TAG "SETTINGS_UI"
 #include "../config.h"
 #include "../core/Core.h"
 #include "../ui/Elements.h"
@@ -36,7 +39,7 @@ SettingsState::SettingsState(GfxRenderer& renderer)
 SettingsState::~SettingsState() = default;
 
 void SettingsState::enter(Core& core) {
-  Serial.println("[SETTINGS] Entering");
+  LOG_INF(TAG, "Entering");
   core_ = &core;  // Store for helper methods
   currentScreen_ = returnScreen_;
   returnScreen_ = SettingsScreen::Menu;  // Reset for next normal entry
@@ -62,7 +65,7 @@ void SettingsState::enter(Core& core) {
 }
 
 void SettingsState::exit(Core& core) {
-  Serial.println("[SETTINGS] Exiting");
+  LOG_INF(TAG, "Exiting");
   // Save settings on exit
   core.settings.save(core.storage);
 }

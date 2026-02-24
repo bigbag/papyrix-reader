@@ -1,8 +1,11 @@
 #include "StateMachine.h"
 
 #include <Arduino.h>
+#include <Logging.h>
 
 #include "Core.h"
+
+#define TAG "STATE"
 
 namespace papyrix {
 
@@ -16,10 +19,10 @@ void StateMachine::init(Core& core, StateId initialState) {
   current_ = getState(initialState);
 
   if (current_) {
-    Serial.printf("[SM] Initial state: %d\n", static_cast<int>(initialState));
+    LOG_INF(TAG, "Initial state: %d", static_cast<int>(initialState));
     current_->enter(core);
   } else {
-    Serial.printf("[SM] ERROR: No state registered for id %d\n", static_cast<int>(initialState));
+    LOG_ERR(TAG, "No state registered for id %d", static_cast<int>(initialState));
   }
 }
 
@@ -41,12 +44,12 @@ void StateMachine::registerState(State* state) {
   if (!state) return;
 
   if (stateCount_ >= MAX_STATES) {
-    Serial.println("[SM] ERROR: Too many states registered");
+    LOG_ERR(TAG, "Too many states registered");
     return;
   }
 
   states_[stateCount_++] = state;
-  Serial.printf("[SM] Registered state: %d\n", static_cast<int>(state->id()));
+  LOG_DBG(TAG, "Registered state: %d", static_cast<int>(state->id()));
 }
 
 State* StateMachine::getState(StateId id) {
@@ -62,12 +65,12 @@ void StateMachine::transition(StateId next, Core& core, bool immediate) {
   State* nextState = getState(next);
 
   if (!nextState) {
-    Serial.printf("[SM] ERROR: No state for id %d\n", static_cast<int>(next));
+    LOG_ERR(TAG, "No state for id %d", static_cast<int>(next));
     return;
   }
 
-  Serial.printf("[SM] Transition: %d -> %d%s\n", static_cast<int>(currentId_), static_cast<int>(next),
-                immediate ? " (immediate)" : "");
+  LOG_INF(TAG, "Transition: %d -> %d%s", static_cast<int>(currentId_), static_cast<int>(next),
+          immediate ? " (immediate)" : "");
 
   if (current_) {
     current_->exit(core);

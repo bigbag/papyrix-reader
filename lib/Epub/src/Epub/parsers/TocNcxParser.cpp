@@ -1,15 +1,17 @@
 #include "TocNcxParser.h"
 
 #include <FsHelpers.h>
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <Utf8.h>
 
 #include "../BookMetadataCache.h"
 
+#define TAG "TOC_NCX"
+
 bool TocNcxParser::setup() {
   parser = XML_ParserCreate(nullptr);
   if (!parser) {
-    Serial.printf("[%lu] [TOC] Couldn't allocate memory for parser\n", millis());
+    LOG_ERR(TAG, "Couldn't allocate memory for parser");
     return false;
   }
 
@@ -40,7 +42,7 @@ size_t TocNcxParser::write(const uint8_t* buffer, const size_t size) {
   while (remainingInBuffer > 0) {
     void* const buf = XML_GetBuffer(parser, 1024);
     if (!buf) {
-      Serial.printf("[%lu] [TOC] Couldn't allocate memory for buffer\n", millis());
+      LOG_ERR(TAG, "Couldn't allocate memory for buffer");
       XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
       XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
       XML_SetCharacterDataHandler(parser, nullptr);
@@ -53,8 +55,8 @@ size_t TocNcxParser::write(const uint8_t* buffer, const size_t size) {
     memcpy(buf, currentBufferPos, toRead);
 
     if (XML_ParseBuffer(parser, static_cast<int>(toRead), remainingSize == toRead) == XML_STATUS_ERROR) {
-      Serial.printf("[%lu] [TOC] Parse error at line %lu: %s\n", millis(), XML_GetCurrentLineNumber(parser),
-                    XML_ErrorString(XML_GetErrorCode(parser)));
+      LOG_ERR(TAG, "Parse error at line %lu: %s", XML_GetCurrentLineNumber(parser),
+              XML_ErrorString(XML_GetErrorCode(parser)));
       XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
       XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
       XML_SetCharacterDataHandler(parser, nullptr);
@@ -143,7 +145,7 @@ void XMLCALL TocNcxParser::characterData(void* userData, const XML_Char* s, cons
       // Truncate at limit
       const size_t remaining = MAX_LABEL_LENGTH - self->currentLabel.size();
       self->currentLabel.append(s, remaining);
-      Serial.printf("[TOC] Label truncated at %zu bytes\n", MAX_LABEL_LENGTH);
+      LOG_DBG(TAG, "Label truncated at %zu bytes", MAX_LABEL_LENGTH);
     }
   }
 }

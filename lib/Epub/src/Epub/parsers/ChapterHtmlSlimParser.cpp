@@ -3,8 +3,8 @@
 #include <Bitmap.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
-#include <HardwareSerial.h>
 #include <ImageConverter.h>
+#include <Logging.h>
 #include <Page.h>
 #include <SDCardManager.h>
 #include <Utf8.h>
@@ -12,6 +12,8 @@
 #include <expat.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+
+#define TAG "HTML_PARSER"
 
 #include "../htmlEntities.h"
 
@@ -127,11 +129,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       }
     }
 
-    Serial.printf("[%lu] [EHP] Found image: src=%s\n", millis(), srcAttr.empty() ? "(empty)" : srcAttr.c_str());
+    LOG_DBG(TAG, "Found image: src=%s", srcAttr.empty() ? "(empty)" : srcAttr.c_str());
 
     // Silently skip unsupported image formats (GIF, SVG, WebP, etc.)
     if (!srcAttr.empty() && !ImageConverterFactory::isSupported(srcAttr)) {
-      Serial.printf("[%lu] [EHP] Skipping unsupported format: %s\n", millis(), srcAttr.c_str());
+      LOG_DBG(TAG, "Skipping unsupported format: %s", srcAttr.c_str());
       self->depth += 1;
       return;
     }
@@ -160,7 +162,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
               self->depth += 1;
               return;
             }
-            Serial.printf("[%lu] [EHP] Image loaded: %dx%d\n", millis(), bitmap.getWidth(), bitmap.getHeight());
+            LOG_DBG(TAG, "Image loaded: %dx%d", bitmap.getWidth(), bitmap.getHeight());
             auto imageBlock = std::make_shared<ImageBlock>(cachedPath, bitmap.getWidth(), bitmap.getHeight());
             bmpFile.close();
 
@@ -173,16 +175,16 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
             self->depth += 1;
             return;
           } else {
-            Serial.printf("[%lu] [EHP] BMP parse failed for cached image\n", millis());
+            LOG_ERR(TAG, "BMP parse failed for cached image");
           }
           bmpFile.close();
         } else {
-          Serial.printf("[%lu] [EHP] Failed to open cached BMP: %s\n", millis(), cachedPath.c_str());
+          LOG_ERR(TAG, "Failed to open cached BMP: %s", cachedPath.c_str());
         }
       }
     } else {
-      Serial.printf("[%lu] [EHP] Image skipped: src=%d, readItemFn=%d, imageCachePath=%d\n", millis(), !srcAttr.empty(),
-                    self->readItemFn != nullptr, !self->imageCachePath.empty());
+      LOG_DBG(TAG, "Image skipped: src=%d, readItemFn=%d, imageCachePath=%d", !srcAttr.empty(),
+              self->readItemFn != nullptr, !self->imageCachePath.empty());
     }
 
     // Fallback: show placeholder with alt text if image processing failed
@@ -272,7 +274,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     if (++self->elementCounter_ % CSS_HEAP_CHECK_INTERVAL == 0) {
       self->cssHeapOk_ = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) >= MIN_FREE_HEAP;
       if (!self->cssHeapOk_) {
-        Serial.printf("[%lu] [EHP] Low memory, skipping CSS lookups\n", millis());
+        LOG_ERR(TAG, "Low memory, skipping CSS lookups");
       }
     }
     if (self->cssHeapOk_) {
@@ -475,20 +477,20 @@ void XMLCALL ChapterHtmlSlimParser::defaultHandler(void* userData, const XML_Cha
 bool ChapterHtmlSlimParser::shouldAbort() const {
   // Check external abort callback first (cooperative cancellation)
   if (externalAbortCallback_ && externalAbortCallback_()) {
-    Serial.printf("[%lu] [EHP] External abort requested\n", millis());
+    LOG_DBG(TAG, "External abort requested");
     return true;
   }
 
   // Check timeout
   if (millis() - parseStartTime_ > MAX_PARSE_TIME_MS) {
-    Serial.printf("[%lu] [EHP] Parse timeout exceeded (%u ms)\n", millis(), MAX_PARSE_TIME_MS);
+    LOG_ERR(TAG, "Parse timeout exceeded (%u ms)", MAX_PARSE_TIME_MS);
     return true;
   }
 
   // Check memory pressure
   const size_t freeHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
   if (freeHeap < MIN_FREE_HEAP) {
-    Serial.printf("[%lu] [EHP] Low memory (%zu bytes free)\n", millis(), freeHeap);
+    LOG_ERR(TAG, "Low memory (%zu bytes free)", freeHeap);
     return true;
   }
 
@@ -529,7 +531,7 @@ bool ChapterHtmlSlimParser::initParser() {
 
   xmlParser_ = XML_ParserCreate(nullptr);
   if (!xmlParser_) {
-    Serial.printf("[%lu] [EHP] Couldn't allocate memory for parser\n", millis());
+    LOG_ERR(TAG, "Couldn't allocate memory for parser");
     return false;
   }
 
@@ -566,7 +568,7 @@ bool ChapterHtmlSlimParser::parseLoop() {
     // Periodic safety check and yield
     if (++loopCounter_ % YIELD_CHECK_INTERVAL == 0) {
       if (shouldAbort()) {
-        Serial.printf("[%lu] [EHP] Aborting parse, pages created: %u\n", millis(), pagesCreated_);
+        LOG_DBG(TAG, "Aborting parse, pages created: %u", pagesCreated_);
         aborted_ = true;
         break;
       }
@@ -577,7 +579,7 @@ bool ChapterHtmlSlimParser::parseLoop() {
     constexpr size_t kDataUriPrefixSize = 10;  // max partial saved by DataUriStripper: "src=\"data:"
     void* const buf = XML_GetBuffer(xmlParser_, kReadChunkSize + kDataUriPrefixSize);
     if (!buf) {
-      Serial.printf("[%lu] [EHP] Couldn't allocate memory for buffer\n", millis());
+      LOG_ERR(TAG, "Couldn't allocate memory for buffer");
       cleanupParser();
       return false;
     }
@@ -585,7 +587,7 @@ bool ChapterHtmlSlimParser::parseLoop() {
     size_t len = file_.read(static_cast<uint8_t*>(buf), kReadChunkSize);
 
     if (len == 0) {
-      Serial.printf("[%lu] [EHP] File read error\n", millis());
+      LOG_ERR(TAG, "File read error");
       cleanupParser();
       return false;
     }
@@ -610,8 +612,8 @@ bool ChapterHtmlSlimParser::parseLoop() {
 
     const auto status = XML_ParseBuffer(xmlParser_, static_cast<int>(len), done);
     if (status == XML_STATUS_ERROR) {
-      Serial.printf("[%lu] [EHP] Parse error at line %lu:\n%s\n", millis(), XML_GetCurrentLineNumber(xmlParser_),
-                    XML_ErrorString(XML_GetErrorCode(xmlParser_)));
+      LOG_ERR(TAG, "Parse error at line %lu: %s", XML_GetCurrentLineNumber(xmlParser_),
+              XML_ErrorString(XML_GetErrorCode(xmlParser_)));
       cleanupParser();
       return false;
     }
@@ -632,11 +634,11 @@ bool ChapterHtmlSlimParser::parseLoop() {
       pendingEmergencySplit_ = false;
       const size_t freeHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
       if (freeHeap < MIN_FREE_HEAP * 2) {
-        Serial.printf("[%lu] [EHP] Low memory (%zu), aborting parse\n", millis(), freeHeap);
+        LOG_ERR(TAG, "Low memory (%zu), aborting parse", freeHeap);
         aborted_ = true;
         break;
       }
-      Serial.printf("[%lu] [EHP] Text block too long (%zu words), splitting\n", millis(), currentTextBlock->size());
+      LOG_DBG(TAG, "Text block too long (%zu words), splitting", currentTextBlock->size());
       currentTextBlock->setUseGreedyBreaking(true);
       currentTextBlock->layoutAndExtractLines(
           renderer, config.fontId, config.viewportWidth,
@@ -674,7 +676,7 @@ bool ChapterHtmlSlimParser::resumeParsing() {
 
   // Reopen file at saved position (closed on suspend to free file handle)
   if (!SdMan.openFileForRead("EHP", filepath, file_)) {
-    Serial.printf("[%lu] [EHP] Failed to reopen file for resume\n", millis());
+    LOG_ERR(TAG, "Failed to reopen file for resume");
     cleanupParser();
     return false;
   }
@@ -712,7 +714,7 @@ bool ChapterHtmlSlimParser::resumeParsing() {
 
   const auto status = XML_ResumeParser(xmlParser_);
   if (status == XML_STATUS_ERROR) {
-    Serial.printf("[%lu] [EHP] Resume error: %s\n", millis(), XML_ErrorString(XML_GetErrorCode(xmlParser_)));
+    LOG_ERR(TAG, "Resume error: %s", XML_ErrorString(XML_GetErrorCode(xmlParser_)));
     cleanupParser();
     return false;
   }
@@ -760,7 +762,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
 
 void ChapterHtmlSlimParser::makePages() {
   if (!currentTextBlock) {
-    Serial.printf("[%lu] [EHP] !! No text block to make pages for !!\n", millis());
+    LOG_ERR(TAG, "No text block to make pages for");
     return;
   }
 
@@ -769,7 +771,7 @@ void ChapterHtmlSlimParser::makePages() {
   // Check memory before expensive layout operation
   const size_t freeHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
   if (freeHeap < MIN_FREE_HEAP * 2) {
-    Serial.printf("[%lu] [EHP] Insufficient memory for layout (%zu bytes)\n", millis(), freeHeap);
+    LOG_ERR(TAG, "Insufficient memory for layout (%zu bytes)", freeHeap);
     currentTextBlock.reset();
     aborted_ = true;
     return;
@@ -802,19 +804,19 @@ void ChapterHtmlSlimParser::makePages() {
 std::string ChapterHtmlSlimParser::cacheImage(const std::string& src) {
   // Check abort before starting image processing
   if (externalAbortCallback_ && externalAbortCallback_()) {
-    Serial.printf("[%lu] [EHP] Abort requested, skipping image\n", millis());
+    LOG_DBG(TAG, "Abort requested, skipping image");
     return "";
   }
 
   // Skip data URIs - embedded base64 images can't be extracted and waste memory
   if (src.length() >= 5 && strncasecmp(src.c_str(), "data:", 5) == 0) {
-    Serial.printf("[%lu] [EHP] Skipping embedded data URI image\n", millis());
+    LOG_DBG(TAG, "Skipping embedded data URI image");
     return "";
   }
 
   // Skip remaining images after too many consecutive failures
   if (consecutiveImageFailures_ >= MAX_CONSECUTIVE_IMAGE_FAILURES) {
-    Serial.printf("[%lu] [EHP] Skipping image - too many failures\n", millis());
+    LOG_DBG(TAG, "Skipping image - too many failures");
     return "";
   }
 
@@ -840,7 +842,7 @@ std::string ChapterHtmlSlimParser::cacheImage(const std::string& src) {
 
   // Check if format is supported
   if (!ImageConverterFactory::isSupported(src)) {
-    Serial.printf("[%lu] [EHP] Unsupported image format: %s\n", millis(), src.c_str());
+    LOG_DBG(TAG, "Unsupported image format: %s", src.c_str());
     FsFile marker;
     if (SdMan.openFileForWrite("EHP", failedMarker, marker)) {
       marker.close();
@@ -854,12 +856,12 @@ std::string ChapterHtmlSlimParser::cacheImage(const std::string& src) {
   std::string tempPath = imageCachePath + "/.tmp_" + std::to_string(srcHash) + tempExt;
   FsFile tempFile;
   if (!SdMan.openFileForWrite("EHP", tempPath, tempFile)) {
-    Serial.printf("[%lu] [EHP] Failed to create temp file for image\n", millis());
+    LOG_ERR(TAG, "Failed to create temp file for image");
     return "";
   }
 
   if (!readItemFn(resolvedPath, tempFile, 1024)) {
-    Serial.printf("[%lu] [EHP] Failed to extract image: %s\n", millis(), resolvedPath.c_str());
+    LOG_ERR(TAG, "Failed to extract image: %s", resolvedPath.c_str());
     tempFile.close();
     SdMan.remove(tempPath.c_str());
     FsFile marker;
@@ -882,7 +884,7 @@ std::string ChapterHtmlSlimParser::cacheImage(const std::string& src) {
   SdMan.remove(tempPath.c_str());
 
   if (!success) {
-    Serial.printf("[%lu] [EHP] Failed to convert image to BMP: %s\n", millis(), resolvedPath.c_str());
+    LOG_ERR(TAG, "Failed to convert image to BMP: %s", resolvedPath.c_str());
     SdMan.remove(cachedBmpPath.c_str());
     FsFile marker;
     if (SdMan.openFileForWrite("EHP", failedMarker, marker)) {
@@ -893,7 +895,7 @@ std::string ChapterHtmlSlimParser::cacheImage(const std::string& src) {
   }
 
   consecutiveImageFailures_ = 0;  // Reset on success
-  Serial.printf("[%lu] [EHP] Cached image: %s\n", millis(), cachedBmpPath.c_str());
+  LOG_DBG(TAG, "Cached image: %s", cachedBmpPath.c_str());
   return cachedBmpPath;
 }
 

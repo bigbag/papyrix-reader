@@ -4,6 +4,7 @@
 #include <EInkDisplay.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <Logging.h>
 #include <SDCardManager.h>
 #include <Utf8.h>
 #include <esp_system.h>
@@ -17,6 +18,8 @@
 #include "../ui/Elements.h"
 #include "MappedInputManager.h"
 #include "ThemeManager.h"
+
+#define TAG "FILELIST"
 
 namespace papyrix {
 
@@ -45,7 +48,7 @@ void FileListState::setDirectory(const char* dir) {
 }
 
 void FileListState::enter(Core& core) {
-  Serial.printf("[FILES] Entering, dir: %s\n", currentDir_);
+  LOG_INF(TAG, "Entering, dir: %s", currentDir_);
 
   // Preserve position when returning from Reader via boot transition
   const auto& transition = getTransition();
@@ -88,7 +91,7 @@ void FileListState::enter(Core& core) {
   }
 }
 
-void FileListState::exit(Core& core) { Serial.println("[FILES] Exiting"); }
+void FileListState::exit(Core& core) { LOG_INF(TAG, "Exiting"); }
 
 void FileListState::loadFiles(Core& core) {
   files_.clear();
@@ -97,7 +100,7 @@ void FileListState::loadFiles(Core& core) {
   FsFile dir;
   auto result = core.storage.openDir(currentDir_, dir);
   if (!result.ok()) {
-    Serial.printf("[FILES] Failed to open dir: %s\n", currentDir_);
+    LOG_ERR(TAG, "Failed to open dir: %s", currentDir_);
     return;
   }
 
@@ -125,7 +128,7 @@ void FileListState::loadFiles(Core& core) {
   // Safety check - prevent OOM on extreme cases
   constexpr size_t MAX_ENTRIES = 1000;
   if (files_.size() > MAX_ENTRIES) {
-    Serial.printf("[FILES] Warning: truncated to %zu entries\n", MAX_ENTRIES);
+    LOG_INF(TAG, "Warning: truncated to %zu entries", MAX_ENTRIES);
     files_.resize(MAX_ENTRIES);
     files_.shrink_to_fit();
   }
@@ -168,7 +171,7 @@ void FileListState::loadFiles(Core& core) {
     return *s1 == '\0' && *s2 != '\0';
   });
 
-  Serial.printf("[FILES] Loaded %zu entries\n", files_.size());
+  LOG_INF(TAG, "Loaded %zu entries", files_.size());
 }
 
 bool FileListState::isHidden(const char* name) const {
@@ -430,7 +433,7 @@ void FileListState::openSelected(Core& core) {
     core.settings.fileListSelectedIndex = selectedIndex_;
 
     // Select file - transition to Reader mode via restart
-    Serial.printf("[FILES] Selected: %s\n", selectedPath_);
+    LOG_INF(TAG, "Selected: %s", selectedPath_);
     showTransitionNotification("Opening book...");
     saveTransition(BootMode::READER, selectedPath_, ReturnTo::FILE_MANAGER);
     vTaskDelay(50 / portTICK_PERIOD_MS);

@@ -2,7 +2,10 @@
 
 #include <GfxRenderer.h>
 #include <Hyphenation.h>
+#include <Logging.h>
 #include <Utf8.h>
+
+#define TAG "TEXT"
 
 #include <algorithm>
 #include <cmath>
@@ -597,7 +600,7 @@ bool ParsedText::preSplitOversizedWords(const GfxRenderer& renderer, const int f
 
         while (splitIterations++ < MAX_SPLIT_ITERATIONS) {
           if (splitIterations == MAX_SPLIT_ITERATIONS) {
-            Serial.printf("[PT] Warning: hit max split iterations for oversized word\n");
+            LOG_ERR(TAG, "Warning: hit max split iterations for oversized word");
           }
           const std::string strippedRemaining = stripSoftHyphens(remaining);
           const int remainingWidth = renderer.getTextWidth(fontId, strippedRemaining.c_str(), wordStyle);

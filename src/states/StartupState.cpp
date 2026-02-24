@@ -1,17 +1,20 @@
 #include "StartupState.h"
 
 #include <Arduino.h>
+#include <Logging.h>
 
 #include "../core/Core.h"
+
+#define TAG "STARTUP"
 
 namespace papyrix {
 
 void StartupState::enter(Core& core) {
-  Serial.println("[STATE] StartupState::enter");
+  LOG_INF(TAG, "Entering");
   initialized_ = false;
 }
 
-void StartupState::exit(Core& core) { Serial.println("[STATE] StartupState::exit"); }
+void StartupState::exit(Core& core) { LOG_INF(TAG, "Exiting"); }
 
 StateTransition StartupState::update(Core& core) {
   if (!initialized_) {

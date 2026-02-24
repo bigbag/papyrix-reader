@@ -2,11 +2,14 @@
 
 #include <Arduino.h>
 #include <GfxRenderer.h>
+#include <Logging.h>
 
 #include <cstring>
 
 #include "../core/Core.h"
 #include "ThemeManager.h"
+
+#define TAG "ERROR"
 
 namespace papyrix {
 
@@ -31,11 +34,11 @@ void ErrorState::enter(Core& core) {
     message_[sizeof(message_) - 1] = '\0';
     core.buf.text[0] = '\0';  // Clear after reading
   }
-  Serial.printf("[STATE] ErrorState::enter - %s\n", message_);
+  LOG_INF(TAG, "Entering - %s", message_);
   needsRender_ = true;
 }
 
-void ErrorState::exit(Core& core) { Serial.println("[STATE] ErrorState::exit"); }
+void ErrorState::exit(Core& core) { LOG_INF(TAG, "Exiting"); }
 
 StateTransition ErrorState::update(Core& core) {
   // Process events

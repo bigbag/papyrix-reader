@@ -1,10 +1,13 @@
 #include "PlainTextParser.h"
 
 #include <GfxRenderer.h>
+#include <Logging.h>
 #include <Page.h>
 #include <ParsedText.h>
 #include <SDCardManager.h>
 #include <Utf8.h>
+
+#define TAG "TXT_PARSE"
 
 #include <utility>
 
@@ -27,7 +30,7 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
                                  const AbortCallback& shouldAbort) {
   FsFile file;
   if (!SdMan.openFileForRead("TXT", filepath_, file)) {
-    Serial.printf("[TXT] Failed to open file: %s\n", filepath_.c_str());
+    LOG_ERR(TAG, "Failed to open file: %s", filepath_.c_str());
     return false;
   }
 
@@ -104,7 +107,7 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
   while (file.available() > 0) {
     // Check for abort every few iterations
     if (shouldAbort && (++abortCheckCounter % 10 == 0) && shouldAbort()) {
-      Serial.printf("[TXT] Aborted by external request\n");
+      LOG_INF(TAG, "Aborted by external request");
       currentOffset_ = file.position();
       hasMore_ = true;
       file.close();
@@ -202,6 +205,6 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
   currentOffset_ = fileSize_;
   hasMore_ = false;
 
-  Serial.printf("[TXT] Parsed %d pages from %s\n", pagesCreated, filepath_.c_str());
+  LOG_INF(TAG, "Parsed %d pages from %s", pagesCreated, filepath_.c_str());
   return true;
 }

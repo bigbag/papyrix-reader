@@ -1,6 +1,8 @@
 #include "ExternalFont.h"
 
-#include <HardwareSerial.h>
+#include <Logging.h>
+
+#define TAG "EXT_FONT"
 
 #include <algorithm>
 #include <cstring>
@@ -49,7 +51,7 @@ bool ExternalFont::parseFilename(const char* filepath) {
   // Remove .bin extension
   char* ext = strstr(nameCopy, ".bin");
   if (!ext) {
-    Serial.printf("[EXT_FONT] Invalid filename: no .bin extension\n");
+    LOG_ERR(TAG, "Invalid filename: no .bin extension");
     return false;
   }
   *ext = '\0';
@@ -57,14 +59,14 @@ bool ExternalFont::parseFilename(const char* filepath) {
   // Find _WxH part from the end
   char* lastUnderscore = strrchr(nameCopy, '_');
   if (!lastUnderscore) {
-    Serial.printf("[EXT_FONT] Invalid filename format\n");
+    LOG_ERR(TAG, "Invalid filename format");
     return false;
   }
 
   // Parse WxH
   int w, h;
   if (sscanf(lastUnderscore + 1, "%dx%d", &w, &h) != 2) {
-    Serial.printf("[EXT_FONT] Failed to parse dimensions\n");
+    LOG_ERR(TAG, "Failed to parse dimensions");
     return false;
   }
   _charWidth = (uint8_t)w;
@@ -73,8 +75,7 @@ bool ExternalFont::parseFilename(const char* filepath) {
   // Validate dimensions
   static constexpr uint8_t MAX_CHAR_DIM = 64;
   if (_charWidth > MAX_CHAR_DIM || _charHeight > MAX_CHAR_DIM) {
-    Serial.printf("[EXT_FONT] Dimensions too large: %dx%d (max %d). Using default font.\n", _charWidth, _charHeight,
-                  MAX_CHAR_DIM);
+    LOG_ERR(TAG, "Dimensions too large: %dx%d (max %d). Using default font.", _charWidth, _charHeight, MAX_CHAR_DIM);
     return false;
   }
 
@@ -83,13 +84,13 @@ bool ExternalFont::parseFilename(const char* filepath) {
   // Find size
   lastUnderscore = strrchr(nameCopy, '_');
   if (!lastUnderscore) {
-    Serial.printf("[EXT_FONT] Invalid filename format: no size\n");
+    LOG_ERR(TAG, "Invalid filename format: no size");
     return false;
   }
 
   int size;
   if (sscanf(lastUnderscore + 1, "%d", &size) != 1) {
-    Serial.printf("[EXT_FONT] Failed to parse size\n");
+    LOG_ERR(TAG, "Failed to parse size");
     return false;
   }
   _fontSize = (uint8_t)size;
@@ -104,12 +105,12 @@ bool ExternalFont::parseFilename(const char* filepath) {
   _bytesPerChar = _bytesPerRow * _charHeight;
 
   if (_bytesPerChar > MAX_GLYPH_BYTES) {
-    Serial.printf("[EXT_FONT] Glyph too large: %d bytes (max %d)\n", _bytesPerChar, MAX_GLYPH_BYTES);
+    LOG_ERR(TAG, "Glyph too large: %d bytes (max %d)", _bytesPerChar, MAX_GLYPH_BYTES);
     return false;
   }
 
-  Serial.printf("[EXT_FONT] Parsed: name=%s, size=%d, %dx%d, %d bytes/char\n", _fontName, _fontSize, _charWidth,
-                _charHeight, _bytesPerChar);
+  LOG_INF(TAG, "Parsed: name=%s, size=%d, %dx%d, %d bytes/char", _fontName, _fontSize, _charWidth, _charHeight,
+          _bytesPerChar);
 
   return true;
 }
@@ -122,7 +123,7 @@ bool ExternalFont::load(const char* filepath) {
   }
 
   if (!SdMan.openFileForRead("EXT_FONT", filepath, _fontFile)) {
-    Serial.printf("[EXT_FONT] Failed to open: %s\n", filepath);
+    LOG_ERR(TAG, "Failed to open: %s", filepath);
     return false;
   }
 
@@ -130,13 +131,13 @@ bool ExternalFont::load(const char* filepath) {
   static constexpr uint32_t MAX_FONT_FILE_SIZE = 32 * 1024 * 1024;  // 32MB max
   uint32_t fileSize = _fontFile.size();
   if (fileSize == 0 || fileSize > MAX_FONT_FILE_SIZE) {
-    Serial.printf("[EXT_FONT] Invalid file size: %u bytes (max 32MB). Using default font.\n", fileSize);
+    LOG_ERR(TAG, "Invalid file size: %u bytes (max 32MB). Using default font.", fileSize);
     _fontFile.close();
     return false;
   }
 
   _isLoaded = true;
-  Serial.printf("[EXT_FONT] Loaded: %s\n", filepath);
+  LOG_INF(TAG, "Loaded: %s", filepath);
   return true;
 }
 
@@ -338,7 +339,7 @@ void ExternalFont::preloadGlyphs(const uint32_t* codepoints, size_t count) {
   // Remove duplicates
   sorted.erase(std::unique(sorted.begin(), sorted.end()), sorted.end());
 
-  Serial.printf("[EXT_FONT] Preloading %zu unique glyphs\n", sorted.size());
+  LOG_INF(TAG, "Preloading %zu unique glyphs", sorted.size());
   const unsigned long startTime = millis();
 
   size_t loaded = 0;
@@ -356,8 +357,7 @@ void ExternalFont::preloadGlyphs(const uint32_t* codepoints, size_t count) {
     loaded++;
   }
 
-  Serial.printf("[EXT_FONT] Preload done: %zu loaded, %zu already cached, took %lums\n", loaded, skipped,
-                millis() - startTime);
+  LOG_INF(TAG, "Preload done: %zu loaded, %zu already cached, took %lums", loaded, skipped, millis() - startTime);
 }
 
 void ExternalFont::logCacheStats() const {
@@ -365,5 +365,5 @@ void ExternalFont::logCacheStats() const {
   for (int i = 0; i < CACHE_SIZE; i++) {
     if (_cache[i].codepoint != 0xFFFFFFFF) used++;
   }
-  Serial.printf("[EXT_FONT] Cache: %d/%d slots used (~%dKB)\n", used, CACHE_SIZE, (used * sizeof(CacheEntry)) / 1024);
+  LOG_DBG(TAG, "Cache: %d/%d slots used (~%dKB)", used, CACHE_SIZE, (used * sizeof(CacheEntry)) / 1024);
 }

@@ -1,6 +1,7 @@
 #include "FontManager.h"
 
 #include <EpdFontLoader.h>
+#include <Logging.h>
 #include <SDCardManager.h>
 #include <StreamingEpdFont.h>
 #include <esp_heap_caps.h>
@@ -8,6 +9,8 @@
 #include <cstring>
 
 #include "config.h"
+
+#define TAG "FONT"
 
 FontManager& FontManager::instance() {
   static FontManager instance;
@@ -317,8 +320,9 @@ int FontManager::getReaderFontId(const char* familyName, int builtinFontId) {
       _activeReaderFontId = 0;
     }
 
-    // Load as external font - provides fallback for CJK characters
-    loadExternalFont(familyName);
+    // Defer external font loading until a CJK character is actually encountered.
+    // Saves ~13KB for non-CJK books.
+    deferExternalFont(familyName);
     // Return builtin font ID - ASCII uses built-in, CJK falls back to external
     return builtinFontId;
   }
@@ -365,7 +369,30 @@ bool FontManager::loadExternalFont(const char* filename) {
   return true;
 }
 
+void FontManager::deferExternalFont(const char* filename) {
+  if (!renderer || !filename || !*filename) return;
+
+  strncpy(_deferredExternalFontName, filename, sizeof(_deferredExternalFontName) - 1);
+  _deferredExternalFontName[sizeof(_deferredExternalFontName) - 1] = '\0';
+
+  renderer->setExternalFontResolver(externalFontResolverCallback, this);
+  LOG_DBG(TAG, "Deferred external font: %s", filename);
+}
+
+void FontManager::externalFontResolverCallback(void* ctx) {
+  auto* self = static_cast<FontManager*>(ctx);
+  if (self->_deferredExternalFontName[0] != '\0') {
+    LOG_INF(TAG, "Lazy-loading external font: %s", self->_deferredExternalFontName);
+    self->loadExternalFont(self->_deferredExternalFontName);
+    self->_deferredExternalFontName[0] = '\0';
+  }
+}
+
 void FontManager::unloadExternalFont() {
+  _deferredExternalFontName[0] = '\0';
+  if (renderer) {
+    renderer->setExternalFontResolver(nullptr, nullptr);
+  }
   if (_externalFont) {
     if (renderer) {
       renderer->setExternalFont(nullptr);

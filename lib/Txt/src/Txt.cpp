@@ -8,8 +8,10 @@
 
 #include <CoverHelpers.h>
 #include <FsHelpers.h>
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <SDCardManager.h>
+
+#define TAG "TXT"
 
 Txt::Txt(std::string filepath, const std::string& cacheDir)
     : filepath(std::move(filepath)), fileSize(0), loaded(false) {
@@ -34,16 +36,16 @@ Txt::Txt(std::string filepath, const std::string& cacheDir)
 }
 
 bool Txt::load() {
-  Serial.printf("[%lu] [TXT] Loading TXT: %s\n", millis(), filepath.c_str());
+  LOG_INF(TAG, "Loading TXT: %s", filepath.c_str());
 
   if (!SdMan.exists(filepath.c_str())) {
-    Serial.printf("[%lu] [TXT] File does not exist\n", millis());
+    LOG_ERR(TAG, "File does not exist");
     return false;
   }
 
   FsFile file;
   if (!SdMan.openFileForRead("TXT", filepath, file)) {
-    Serial.printf("[%lu] [TXT] Failed to open file\n", millis());
+    LOG_ERR(TAG, "Failed to open file");
     return false;
   }
 
@@ -51,22 +53,22 @@ bool Txt::load() {
   file.close();
 
   loaded = true;
-  Serial.printf("[%lu] [TXT] Loaded TXT: %s (%zu bytes)\n", millis(), filepath.c_str(), fileSize);
+  LOG_INF(TAG, "Loaded TXT: %s (%zu bytes)", filepath.c_str(), fileSize);
   return true;
 }
 
 bool Txt::clearCache() const {
   if (!SdMan.exists(cachePath.c_str())) {
-    Serial.printf("[%lu] [TXT] Cache does not exist, no action needed\n", millis());
+    LOG_DBG(TAG, "Cache does not exist, no action needed");
     return true;
   }
 
   if (!SdMan.removeDir(cachePath.c_str())) {
-    Serial.printf("[%lu] [TXT] Failed to clear cache\n", millis());
+    LOG_ERR(TAG, "Failed to clear cache");
     return false;
   }
 
-  Serial.printf("[%lu] [TXT] Cache cleared successfully\n", millis());
+  LOG_INF(TAG, "Cache cleared successfully");
   return true;
 }
 
@@ -112,7 +114,7 @@ bool Txt::generateCoverBmp(bool use1BitDithering) const {
   // Find a cover image
   std::string coverImagePath = findCoverImage();
   if (coverImagePath.empty()) {
-    Serial.printf("[%lu] [TXT] No cover image found\n", millis());
+    LOG_DBG(TAG, "No cover image found");
     // Create failure marker
     FsFile marker;
     if (SdMan.openFileForWrite("TXT", failedMarkerPath, marker)) {

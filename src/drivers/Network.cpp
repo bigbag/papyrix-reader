@@ -1,10 +1,13 @@
 #include "Network.h"
 
 #include <Arduino.h>
+#include <Logging.h>
 #include <WiFi.h>
 
 #include <algorithm>
 #include <cstring>
+
+#define TAG "NETWORK"
 
 namespace papyrix {
 namespace drivers {
@@ -22,7 +25,7 @@ Result<void> Network::init() {
   connected_ = false;
   apMode_ = false;
 
-  Serial.println("[NET] WiFi initialized (STA mode)");
+  LOG_INF(TAG, "WiFi initialized (STA mode)");
   return Ok();
 }
 
@@ -39,7 +42,7 @@ void Network::shutdown() {
     WiFi.mode(WIFI_OFF);
     initialized_ = false;
     scanInProgress_ = false;
-    Serial.println("[NET] WiFi shut down");
+    LOG_INF(TAG, "WiFi shut down");
   }
 }
 
@@ -52,7 +55,7 @@ Result<void> Network::connect(const char* ssid, const char* password) {
     TRY(init());
   }
 
-  Serial.printf("[NET] Connecting to %s...\n", ssid);
+  LOG_INF(TAG, "Connecting to %s...", ssid);
 
   WiFi.begin(ssid, password);
 
@@ -62,14 +65,14 @@ Result<void> Network::connect(const char* ssid, const char* password) {
 
   while (WiFi.status() != WL_CONNECTED) {
     if (millis() - startMs > TIMEOUT_MS) {
-      Serial.println("[NET] Connection timeout");
+      LOG_ERR(TAG, "Connection timeout");
       return ErrVoid(Error::Timeout);
     }
     delay(100);
   }
 
   connected_ = true;
-  Serial.printf("[NET] Connected, IP: %s\n", WiFi.localIP().toString().c_str());
+  LOG_INF(TAG, "Connected, IP: %s", WiFi.localIP().toString().c_str());
   return Ok();
 }
 
@@ -81,7 +84,7 @@ void Network::disconnect() {
       delay(10);
     }
     connected_ = false;
-    Serial.println("[NET] Disconnected");
+    LOG_INF(TAG, "Disconnected");
   }
 }
 
@@ -112,11 +115,11 @@ Result<void> Network::startScan() {
     return ErrVoid(Error::InvalidOperation);
   }
 
-  Serial.println("[NET] Starting WiFi scan...");
+  LOG_INF(TAG, "Starting WiFi scan...");
   WiFi.scanDelete();
   int16_t result = WiFi.scanNetworks(true);  // Async scan
   if (result == WIFI_SCAN_FAILED) {
-    Serial.println("[NET] Failed to start scan");
+    LOG_ERR(TAG, "Failed to start scan");
     return ErrVoid(Error::IOError);
   }
   scanInProgress_ = true;
@@ -145,7 +148,7 @@ int Network::getScanResults(WifiNetwork* out, int maxCount) {
   scanInProgress_ = false;
 
   if (result == WIFI_SCAN_FAILED || result < 0) {
-    Serial.println("[NET] Scan failed");
+    LOG_ERR(TAG, "Scan failed");
     return 0;
   }
 
@@ -161,7 +164,7 @@ int Network::getScanResults(WifiNetwork* out, int maxCount) {
   // Sort by signal strength (strongest first)
   std::sort(out, out + count, [](const WifiNetwork& a, const WifiNetwork& b) { return a.rssi > b.rssi; });
 
-  Serial.printf("[NET] Scan found %d networks\n", count);
+  LOG_INF(TAG, "Scan found %d networks", count);
   WiFi.scanDelete();
   return count;
 }
@@ -171,7 +174,7 @@ Result<void> Network::startAP(const char* ssid, const char* password) {
     disconnect();
   }
 
-  Serial.printf("[NET] Starting AP: %s\n", ssid);
+  LOG_INF(TAG, "Starting AP: %s", ssid);
 
   WiFi.mode(WIFI_AP);
 
@@ -183,13 +186,13 @@ Result<void> Network::startAP(const char* ssid, const char* password) {
   }
 
   if (!success) {
-    Serial.println("[NET] Failed to start AP");
+    LOG_ERR(TAG, "Failed to start AP");
     return ErrVoid(Error::IOError);
   }
 
   initialized_ = true;
   apMode_ = true;
-  Serial.printf("[NET] AP started, IP: %s\n", WiFi.softAPIP().toString().c_str());
+  LOG_INF(TAG, "AP started, IP: %s", WiFi.softAPIP().toString().c_str());
   return Ok();
 }
 
@@ -197,7 +200,7 @@ void Network::stopAP() {
   if (apMode_) {
     WiFi.softAPdisconnect(true);
     apMode_ = false;
-    Serial.println("[NET] AP stopped");
+    LOG_INF(TAG, "AP stopped");
   }
 }
 

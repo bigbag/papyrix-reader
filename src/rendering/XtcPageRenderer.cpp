@@ -2,11 +2,14 @@
 
 #include <Arduino.h>
 #include <GfxRenderer.h>
+#include <Logging.h>
 #include <Xtc/XtcParser.h>
 #include <esp_task_wdt.h>
 
 #include <cstdlib>
 #include <cstring>
+
+#define TAG "XTC_RENDER"
 
 namespace papyrix {
 
@@ -27,7 +30,7 @@ XtcPageRenderer::RenderResult XtcPageRenderer::render(xtc::XtcParser& parser, ui
   const uint8_t bitDepth = parser.getBitDepth();
 
   if (pageWidth == 0 || pageHeight == 0 || pageWidth > MAX_PAGE_WIDTH || pageHeight > MAX_PAGE_HEIGHT) {
-    Serial.println("[XTC] Invalid page dimensions");
+    LOG_ERR(TAG, "Invalid page dimensions");
     return RenderResult::InvalidDimensions;
   }
 
@@ -42,15 +45,15 @@ XtcPageRenderer::RenderResult XtcPageRenderer::render(xtc::XtcParser& parser, ui
     // Two 48KB blocks are easier to find than one 96KB contiguous block
     plane1Buffer = static_cast<uint8_t*>(malloc(planeSize));
     if (!plane1Buffer) {
-      Serial.printf("[XTC] Failed to allocate plane1 buffer (%zu bytes, free heap: %lu)\n", planeSize,
-                    static_cast<unsigned long>(ESP.getFreeHeap()));
+      LOG_ERR(TAG, "Failed to allocate plane1 buffer (%zu bytes, free heap: %lu)", planeSize,
+              static_cast<unsigned long>(ESP.getFreeHeap()));
       return RenderResult::AllocationFailed;
     }
 
     plane2Buffer = static_cast<uint8_t*>(malloc(planeSize));
     if (!plane2Buffer) {
-      Serial.printf("[XTC] Failed to allocate plane2 buffer (%zu bytes, free heap: %lu)\n", planeSize,
-                    static_cast<unsigned long>(ESP.getFreeHeap()));
+      LOG_ERR(TAG, "Failed to allocate plane2 buffer (%zu bytes, free heap: %lu)", planeSize,
+              static_cast<unsigned long>(ESP.getFreeHeap()));
       free(plane1Buffer);
       return RenderResult::AllocationFailed;
     }
@@ -60,8 +63,8 @@ XtcPageRenderer::RenderResult XtcPageRenderer::render(xtc::XtcParser& parser, ui
     bufferSize = static_cast<size_t>((pageWidth + 7) / 8) * pageHeight;
     plane1Buffer = static_cast<uint8_t*>(malloc(bufferSize));
     if (!plane1Buffer) {
-      Serial.printf("[XTC] Failed to allocate buffer (%zu bytes, free heap: %lu)\n", bufferSize,
-                    static_cast<unsigned long>(ESP.getFreeHeap()));
+      LOG_ERR(TAG, "Failed to allocate buffer (%zu bytes, free heap: %lu)", bufferSize,
+              static_cast<unsigned long>(ESP.getFreeHeap()));
       return RenderResult::AllocationFailed;
     }
   }
@@ -99,7 +102,7 @@ XtcPageRenderer::RenderResult XtcPageRenderer::render(xtc::XtcParser& parser, ui
         4096);
 
     if (err != xtc::XtcError::OK) {
-      Serial.printf("[XTC] Failed to load page %u (streaming error)\n", pageNum);
+      LOG_ERR(TAG, "Failed to load page %u (streaming error)", pageNum);
       free(plane1Buffer);
       free(plane2Buffer);
       return RenderResult::PageLoadFailed;
@@ -107,7 +110,7 @@ XtcPageRenderer::RenderResult XtcPageRenderer::render(xtc::XtcParser& parser, ui
   } else {
     bytesRead = parser.loadPage(pageNum, plane1Buffer, bufferSize);
     if (bytesRead == 0) {
-      Serial.printf("[XTC] Failed to load page %u\n", pageNum);
+      LOG_ERR(TAG, "Failed to load page %u", pageNum);
       free(plane1Buffer);
       return RenderResult::PageLoadFailed;
     }
@@ -175,12 +178,12 @@ XtcPageRenderer::RenderResult XtcPageRenderer::render(xtc::XtcParser& parser, ui
     }
 
     renderer_.cleanupGrayscaleWithFrameBuffer();
-    Serial.printf("[XTC] Rendered page %u/%u (2-bit grayscale)\n", pageNum + 1, parser.getPageCount());
+    LOG_DBG(TAG, "Rendered page %u/%u (2-bit grayscale)", pageNum + 1, parser.getPageCount());
     free(plane2Buffer);
   } else {
     render1Bit(plane1Buffer, pageWidth, pageHeight);
     refreshCallback();
-    Serial.printf("[XTC] Rendered page %u/%u (%u-bit)\n", pageNum + 1, parser.getPageCount(), bitDepth);
+    LOG_DBG(TAG, "Rendered page %u/%u (%u-bit)", pageNum + 1, parser.getPageCount(), bitDepth);
   }
 
   free(plane1Buffer);

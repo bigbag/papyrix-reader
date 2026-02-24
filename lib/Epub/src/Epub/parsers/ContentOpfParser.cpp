@@ -1,11 +1,13 @@
 #include "ContentOpfParser.h"
 
 #include <FsHelpers.h>
-#include <HardwareSerial.h>
+#include <Logging.h>
 #include <Serialization.h>
 #include <Utf8.h>
 
 #include "../BookMetadataCache.h"
+
+#define TAG "OPF"
 
 namespace {
 constexpr char MEDIA_TYPE_NCX[] = "application/x-dtbncx+xml";
@@ -54,7 +56,7 @@ size_t findUtf8Boundary(const char* s, size_t maxLen) {
 bool ContentOpfParser::setup() {
   parser = XML_ParserCreate(nullptr);
   if (!parser) {
-    Serial.printf("[%lu] [COF] Couldn't allocate memory for parser\n", millis());
+    LOG_ERR(TAG, "Couldn't allocate memory for parser");
     return false;
   }
 
@@ -92,7 +94,7 @@ size_t ContentOpfParser::write(const uint8_t* buffer, const size_t size) {
     void* const buf = XML_GetBuffer(parser, 1024);
 
     if (!buf) {
-      Serial.printf("[%lu] [COF] Couldn't allocate memory for buffer\n", millis());
+      LOG_ERR(TAG, "Couldn't allocate memory for buffer");
       XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
       XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
       XML_SetCharacterDataHandler(parser, nullptr);
@@ -105,8 +107,8 @@ size_t ContentOpfParser::write(const uint8_t* buffer, const size_t size) {
     memcpy(buf, currentBufferPos, toRead);
 
     if (XML_ParseBuffer(parser, static_cast<int>(toRead), remainingSize == toRead) == XML_STATUS_ERROR) {
-      Serial.printf("[%lu] [COF] Parse error at line %lu: %s\n", millis(), XML_GetCurrentLineNumber(parser),
-                    XML_ErrorString(XML_GetErrorCode(parser)));
+      LOG_ERR(TAG, "Parse error at line %lu: %s", XML_GetCurrentLineNumber(parser),
+              XML_ErrorString(XML_GetErrorCode(parser)));
       XML_StopParser(parser, XML_FALSE);                // Stop any pending processing
       XML_SetElementHandler(parser, nullptr, nullptr);  // Clear callbacks
       XML_SetCharacterDataHandler(parser, nullptr);
@@ -158,9 +160,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   if (self->state == IN_PACKAGE && (strcmp(name, "manifest") == 0 || strcmp(name, "opf:manifest") == 0)) {
     self->state = IN_MANIFEST;
     if (!SdMan.openFileForWrite("COF", self->cachePath + itemCacheFile, self->tempItemStore)) {
-      Serial.printf(
-          "[%lu] [COF] Couldn't open temp items file for writing. This is probably going to be a fatal error.\n",
-          millis());
+      LOG_ERR(TAG, "Couldn't open temp items file for writing. This is probably going to be a fatal error.");
     }
     return;
   }
@@ -168,16 +168,14 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   if (self->state == IN_PACKAGE && (strcmp(name, "spine") == 0 || strcmp(name, "opf:spine") == 0)) {
     self->state = IN_SPINE;
     if (!SdMan.openFileForRead("COF", self->cachePath + itemCacheFile, self->tempItemStore)) {
-      Serial.printf(
-          "[%lu] [COF] Couldn't open temp items file for reading. This is probably going to be a fatal error.\n",
-          millis());
+      LOG_ERR(TAG, "Couldn't open temp items file for reading. This is probably going to be a fatal error.");
     } else {
       std::string itemId;
       std::string href;
       while (self->tempItemStore.available()) {
         if (!serialization::readString(self->tempItemStore, itemId) ||
             !serialization::readString(self->tempItemStore, href)) {
-          Serial.printf("[%lu] [COF] Failed to read manifest item from temp store\n", millis());
+          LOG_ERR(TAG, "Failed to read manifest item from temp store");
           break;
         }
         self->manifestIndex[itemId] = href;
@@ -240,8 +238,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       if (self->tocNcxPath.empty()) {
         self->tocNcxPath = href;
       } else {
-        Serial.printf("[%lu] [COF] Warning: Multiple NCX files found in manifest. Ignoring duplicate: %s\n", millis(),
-                      href.c_str());
+        LOG_DBG(TAG, "Warning: Multiple NCX files found in manifest. Ignoring duplicate: %s", href.c_str());
       }
     }
 
@@ -250,14 +247,14 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       // Properties is space-separated, check if "nav" is present as a word
       if (properties == "nav" || properties.find("nav ") == 0 || properties.find(" nav") != std::string::npos) {
         self->tocNavPath = href;
-        Serial.printf("[%lu] [COF] Found EPUB 3 nav document: %s\n", millis(), href.c_str());
+        LOG_INF(TAG, "Found EPUB 3 nav document: %s", href.c_str());
       }
     }
 
     // Collect CSS files
     if (mediaType.find("css") != std::string::npos) {
       self->cssFiles_.push_back(href);
-      Serial.printf("[%lu] [COF] Found CSS file: %s\n", millis(), href.c_str());
+      LOG_DBG(TAG, "Found CSS file: %s", href.c_str());
     }
     return;
   }
@@ -288,7 +285,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
         if (type == "text" || type == "start") {
           continue;
         } else {
-          Serial.printf("[%lu] [COF] Skipping non-text reference in guide: %s\n", millis(), type.c_str());
+          LOG_DBG(TAG, "Skipping non-text reference in guide: %s", type.c_str());
           break;
         }
       } else if (strcmp(atts[i], "href") == 0) {
@@ -296,7 +293,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       }
     }
     if ((type == "text" || (type == "start" && !self->textReferenceHref.empty())) && (textHref.length() > 0)) {
-      Serial.printf("[%lu] [COF] Found %s reference in guide: %s.\n", millis(), type.c_str(), textHref.c_str());
+      LOG_INF(TAG, "Found %s reference in guide: %s", type.c_str(), textHref.c_str());
       self->textReferenceHref = textHref;
     }
     return;
@@ -315,7 +312,7 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
       if (safeLen > 0) {
         self->title.append(s, safeLen);
       }
-      Serial.printf("[COF] Title truncated at %zu bytes\n", self->title.size());
+      LOG_DBG(TAG, "Title truncated at %zu bytes", self->title.size());
     }
     return;
   }
@@ -329,7 +326,7 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
       if (safeLen > 0) {
         self->author.append(s, safeLen);
       }
-      Serial.printf("[COF] Author truncated at %zu bytes\n", self->author.size());
+      LOG_DBG(TAG, "Author truncated at %zu bytes", self->author.size());
     }
     return;
   }

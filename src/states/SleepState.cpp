@@ -8,6 +8,7 @@
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <InputManager.h>
+#include <Logging.h>
 #include <Markdown.h>
 #include <SDCardManager.h>
 #include <Txt.h>
@@ -26,12 +27,14 @@
 extern InputManager inputManager;
 extern uint16_t rtcPowerButtonDurationMs;
 
+#define TAG "SLEEP"
+
 namespace papyrix {
 
 SleepState::SleepState(GfxRenderer& renderer) : renderer_(renderer) {}
 
 void SleepState::enter(Core& core) {
-  Serial.println("[STATE] SleepState::enter - rendering sleep screen");
+  LOG_INF(TAG, "SleepState::enter - rendering sleep screen");
 
   // Show immediate feedback before rendering sleep screen
   renderer_.clearScreen(0xFF);
@@ -71,7 +74,7 @@ void SleepState::enter(Core& core) {
   // Hold GPIO pins to keep LDO enabled during sleep
   gpio_deep_sleep_hold_en();
 
-  Serial.printf("[%lu] Entering deep sleep\n", millis());
+  LOG_INF(TAG, "Entering deep sleep");
 
   // Enter deep sleep - this never returns
   esp_deep_sleep_start();
@@ -79,12 +82,12 @@ void SleepState::enter(Core& core) {
 
 void SleepState::exit(Core& core) {
   // This should never be called - enter() calls esp_deep_sleep_start() and never returns
-  Serial.println("[STATE] SleepState::exit (unexpected)");
+  LOG_ERR(TAG, "SleepState::exit (unexpected)");
 }
 
 StateTransition SleepState::update(Core& core) {
   // This should never be called - enter() calls esp_deep_sleep_start() and never returns
-  Serial.println("[STATE] SleepState::update (unexpected - enter() should not return)");
+  LOG_ERR(TAG, "SleepState::update (unexpected - enter() should not return)");
   return StateTransition::stay(StateId::Sleep);
 }
 
@@ -127,13 +130,13 @@ void SleepState::renderCustomSleepScreen(const Core& core) const {
       }
 
       if (!FsHelpers::isBmpFile(filename)) {
-        Serial.printf("[%lu] [SLP] Skipping non-.bmp file name: %s\n", millis(), name);
+        LOG_DBG(TAG, "Skipping non-.bmp file name: %s", name);
         file.close();
         continue;
       }
       Bitmap bitmap(file);
       if (bitmap.parseHeaders() != BmpReaderError::Ok) {
-        Serial.printf("[%lu] [SLP] Skipping invalid BMP file: %s\n", millis(), name);
+        LOG_DBG(TAG, "Skipping invalid BMP file: %s", name);
         file.close();
         continue;
       }
@@ -147,7 +150,7 @@ void SleepState::renderCustomSleepScreen(const Core& core) const {
       const auto filename = "/sleep/" + files[randomFileIndex];
       FsFile file;
       if (SdMan.openFileForRead("SLP", filename, file)) {
-        Serial.printf("[%lu] [SLP] Randomly loading: /sleep/%s\n", millis(), files[randomFileIndex].c_str());
+        LOG_INF(TAG, "Randomly loading: /sleep/%s", files[randomFileIndex].c_str());
         delay(100);
         Bitmap bitmap(file, true);
         if (bitmap.parseHeaders() == BmpReaderError::Ok) {
@@ -166,7 +169,7 @@ void SleepState::renderCustomSleepScreen(const Core& core) const {
   if (SdMan.openFileForRead("SLP", "/sleep.bmp", file)) {
     Bitmap bitmap(file, true);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-      Serial.printf("[%lu] [SLP] Loading: /sleep.bmp\n", millis());
+      LOG_INF(TAG, "Loading: /sleep.bmp");
       renderBitmapSleepScreen(bitmap);
       return;
     }
@@ -207,7 +210,7 @@ void SleepState::renderCoverSleepScreen(Core& core) const {
   }
 
   if (coverBmpPath.empty()) {
-    Serial.println("[SLP] No cover BMP available");
+    LOG_DBG(TAG, "No cover BMP available");
     return renderDefaultSleepScreen(core);
   }
 

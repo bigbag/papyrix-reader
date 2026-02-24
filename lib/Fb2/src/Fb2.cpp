@@ -8,7 +8,9 @@
 
 #include <CoverHelpers.h>
 #include <FsHelpers.h>
-#include <HardwareSerial.h>
+#include <Logging.h>
+
+#define TAG "FB2"
 #include <SDCardManager.h>
 #include <Serialization.h>
 
@@ -49,24 +51,23 @@ Fb2::~Fb2() {
 }
 
 bool Fb2::load() {
-  Serial.printf("[%lu] [FB2] Loading FB2: %s\n", millis(), filepath.c_str());
+  LOG_INF(TAG, "Loading FB2: %s", filepath.c_str());
 
   if (!SdMan.exists(filepath.c_str())) {
-    Serial.printf("[%lu] [FB2] File does not exist\n", millis());
+    LOG_ERR(TAG, "File does not exist");
     return false;
   }
 
   // Try loading from metadata cache first
   if (loadMetaCache()) {
     loaded = true;
-    Serial.printf("[%lu] [FB2] Loaded from cache: %s (title: '%s', author: '%s')\n", millis(), filepath.c_str(),
-                  title.c_str(), author.c_str());
+    LOG_INF(TAG, "Loaded from cache: %s (title: '%s', author: '%s')", filepath.c_str(), title.c_str(), author.c_str());
     return true;
   }
 
   FsFile file;
   if (!SdMan.openFileForRead("FB2", filepath, file)) {
-    Serial.printf("[%lu] [FB2] Failed to open file\n", millis());
+    LOG_ERR(TAG, "Failed to open file");
     return false;
   }
 
@@ -75,15 +76,14 @@ bool Fb2::load() {
 
   // Stream-parse in chunks (file may exceed available RAM)
   if (!parseXmlStream()) {
-    Serial.printf("[%lu] [FB2] Failed to parse XML\n", millis());
+    LOG_ERR(TAG, "Failed to parse XML");
     return false;
   }
 
   saveMetaCache();
 
   loaded = true;
-  Serial.printf("[%lu] [FB2] Loaded FB2: %s (title: '%s', author: '%s')\n", millis(), filepath.c_str(), title.c_str(),
-                author.c_str());
+  LOG_INF(TAG, "Loaded FB2: %s (title: '%s', author: '%s')", filepath.c_str(), title.c_str(), author.c_str());
   return true;
 }
 
@@ -156,7 +156,7 @@ void XMLCALL Fb2::startElement(void* userData, const XML_Char* name, const XML_C
           } else {
             self->coverPath = attrValue;
           }
-          Serial.printf("[%lu] [FB2] Found cover reference: %s\n", millis(), self->coverPath.c_str());
+          LOG_INF(TAG, "Found cover reference: %s", self->coverPath.c_str());
           break;
         }
       }
@@ -278,7 +278,7 @@ void XMLCALL Fb2::characterData(void* userData, const XML_Char* s, int len) {
 }
 
 bool Fb2::parseXmlStream() {
-  Serial.printf("[%lu] [FB2] Starting streaming XML parse\n", millis());
+  LOG_INF(TAG, "Starting streaming XML parse");
 
   FsFile file;
   if (!SdMan.openFileForRead("FB2", filepath, file)) {
@@ -287,7 +287,7 @@ bool Fb2::parseXmlStream() {
 
   xmlParser_ = XML_ParserCreate("UTF-8");
   if (!xmlParser_) {
-    Serial.printf("[%lu] [FB2] Failed to create XML parser\n", millis());
+    LOG_ERR(TAG, "Failed to create XML parser");
     file.close();
     return false;
   }
@@ -307,7 +307,7 @@ bool Fb2::parseXmlStream() {
     const int done = (file.available() == 0) ? 1 : 0;
     if (XML_Parse(xmlParser_, reinterpret_cast<const char*>(buffer), static_cast<int>(bytesRead), done) ==
         XML_STATUS_ERROR) {
-      Serial.printf("[%lu] [FB2] XML parse error: %s\n", millis(), XML_ErrorString(XML_GetErrorCode(xmlParser_)));
+      LOG_ERR(TAG, "XML parse error: %s", XML_ErrorString(XML_GetErrorCode(xmlParser_)));
       success = false;
       break;
     }
@@ -340,21 +340,21 @@ void Fb2::postProcessMetadata() {
     }
   }
 
-  Serial.printf("[%lu] [FB2] XML parsing complete: title='%s', author='%s'\n", millis(), title.c_str(), author.c_str());
+  LOG_INF(TAG, "XML parsing complete: title='%s', author='%s'", title.c_str(), author.c_str());
 }
 
 bool Fb2::clearCache() const {
   if (!SdMan.exists(cachePath.c_str())) {
-    Serial.printf("[%lu] [FB2] Cache does not exist, no action needed\n", millis());
+    LOG_INF(TAG, "Cache does not exist, no action needed");
     return true;
   }
 
   if (!SdMan.removeDir(cachePath.c_str())) {
-    Serial.printf("[%lu] [FB2] Failed to clear cache\n", millis());
+    LOG_ERR(TAG, "Failed to clear cache");
     return false;
   }
 
-  Serial.printf("[%lu] [FB2] Cache cleared successfully\n", millis());
+  LOG_INF(TAG, "Cache cleared successfully");
   return true;
 }
 
@@ -402,7 +402,7 @@ bool Fb2::generateCoverBmp(bool use1BitDithering) const {
   // Find a cover image
   std::string coverImagePath = findCoverImage();
   if (coverImagePath.empty()) {
-    Serial.printf("[%lu] [FB2] No cover image found\n", millis());
+    LOG_INF(TAG, "No cover image found");
     // Create failure marker
     FsFile marker;
     if (SdMan.openFileForWrite("FB2", failedMarkerPath, marker)) {
@@ -472,14 +472,14 @@ bool Fb2::loadMetaCache() {
 
   uint8_t version;
   if (!serialization::readPodChecked(file, version) || version != kMetaCacheVersion) {
-    Serial.printf("[%lu] [FB2] Meta cache version mismatch\n", millis());
+    LOG_ERR(TAG, "Meta cache version mismatch");
     file.close();
     return false;
   }
 
   if (!serialization::readString(file, title) || !serialization::readString(file, author) ||
       !serialization::readString(file, coverPath)) {
-    Serial.printf("[%lu] [FB2] Failed to read meta cache strings\n", millis());
+    LOG_ERR(TAG, "Failed to read meta cache strings");
     file.close();
     return false;
   }
@@ -531,7 +531,7 @@ bool Fb2::saveMetaCache() const {
   const std::string metaPath = cachePath + kMetaCacheFile;
   FsFile file;
   if (!SdMan.openFileForWrite("FB2", metaPath, file)) {
-    Serial.printf("[%lu] [FB2] Failed to create meta cache\n", millis());
+    LOG_ERR(TAG, "Failed to create meta cache");
     return false;
   }
 
@@ -556,7 +556,7 @@ bool Fb2::saveMetaCache() const {
   }
 
   file.close();
-  Serial.printf("[%lu] [FB2] Saved meta cache (%u TOC items)\n", millis(), tocItemCount);
+  LOG_INF(TAG, "Saved meta cache (%u TOC items)", tocItemCount);
   return true;
 }
 

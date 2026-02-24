@@ -1,6 +1,9 @@
 #include "Core.h"
 
 #include <Arduino.h>
+#include <Logging.h>
+
+#define TAG "CORE"
 
 namespace papyrix {
 
@@ -44,7 +47,7 @@ void Core::shutdown() {
 uint32_t Core::freeHeap() const { return ESP.getFreeHeap(); }
 
 void Core::logMemory(const char* label) const {
-  Serial.printf("[MEM] %s: free=%lu, largest=%lu\n", label, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+  LOG_DBG(TAG, "%s: free=%lu, largest=%lu", label, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 }
 
 }  // namespace papyrix

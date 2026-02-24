@@ -1,10 +1,13 @@
 #include "Fb2Parser.h"
 
 #include <GfxRenderer.h>
+#include <Logging.h>
 #include <Page.h>
 #include <ParsedText.h>
 #include <SDCardManager.h>
 #include <Utf8.h>
+
+#define TAG "FB2_PARSE"
 
 #include <cstring>
 #include <utility>
@@ -63,7 +66,7 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
                            const AbortCallback& shouldAbort) {
   FsFile file;
   if (!SdMan.openFileForRead("FB2", filepath_, file)) {
-    Serial.printf("[FB2] Failed to open file: %s\n", filepath_.c_str());
+    LOG_ERR(TAG, "Failed to open file: %s", filepath_.c_str());
     return false;
   }
 
@@ -89,7 +92,7 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
   // Create Expat parser
   xmlParser_ = XML_ParserCreate("UTF-8");
   if (!xmlParser_) {
-    Serial.printf("[FB2] Failed to create XML parser\n");
+    LOG_ERR(TAG, "Failed to create XML parser");
     file.close();
     return false;
   }
@@ -103,7 +106,7 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
 
   while (file.available() > 0) {
     if (shouldAbort_ && (++abortCheckCounter % 10 == 0) && shouldAbort_()) {
-      Serial.printf("[FB2] Aborted by external request\n");
+      LOG_INF(TAG, "Aborted by external request");
       XML_ParserFree(xmlParser_);
       xmlParser_ = nullptr;
       file.close();
@@ -117,8 +120,8 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
     int done = (file.available() == 0) ? 1 : 0;
     if (XML_Parse(xmlParser_, reinterpret_cast<const char*>(buffer), static_cast<int>(bytesRead), done) ==
         XML_STATUS_ERROR) {
-      Serial.printf("[FB2] Parse error at line %lu: %s\n", XML_GetCurrentLineNumber(xmlParser_),
-                    XML_ErrorString(XML_GetErrorCode(xmlParser_)));
+      LOG_ERR(TAG, "Parse error at line %lu: %s", XML_GetCurrentLineNumber(xmlParser_),
+              XML_ErrorString(XML_GetErrorCode(xmlParser_)));
       XML_ParserFree(xmlParser_);
       xmlParser_ = nullptr;
       file.close();
@@ -153,7 +156,7 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
   currentPage_.reset();
   hasMore_ = false;
 
-  Serial.printf("[FB2] Parsed %d pages from %s\n", pagesCreated_, filepath_.c_str());
+  LOG_INF(TAG, "Parsed %d pages from %s", pagesCreated_, filepath_.c_str());
   return true;
 }
 

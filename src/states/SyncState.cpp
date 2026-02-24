@@ -2,9 +2,12 @@
 
 #include <Arduino.h>
 #include <GfxRenderer.h>
+#include <Logging.h>
 
 #include "../core/Core.h"
 #include "ThemeManager.h"
+
+#define TAG "SYNC"
 
 namespace papyrix {
 
@@ -14,7 +17,7 @@ SyncState::SyncState(GfxRenderer& renderer)
 SyncState::~SyncState() = default;
 
 void SyncState::enter(Core& core) {
-  Serial.println("[SYNC] Entering");
+  LOG_INF(TAG, "Entering");
   menuView_.selected = 0;
   menuView_.needsRender = true;
   needsRender_ = true;
@@ -22,7 +25,7 @@ void SyncState::enter(Core& core) {
   goNetwork_ = false;
 }
 
-void SyncState::exit(Core& core) { Serial.println("[SYNC] Exiting"); }
+void SyncState::exit(Core& core) { LOG_INF(TAG, "Exiting"); }
 
 StateTransition SyncState::update(Core& core) {
   Event e;
