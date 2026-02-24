@@ -525,8 +525,8 @@ void loop() {
   inputManager.update();
 
   if (millis() - lastMemPrint >= 10000) {
-    LOG_DBG(TAG, "Free: %d bytes, Total: %d bytes, Min Free: %d bytes", ESP.getFreeHeap(), ESP.getHeapSize(),
-            ESP.getMinFreeHeap());
+    LOG_DBG(TAG, "Free: %d bytes, Total: %d bytes, Min Free: %d bytes, MaxAlloc: %d bytes", ESP.getFreeHeap(),
+            ESP.getHeapSize(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
     lastMemPrint = millis();
   }
 
