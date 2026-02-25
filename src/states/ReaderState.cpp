@@ -777,11 +777,13 @@ void ReaderState::renderCachedPage(Core& core) {
     renderer_.clearScreen(0x00);
     renderer_.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     page->render(renderer_, fontId, vp.marginLeft, vp.marginTop, theme.primaryTextBlack);
+    renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
     renderer_.copyGrayscaleLsbBuffers();
 
     renderer_.clearScreen(0x00);
     renderer_.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
     page->render(renderer_, fontId, vp.marginLeft, vp.marginTop, theme.primaryTextBlack);
+    renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
     renderer_.copyGrayscaleMsbBuffers();
 
     const bool turnOffScreen = core.settings.sunlightFadingFix != 0;
@@ -793,19 +795,6 @@ void ReaderState::renderCachedPage(Core& core) {
     renderPageContents(core, *page, vp.marginTop, vp.marginRight, vp.marginBottom, vp.marginLeft);
     renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
     renderer_.cleanupGrayscaleWithFrameBuffer();
-
-    // Status bar is 1-bit and excluded from grayscale passes, so it needs
-    // an explicit blank-then-draw cycle to prevent ghost accumulation.
-    if (core.settings.statusBar != 0) {
-      const int statusBarY = renderer_.getScreenHeight() - vp.marginBottom;
-      const int statusBarH = vp.marginBottom;
-
-      renderer_.fillRect(0, statusBarY, renderer_.getScreenWidth(), statusBarH, !theme.primaryTextBlack);
-      renderer_.displayWindow(0, statusBarY, renderer_.getScreenWidth(), statusBarH, turnOffScreen);
-
-      renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
-      renderer_.displayWindow(0, statusBarY, renderer_.getScreenWidth(), statusBarH, turnOffScreen);
-    }
   }
 
   LOG_DBG(TAG, "Rendered page %d/%d", currentSectionPage_ + 1, pageCount);

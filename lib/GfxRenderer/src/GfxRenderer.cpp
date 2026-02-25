@@ -434,7 +434,40 @@ void GfxRenderer::displayBuffer(const EInkDisplay::RefreshMode refreshMode, bool
 }
 
 void GfxRenderer::displayWindow(int x, int y, int width, int height, bool turnOffScreen) const {
-  einkDisplay.displayWindow(x, y, width, height, turnOffScreen);
+  int physX, physY, physW, physH;
+  switch (orientation) {
+    case Portrait:
+      physX = y;
+      physY = EInkDisplay::DISPLAY_HEIGHT - x - width;
+      physW = height;
+      physH = width;
+      break;
+    case PortraitInverted:
+      physX = EInkDisplay::DISPLAY_WIDTH - y - height;
+      physY = x;
+      physW = height;
+      physH = width;
+      break;
+    case LandscapeClockwise:
+      physX = EInkDisplay::DISPLAY_WIDTH - x - width;
+      physY = EInkDisplay::DISPLAY_HEIGHT - y - height;
+      physW = width;
+      physH = height;
+      break;
+    case LandscapeCounterClockwise:
+    default:
+      physX = x;
+      physY = y;
+      physW = width;
+      physH = height;
+      break;
+  }
+  // E-ink controller requires x and width to be byte-aligned (multiples of 8 pixels).
+  // Expand the window outward to the nearest byte boundaries.
+  int alignedEnd = (physX + physW + 7) & ~7;
+  physX = physX & ~7;
+  physW = alignedEnd - physX;
+  einkDisplay.displayWindow(physX, physY, physW, physH, turnOffScreen);
 }
 
 std::string GfxRenderer::truncatedText(const int fontId, const char* text, const int maxWidth,

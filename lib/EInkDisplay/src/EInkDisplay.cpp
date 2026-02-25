@@ -410,7 +410,9 @@ void EInkDisplay::copyGrayscaleBuffers(const uint8_t* lsbBuffer, const uint8_t* 
  */
 void EInkDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) {
   setRamArea(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+  writeRamBuffer(CMD_WRITE_RAM_BW, bwBuffer, BUFFER_SIZE);
   writeRamBuffer(CMD_WRITE_RAM_RED, bwBuffer, BUFFER_SIZE);
+  inGrayscaleMode = false;
 }
 #endif
 
