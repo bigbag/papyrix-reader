@@ -69,37 +69,7 @@ void render(const GfxRenderer& r, const Theme& t, const CoverPageView& v) {
 void render(const GfxRenderer& r, const Theme& t, const ReaderMenuView& v) {
   if (!v.visible) return;
 
-  const int screenW = r.getScreenWidth();
-  const int screenH = r.getScreenHeight();
-
-  // Menu overlay box
-  const int menuW = 200;
-  const int menuH = ReaderMenuView::ITEM_COUNT * (t.itemHeight + 5) + 30;
-  const int menuX = (screenW - menuW) / 2;
-  const int menuY = (screenH - menuH) / 2;
-
-  // Draw menu background with border
-  r.clearArea(menuX, menuY, menuW, menuH, t.backgroundColor);
-  r.drawRect(menuX, menuY, menuW, menuH, t.primaryTextBlack);
-
-  // Menu title
-  r.drawCenteredText(t.uiFontId, menuY + 10, "Menu", t.primaryTextBlack, EpdFontFamily::BOLD);
-
-  // Menu items
-  const int itemStartY = menuY + 40;
-  for (int i = 0; i < ReaderMenuView::ITEM_COUNT; i++) {
-    const int itemY = itemStartY + i * (t.itemHeight + 5);
-    const int itemX = menuX + 10;
-    const int itemW = menuW - 20;
-
-    if (i == v.selected) {
-      r.fillRect(itemX, itemY, itemW, t.itemHeight, t.selectionFillBlack);
-      r.drawCenteredText(t.uiFontId, itemY + 5, ReaderMenuView::ITEMS[i], t.selectionTextBlack);
-    } else {
-      r.drawCenteredText(t.uiFontId, itemY + 5, ReaderMenuView::ITEMS[i], t.primaryTextBlack);
-    }
-  }
-
+  ui::popupMenu(r, t, "Menu", ReaderMenuView::ITEMS, ReaderMenuView::ITEM_COUNT, v.selected);
   r.displayBuffer();
 }
 

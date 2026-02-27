@@ -21,11 +21,13 @@
 #include "../Battery.h"
 #include "../FontManager.h"
 #include "../config.h"
+#include "../content/BookmarkManager.h"
 #include "../content/ProgressManager.h"
 #include "../content/ReaderNavigation.h"
 #include "../core/BootMode.h"
 #include "../core/Core.h"
 #include "../ui/Elements.h"
+#include "../ui/views/ReaderViews.h"
 #include "ThemeManager.h"
 
 #define TAG "READER"
@@ -356,6 +358,8 @@ void ReaderState::enter(Core& core) {
   currentSectionPage_ = progress.sectionPage;
   currentPage_ = progress.flatPage;
 
+  bookmarkCount_ = BookmarkManager::load(core, core.content.cacheDir(), bookmarks_, BookmarkManager::MAX_BOOKMARKS);
+
   // If at start of book and showImages enabled, begin at cover
   // Skip for XTC — uses flat page indexing, no cover page concept in reader
   if (type != ContentType::Xtc && currentSpineIndex_ == 0 && currentSectionPage_ == 0 && core.settings.showImages) {
@@ -387,6 +391,7 @@ void ReaderState::exit(Core& core) {
     progress.sectionPage = (lastRenderedSectionPage_ == -1) ? 0 : lastRenderedSectionPage_;
     progress.flatPage = currentPage_;
     ProgressManager::save(core, core.content.cacheDir(), core.content.metadata().type, progress);
+    saveBookmarks(core);
 
     // Safe to reset - task is stopped, we own pageCache_/parser_
     parser_.reset();
@@ -419,7 +424,14 @@ StateTransition ReaderState::update(Core& core) {
 
   Event e;
   while (core.events.pop(e)) {
-    // Route input to TOC handler when in TOC mode
+    if (menuMode_) {
+      handleMenuInput(core, e);
+      continue;
+    }
+    if (bookmarkMode_) {
+      handleBookmarkInput(core, e);
+      continue;
+    }
     if (tocMode_) {
       handleTocInput(core, e);
       continue;
@@ -439,9 +451,7 @@ StateTransition ReaderState::update(Core& core) {
             break;
 
           case Button::Center:
-            if (core.content.tocCount() > 0) {
-              enterTocMode(core);
-            }
+            enterMenuMode(core);
             break;
           case Button::Back:
             exitToUI(core);
@@ -468,11 +478,16 @@ void ReaderState::render(Core& core) {
     return;
   }
 
-  if (tocMode_) {
+  if (menuMode_) {
+    const Theme& theme = THEME_MANAGER.current();
+    ui::render(renderer_, theme, menuView_);
+    core.display.markDirty();
+  } else if (bookmarkMode_) {
+    renderBookmarkOverlay(core);
+  } else if (tocMode_) {
     renderTocOverlay(core);
   } else {
     renderCurrentPage(core);
-    // Track last successfully rendered position for progress saving
     lastRenderedSpineIndex_ = currentSpineIndex_;
     lastRenderedSectionPage_ = currentSectionPage_;
   }
@@ -1518,6 +1533,7 @@ void ReaderState::exitToUI(Core& core) {
     progress.sectionPage = (lastRenderedSectionPage_ == -1) ? 0 : lastRenderedSectionPage_;
     progress.flatPage = currentPage_;
     ProgressManager::save(core, core.content.cacheDir(), core.content.metadata().type, progress);
+    saveBookmarks(core);
     // Skip pageCache_.reset() and content.close() — ESP.restart() follows,
     // and if stopBackgroundCaching() timed out the task still uses them.
   }
@@ -1538,6 +1554,283 @@ void ReaderState::exitToUI(Core& core) {
   // Brief delay to ensure SD writes complete before restart
   vTaskDelay(50 / portTICK_PERIOD_MS);
   ESP.restart();
+}
+
+// ============================================================================
+// Menu Overlay Mode
+// ============================================================================
+
+void ReaderState::enterMenuMode(Core& core) {
+  stopBackgroundCaching();
+  menuView_.show();
+  menuMode_ = true;
+  needsRender_ = true;
+  LOG_DBG(TAG, "Entered menu mode");
+}
+
+void ReaderState::exitMenuMode() {
+  menuView_.hide();
+  menuMode_ = false;
+  needsRender_ = true;
+  LOG_DBG(TAG, "Exited menu mode");
+}
+
+void ReaderState::handleMenuInput(Core& core, const Event& e) {
+  if (e.type != EventType::ButtonPress) return;
+
+  switch (e.button) {
+    case Button::Up:
+      menuView_.moveUp();
+      needsRender_ = true;
+      break;
+    case Button::Down:
+      menuView_.moveDown();
+      needsRender_ = true;
+      break;
+    case Button::Center:
+      handleMenuAction(core, menuView_.selected);
+      break;
+    case Button::Back:
+      exitMenuMode();
+      startBackgroundCaching(core);
+      break;
+    default:
+      break;
+  }
+}
+
+void ReaderState::handleMenuAction(Core& core, int action) {
+  exitMenuMode();
+  switch (action) {
+    case 0:  // Chapters
+      if (core.content.tocCount() > 0) {
+        enterTocMode(core);
+      } else {
+        const Theme& theme = THEME_MANAGER.current();
+        renderer_.clearScreen(theme.backgroundColor);
+        ui::overlayBox(renderer_, theme, core.settings.getReaderFontId(theme), renderer_.getScreenHeight() / 2 - 20,
+                       "No chapters");
+        renderer_.displayBuffer();
+        core.display.markDirty();
+        startBackgroundCaching(core);
+      }
+      break;
+    case 1:  // Bookmarks
+      enterBookmarkMode(core);
+      break;
+  }
+}
+
+// ============================================================================
+// Bookmark Overlay Mode
+// ============================================================================
+
+void ReaderState::enterBookmarkMode(Core& core) {
+  stopBackgroundCaching();
+  populateBookmarkView();
+  bookmarkView_.buttons = ui::ButtonBar("Back", "Go", "Add", "Del");
+  bookmarkMode_ = true;
+  needsRender_ = true;
+  LOG_DBG(TAG, "Entered bookmark mode (%d bookmarks)", bookmarkCount_);
+}
+
+void ReaderState::exitBookmarkMode() {
+  bookmarkMode_ = false;
+  needsRender_ = true;
+  LOG_DBG(TAG, "Exited bookmark mode");
+}
+
+void ReaderState::handleBookmarkInput(Core& core, const Event& e) {
+  if (e.type != EventType::ButtonPress && e.type != EventType::ButtonRepeat) return;
+
+  switch (e.button) {
+    case Button::Up:
+      bookmarkView_.moveUp();
+      needsRender_ = true;
+      break;
+    case Button::Down:
+      bookmarkView_.moveDown();
+      needsRender_ = true;
+      break;
+    case Button::Center:
+      if (bookmarkCount_ > 0) {
+        jumpToBookmark(core, bookmarkView_.selected);
+        exitBookmarkMode();
+        startBackgroundCaching(core);
+      }
+      break;
+    case Button::Left:
+      addBookmark(core);
+      break;
+    case Button::Right:
+      if (bookmarkCount_ > 0) {
+        deleteBookmark(core, bookmarkView_.selected);
+      }
+      break;
+    case Button::Back:
+      exitBookmarkMode();
+      startBackgroundCaching(core);
+      break;
+    default:
+      break;
+  }
+}
+
+void ReaderState::renderBookmarkOverlay(Core& core) {
+  const Theme& theme = THEME_MANAGER.current();
+  constexpr int startY = 60;
+  const int visibleCount = bookmarkVisibleCount();
+
+  bookmarkView_.ensureVisible(visibleCount);
+
+  renderer_.clearScreen(theme.backgroundColor);
+  renderer_.drawCenteredText(theme.uiFontId, 15, "Bookmarks", theme.primaryTextBlack, BOLD);
+
+  if (bookmarkCount_ == 0) {
+    const int y = renderer_.getScreenHeight() / 2 - renderer_.getLineHeight(theme.uiFontId) / 2;
+    renderer_.drawCenteredText(theme.uiFontId, y, "No bookmarks yet", theme.primaryTextBlack, BOLD);
+  } else {
+    const int itemHeight = theme.itemHeight + theme.itemSpacing;
+    const int end = std::min(bookmarkView_.scrollOffset + visibleCount, static_cast<int>(bookmarkView_.itemCount));
+    for (int i = bookmarkView_.scrollOffset; i < end; i++) {
+      const int y = startY + (i - bookmarkView_.scrollOffset) * itemHeight;
+      ui::chapterItem(renderer_, theme, theme.uiFontId, y, bookmarkView_.items[i].title, bookmarkView_.items[i].depth,
+                      i == bookmarkView_.selected, false);
+    }
+  }
+
+  ui::buttonBar(renderer_, theme, bookmarkView_.buttons);
+  renderer_.displayBuffer();
+  core.display.markDirty();
+}
+
+void ReaderState::addBookmark(Core& core) {
+  if (bookmarkCount_ >= BookmarkManager::MAX_BOOKMARKS) {
+    LOG_DBG(TAG, "Max bookmarks reached");
+    return;
+  }
+
+  ContentType type = core.content.metadata().type;
+
+  int existing = BookmarkManager::findAt(bookmarks_, bookmarkCount_, type, lastRenderedSpineIndex_,
+                                         lastRenderedSectionPage_, currentPage_);
+  if (existing >= 0) {
+    LOG_DBG(TAG, "Bookmark already exists at index %d", existing);
+    return;
+  }
+
+  Bookmark bm;
+  memset(&bm, 0, sizeof(bm));
+  bm.spineIndex = static_cast<int16_t>(lastRenderedSpineIndex_);
+  bm.sectionPage = static_cast<int16_t>(lastRenderedSectionPage_);
+  bm.flatPage = currentPage_;
+
+  if (cachedChapterTitle_[0] != '\0') {
+    strncpy(bm.label, cachedChapterTitle_, sizeof(bm.label) - 1);
+    bm.label[sizeof(bm.label) - 1] = '\0';
+  } else {
+    if (type == ContentType::Xtc) {
+      snprintf(bm.label, sizeof(bm.label), "Page %u", static_cast<unsigned>(currentPage_ + 1));
+    } else {
+      snprintf(bm.label, sizeof(bm.label), "Page %d", lastRenderedSectionPage_ + 1);
+    }
+  }
+
+  int insertPos = bookmarkCount_;
+  for (int i = 0; i < bookmarkCount_; i++) {
+    bool insertHere = false;
+    if (type == ContentType::Epub) {
+      if (bm.spineIndex < bookmarks_[i].spineIndex ||
+          (bm.spineIndex == bookmarks_[i].spineIndex && bm.sectionPage < bookmarks_[i].sectionPage)) {
+        insertHere = true;
+      }
+    } else if (type == ContentType::Xtc) {
+      if (bm.flatPage < bookmarks_[i].flatPage) {
+        insertHere = true;
+      }
+    } else {
+      if (bm.sectionPage < bookmarks_[i].sectionPage) {
+        insertHere = true;
+      }
+    }
+    if (insertHere) {
+      insertPos = i;
+      break;
+    }
+  }
+
+  for (int i = bookmarkCount_; i > insertPos; i--) {
+    bookmarks_[i] = bookmarks_[i - 1];
+  }
+  bookmarks_[insertPos] = bm;
+  bookmarkCount_++;
+
+  saveBookmarks(core);
+  populateBookmarkView();
+  needsRender_ = true;
+  LOG_DBG(TAG, "Added bookmark at position %d", insertPos);
+}
+
+void ReaderState::deleteBookmark(Core& core, int index) {
+  if (index < 0 || index >= bookmarkCount_) return;
+
+  for (int i = index; i < bookmarkCount_ - 1; i++) {
+    bookmarks_[i] = bookmarks_[i + 1];
+  }
+  bookmarkCount_--;
+
+  saveBookmarks(core);
+  populateBookmarkView();
+
+  if (bookmarkView_.selected >= bookmarkView_.itemCount && bookmarkView_.itemCount > 0) {
+    bookmarkView_.selected = bookmarkView_.itemCount - 1;
+  }
+
+  needsRender_ = true;
+  LOG_DBG(TAG, "Deleted bookmark at index %d, %d remaining", index, bookmarkCount_);
+}
+
+void ReaderState::jumpToBookmark(Core& core, int index) {
+  if (index < 0 || index >= bookmarkCount_) return;
+
+  const Bookmark& bm = bookmarks_[index];
+  ContentType type = core.content.metadata().type;
+
+  if (type == ContentType::Epub) {
+    if (bm.spineIndex != currentSpineIndex_) {
+      currentSpineIndex_ = bm.spineIndex;
+      parser_.reset();
+      parserSpineIndex_ = -1;
+      pageCache_.reset();
+    }
+    currentSectionPage_ = bm.sectionPage;
+  } else if (type == ContentType::Xtc) {
+    currentPage_ = bm.flatPage;
+  } else {
+    currentSectionPage_ = bm.sectionPage;
+  }
+
+  needsRender_ = true;
+  LOG_DBG(TAG, "Jumped to bookmark %d", index);
+}
+
+void ReaderState::saveBookmarks(Core& core) {
+  BookmarkManager::save(core, core.content.cacheDir(), core.content.metadata().type, bookmarks_, bookmarkCount_);
+}
+
+void ReaderState::populateBookmarkView() {
+  bookmarkView_.clear();
+  for (int i = 0; i < bookmarkCount_ && i < ui::BookmarkListView::MAX_ITEMS; i++) {
+    bookmarkView_.addItem(bookmarks_[i].label, 0);
+  }
+}
+
+int ReaderState::bookmarkVisibleCount() const {
+  constexpr int startY = 60;
+  constexpr int bottomMargin = 70;
+  const Theme& theme = THEME_MANAGER.current();
+  const int itemHeight = theme.itemHeight + theme.itemSpacing;
+  return (renderer_.getScreenHeight() - startY - bottomMargin) / itemHeight;
 }
 
 }  // namespace papyrix

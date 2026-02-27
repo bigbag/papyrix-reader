@@ -738,4 +738,45 @@ void readerStatusBar(const GfxRenderer& r, const Theme& t, int marginLeft, int m
   }
 }
 
+void popupMenu(const GfxRenderer& r, const Theme& t, const char* titleText, const char* const* items, int itemCount,
+               int selected) {
+  const int screenW = r.getScreenWidth();
+  const int screenH = r.getScreenHeight();
+
+  const int menuW = 200;
+  const int menuH = itemCount * (t.itemHeight + 8) + 40 + 10;
+  const int menuX = (screenW - menuW) / 2;
+  const int menuY = (screenH - menuH) / 2;
+
+  r.clearArea(menuX, menuY, menuW, menuH, t.backgroundColor);
+  r.drawRect(menuX, menuY, menuW, menuH, t.primaryTextBlack);
+
+  // Title
+  const int titleW = r.getTextWidth(t.uiFontId, titleText, EpdFontFamily::BOLD);
+  const int titleX = menuX + (menuW - titleW) / 2;
+  r.drawText(t.uiFontId, titleX, menuY + 10, titleText, t.primaryTextBlack, EpdFontFamily::BOLD);
+
+  // Separator
+  r.drawLine(menuX + 10, menuY + 35, menuX + menuW - 10, menuY + 35, t.primaryTextBlack);
+
+  // Items
+  const int itemStartY = menuY + 45;
+  for (int i = 0; i < itemCount; i++) {
+    const int itemY = itemStartY + i * (t.itemHeight + 8);
+    const int itemX = menuX + 10;
+    const int itemW = menuW - 20;
+
+    const int textW = r.getTextWidth(t.uiFontId, items[i]);
+    const int textX = itemX + (itemW - textW) / 2;
+    const int textY = itemY + (t.itemHeight - r.getLineHeight(t.uiFontId)) / 2;
+
+    if (i == selected) {
+      r.fillRect(itemX, itemY, itemW, t.itemHeight, t.selectionFillBlack);
+      r.drawText(t.uiFontId, textX, textY, items[i], t.selectionTextBlack);
+    } else {
+      r.drawText(t.uiFontId, textX, textY, items[i], t.primaryTextBlack);
+    }
+  }
+}
+
 }  // namespace ui

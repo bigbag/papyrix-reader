@@ -5,10 +5,12 @@
 #include <cstdint>
 #include <memory>
 
+#include "../content/BookmarkManager.h"
 #include "../content/ReaderNavigation.h"
 #include "../core/Types.h"
 #include "../rendering/XtcPageRenderer.h"
 #include "../ui/views/HomeView.h"
+#include "../ui/views/ReaderViews.h"
 #include "State.h"
 
 class ContentParser;
@@ -153,6 +155,30 @@ class ReaderState : public State {
   void populateTocView(Core& core);
   int findCurrentTocEntry(Core& core);
   void jumpToTocEntry(Core& core, int tocIndex);
+
+  // Menu overlay mode
+  bool menuMode_ = false;
+  ui::ReaderMenuView menuView_;
+  void enterMenuMode(Core& core);
+  void exitMenuMode();
+  void handleMenuInput(Core& core, const Event& e);
+  void handleMenuAction(Core& core, int action);
+
+  // Bookmark overlay mode
+  Bookmark bookmarks_[BookmarkManager::MAX_BOOKMARKS];
+  int bookmarkCount_ = 0;
+  bool bookmarkMode_ = false;
+  ui::BookmarkListView bookmarkView_;
+  void enterBookmarkMode(Core& core);
+  void exitBookmarkMode();
+  void handleBookmarkInput(Core& core, const Event& e);
+  void renderBookmarkOverlay(Core& core);
+  void addBookmark(Core& core);
+  void deleteBookmark(Core& core, int index);
+  void jumpToBookmark(Core& core, int index);
+  void saveBookmarks(Core& core);
+  void populateBookmarkView();
+  int bookmarkVisibleCount() const;
 
   // Boot mode transition - exit to UI via restart
   void exitToUI(Core& core);

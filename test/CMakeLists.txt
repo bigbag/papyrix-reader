@@ -189,6 +189,11 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/InflateReader/src
       ${PROJECT_ROOT}/lib/uzlib/src
     )
+  elseif(TEST_NAME STREQUAL "test_BookmarkManager")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${TEST_HELPERS}
+    )
   else()
     add_executable(${TEST_NAME} ${TEST_SRC} ${TEST_HELPERS})
   endif()

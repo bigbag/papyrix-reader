@@ -120,6 +120,10 @@ void bookPlaceholder(const GfxRenderer& r, const Theme& t, int x, int y, int wid
 // Overlay box - Centered notification box with text (for Indexing/Loading messages)
 void overlayBox(const GfxRenderer& r, const Theme& t, int fontId, int y, const char* message);
 
+// Popup menu - Centered overlay with title and selectable items
+void popupMenu(const GfxRenderer& r, const Theme& t, const char* title, const char* const* items, int itemCount,
+               int selected);
+
 // Two-column row - Label on left, value on right
 void twoColumnRow(const GfxRenderer& r, const Theme& t, int y, const char* label, const char* value);
 

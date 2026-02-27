@@ -82,8 +82,8 @@ void render(const GfxRenderer& r, const Theme& t, const CoverPageView& v);
 // ============================================================================
 
 struct ReaderMenuView {
-  static constexpr const char* const ITEMS[] = {"Chapters", "Settings", "Home"};
-  static constexpr int ITEM_COUNT = 3;
+  static constexpr const char* const ITEMS[] = {"Chapters", "Bookmarks"};
+  static constexpr int ITEM_COUNT = 2;
 
   int8_t selected = 0;
   bool visible = false;
@@ -116,6 +116,60 @@ struct ReaderMenuView {
 };
 
 void render(const GfxRenderer& r, const Theme& t, const ReaderMenuView& v);
+
+// ============================================================================
+// BookmarkListView - Compact bookmark list (20 items max vs 256 for ChapterListView)
+// ============================================================================
+
+struct BookmarkListView {
+  static constexpr int MAX_ITEMS = 20;
+  static constexpr int TITLE_LEN = 64;
+
+  struct Item {
+    char title[TITLE_LEN];
+    uint8_t depth;
+  };
+
+  ButtonBar buttons{"Back", "Go", "", ""};
+  Item items[MAX_ITEMS];
+  int16_t itemCount = 0;
+  int16_t selected = 0;
+  int16_t scrollOffset = 0;
+
+  void clear() {
+    itemCount = 0;
+    selected = 0;
+    scrollOffset = 0;
+  }
+
+  bool addItem(const char* title, uint8_t depth = 0) {
+    if (itemCount >= MAX_ITEMS) return false;
+    strncpy(items[itemCount].title, title, TITLE_LEN - 1);
+    items[itemCount].title[TITLE_LEN - 1] = '\0';
+    items[itemCount].depth = depth;
+    itemCount++;
+    return true;
+  }
+
+  void moveUp() {
+    if (itemCount == 0) return;
+    selected = (selected == 0) ? itemCount - 1 : selected - 1;
+  }
+
+  void moveDown() {
+    if (itemCount == 0) return;
+    selected = (selected + 1) % itemCount;
+  }
+
+  void ensureVisible(int visibleCount) {
+    if (itemCount == 0 || visibleCount <= 0) return;
+    if (selected < scrollOffset) {
+      scrollOffset = selected;
+    } else if (selected >= scrollOffset + visibleCount) {
+      scrollOffset = selected - visibleCount + 1;
+    }
+  }
+};
 
 // ============================================================================
 // JumpToPageView - Page number input for reader
