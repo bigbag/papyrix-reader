@@ -25,6 +25,13 @@ bool SDCardManager::begin() {
   return initialized;
 }
 
+void SDCardManager::end() {
+  if (initialized) {
+    sd.end();
+    initialized = false;
+  }
+}
+
 bool SDCardManager::ready() const { return initialized; }
 
 std::vector<String> SDCardManager::listFiles(const char* path, const int maxFiles) {
