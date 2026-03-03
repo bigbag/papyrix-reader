@@ -11,7 +11,7 @@
 #include "ContentParser.h"
 
 namespace {
-constexpr uint8_t CACHE_FILE_VERSION = 17;  // v17: fix external font width fallback for Latin chars
+constexpr uint8_t CACHE_FILE_VERSION = 18;  // v18: external font priority (try external before builtin)
 
 // Header layout:
 // - version (1 byte)

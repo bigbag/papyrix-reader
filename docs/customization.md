@@ -67,7 +67,6 @@ item_height = 30          # Menu item height
 item_spacing = 0          # Space between menu items
 
 [fonts]
-ui_font =                 # UI font family (empty = builtin)
 reader_font_small =       # Reader font for small size (empty = builtin)
 reader_font_medium =      # Reader font for medium size (empty = builtin)
 reader_font_large =       # Reader font for large size (empty = builtin)
@@ -122,8 +121,6 @@ Optional metadata for the theme:
 
 #### Fonts Section
 
-- **ui_font** - Custom UI font family name
-  - Leave empty to use builtin font
 - **reader_font_small** - Custom reader font for small size (14pt)
   - Leave empty to use builtin font
 - **reader_font_medium** - Custom reader font for medium size (16pt)
@@ -153,7 +150,6 @@ item_height = 30
 item_spacing = 0
 
 [fonts]
-ui_font =
 reader_font_small =
 reader_font_medium =
 reader_font_large =
@@ -181,7 +177,6 @@ item_height = 25
 item_spacing = 2
 
 [fonts]
-ui_font =
 reader_font_small =
 reader_font_medium =
 reader_font_large =
@@ -209,14 +204,12 @@ item_height = 30
 item_spacing = 0
 
 [fonts]
-ui_font = noto-sans
 reader_font_small = noto-serif-14
 reader_font_medium = noto-serif-16
 reader_font_large = noto-serif-18
 ```
 
 This theme uses custom fonts:
-- UI: `/config/fonts/noto-sans/`
 - Reader (small): `/config/fonts/noto-serif-14/`
 - Reader (medium): `/config/fonts/noto-serif-16/`
 - Reader (large): `/config/fonts/noto-serif-18/`
@@ -339,7 +332,6 @@ Once you've created your font files, reference them in your theme configuration:
 
 ```ini
 [fonts]
-ui_font = my-font
 reader_font_small = my-font-14
 reader_font_medium = my-font-16
 reader_font_large = my-font-18
@@ -445,7 +437,8 @@ The repository includes example theme and font files in [`docs/examples/`](examp
 - **`light-thai.theme`** - Light theme with Noto Sans Thai fonts
 - **`light-vietnamese.theme`** - Light theme with Noto Serif Vietnamese fonts
 - **`light-arabic.theme`** - Light theme with Noto Sans Arabic fonts
-- **`light-cjk-external.theme`** - Light theme with CJK external (.bin) fonts
+- **`light-noto-sans-sc.theme`** - Light theme with Noto Sans SC (Simplified Chinese) CJK font
+- **`light-noto-sans-jp.theme`** - Light theme with Noto Sans JP (Japanese) CJK font
 
 **Fonts:**
 - **`fonts/noto-serif-*/`** - Noto Serif at 14pt, 16pt, 18pt (Latin script)

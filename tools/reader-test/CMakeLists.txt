@@ -45,6 +45,7 @@ add_executable(reader-test
   # Font support
   ${PROJECT_ROOT}/lib/EpdFont/src/EpdFont.cpp
   ${PROJECT_ROOT}/lib/EpdFont/src/EpdFontFamily.cpp
+  ${PROJECT_ROOT}/lib/ExternalFont/src/ExternalFont.cpp
 
   # Hyphenation
   ${PROJECT_ROOT}/lib/Hyphenation/src/Hyphenation.cpp
@@ -88,6 +89,7 @@ target_include_directories(reader-test PRIVATE
   ${PROJECT_ROOT}/lib/GfxRenderer/src
   ${PROJECT_ROOT}/lib/EpdFont/src
   ${PROJECT_ROOT}/lib/EpdFont/src/builtinFonts
+  ${PROJECT_ROOT}/lib/ExternalFont/src
   ${PROJECT_ROOT}/lib/ArabicShaper/src
   ${PROJECT_ROOT}/lib/ThaiShaper/src
   ${PROJECT_ROOT}/lib/ZipFile/src

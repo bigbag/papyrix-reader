@@ -10,6 +10,7 @@
 
 #include <EInkDisplay.h>
 #include <EpdFont.h>
+#include <ExternalFont.h>
 #include <Epub.h>
 #include <EpubChapterParser.h>
 #include <Fb2.h>
@@ -23,6 +24,7 @@
 #include <RenderConfig.h>
 #include <SDCardManager.h>
 #include <Txt.h>
+#include <Utf8.h>
 #include <LittleFS.h>
 
 #include <builtinFonts/reader_2b.h>
@@ -59,7 +61,36 @@ static bool mkdirRecursive(const std::string& path) {
   return true;
 }
 
-static void dumpPages(PageCache& cache) {
+static std::string renderWord(const GfxRenderer& gfx, int fontId, const std::string& word) {
+  std::string result;
+  const char* ptr = word.c_str();
+  uint32_t cp;
+  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&ptr)))) {
+    if (gfx.hasGlyph(fontId, cp)) {
+      // Encode codepoint back to UTF-8
+      if (cp < 0x80) {
+        result += static_cast<char>(cp);
+      } else if (cp < 0x800) {
+        result += static_cast<char>(0xC0 | (cp >> 6));
+        result += static_cast<char>(0x80 | (cp & 0x3F));
+      } else if (cp < 0x10000) {
+        result += static_cast<char>(0xE0 | (cp >> 12));
+        result += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        result += static_cast<char>(0x80 | (cp & 0x3F));
+      } else {
+        result += static_cast<char>(0xF0 | (cp >> 18));
+        result += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+        result += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        result += static_cast<char>(0x80 | (cp & 0x3F));
+      }
+    } else {
+      result += '?';
+    }
+  }
+  return result;
+}
+
+static void dumpPages(PageCache& cache, const GfxRenderer& gfx, int fontId) {
   for (int p = 0; p < cache.pageCount(); p++) {
     auto page = cache.loadPage(p);
     if (!page) continue;
@@ -68,7 +99,7 @@ static void dumpPages(PageCache& cache) {
       if (elem->getTag() == TAG_PageLine) {
         auto& tb = static_cast<PageLine*>(elem.get())->getTextBlock();
         for (auto& wd : tb.getWords()) {
-          printf("%s ", wd.word.c_str());
+          printf("%s ", renderWord(gfx, fontId, wd.word).c_str());
         }
         printf("\n");
       }
@@ -76,7 +107,7 @@ static void dumpPages(PageCache& cache) {
   }
 }
 
-static void dumpCacheDir(const std::string& dir) {
+static void dumpCacheDir(const std::string& dir, const GfxRenderer& gfx, int fontId) {
   // Find and dump .bin files in sections/ subdirectory
   std::string sectionsDir = dir + "/sections";
   struct stat st;
@@ -107,19 +138,20 @@ static void dumpCacheDir(const std::string& dir) {
       continue;
     }
     fprintf(stderr, "  %s: %d pages%s\n", path.c_str(), cache.pageCount(), cache.isPartial() ? " (partial)" : "");
-    dumpPages(cache);
+    dumpPages(cache, gfx, fontId);
     totalPages += cache.pageCount();
   }
   fprintf(stderr, "Total: %d pages\n", totalPages);
 }
 
 static void usage() {
-  fprintf(stderr, "Usage: reader-test [--dump] [--batch N] [--no-statusbar] <file.epub|.md|.txt|.fb2> [output_dir]\n");
+  fprintf(stderr, "Usage: reader-test [--dump] [--batch N] [--no-statusbar] [--cjk-font PATH] <file.epub|.md|.txt|.fb2> [output_dir]\n");
   fprintf(stderr, "       reader-test --cache-dump <cache_dir>\n");
   fprintf(stderr, "  --dump           Print parsed text content of each page\n");
   fprintf(stderr, "  --batch N        Cache N pages per batch (default: 5, matching device)\n");
   fprintf(stderr, "                   Use 0 for unlimited (no suspend/resume)\n");
   fprintf(stderr, "  --no-statusbar   Use full viewport height (no status bar margin)\n");
+  fprintf(stderr, "  --cjk-font PATH  Load external CJK font (.bin) for text width measurement\n");
   fprintf(stderr, "  --cache-dump     Dump text from existing device cache directory\n");
   fprintf(stderr, "  output_dir defaults to /tmp/papyrix-cache/\n");
 }
@@ -133,6 +165,7 @@ int main(int argc, char* argv[]) {
   bool dump = false;
   bool showStatusBar = true;
   uint16_t batchSize = 5;
+  std::string cjkFontPath;
   int argIdx = 1;
   while (argIdx < argc && argv[argIdx][0] == '-') {
     if (strcmp(argv[argIdx], "--dump") == 0) {
@@ -144,12 +177,50 @@ int main(int argc, char* argv[]) {
     } else if (strcmp(argv[argIdx], "--batch") == 0 && argIdx + 1 < argc) {
       batchSize = static_cast<uint16_t>(atoi(argv[argIdx + 1]));
       argIdx += 2;
-    } else if (strcmp(argv[argIdx], "--cache-dump") == 0 && argIdx + 1 < argc) {
-      dumpCacheDir(argv[argIdx + 1]);
-      return 0;
+    } else if (strcmp(argv[argIdx], "--cjk-font") == 0 && argIdx + 1 < argc) {
+      cjkFontPath = argv[argIdx + 1];
+      argIdx += 2;
+    } else if (strcmp(argv[argIdx], "--cache-dump") == 0) {
+      // Handled after renderer setup
+      break;
     } else {
       break;
     }
+  }
+
+  // Setup renderer with real font metrics
+  EInkDisplay display(0, 0, 0, 0, 0, 0);
+  GfxRenderer gfx(display);
+  gfx.begin();
+
+  EpdFont readerFont(&reader_2b);
+  EpdFont readerBoldFont(&reader_bold_2b);
+  EpdFont readerItalicFont(&reader_italic_2b);
+  EpdFontFamily readerFontFamily(&readerFont, &readerBoldFont, &readerItalicFont, &readerBoldFont);
+  constexpr int FONT_ID = 1818981670;
+  gfx.insertFont(FONT_ID, readerFontFamily);  // READER_FONT_ID
+
+  ExternalFont externalFont;
+  if (!cjkFontPath.empty()) {
+    if (externalFont.load(cjkFontPath.c_str())) {
+      gfx.setExternalFont(&externalFont);
+      fprintf(stderr, "CJK font: %s (%dx%d, %d bytes/char)\n",
+              externalFont.getFontName(), externalFont.getCharWidth(),
+              externalFont.getCharHeight(), externalFont.getBytesPerChar());
+    } else {
+      fprintf(stderr, "Failed to load CJK font: %s\n", cjkFontPath.c_str());
+      return 1;
+    }
+  }
+
+  // Handle --cache-dump (needs renderer for glyph checking)
+  if (argIdx < argc && strcmp(argv[argIdx], "--cache-dump") == 0) {
+    if (argIdx + 1 >= argc) {
+      usage();
+      return 1;
+    }
+    dumpCacheDir(argv[argIdx + 1], gfx, FONT_ID);
+    return 0;
   }
 
   if (argIdx >= argc) {
@@ -166,19 +237,8 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  // Setup renderer with real font metrics
-  EInkDisplay display(0, 0, 0, 0, 0, 0);
-  GfxRenderer gfx(display);
-  gfx.begin();
-
-  EpdFont readerFont(&reader_2b);
-  EpdFont readerBoldFont(&reader_bold_2b);
-  EpdFont readerItalicFont(&reader_italic_2b);
-  EpdFontFamily readerFontFamily(&readerFont, &readerBoldFont, &readerItalicFont, &readerBoldFont);
-  gfx.insertFont(1818981670, readerFontFamily);  // READER_FONT_ID
-
   RenderConfig config;
-  config.fontId = 1818981670;
+  config.fontId = FONT_ID;
   config.viewportWidth = 464;                        // 480 - 2*(3+5)
   config.viewportHeight = showStatusBar ? 765 : 788;  // 800 - 9 - (3+23) or 800 - 9 - 3
   config.paragraphAlignment = 0;
@@ -212,7 +272,7 @@ int main(int argc, char* argv[]) {
         cache.extend(parser, batchSize);
       }
       printf("  Spine %d: %d pages -> %s\n", i, cache.pageCount(), cachePath.c_str());
-      if (dump) dumpPages(cache);
+      if (dump) dumpPages(cache, gfx, FONT_ID);
       totalPages += cache.pageCount();
     }
     printf("Total: %d pages\n", totalPages);
@@ -230,7 +290,7 @@ int main(int argc, char* argv[]) {
     PageCache cache(cachePath);
     cache.create(parser, config, 0);
     printf("Markdown: %d pages -> %s\n", cache.pageCount(), cachePath.c_str());
-    if (dump) dumpPages(cache);
+    if (dump) dumpPages(cache, gfx, FONT_ID);
 
   } else if (type == FB2_FILE) {
     Fb2 fb2file(filepath, outputDir);
@@ -250,7 +310,7 @@ int main(int argc, char* argv[]) {
       cache.extend(parser, batchSize);
     }
     printf("FB2: %d pages -> %s\n", cache.pageCount(), cachePath.c_str());
-    if (dump) dumpPages(cache);
+    if (dump) dumpPages(cache, gfx, FONT_ID);
 
   } else {
     Txt txt(filepath, outputDir);
@@ -265,7 +325,7 @@ int main(int argc, char* argv[]) {
     PageCache cache(cachePath);
     cache.create(parser, config, 0);
     printf("TXT: %d pages -> %s\n", cache.pageCount(), cachePath.c_str());
-    if (dump) dumpPages(cache);
+    if (dump) dumpPages(cache, gfx, FONT_ID);
   }
 
   return 0;

@@ -48,7 +48,6 @@ struct Theme {
   int readerFontIdLarge;
 
   // External font family names (empty = use builtin)
-  char uiFontFamily[32];
   char readerFontFamilyXSmall[32];
   char readerFontFamilySmall[32];
   char readerFontFamilyMedium[32];
@@ -79,7 +78,6 @@ inline Theme getBuiltinLightTheme() {
   theme.readerFontId = READER_FONT_ID;
   theme.readerFontIdMedium = READER_FONT_ID_MEDIUM;
   theme.readerFontIdLarge = READER_FONT_ID_LARGE;
-  theme.uiFontFamily[0] = '\0';
   theme.readerFontFamilyXSmall[0] = '\0';
   theme.readerFontFamilySmall[0] = '\0';
   theme.readerFontFamilyMedium[0] = '\0';
@@ -111,7 +109,6 @@ inline Theme getBuiltinDarkTheme() {
   theme.readerFontId = READER_FONT_ID;
   theme.readerFontIdMedium = READER_FONT_ID_MEDIUM;
   theme.readerFontIdLarge = READER_FONT_ID_LARGE;
-  theme.uiFontFamily[0] = '\0';
   theme.readerFontFamilyXSmall[0] = '\0';
   theme.readerFontFamilySmall[0] = '\0';
   theme.readerFontFamilyMedium[0] = '\0';

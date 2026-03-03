@@ -45,6 +45,18 @@ class GfxRenderer {
   mutable std::map<int, std::array<StreamingEpdFont*, EpdFontFamily::kExternalStyleCount>> _streamingFonts;
   ExternalFont* _externalFont = nullptr;
 
+  // Font IDs excluded from external font lookup (UI/status bar fonts stay builtin)
+  static constexpr size_t MAX_EXCLUDED_FONT_IDS = 4;
+  int _externalFontExcludedIds[MAX_EXCLUDED_FONT_IDS] = {};
+  int _externalFontExcludedCount = 0;
+
+  bool isExternalFontAllowed(int fontId) const {
+    for (int i = 0; i < _externalFontExcludedCount; i++) {
+      if (_externalFontExcludedIds[i] == fontId) return false;
+    }
+    return true;
+  }
+
   // Lazy font style resolver: called when a streaming font variant (bold/italic) is
   // requested but not yet loaded. The callback should load the variant and call
   // setStreamingFont() + updateFontFamily() to register it.
@@ -96,7 +108,7 @@ class GfxRenderer {
                   EpdFontFamily::Style style, int fontId) const;
   void renderThaiCluster(const EpdFontFamily& fontFamily, const ThaiShaper::ThaiCluster& cluster, int* x, int y,
                          bool pixelState, EpdFontFamily::Style style, int fontId) const;
-  void renderExternalGlyph(uint32_t cp, int* x, int y, bool pixelState) const;
+  void renderExternalGlyph(uint32_t cp, int* x, int y, bool pixelState, const uint8_t* bitmap = nullptr) const;
   int getExternalGlyphWidth(uint32_t cp) const;
   bool tryResolveExternalFont() const;
   void freeBwBufferChunks();
@@ -122,6 +134,10 @@ class GfxRenderer {
   }
   void setExternalFont(ExternalFont* font) { _externalFont = font; }
   ExternalFont* getExternalFont() const { return _externalFont; }
+  void excludeExternalFont(int fontId) {
+    if (_externalFontExcludedCount < static_cast<int>(MAX_EXCLUDED_FONT_IDS))
+      _externalFontExcludedIds[_externalFontExcludedCount++] = fontId;
+  }
 
   void setFontStyleResolver(FontStyleResolver resolver, void* ctx) {
     _fontStyleResolver = resolver;
@@ -189,6 +205,7 @@ class GfxRenderer {
   int getSpaceWidth(int fontId) const;
   int getFontAscenderSize(int fontId) const;
   int getLineHeight(int fontId) const;
+  int getEffectiveLineHeight(int fontId) const;
   std::string truncatedText(const int fontId, const char* text, const int maxWidth,
                             const EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   // Breaks a single word into chunks that fit within maxWidth, adding "-" where needed

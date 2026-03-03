@@ -130,12 +130,74 @@ A sans-serif font with complete Arabic script support including contextual shapi
 
 ### CJK Fonts (Chinese/Japanese/Korean)
 
-For CJK texts, Papyrix uses external `.bin` format fonts that are streamed from the SD card due to their large size.
+For CJK texts, Papyrix uses external `.bin` format fonts that are streamed from the SD card due to their large size. The `.bin` format uses direct codepoint indexing (1-bit bitmap, MSB first) for the full BMP range (U+0000-U+FFEF).
 
-- **Source Han Sans CN** (`source-han-sans-cn_20_20x20.bin`) - Simplified Chinese
-- **King Hwa Old Song** (`king-hwa-old-song_38_33x39.bin`) - Traditional Chinese
+#### Quick Start with gen_cjk_theme.sh
 
-See `light-cjk-external.theme` for usage.
+The easiest way to create CJK fonts is with `gen_cjk_theme.sh`, which generates a `.bin` font and matching `.theme` file:
+
+```bash
+# CJK font renders everything (Latin + CJK)
+./scripts/gen_cjk_theme.sh --cjk MyCJKFont.otf --latin-mode cjk --name my-cjk-font
+
+# Separate Latin font for ANSI, CJK font for ideographs
+./scripts/gen_cjk_theme.sh --cjk MyCJKFont.ttf --latin MySerifFont.ttf --name my-mixed-font
+
+# CJK only, builtin system font handles Latin
+./scripts/gen_cjk_theme.sh --cjk MyCJKFont.otf --latin-mode system --name my-cjk-font
+```
+
+#### Manual Conversion with fontconvert-bin
+
+For single-size conversion or custom options, use the Go converter (fast, no native dependencies):
+
+```bash
+# Build the Go converter (one-time)
+make fontconvert-bin
+
+# Basic CJK conversion
+tools/fontconvert-bin/build/fontconvert-bin MyCJKFont.ttf --pixel-height 34 --name my-cjk -o /tmp/
+
+# With separate Latin font
+tools/fontconvert-bin/build/fontconvert-bin MyCJKFont.ttf --pixel-height 34 --latin-font Latin.ttf --name mixed -o /tmp/
+
+# CJK only (builtin handles Latin)
+tools/fontconvert-bin/build/fontconvert-bin MyCJKFont.ttf --pixel-height 30 --cjk-only --name cjk -o /tmp/
+```
+
+Alternative: Python converter (slower, no build step):
+
+```bash
+uv run scripts/fontconvert_bin.py MyCJKFont.ttf --pixel-height 34 --name my-cjk -o /tmp/
+```
+
+Options:
+- `--size N` — Font size in points (default: 20)
+- `--pixel-height N` — Pixel height (overrides --size/--dpi)
+- `--name NAME` — Font name for output
+- `--latin-font FILE` — Separate font for Latin (U+0000-U+024F)
+- `--latin-size N` — Pixel height for Latin font
+- `--cjk-only` — Zero Latin range, empty slots fall through to builtin
+- `-o DIR` — Output directory
+- `--dpi N` — Rendering DPI (default: 150)
+- `--max-codepoint N` — Highest codepoint (default: 0xFFEF)
+
+#### CJK Font Format Details
+
+- **Direct codepoint indexing**: `offset = codepoint * bytesPerChar`
+- **1-bit bitmap**, MSB first, `bytesPerRow = (W+7)//8`
+- **Cell dimensions**: auto-calculated from sample CJK chars, capped at 64x64
+- **Cell size constraint**: max 512 bytes/glyph (64x64 at 1-bit)
+- **Filename encodes metadata**: `{name}_{size}_{W}x{H}.bin` or `{name}_px{height}_{W}x{H}.bin`
+- **Glyph filtering**: detects Latin glyph reuse (font mapping bugs), skips narrow ideographs (<20% cell width)
+
+#### Latin Handling Modes
+
+| Mode | Description | When to use |
+|------|-------------|-------------|
+| `cjk` | CJK font renders Latin + CJK | Font has good Latin glyphs |
+| `include` | Separate Latin font for U+0000-U+024F | Want different Latin/CJK fonts |
+| `system` | Builtin font handles Latin, `.bin` for CJK only | Prefer builtin Latin rendering |
 
 ## Converting and Installing Fonts
 

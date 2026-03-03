@@ -81,7 +81,7 @@ bool ExternalFont::parseFilename(const char* filepath) {
 
   *lastUnderscore = '\0';
 
-  // Find size
+  // Find size (supports both "38" and "px30" notation)
   lastUnderscore = strrchr(nameCopy, '_');
   if (!lastUnderscore) {
     LOG_ERR(TAG, "Invalid filename format: no size");
@@ -89,7 +89,13 @@ bool ExternalFont::parseFilename(const char* filepath) {
   }
 
   int size;
-  if (sscanf(lastUnderscore + 1, "%d", &size) != 1) {
+  const char* sizeStr = lastUnderscore + 1;
+  if (strncmp(sizeStr, "px", 2) == 0) {
+    if (sscanf(sizeStr + 2, "%d", &size) != 1) {
+      LOG_ERR(TAG, "Failed to parse pixel-height size");
+      return false;
+    }
+  } else if (sscanf(sizeStr, "%d", &size) != 1) {
     LOG_ERR(TAG, "Failed to parse size");
     return false;
   }
@@ -261,9 +267,10 @@ const uint8_t* ExternalFont::getGlyph(uint32_t codepoint) {
   // Check if this is a whitespace character (U+2000-U+200F: various spaces, U+3000: ideographic space)
   bool isWhitespace = (codepoint >= 0x2000 && codepoint <= 0x200F) || codepoint == 0x3000;
 
-  // Mark as notFound only if read failed or (empty AND not whitespace AND non-ASCII)
+  // Mark as notFound only if read failed or (empty AND not whitespace)
   // Whitespace characters are expected to be empty but should still be rendered
-  _cache[slot].notFound = !readSuccess || (isEmpty && !isWhitespace && codepoint > 0x7F);
+  // Empty ASCII slots (from --cjk-only fonts) also marked notFound so they fall through to builtin
+  _cache[slot].notFound = !readSuccess || (isEmpty && !isWhitespace);
 
   // Store metrics
   if (!isEmpty) {

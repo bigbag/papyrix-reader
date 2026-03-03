@@ -35,10 +35,6 @@ item_height = 30
 item_spacing = 0
 
 [fonts]
-# Custom UI font family name (leave empty for builtin UI font)
-# Must match directory name under /config/fonts/ on SD card
-# Example: ui_font = noto-sans
-ui_font =
 # Custom reader font for each size (leave empty for builtin)
 # Must match directory name under /config/fonts/ on SD card
 # Example: reader_font_small = noto-serif-14

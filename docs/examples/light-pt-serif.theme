@@ -27,7 +27,6 @@ item_height = 30
 item_spacing = 0
 
 [fonts]
-ui_font =
 reader_font_small = pt-serif-14
 reader_font_medium = pt-serif-16
 reader_font_large = pt-serif-18

@@ -2,6 +2,7 @@
 
 #include <EInkDisplay.h>
 #include <EpdFontFamily.h>
+#include <ExternalFont.h>
 #include <ThaiCluster.h>
 #include <Utf8.h>
 
@@ -32,6 +33,17 @@ class GfxRenderer {
   using FontStyleResolver = void (*)(void* ctx, int fontId, int styleIdx);
   mutable FontStyleResolver _fontStyleResolver = nullptr;
   mutable void* _fontStyleResolverCtx = nullptr;
+
+  static constexpr size_t MAX_EXCLUDED_FONT_IDS = 4;
+  int _externalFontExcludedIds[MAX_EXCLUDED_FONT_IDS] = {};
+  int _externalFontExcludedCount = 0;
+
+  bool isExternalFontAllowed(int fontId) const {
+    for (int i = 0; i < _externalFontExcludedCount; i++) {
+      if (_externalFontExcludedIds[i] == fontId) return false;
+    }
+    return true;
+  }
   static constexpr size_t MAX_WIDTH_CACHE_SIZE = 256;
   mutable std::unordered_map<uint64_t, int16_t> wordWidthCache;
   static uint8_t frameBuffer_[EInkDisplay::BUFFER_SIZE];
@@ -52,6 +64,10 @@ class GfxRenderer {
   void clearWidthCache() { wordWidthCache.clear(); }
   void setExternalFont(ExternalFont* font) { _externalFont = font; }
   ExternalFont* getExternalFont() const { return _externalFont; }
+  void excludeExternalFont(int fontId) {
+    if (_externalFontExcludedCount < static_cast<int>(MAX_EXCLUDED_FONT_IDS))
+      _externalFontExcludedIds[_externalFontExcludedCount++] = fontId;
+  }
 
   void setFontStyleResolver(FontStyleResolver resolver, void* ctx) {
     _fontStyleResolver = resolver;
@@ -119,6 +135,19 @@ class GfxRenderer {
     const char* ptr = text;
     uint32_t cp;
     while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&ptr)))) {
+      // Try external font first (matches real GfxRenderer logic)
+      if (isExternalFontAllowed(fontId) && _externalFont && _externalFont->isLoaded()) {
+        if (_externalFont->getGlyph(cp)) {
+          uint8_t minX = 0, advX = _externalFont->getCharWidth();
+          if (_externalFont->getGlyphMetrics(cp, &minX, &advX)) {
+            w += advX;
+          } else {
+            w += _externalFont->getCharWidth();
+          }
+          continue;
+        }
+      }
+      // Builtin fallback
       const EpdGlyph* glyph = font.getGlyph(cp, style);
       if (!glyph) glyph = font.getGlyph('?', style);
       if (glyph) w += glyph->advanceX;
@@ -144,6 +173,14 @@ class GfxRenderer {
     if (it == fontMap.end()) return 20;
     const EpdFontData* data = it->second.getData();
     return data ? data->advanceY : 20;
+  }
+  int getEffectiveLineHeight(int fontId) const {
+    int h = getLineHeight(fontId);
+    if (isExternalFontAllowed(fontId) && _externalFont && _externalFont->isLoaded()) {
+      int extH = _externalFont->getCharHeight() + 2;
+      if (extH > h) h = extH;
+    }
+    return h;
   }
   std::string truncatedText(int, const char* text, int, EpdFontFamily::Style = EpdFontFamily::REGULAR) const {
     return text ? text : "";
@@ -209,6 +246,18 @@ class GfxRenderer {
   }
 
   bool fontSupportsGrayscale(int) const { return false; }
+
+  // Check if a codepoint has a glyph (external font → builtin → false)
+  bool hasGlyph(int fontId, uint32_t cp) const {
+    if (isExternalFontAllowed(fontId) && _externalFont && _externalFont->isLoaded() && _externalFont->getGlyph(cp)) {
+      return true;
+    }
+    auto it = fontMap.find(fontId);
+    if (it != fontMap.end() && it->second.getGlyph(cp, EpdFontFamily::REGULAR)) {
+      return true;
+    }
+    return false;
+  }
 
   // Thai text - use same font metrics
   int getThaiTextWidth(int fontId, const char* text, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const {

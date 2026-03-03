@@ -29,7 +29,6 @@ item_height = 30
 item_spacing = 0
 
 [fonts]
-ui_font =
 reader_font_small = noto-sans-arabic-14
 reader_font_medium = noto-sans-arabic-16
 reader_font_large = noto-sans-arabic-18

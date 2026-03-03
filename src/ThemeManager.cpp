@@ -103,10 +103,7 @@ bool ThemeManager::loadFromFileToTheme(const char* path, Theme& theme) {
     }
     // [fonts] section
     else if (strcmp(section, "fonts") == 0) {
-      if (strcmp(key, "ui_font") == 0) {
-        strncpy(theme.uiFontFamily, value, sizeof(theme.uiFontFamily) - 1);
-        theme.uiFontFamily[sizeof(theme.uiFontFamily) - 1] = '\0';
-      } else if (strcmp(key, "reader_font_xsmall") == 0) {
+      if (strcmp(key, "reader_font_xsmall") == 0) {
         strncpy(theme.readerFontFamilyXSmall, value, sizeof(theme.readerFontFamilyXSmall) - 1);
         theme.readerFontFamilyXSmall[sizeof(theme.readerFontFamilyXSmall) - 1] = '\0';
       } else if (strcmp(key, "reader_font_small") == 0) {
@@ -194,7 +191,6 @@ bool ThemeManager::saveToFile(const char* path, const Theme& theme) {
   file.println();
 
   file.println("[fonts]");
-  file.printf("ui_font = %s\n", theme.uiFontFamily);
   file.printf("reader_font_xsmall = %s\n", theme.readerFontFamilyXSmall);
   file.printf("reader_font_small = %s\n", theme.readerFontFamilySmall);
   file.printf("reader_font_medium = %s\n", theme.readerFontFamilyMedium);

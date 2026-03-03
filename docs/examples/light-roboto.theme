@@ -27,7 +27,6 @@ item_height = 30
 item_spacing = 0
 
 [fonts]
-ui_font =
 reader_font_small = roboto-14
 reader_font_medium = roboto-16
 reader_font_large = roboto-18

@@ -39,7 +39,7 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
     file.seek(currentOffset_);
   }
 
-  const int lineHeight = static_cast<int>(renderer_.getLineHeight(config_.fontId) * config_.lineCompression);
+  const int lineHeight = static_cast<int>(renderer_.getEffectiveLineHeight(config_.fontId) * config_.lineCompression);
   const int maxLinesPerPage = config_.viewportHeight / lineHeight;
 
   uint8_t buffer[READ_CHUNK_SIZE + 1];
@@ -173,9 +173,26 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
 
       // Prevent extremely long words from accumulating
       if (partialWord.length() > 100) {
-        partialWord.resize(utf8NormalizeNfc(&partialWord[0], partialWord.size()));
-        currentBlock->addWord(partialWord, EpdFontFamily::REGULAR);
-        partialWord.clear();
+        // Back up to last valid UTF-8 codepoint boundary to avoid splitting multi-byte chars
+        size_t safeLen = partialWord.length();
+        while (safeLen > 0 && (static_cast<unsigned char>(partialWord[safeLen - 1]) & 0xC0) == 0x80) {
+          safeLen--;
+        }
+        if (safeLen > 0 && static_cast<unsigned char>(partialWord[safeLen - 1]) >= 0xC0) {
+          safeLen--;
+        }
+
+        if (safeLen > 0) {
+          std::string overflow = partialWord.substr(safeLen);
+          partialWord.resize(safeLen);
+          partialWord.resize(utf8NormalizeNfc(&partialWord[0], partialWord.size()));
+          currentBlock->addWord(partialWord, EpdFontFamily::REGULAR);
+          partialWord = std::move(overflow);
+        } else {
+          partialWord.resize(utf8NormalizeNfc(&partialWord[0], partialWord.size()));
+          currentBlock->addWord(partialWord, EpdFontFamily::REGULAR);
+          partialWord.clear();
+        }
       }
     }
 

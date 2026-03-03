@@ -12,7 +12,10 @@ tmp/*
 data/*
 crosspoint-reader/*
 *.o
+scripts/fontconvert_bin
 test/build/*
+tools/fontconvert-bin/build/
+tools/fontconvert-bin/papyrix-fontconvert-bin
 tools/monitor/build/
 tools/reader-test/build/
 /monitor

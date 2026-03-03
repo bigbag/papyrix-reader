@@ -3,7 +3,7 @@
 
 .PHONY: all build build-release release upload upload-release flash flash-release \
         clean format check monitor size erase build-fs upload-fs sleep-screen gh-release changelog help \
-        test test-build test-run test-clean reader-test
+        test test-build test-run test-clean fontconvert-bin reader-test
 
 # Default target
 all: help
@@ -135,6 +135,9 @@ test-clean: ## Clean test build artifacts
 	@rm -rf test/build
 
 ## Tools:
+
+fontconvert-bin: ## Build Go fontconvert-bin tool (CJK .bin font converter)
+	$(MAKE) -C tools/fontconvert-bin build
 
 reader-test: ## Build desktop reader-test tool (process books without flashing)
 	@mkdir -p tools/reader-test/build

@@ -120,22 +120,21 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
     w = getArabicTextWidth(fontId, text, style);
   } else if (ScriptDetector::containsThai(text)) {
     w = getThaiTextWidth(fontId, text, style);
-  } else if (_externalFont && _externalFont->isLoaded()) {
-    // Character-by-character calculation with external font fallback (already loaded)
+  } else if (isExternalFontAllowed(fontId) &&
+             ((_externalFont && _externalFont->isLoaded()) || tryResolveExternalFont())) {
+    // Character-by-character: try external font first, then builtin fallback
     const auto& font = fontMap.at(fontId);
     const char* ptr = text;
     uint32_t cp;
     while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&ptr)))) {
-      const EpdGlyph* glyph = font.getGlyph(cp, style);
-      if (glyph) {
-        w += glyph->advanceX;
+      const int extWidth = getExternalGlyphWidth(cp);
+      if (extWidth > 0) {
+        w += extWidth;
       } else {
-        // Try external font
-        const int extWidth = getExternalGlyphWidth(cp);
-        if (extWidth > 0) {
-          w += extWidth;
+        const EpdGlyph* glyph = font.getGlyph(cp, style);
+        if (glyph) {
+          w += glyph->advanceX;
         } else {
-          // Fall back to '?' glyph width
           const EpdGlyph* fallback = font.getGlyph('?', style);
           if (fallback) {
             w += fallback->advanceX;
@@ -708,6 +707,15 @@ int GfxRenderer::getLineHeight(const int fontId) const {
   return fontMap.at(fontId).getData(EpdFontFamily::REGULAR)->advanceY;
 }
 
+int GfxRenderer::getEffectiveLineHeight(const int fontId) const {
+  int h = getLineHeight(fontId);
+  if (isExternalFontAllowed(fontId) && _externalFont && _externalFont->isLoaded()) {
+    int extH = _externalFont->getCharHeight() + 2;
+    if (extH > h) h = extH;
+  }
+  return h;
+}
+
 bool GfxRenderer::fontSupportsGrayscale(const int fontId) const {
   auto it = fontMap.find(fontId);
   if (it == fontMap.end()) {
@@ -839,15 +847,17 @@ void GfxRenderer::cleanupGrayscaleWithFrameBuffer() const { einkDisplay.cleanupG
 
 void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp, int* x, const int* y,
                              const bool pixelState, const EpdFontFamily::Style style, const int fontId) const {
-  const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
-  if (!glyph) {
-    // Try external font fallback (for CJK characters) — may trigger lazy load
-    if ((_externalFont || (ScriptDetector::isCjkCodepoint(cp) && tryResolveExternalFont())) &&
-        _externalFont->isLoaded()) {
-      renderExternalGlyph(cp, x, *y, pixelState);
+  // Try external font first — covers CJK and optionally Latin from .bin fonts
+  if (isExternalFontAllowed(fontId) && (_externalFont || tryResolveExternalFont()) && _externalFont->isLoaded()) {
+    const uint8_t* extBitmap = _externalFont->getGlyph(cp);
+    if (extBitmap) {
+      renderExternalGlyph(cp, x, *y - fontFamily.getData(EpdFontFamily::REGULAR)->ascender, pixelState, extBitmap);
       return;
     }
+  }
 
+  const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
+  if (!glyph) {
     // For whitespace characters missing from font, advance by space width instead of rendering '?'
     if (cp == 0x2002 || cp == 0x2003 || cp == 0x00A0) {  // EN SPACE, EM SPACE, NBSP
       const EpdGlyph* spaceGlyph = fontFamily.getGlyph(' ', style);
@@ -989,12 +999,13 @@ void GfxRenderer::freeBitmapRowBuffers() {
   }
 }
 
-void GfxRenderer::renderExternalGlyph(const uint32_t cp, int* x, const int y, const bool pixelState) const {
+void GfxRenderer::renderExternalGlyph(const uint32_t cp, int* x, const int y, const bool pixelState,
+                                      const uint8_t* bitmap) const {
   if (!_externalFont || !_externalFont->isLoaded()) {
     return;
   }
 
-  const uint8_t* bitmap = _externalFont->getGlyph(cp);
+  if (!bitmap) bitmap = _externalFont->getGlyph(cp);
   if (!bitmap) {
     // Glyph not found - advance by 1/3 char width as fallback
     *x += _externalFont->getCharWidth() / 3;

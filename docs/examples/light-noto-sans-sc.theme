@@ -1,0 +1,33 @@
+# Papyrix Theme: Light Noto Sans SC (Simplified Chinese)
+# Copy this file to /config/themes/ on your SD card.
+# Copy noto-sans-sc_34_34x45.bin to /config/fonts/ on your SD card.
+#
+# All glyphs (Latin + CJK) rendered from NotoSansSC-Regular.ttf.
+# Font file: noto-sans-sc_34_34x45.bin  (14 MB)
+
+[theme]
+name = Light Noto Sans SC
+
+[colors]
+inverted_mode = false
+background = white
+
+[selection]
+fill_color = black
+text_color = white
+
+[text]
+primary_color = black
+secondary_color = black
+
+[layout]
+margin_top = 9
+margin_side = 3
+item_height = 30
+item_spacing = 0
+
+[fonts]
+reader_font_xsmall = noto-sans-sc_34_34x45.bin
+reader_font_small = noto-sans-sc_34_34x45.bin
+reader_font_medium = noto-sans-sc_34_34x45.bin
+reader_font_large = noto-sans-sc_34_34x45.bin

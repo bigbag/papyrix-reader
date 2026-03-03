@@ -242,6 +242,8 @@ void setupDisplayAndFonts(bool allReaderSizes = true) {
   }
   renderer.insertFont(UI_FONT_ID, uiFontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
+  renderer.excludeExternalFont(UI_FONT_ID);
+  renderer.excludeExternalFont(SMALL_FONT_ID);
   LOG_INF(TAG, "Fonts setup");
 }
 
@@ -250,15 +252,6 @@ void applyThemeFonts() {
 
   // Reset UI font to builtin first in case custom font loading fails
   theme.uiFontId = UI_FONT_ID;
-
-  // Apply custom UI font if specified (small, always safe to load)
-  if (theme.uiFontFamily[0] != '\0') {
-    int customUiFontId = FONT_MANAGER.getFontId(theme.uiFontFamily, UI_FONT_ID);
-    if (customUiFontId != UI_FONT_ID) {
-      theme.uiFontId = customUiFontId;
-      LOG_INF(TAG, "UI font: %s (ID: %d)", theme.uiFontFamily, customUiFontId);
-    }
-  }
 
   // Only load the reader font that matches current font size setting
   // This saves ~500KB+ of RAM by not loading all three sizes

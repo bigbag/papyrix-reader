@@ -401,7 +401,30 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
 
     // If we're about to run out of space, then cut the word off and start a new one
     if (self->partWordBufferIndex >= MAX_WORD_SIZE) {
-      self->flushPartWordBuffer();
+      // Back up to last valid UTF-8 codepoint boundary to avoid splitting multi-byte chars
+      int safeIdx = self->partWordBufferIndex;
+      while (safeIdx > 0 && (static_cast<unsigned char>(self->partWordBuffer[safeIdx - 1]) & 0xC0) == 0x80) {
+        safeIdx--;
+      }
+      if (safeIdx > 0 && static_cast<unsigned char>(self->partWordBuffer[safeIdx - 1]) >= 0xC0) {
+        safeIdx--;
+      }
+
+      if (safeIdx > 0) {
+        int overflowLen = self->partWordBufferIndex - safeIdx;
+        char overflow[4];
+        if (overflowLen > 0) {
+          memcpy(overflow, &self->partWordBuffer[safeIdx], overflowLen);
+        }
+        self->partWordBufferIndex = safeIdx;
+        self->flushPartWordBuffer();
+        if (overflowLen > 0) {
+          memcpy(self->partWordBuffer, overflow, overflowLen);
+          self->partWordBufferIndex = overflowLen;
+        }
+      } else {
+        self->flushPartWordBuffer();
+      }
     }
 
     self->partWordBuffer[self->partWordBufferIndex++] = s[i];
@@ -741,7 +764,7 @@ bool ChapterHtmlSlimParser::resumeParsing() {
 void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
   if (stopRequested_) return;
 
-  const int lineHeight = renderer.getLineHeight(config.fontId) * config.lineCompression;
+  const int lineHeight = renderer.getEffectiveLineHeight(config.fontId) * config.lineCompression;
 
   if (currentPageNextY + lineHeight > config.viewportHeight) {
     ++pagesCreated_;
@@ -789,7 +812,7 @@ void ChapterHtmlSlimParser::makePages() {
     currentPageNextY = 0;
   }
 
-  const int lineHeight = renderer.getLineHeight(config.fontId) * config.lineCompression;
+  const int lineHeight = renderer.getEffectiveLineHeight(config.fontId) * config.lineCompression;
   currentTextBlock->layoutAndExtractLines(
       renderer, config.fontId, config.viewportWidth,
       [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); }, true,
@@ -910,7 +933,7 @@ void ChapterHtmlSlimParser::addImageToPage(std::shared_ptr<ImageBlock> image) {
   if (stopRequested_) return;
 
   const int imageHeight = image->getHeight();
-  const int lineHeight = renderer.getLineHeight(config.fontId) * config.lineCompression;
+  const int lineHeight = renderer.getEffectiveLineHeight(config.fontId) * config.lineCompression;
   const bool isTallImage = imageHeight > config.viewportHeight / 2;
 
   if (!currentPage) {
