@@ -424,10 +424,7 @@ void EInkDisplay::displayBuffer(RefreshMode mode, bool turnOffScreen) {
   }
 
   // If currently in grayscale mode, revert first to black/white
-  if (inGrayscaleMode) {
-    inGrayscaleMode = false;
-    grayscaleRevert();
-  }
+  grayscaleRevert();
 
   // Set up full screen RAM area
   setRamArea(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
@@ -485,10 +482,7 @@ void EInkDisplay::displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, 
   }
 
   // displayWindow is not supported while the rest of the screen has grayscale content, revert it
-  if (inGrayscaleMode) {
-    inGrayscaleMode = false;
-    grayscaleRevert();
-  }
+  grayscaleRevert();
 
   // Calculate window buffer size
   const uint16_t windowWidthBytes = w / 8;

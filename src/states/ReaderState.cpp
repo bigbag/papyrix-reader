@@ -1005,6 +1005,9 @@ void ReaderState::renderXtcPage(Core& core) {
 
   switch (result) {
     case XtcPageRenderer::RenderResult::Success:
+      if (provider->getParser().getBitDepth() == 2) {
+        pagesUntilFullRefresh_ = 1;
+      }
       break;
     case XtcPageRenderer::RenderResult::EndOfBook:
       ui::centeredMessage(renderer_, theme, theme.uiFontId, "End of book");
