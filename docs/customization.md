@@ -375,7 +375,7 @@ uv run scripts/fontconvert.py noto-sans-arabic -r NotoSansArabic-Regular.ttf -b 
 
 ### CJK Fonts
 
-The ESP32-C3 has limited RAM (~380KB), so CJK fonts require external `.bin` format which streams glyphs from SD card. Pre-converted CJK fonts are available in the `docs/examples/fonts/` directory.
+The ESP32-C3 has limited RAM (~380KB), so CJK fonts require external `.bin` format which streams glyphs from SD card. Pre-converted CJK fonts are available in the `docs/examples/fonts/` directory. To convert your own CJK fonts, use `scripts/gen_cjk_theme.sh` (auto-downloads the converter binary) — see the [Fonts Guide: CJK section](fonts.md#cjk-fonts-chinesejapanesekorean) for details.
 
 ### Fallback Behavior
 

@@ -134,7 +134,7 @@ For CJK texts, Papyrix uses external `.bin` format fonts that are streamed from 
 
 #### Quick Start with gen_cjk_theme.sh
 
-The easiest way to create CJK fonts is with `gen_cjk_theme.sh`, which generates a `.bin` font and matching `.theme` file:
+The easiest way to create CJK fonts is with `gen_cjk_theme.sh`, which generates a `.bin` font and matching `.theme` file. The script automatically downloads the `fontconvert-bin` binary if it's not already built locally (no Go installation required):
 
 ```bash
 # CJK font renders everything (Latin + CJK)
@@ -149,11 +149,13 @@ The easiest way to create CJK fonts is with `gen_cjk_theme.sh`, which generates 
 
 #### Manual Conversion with fontconvert-bin
 
-For single-size conversion or custom options, use the Go converter (fast, no native dependencies):
+For single-size conversion or custom options, use the Go converter directly:
 
 ```bash
-# Build the Go converter (one-time)
+# Build from source (requires Go) — one-time
 make fontconvert-bin
+
+# Or let gen_cjk_theme.sh auto-download the pre-built binary (no Go needed)
 
 # Basic CJK conversion
 tools/fontconvert-bin/build/fontconvert-bin MyCJKFont.ttf --pixel-height 34 --name my-cjk -o /tmp/
@@ -163,12 +165,6 @@ tools/fontconvert-bin/build/fontconvert-bin MyCJKFont.ttf --pixel-height 34 --la
 
 # CJK only (builtin handles Latin)
 tools/fontconvert-bin/build/fontconvert-bin MyCJKFont.ttf --pixel-height 30 --cjk-only --name cjk -o /tmp/
-```
-
-Alternative: Python converter (slower, no build step):
-
-```bash
-uv run scripts/fontconvert_bin.py MyCJKFont.ttf --pixel-height 34 --name my-cjk -o /tmp/
 ```
 
 Options:

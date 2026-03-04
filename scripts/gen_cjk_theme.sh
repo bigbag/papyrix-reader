@@ -5,7 +5,7 @@
 # Runs fontconvert-bin at a single pixel height and creates a matching
 # theme INI file. All reader font sizes point to the same .bin file.
 #
-# Requires: tools/fontconvert-bin (run 'make fontconvert-bin' to build)
+# Requires: tools/fontconvert-bin (auto-downloaded or built via 'make fontconvert-bin')
 #
 # Usage:
 #   ./scripts/gen_cjk_theme.sh --cjk CJKFont.ttf [options]
@@ -23,11 +23,48 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CONVERTER="$SCRIPT_DIR/../tools/fontconvert-bin/build/fontconvert-bin"
+PROJECT_DIR="$SCRIPT_DIR/.."
+CONVERTER="$PROJECT_DIR/tools/fontconvert-bin/build/fontconvert-bin"
+
+die() { echo "Error: $*" >&2; exit 1; }
+info() { echo "==> $*"; }
+warn() { echo "WARNING: $*" >&2; }
+
+GITHUB_REPO="bigbag/papyrix-reader"
+GITHUB_RELEASE_TAG="fontconvert-bin-v0.1.0"
+
+# Auto-download fontconvert-bin from GitHub releases if not found locally
+download_converter() {
+    local os arch asset_name url dest_dir
+    dest_dir="$PROJECT_DIR/tools/fontconvert-bin/build"
+
+    os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+    arch="$(uname -m)"
+    case "$arch" in
+        x86_64)  arch="amd64" ;;
+        aarch64|arm64) arch="arm64" ;;
+        *) die "Unsupported architecture: $arch" ;;
+    esac
+    case "$os" in
+        linux|darwin) ;;
+        *) die "Unsupported OS: $os (use 'make fontconvert-bin' to build from source)" ;;
+    esac
+
+    asset_name="fontconvert-bin-${os}-${arch}"
+    url="https://github.com/${GITHUB_REPO}/releases/download/${GITHUB_RELEASE_TAG}/${asset_name}"
+
+    info "Downloading fontconvert-bin for ${os}/${arch}..."
+    mkdir -p "$dest_dir"
+    if ! curl -fSL --progress-bar -o "$dest_dir/fontconvert-bin" "$url"; then
+        rm -f "$dest_dir/fontconvert-bin"
+        die "Failed to download fontconvert-bin from $url"
+    fi
+    chmod +x "$dest_dir/fontconvert-bin"
+    info "Downloaded to $dest_dir/fontconvert-bin"
+}
 
 if [[ ! -x "$CONVERTER" ]]; then
-    echo "Error: fontconvert-bin not found. Run 'make fontconvert-bin' first." >&2
-    exit 1
+    download_converter
 fi
 
 # Defaults
@@ -70,10 +107,6 @@ Examples:
   gen_cjk_theme.sh --cjk MyCJKFont.otf --latin-mode system --name my-cjk-font --dark
 EOF
 }
-
-die() { echo "Error: $*" >&2; exit 1; }
-info() { echo "==> $*"; }
-warn() { echo "WARNING: $*" >&2; }
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
