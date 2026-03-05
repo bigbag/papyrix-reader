@@ -1,6 +1,7 @@
 #include "test_utils.h"
 
 #include <cstdint>
+#include <vector>
 
 // ============================================================================
 // Extract chapter navigation logic from ReaderState for unit testing.
@@ -242,6 +243,156 @@ int main() {
       holdNavigated = true;
     }
     runner.expectEq(4, s.currentSpineIndex, "Hold: repeat after release navigates to spine 4");
+  }
+
+  // ============================================
+  // XTC chapter navigation tests
+  // ============================================
+
+  // Minimal XTC state struct with flat page model and chapter boundaries
+  struct XtcChapter {
+    uint32_t startPage;
+  };
+
+  struct XtcNavState {
+    uint32_t currentPage = 0;
+    bool needsRender = false;
+    std::vector<XtcChapter> chapters;
+
+    int findCurrentChapter() const {
+      int current = -1;
+      for (size_t i = 0; i < chapters.size(); i++) {
+        if (chapters[i].startPage <= currentPage) {
+          current = i;
+        }
+      }
+      return current;
+    }
+
+    void navigateNextChapter() {
+      if (chapters.empty()) return;
+      int currentChapter = findCurrentChapter();
+      if (currentChapter + 1 >= static_cast<int>(chapters.size())) return;
+      currentPage = chapters[currentChapter + 1].startPage;
+      needsRender = true;
+    }
+
+    void navigatePrevChapter() {
+      if (chapters.empty()) return;
+      int currentChapter = findCurrentChapter();
+      if (currentChapter < 0) return;
+      if (currentPage > chapters[currentChapter].startPage) {
+        currentPage = chapters[currentChapter].startPage;
+      } else if (currentChapter > 0) {
+        currentPage = chapters[currentChapter - 1].startPage;
+      } else {
+        return;
+      }
+      needsRender = true;
+    }
+  };
+
+  // XTC chapters: ch0 starts at page 0, ch1 at page 10, ch2 at page 25
+  auto makeXtcChapters = []() -> std::vector<XtcChapter> {
+    return {{0}, {10}, {25}};
+  };
+
+  // XTC next: advance from chapter 0 to chapter 1
+  {
+    XtcNavState s;
+    s.chapters = makeXtcChapters();
+    s.currentPage = 5;
+    s.navigateNextChapter();
+    runner.expectEq(10u, s.currentPage, "XTC next: from page 5 (ch0) jumps to page 10 (ch1)");
+    runner.expectTrue(s.needsRender, "XTC next: needsRender is true");
+  }
+
+  // XTC next: advance from chapter 1 to chapter 2
+  {
+    XtcNavState s;
+    s.chapters = makeXtcChapters();
+    s.currentPage = 15;
+    s.navigateNextChapter();
+    runner.expectEq(25u, s.currentPage, "XTC next: from page 15 (ch1) jumps to page 25 (ch2)");
+    runner.expectTrue(s.needsRender, "XTC next: needsRender is true");
+  }
+
+  // XTC next: at last chapter, no-op
+  {
+    XtcNavState s;
+    s.chapters = makeXtcChapters();
+    s.currentPage = 30;
+    s.navigateNextChapter();
+    runner.expectEq(30u, s.currentPage, "XTC next: at last chapter stays at page 30");
+    runner.expectFalse(s.needsRender, "XTC next: at last chapter needsRender stays false");
+  }
+
+  // XTC next: from exact chapter start, jump to next chapter
+  {
+    XtcNavState s;
+    s.chapters = makeXtcChapters();
+    s.currentPage = 10;
+    s.navigateNextChapter();
+    runner.expectEq(25u, s.currentPage, "XTC next: from exact ch1 start (page 10) jumps to ch2 (page 25)");
+    runner.expectTrue(s.needsRender, "XTC next: from exact chapter start needsRender is true");
+  }
+
+  // XTC next: no chapters, no-op
+  {
+    XtcNavState s;
+    s.currentPage = 5;
+    s.navigateNextChapter();
+    runner.expectEq(5u, s.currentPage, "XTC next: no chapters, stays at page 5");
+    runner.expectFalse(s.needsRender, "XTC next: no chapters, needsRender stays false");
+  }
+
+  // XTC prev: mid-chapter, go to start of current chapter
+  {
+    XtcNavState s;
+    s.chapters = makeXtcChapters();
+    s.currentPage = 15;
+    s.navigatePrevChapter();
+    runner.expectEq(10u, s.currentPage, "XTC prev: from page 15 jumps to start of ch1 (page 10)");
+    runner.expectTrue(s.needsRender, "XTC prev: mid-chapter needsRender is true");
+  }
+
+  // XTC prev: at start of chapter, go to previous chapter
+  {
+    XtcNavState s;
+    s.chapters = makeXtcChapters();
+    s.currentPage = 10;
+    s.navigatePrevChapter();
+    runner.expectEq(0u, s.currentPage, "XTC prev: from start of ch1 jumps to ch0 (page 0)");
+    runner.expectTrue(s.needsRender, "XTC prev: at chapter start needsRender is true");
+  }
+
+  // XTC prev: at first chapter start, no-op
+  {
+    XtcNavState s;
+    s.chapters = makeXtcChapters();
+    s.currentPage = 0;
+    s.navigatePrevChapter();
+    runner.expectEq(0u, s.currentPage, "XTC prev: at first chapter start stays at page 0");
+    runner.expectFalse(s.needsRender, "XTC prev: at first chapter start needsRender stays false");
+  }
+
+  // XTC prev: mid first chapter, go to start
+  {
+    XtcNavState s;
+    s.chapters = makeXtcChapters();
+    s.currentPage = 5;
+    s.navigatePrevChapter();
+    runner.expectEq(0u, s.currentPage, "XTC prev: from page 5 (mid ch0) jumps to page 0");
+    runner.expectTrue(s.needsRender, "XTC prev: mid first chapter needsRender is true");
+  }
+
+  // XTC prev: no chapters, no-op
+  {
+    XtcNavState s;
+    s.currentPage = 5;
+    s.navigatePrevChapter();
+    runner.expectEq(5u, s.currentPage, "XTC prev: no chapters, stays at page 5");
+    runner.expectFalse(s.needsRender, "XTC prev: no chapters, needsRender stays false");
   }
 
   return runner.allPassed() ? 0 : 1;

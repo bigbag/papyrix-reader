@@ -630,6 +630,30 @@ void ReaderState::applyNavResult(const ReaderNavigation::NavResult& result, Core
 
 void ReaderState::navigateNextChapter(Core& core) {
   ContentType type = core.content.metadata().type;
+
+  if (type == ContentType::Xtc) {
+    const uint16_t count = core.content.tocCount();
+    if (count == 0) return;
+
+    // Find current chapter
+    int currentChapter = -1;
+    for (uint16_t i = 0; i < count; i++) {
+      auto result = core.content.getTocEntry(i);
+      if (result.ok() && result.value.pageIndex <= currentPage_) {
+        currentChapter = i;
+      }
+    }
+
+    if (currentChapter + 1 >= static_cast<int>(count)) return;
+
+    auto next = core.content.getTocEntry(currentChapter + 1);
+    if (!next.ok()) return;
+
+    currentPage_ = next.value.pageIndex;
+    needsRender_ = true;
+    return;
+  }
+
   if (type != ContentType::Epub) return;
 
   auto* provider = core.content.asEpub();
@@ -650,6 +674,40 @@ void ReaderState::navigateNextChapter(Core& core) {
 
 void ReaderState::navigatePrevChapter(Core& core) {
   ContentType type = core.content.metadata().type;
+
+  if (type == ContentType::Xtc) {
+    const uint16_t count = core.content.tocCount();
+    if (count == 0) return;
+
+    // Find current chapter
+    int currentChapter = -1;
+    uint32_t currentChapterStart = 0;
+    for (uint16_t i = 0; i < count; i++) {
+      auto result = core.content.getTocEntry(i);
+      if (result.ok() && result.value.pageIndex <= currentPage_) {
+        currentChapter = i;
+        currentChapterStart = result.value.pageIndex;
+      }
+    }
+
+    if (currentChapter < 0) return;
+
+    if (currentPage_ > currentChapterStart) {
+      // Mid-chapter: go to start of current chapter
+      currentPage_ = currentChapterStart;
+    } else if (currentChapter > 0) {
+      // At start of chapter: go to previous chapter
+      auto prev = core.content.getTocEntry(currentChapter - 1);
+      if (!prev.ok()) return;
+      currentPage_ = prev.value.pageIndex;
+    } else {
+      return;
+    }
+
+    needsRender_ = true;
+    return;
+  }
+
   if (type != ContentType::Epub) return;
 
   stopBackgroundCaching();
