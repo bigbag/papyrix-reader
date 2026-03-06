@@ -475,7 +475,7 @@ std::string GfxRenderer::truncatedText(const int fontId, const char* text, const
   int itemWidth = getTextWidth(fontId, item.c_str(), style);
   while (itemWidth > maxWidth && item.length() > 8) {
     // Remove "..." first, then remove one UTF-8 char, then add "..." back
-    if (item.length() >= 3 && item.substr(item.length() - 3) == "...") {
+    if (item.length() >= 3 && item.compare(item.length() - 3, 3, "...") == 0) {
       item.resize(item.length() - 3);
     }
     utf8RemoveLastChar(item);

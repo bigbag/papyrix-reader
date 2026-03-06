@@ -25,6 +25,7 @@
 #include <SDCardManager.h>
 #include <Txt.h>
 #include <Utf8.h>
+#include <FsHelpers.h>
 #include <LittleFS.h>
 
 #include <builtinFonts/reader_2b.h>
@@ -40,12 +41,10 @@ uint8_t GfxRenderer::frameBuffer_[EInkDisplay::BUFFER_SIZE];
 enum ContentType { EPUB, MARKDOWN, TXT_FILE, FB2_FILE, UNKNOWN };
 
 static ContentType detectType(const std::string& path) {
-  auto ext = path.substr(path.find_last_of('.') + 1);
-  for (auto& c : ext) c = static_cast<char>(tolower(c));
-  if (ext == "epub") return EPUB;
-  if (ext == "md" || ext == "markdown") return MARKDOWN;
-  if (ext == "txt") return TXT_FILE;
-  if (ext == "fb2") return FB2_FILE;
+  if (FsHelpers::hasExtension(path, ".epub")) return EPUB;
+  if (FsHelpers::hasExtension(path, ".md") || FsHelpers::hasExtension(path, ".markdown")) return MARKDOWN;
+  if (FsHelpers::hasExtension(path, ".txt")) return TXT_FILE;
+  if (FsHelpers::hasExtension(path, ".fb2")) return FB2_FILE;
   return UNKNOWN;
 }
 
@@ -123,7 +122,7 @@ static void dumpCacheDir(const std::string& dir, const GfxRenderer& gfx, int fon
   struct dirent* entry;
   while ((entry = readdir(d)) != nullptr) {
     std::string name = entry->d_name;
-    if (name.size() > 4 && name.substr(name.size() - 4) == ".bin") {
+    if (FsHelpers::hasExtension(name, ".bin")) {
       binFiles.push_back(scanDir + "/" + name);
     }
   }
