@@ -54,16 +54,20 @@ std::vector<String> SDCardManager::listFiles(const char* path, const int maxFile
 
   int count = 0;
   char name[128];
-  for (auto f = root.openNextFile(); f && count < maxFiles; f = root.openNextFile()) {
+  auto f = root.openNextFile();
+  while (f && count < maxFiles) {
     if (f.isDirectory()) {
       f.close();
+      f = root.openNextFile();
       continue;
     }
     f.getName(name, sizeof(name));
     ret.emplace_back(name);
     f.close();
     count++;
+    f = root.openNextFile();
   }
+  if (f) f.close();
   root.close();
   return ret;
 }
@@ -254,6 +258,7 @@ bool SDCardManager::removeDir(const char* path) {
     return false;
   }
   if (!dir.isDirectory()) {
+    dir.close();
     return false;
   }
 
@@ -268,16 +273,21 @@ bool SDCardManager::removeDir(const char* path) {
     filePath += name;
 
     if (file.isDirectory()) {
+      file.close();
       if (!removeDir(filePath.c_str())) {
+        dir.close();
         return false;
       }
     } else {
+      file.close();
       if (!sd.remove(filePath.c_str())) {
+        dir.close();
         return false;
       }
     }
     file = dir.openNextFile();
   }
 
+  dir.close();
   return sd.rmdir(path);
 }
