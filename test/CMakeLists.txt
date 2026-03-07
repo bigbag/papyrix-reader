@@ -42,6 +42,9 @@ include_directories(
   ${PROJECT_ROOT}/lib/GfxRenderer/src
   ${PROJECT_ROOT}/lib/EpdFont/src
   ${PROJECT_ROOT}/lib/ArabicShaper/src
+  ${PROJECT_ROOT}/lib/ZipFile/src
+  ${PROJECT_ROOT}/lib/InflateReader/src
+  ${PROJECT_ROOT}/lib/uzlib/src
 )
 
 # Common test helpers
@@ -196,6 +199,21 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${TEST_HELPERS}
     )
     target_include_directories(${TEST_NAME} PRIVATE
+      ${PROJECT_ROOT}/lib/InflateReader/src
+      ${PROJECT_ROOT}/lib/uzlib/src
+    )
+  elseif(TEST_NAME STREQUAL "ZipFileErrorPathTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/ZipFile/src/ZipFile.cpp
+      ${PROJECT_ROOT}/lib/InflateReader/src/InflateReader.cpp
+      ${PROJECT_ROOT}/lib/uzlib/src/tinflate.c
+      ${PROJECT_ROOT}/lib/uzlib/src/adler32.c
+      ${PROJECT_ROOT}/lib/uzlib/src/crc32.c
+      ${TEST_HELPERS}
+    )
+    target_include_directories(${TEST_NAME} PRIVATE
+      ${PROJECT_ROOT}/lib/ZipFile/src
       ${PROJECT_ROOT}/lib/InflateReader/src
       ${PROJECT_ROOT}/lib/uzlib/src
     )

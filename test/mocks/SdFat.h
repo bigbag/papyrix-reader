@@ -7,6 +7,9 @@
 #include <sstream>
 #include <string>
 
+// Forward declare Print (defined in platform_stubs.h)
+class Print;
+
 // File open mode flags
 #define O_RDONLY 0x00
 #define O_WRONLY 0x01
@@ -33,6 +36,12 @@ class FsFile {
     buffer_ = *buf;
     pos_ = 0;
     isOpen_ = true;
+  }
+
+  // Read limit injection: only allow N bytes to be read
+  void setReadLimit(size_t limit) {
+    readLimit_ = limit;
+    readLimitActive_ = true;
   }
 
   std::string getBuffer() const { return buffer_; }
@@ -73,16 +82,42 @@ class FsFile {
 
   int read() {
     if (!isOpen_ || pos_ >= buffer_.size()) return -1;
+    if (readLimitActive_ && totalRead_ >= readLimit_) return -1;
+    totalRead_++;
     return static_cast<unsigned char>(buffer_[pos_++]);
   }
 
   int read(uint8_t* buf, size_t len) {
     if (!isOpen_) return -1;
+    if (readLimitActive_) {
+      size_t remaining = readLimit_ - totalRead_;
+      if (remaining == 0) return 0;
+      len = std::min(len, remaining);
+    }
     size_t toRead = std::min(len, buffer_.size() - pos_);
     if (toRead == 0) return 0;
     memcpy(buf, buffer_.data() + pos_, toRead);
     pos_ += toRead;
+    totalRead_ += toRead;
     return static_cast<int>(toRead);
+  }
+
+  // Overload for char* (common in C code)
+  int read(char* buf, size_t len) { return read(reinterpret_cast<uint8_t*>(buf), len); }
+
+  // Overload for void* (used by some libraries)
+  int read(void* buf, size_t len) { return read(static_cast<uint8_t*>(buf), len); }
+
+  // Read into uint16_t* (used for reading 16-bit values)
+  int read(uint16_t* buf, size_t len) {
+    int bytes = read(reinterpret_cast<uint8_t*>(buf), len * 2);
+    return bytes > 0 ? bytes / 2 : bytes;
+  }
+
+  // Read into uint32_t* (used for reading 32-bit values)
+  int read(uint32_t* buf, size_t len) {
+    int bytes = read(reinterpret_cast<uint8_t*>(buf), len * 4);
+    return bytes > 0 ? bytes / 4 : bytes;
   }
 
   size_t write(uint8_t byte) {
@@ -112,4 +147,7 @@ class FsFile {
   std::shared_ptr<std::string> sharedBuffer_;
   size_t pos_ = 0;
   bool isOpen_ = false;
+  size_t readLimit_ = 0;
+  bool readLimitActive_ = false;
+  size_t totalRead_ = 0;
 };

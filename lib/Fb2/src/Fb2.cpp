@@ -513,7 +513,8 @@ bool Fb2::loadMetaCache() {
 
   // Build compact LUT: record file offset for each TOC entry, skip the actual data
   tocItemCount_ = tocItemCount;
-  tocLut_.clear();
+  // Release old capacity before reserving new (swap idiom clears capacity from previous load)
+  std::vector<uint32_t>().swap(tocLut_);
   tocLut_.reserve(tocItemCount);
   for (uint16_t i = 0; i < tocItemCount; i++) {
     tocLut_.push_back(static_cast<uint32_t>(file.position()));
