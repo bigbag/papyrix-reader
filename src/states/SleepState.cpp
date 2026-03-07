@@ -78,8 +78,7 @@ void SleepState::enter(Core& core) {
   // Wait for power button release before entering deep sleep
   waitForPowerRelease();
 
-  // Hold GPIO pins to keep LDO enabled during sleep
-  gpio_deep_sleep_hold_en();
+  disableGpioPullsForSleep();
 
   LOG_INF(TAG, "Entering deep sleep");
 

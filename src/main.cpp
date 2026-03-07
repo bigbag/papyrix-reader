@@ -195,9 +195,7 @@ void verifyWakeupLongPress(esp_reset_reason_t resetReason) {
     // Button released too early. Returning to sleep.
     // IMPORTANT: Re-arm the wakeup trigger before sleeping again
     esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
-    // Hold all GPIO pins at their current state during deep sleep to keep the X4's LDO enabled.
-    // Without this, floating pins can cause increased power draw during sleep.
-    gpio_deep_sleep_hold_en();
+    disableGpioPullsForSleep();
     esp_deep_sleep_start();
   }
 }
@@ -308,7 +306,6 @@ static papyrix::BootMode currentBootMode = papyrix::BootMode::UI;
 bool earlyInit() {
   // Only start serial if USB connected
   pinMode(UART0_RXD, INPUT);
-  gpio_deep_sleep_hold_dis();  // Release GPIO hold from deep sleep to allow fresh readings
   if (isUsbConnected()) {
     Serial.begin(115200);
     delay(SERIAL_INIT_DELAY_MS);  // Allow USB CDC to initialize
