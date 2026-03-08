@@ -1,5 +1,56 @@
 
 
+## v1.17.0 (2026-03-08)
+
+*  SDCardManager: Fix file descriptor leaks in listFiles and removeDir [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  GfxRenderer: Replace substr comparison with compare(); reader-test: Use FsHelpers::hasExtension for file type detection [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  InputManager: Replace GPIO hold with explicit pull-up/pull-down disable for lower deep-sleep current [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  FileListState: Add Left/Right toggle for delete confirmation dialog [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Fb2: Use swap idiom for tocLut_; add ZipFile error path tests [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add support for books in html format [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.16.2 (2026-03-06)
+
+*  Move page turn from ButtonPress to ButtonRelease to prevent short+long press double-action. Issue #81 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.16.1 (2026-03-05)
+
+*  Add chapter navigation via button hold (long-press next/prev chapter) for EPUB reader. Issue #81 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Extend chapter navigation (long-press next/prev) to XTC format with flat page-based TOC lookup. Issue #81 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.16.0 (2026-03-05)
+
+*  Update docs [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Replace multi-page web UI with single-page tab-based app, add font/theme upload and file download/rename [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## fontconvert-bin-v0.1.0 (2026-03-04)
+
+
+
+## v1.15.0 (2026-03-04)
+
+*  Fix deep sleep current draw by powering down SD, LittleFS, and SPI before sleep [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add CJK font toolchain, external font rendering priority, and UTF-8 safe word splitting. Issue #77. [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Fb2, Xtc: Replace in-memory TOC and page tables with lazy file-backed lookups. Issue #80 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Fix grayscale-to-BW display transition for 2-bit XTC pages [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.14.0 (2026-03-01)
+
+*  Update changelog [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Update Readme [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add bookmark system with save/load, jump-to-page, and reader menu UI. Issue #44 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Update docs [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
 ## v1.13.1 (2026-02-27)
 
 *  Fix XTC books always opening to cover page on enter. Issue #79 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
