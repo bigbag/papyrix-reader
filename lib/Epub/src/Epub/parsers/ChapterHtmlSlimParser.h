@@ -67,6 +67,15 @@ class ChapterHtmlSlimParser {
     TextBlock::BLOCK_STYLE style;
   };
   std::vector<AlignEntry> alignStack_;
+
+  // List rendering state: tracks <ul>/<ol> nesting for bullet/number prefixes
+  struct ListEntry {
+    int depth;
+    bool isOrdered;
+    int counter;
+  };
+  std::vector<ListEntry> listStack_;
+  char pendingListMarker_[12] = {};  // Deferred marker when block creation was suspended
   bool aborted_ = false;
 
   // External abort callback for cooperative cancellation

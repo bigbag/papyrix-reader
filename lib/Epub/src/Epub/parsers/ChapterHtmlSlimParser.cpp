@@ -351,11 +351,31 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         self->alignStack_.push_back({self->depth, blockStyle});
       }
       self->startNewTextBlock(blockStyle);
+      // Add list marker for <li> elements
+      if (strcmp(name, "li") == 0 && !self->listStack_.empty()) {
+        auto& listEntry = self->listStack_.back();
+        listEntry.counter++;
+        char marker[12];
+        if (listEntry.isOrdered) {
+          snprintf(marker, sizeof(marker), "%d.", listEntry.counter);
+        } else {
+          // U+2022 BULLET (UTF-8: 0xE2 0x80 0xA2)
+          strcpy(marker, "\xe2\x80\xa2");
+        }
+        if (self->currentTextBlock && !self->pendingNewTextBlock_) {
+          self->currentTextBlock->addWord(marker, EpdFontFamily::REGULAR);
+        } else {
+          // Block creation was deferred (page batch limit hit); save marker for resume
+          memcpy(self->pendingListMarker_, marker, sizeof(self->pendingListMarker_));
+        }
+      }
     }
   } else if (matches(name, BOLD_TAGS, NUM_BOLD_TAGS)) {
     self->boldUntilDepth = min(self->boldUntilDepth, self->depth);
   } else if (matches(name, ITALIC_TAGS, NUM_ITALIC_TAGS)) {
     self->italicUntilDepth = min(self->italicUntilDepth, self->depth);
+  } else if (strcmp(name, "ul") == 0 || strcmp(name, "ol") == 0) {
+    self->listStack_.push_back({self->depth, strcmp(name, "ol") == 0, 0});
   }
 
   // Record anchor-to-page mapping (after block handling so pagesCreated_ reflects current page)
@@ -485,6 +505,9 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   while (!self->alignStack_.empty() && self->alignStack_.back().depth >= self->depth) {
     self->alignStack_.pop_back();
   }
+  while (!self->listStack_.empty() && self->listStack_.back().depth >= self->depth) {
+    self->listStack_.pop_back();
+  }
 }
 
 void XMLCALL ChapterHtmlSlimParser::defaultHandler(void* userData, const XML_Char* s, int len) {
@@ -556,6 +579,8 @@ bool ChapterHtmlSlimParser::initParser() {
   stopRequested_ = false;
   suspended_ = false;
   alignStack_.clear();
+  listStack_.clear();
+  pendingListMarker_[0] = '\0';
   dataUriStripper_.reset();
   startNewTextBlock(static_cast<TextBlock::BLOCK_STYLE>(config.paragraphAlignment));
 
@@ -740,6 +765,11 @@ bool ChapterHtmlSlimParser::resumeParsing() {
     pendingNewTextBlock_ = false;
     currentTextBlock.reset(
         new ParsedText(pendingBlockStyle_, config.indentLevel, config.hyphenation, true, pendingRtl_));
+    // Apply any list marker that was pending when the block creation was suspended
+    if (pendingListMarker_[0] != '\0') {
+      currentTextBlock->addWord(pendingListMarker_, EpdFontFamily::REGULAR);
+      pendingListMarker_[0] = '\0';
+    }
   }
 
   const auto status = XML_ResumeParser(xmlParser_);
