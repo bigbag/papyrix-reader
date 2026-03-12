@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "../content/BookmarkManager.h"
+#include "../content/ReadingStatsManager.h"
 #include "../content/ReaderNavigation.h"
 #include "../core/Types.h"
 #include "../rendering/XtcPageRenderer.h"
@@ -184,6 +185,21 @@ class ReaderState : public State {
   void saveBookmarks(Core& core);
   void populateBookmarkView();
   int bookmarkVisibleCount() const;
+
+  // Reading statistics overlay mode
+  bool statsMode_ = false;
+  ReadingStatsManager::Snapshot readingStats_{};
+  uint32_t sessionPagesRead_ = 0;
+  uint32_t sessionStartMillis_ = 0;
+
+  void enterStatsMode(Core& core);
+  void exitStatsMode();
+  void handleStatsInput(Core& core, const Event& e);
+  void renderStatsOverlay(Core& core);
+  void recordPagesRead(Core& core, uint32_t pagesRead);
+  uint32_t estimateMinutesForPages(uint32_t pages) const;
+  int estimateChapterRemainingPages() const;
+  int estimateBookRemainingPages(Core& core, bool& approximate) const;
 
   // Boot mode transition - exit to UI via restart
   void exitToUI(Core& core);

@@ -82,8 +82,8 @@ void render(const GfxRenderer& r, const Theme& t, const CoverPageView& v);
 // ============================================================================
 
 struct ReaderMenuView {
-  static constexpr const char* const ITEMS[] = {"Chapters", "Bookmarks"};
-  static constexpr int ITEM_COUNT = 2;
+  static constexpr const char* const ITEMS[] = {"Chapters", "Bookmarks", "Stats"};
+  static constexpr int ITEM_COUNT = 3;
 
   int8_t selected = 0;
   bool visible = false;

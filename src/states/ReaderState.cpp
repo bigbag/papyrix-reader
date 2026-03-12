@@ -24,6 +24,7 @@
 #include "../config.h"
 #include "../content/BookmarkManager.h"
 #include "../content/ProgressManager.h"
+#include "../content/ReadingStatsManager.h"
 #include "../content/ReaderNavigation.h"
 #include "../core/BootMode.h"
 #include "../core/Core.h"
@@ -254,6 +255,9 @@ void ReaderState::enter(Core& core) {
   pageCache_.reset();
   currentSpineIndex_ = 0;
   currentSectionPage_ = 0;  // Will be set to -1 after progress load if at start
+  statsMode_ = false;
+  sessionPagesRead_ = 0;
+  sessionStartMillis_ = millis();
 
   // Read path from shared buffer if not already set
   if (contentPath_[0] == '\0' && core.buf.path[0] != '\0') {
@@ -304,6 +308,7 @@ void ReaderState::enter(Core& core) {
   }
 
   contentLoaded_ = true;
+  readingStats_ = ReadingStatsManager::load(core);
 
   // Save last book path to settings
   strncpy(core.settings.lastBookPath, contentPath_, sizeof(core.settings.lastBookPath) - 1);
@@ -441,6 +446,10 @@ StateTransition ReaderState::update(Core& core) {
       handleBookmarkInput(core, e);
       continue;
     }
+    if (statsMode_) {
+      handleStatsInput(core, e);
+      continue;
+    }
     if (tocMode_) {
       handleTocInput(core, e);
       continue;
@@ -520,6 +529,8 @@ void ReaderState::render(Core& core) {
     const Theme& theme = THEME_MANAGER.current();
     ui::render(renderer_, theme, menuView_);
     core.display.markDirty();
+  } else if (statsMode_) {
+    renderStatsOverlay(core);
   } else if (bookmarkMode_) {
     renderBookmarkOverlay(core);
   } else if (tocMode_) {
@@ -545,6 +556,9 @@ void ReaderState::navigateNext(Core& core) {
     pos.flatPage = currentPage_;
     auto result = ReaderNavigation::next(type, pos, nullptr, core.content.pageCount());
     applyNavResult(result, core);
+    if (result.needsRender) {
+      recordPagesRead(core, 1);
+    }
     return;
   }
 
@@ -576,6 +590,9 @@ void ReaderState::navigateNext(Core& core) {
   pos.flatPage = currentPage_;
   auto result = ReaderNavigation::next(type, pos, pageCache_.get(), core.content.pageCount());
   applyNavResult(result, core);
+  if (result.needsRender) {
+    recordPagesRead(core, 1);
+  }
 }
 
 void ReaderState::navigatePrev(Core& core) {
@@ -1783,7 +1800,155 @@ void ReaderState::handleMenuAction(Core& core, int action) {
     case 1:  // Bookmarks
       enterBookmarkMode(core);
       break;
+    case 2:  // Stats
+      enterStatsMode(core);
+      break;
   }
+}
+
+void ReaderState::enterStatsMode(Core& core) {
+  stopBackgroundCaching();
+  statsMode_ = true;
+  needsRender_ = true;
+  LOG_DBG(TAG, "Entered stats mode");
+}
+
+void ReaderState::exitStatsMode() {
+  statsMode_ = false;
+  needsRender_ = true;
+  LOG_DBG(TAG, "Exited stats mode");
+}
+
+void ReaderState::handleStatsInput(Core& core, const Event& e) {
+  if (e.type != EventType::ButtonPress) return;
+
+  switch (e.button) {
+    case Button::Back:
+    case Button::Center:
+      exitStatsMode();
+      startBackgroundCaching(core);
+      break;
+    default:
+      break;
+  }
+}
+
+void ReaderState::recordPagesRead(Core& core, uint32_t pagesRead) {
+  if (pagesRead == 0) return;
+
+  // Cap outliers from accidental long jumps so metrics remain meaningful.
+  const uint32_t clamped = std::min<uint32_t>(pagesRead, 10);
+  sessionPagesRead_ += clamped;
+  ReadingStatsManager::recordPages(core, clamped, readingStats_);
+}
+
+uint32_t ReaderState::estimateMinutesForPages(uint32_t pages) const {
+  if (pages == 0) return 0;
+
+  static constexpr float kFallbackWpm = 220.0f;
+  static constexpr float kWordsPerPage = 250.0f;
+
+  const uint32_t elapsedMs = millis() - sessionStartMillis_;
+  const float elapsedMinutes = static_cast<float>(elapsedMs) / 60000.0f;
+  if (sessionPagesRead_ >= 3 && elapsedMinutes >= 1.0f) {
+    const float minutesPerPage = elapsedMinutes / static_cast<float>(sessionPagesRead_);
+    return static_cast<uint32_t>(minutesPerPage * static_cast<float>(pages) + 0.5f);
+  }
+
+  const float fallbackMinutesPerPage = kWordsPerPage / kFallbackWpm;
+  return static_cast<uint32_t>(fallbackMinutesPerPage * static_cast<float>(pages) + 0.5f);
+}
+
+int ReaderState::estimateChapterRemainingPages() const {
+  if (currentSectionPage_ < 0 || !pageCache_) return -1;
+  if (pageCache_->isPartial()) return -1;
+
+  const int total = static_cast<int>(pageCache_->pageCount());
+  if (total <= 0) return -1;
+
+  const int remaining = total - (currentSectionPage_ + 1);
+  return std::max(remaining, 0);
+}
+
+int ReaderState::estimateBookRemainingPages(Core& core, bool& approximate) const {
+  approximate = false;
+
+  const ContentType type = core.content.metadata().type;
+  if (type == ContentType::Xtc) {
+    const int total = static_cast<int>(core.content.pageCount());
+    const int remaining = total - static_cast<int>(currentPage_) - 1;
+    return std::max(remaining, 0);
+  }
+
+  if (type != ContentType::Epub) {
+    const int total = static_cast<int>(core.content.pageCount());
+    const int remaining = total - (currentSectionPage_ + 1);
+    return std::max(remaining, 0);
+  }
+
+  // EPUB page counts are chapter-based, so estimate remaining pages using
+  // current chapter density and remaining spine items.
+  approximate = true;
+  int chapterRemaining = estimateChapterRemainingPages();
+  if (chapterRemaining < 0) chapterRemaining = 0;
+
+  int pagesPerSpine = 12;
+  if (pageCache_ && pageCache_->pageCount() > 0) {
+    pagesPerSpine = static_cast<int>(pageCache_->pageCount());
+  }
+
+  const int totalSpines = static_cast<int>(core.content.pageCount());
+  int remainingSpines = totalSpines - currentSpineIndex_ - 1;
+  if (remainingSpines < 0) remainingSpines = 0;
+
+  return chapterRemaining + (remainingSpines * pagesPerSpine);
+}
+
+void ReaderState::renderStatsOverlay(Core& core) {
+  const Theme& theme = THEME_MANAGER.current();
+  renderer_.clearScreen(theme.backgroundColor);
+
+  renderer_.drawCenteredText(theme.uiFontId, 15, "Reading Stats", theme.primaryTextBlack, BOLD);
+
+  constexpr int startY = 90;
+  constexpr int rowGap = 48;
+  char value[48];
+
+  snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(readingStats_.pagesToday));
+  ui::twoColumnRow(renderer_, theme, startY, readingStats_.hasCalendarTime ? "Pages today" : "Pages (no clock)",
+                   value);
+
+  snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(sessionPagesRead_));
+  ui::twoColumnRow(renderer_, theme, startY + rowGap, "Session pages", value);
+
+  const int chapterRemaining = estimateChapterRemainingPages();
+  if (chapterRemaining >= 0) {
+    const uint32_t mins = estimateMinutesForPages(static_cast<uint32_t>(chapterRemaining));
+    snprintf(value, sizeof(value), "%lum", static_cast<unsigned long>(mins));
+  } else {
+    strncpy(value, "Indexing...", sizeof(value) - 1);
+    value[sizeof(value) - 1] = '\0';
+  }
+  ui::twoColumnRow(renderer_, theme, startY + rowGap * 2, "To chapter end", value);
+
+  bool approx = false;
+  const int bookRemaining = estimateBookRemainingPages(core, approx);
+  if (bookRemaining >= 0) {
+    const uint32_t mins = estimateMinutesForPages(static_cast<uint32_t>(bookRemaining));
+    if (approx) {
+      snprintf(value, sizeof(value), "~%lum", static_cast<unsigned long>(mins));
+    } else {
+      snprintf(value, sizeof(value), "%lum", static_cast<unsigned long>(mins));
+    }
+  } else {
+    strncpy(value, "N/A", sizeof(value) - 1);
+    value[sizeof(value) - 1] = '\0';
+  }
+  ui::twoColumnRow(renderer_, theme, startY + rowGap * 3, "To book end", value);
+
+  ui::buttonBar(renderer_, theme, "Back", "", "", "");
+  renderer_.displayBuffer();
+  core.display.markDirty();
 }
 
 // ============================================================================
