@@ -248,6 +248,7 @@ void ReaderState::enter(Core& core) {
   loadFailed_ = false;
   needsRender_ = true;
   holdNavigated_ = false;
+  powerPressStartedMs_ = 0;
   stopBackgroundCaching();  // Ensure any previous task is stopped
   parser_.reset();          // Safe - task is stopped
   parserSpineIndex_ = -1;
@@ -458,7 +459,7 @@ StateTransition ReaderState::update(Core& core) {
             return StateTransition::stay(StateId::Reader);
           case Button::Power:
             if (core.settings.shortPwrBtn == Settings::PowerPageTurn) {
-              navigateNext(core);
+              powerPressStartedMs_ = millis();
             }
             break;
           default:
@@ -496,9 +497,20 @@ StateTransition ReaderState::update(Core& core) {
             case Button::Up:
               navigatePrev(core);
               break;
+            case Button::Power:
+              if (core.settings.shortPwrBtn == Settings::PowerPageTurn && powerPressStartedMs_ != 0) {
+                const uint32_t heldMs = millis() - powerPressStartedMs_;
+                if (heldMs < core.settings.getPowerButtonDuration()) {
+                  navigateNext(core);
+                }
+              }
+              break;
             default:
               break;
           }
+        }
+        if (e.button == Button::Power) {
+          powerPressStartedMs_ = 0;
         }
         holdNavigated_ = false;
         break;
@@ -1396,7 +1408,7 @@ void ReaderState::exitTocMode() {
 }
 
 void ReaderState::handleTocInput(Core& core, const Event& e) {
-  if (e.type != EventType::ButtonPress && e.type != EventType::ButtonRepeat) {
+  if (e.type != EventType::ButtonPress && e.type != EventType::ButtonRepeat && e.type != EventType::ButtonRelease) {
     return;
   }
 
@@ -1434,8 +1446,16 @@ void ReaderState::handleTocInput(Core& core, const Event& e) {
 
     case Button::Power:
       if (core.settings.shortPwrBtn == Settings::PowerPageTurn) {
-        tocView_.moveDown();
-        needsRender_ = true;
+        if (e.type == EventType::ButtonPress) {
+          powerPressStartedMs_ = millis();
+        } else if (e.type == EventType::ButtonRelease && powerPressStartedMs_ != 0) {
+          const uint32_t heldMs = millis() - powerPressStartedMs_;
+          if (heldMs < core.settings.getPowerButtonDuration()) {
+            tocView_.moveDown();
+            needsRender_ = true;
+          }
+          powerPressStartedMs_ = 0;
+        }
       }
       break;
   }
