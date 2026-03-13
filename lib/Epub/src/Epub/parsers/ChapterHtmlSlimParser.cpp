@@ -564,6 +564,7 @@ void ChapterHtmlSlimParser::cleanupParser() {
   currentPage.reset();
   currentTextBlock.reset();
   suspended_ = false;
+  xmlDone_ = false;
 }
 
 bool ChapterHtmlSlimParser::initParser() {
@@ -576,6 +577,7 @@ bool ChapterHtmlSlimParser::initParser() {
   aborted_ = false;
   stopRequested_ = false;
   suspended_ = false;
+  xmlDone_ = false;
   alignStack_.clear();
   listStack_.clear();
   pendingListMarker_[0] = '\0';
@@ -696,7 +698,7 @@ bool ChapterHtmlSlimParser::parseLoop() {
       currentTextBlock->layoutAndExtractLines(
           renderer, config.fontId, config.viewportWidth,
           [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); }, false,
-          [this]() -> bool { return shouldAbort(); });
+          [this]() -> bool { return stopRequested_ || shouldAbort(); });
     }
   } while (!done);
 
@@ -704,7 +706,14 @@ bool ChapterHtmlSlimParser::parseLoop() {
   // Process last page if there is still text
   if (currentTextBlock && !stopRequested_) {
     makePages();
-    if (!stopRequested_ && currentPage) {
+    if (stopRequested_) {
+      // Batch limit hit while flushing final content — stay suspended
+      suspended_ = true;
+      xmlDone_ = true;
+      file_.close();
+      return true;
+    }
+    if (currentPage) {
       completePageFn(std::move(currentPage));
     }
     currentPage.reset();
@@ -725,6 +734,28 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
 bool ChapterHtmlSlimParser::resumeParsing() {
   if (!suspended_ || !xmlParser_) {
     return false;
+  }
+
+  // XML parser already finished — just flush remaining content from finalization
+  if (xmlDone_) {
+    stopRequested_ = false;
+    suspended_ = false;
+    parseStartTime_ = millis();
+
+    if (currentTextBlock && !currentTextBlock->isEmpty()) {
+      makePages();
+      if (stopRequested_) {
+        // Still more content than fits in one batch — stay suspended
+        suspended_ = true;
+        return true;
+      }
+    }
+
+    if (currentPage) {
+      completePageFn(std::move(currentPage));
+    }
+    cleanupParser();
+    return true;
   }
 
   // Reopen file at saved position (closed on suspend to free file handle)
@@ -790,7 +821,13 @@ bool ChapterHtmlSlimParser::resumeParsing() {
   if (file_.available() == 0) {
     if (currentTextBlock && !stopRequested_) {
       makePages();
-      if (!stopRequested_ && currentPage) {
+      if (stopRequested_) {
+        suspended_ = true;
+        xmlDone_ = true;
+        file_.close();
+        return true;
+      }
+      if (currentPage) {
         completePageFn(std::move(currentPage));
       }
       currentPage.reset();

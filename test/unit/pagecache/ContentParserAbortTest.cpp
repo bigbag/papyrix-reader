@@ -19,9 +19,16 @@ class Page {
 // Models the hasMore_ logic from EpubChapterParser:
 //   hasMore_ = hitMaxPages || parser.wasAborted() || (!success && pagesCreated > 0)
 // Also models canResume() for hot extend: parser keeps position between parsePages() calls.
+//
+// Optional finalizationPages parameter models the two-phase parsing in
+// ChapterHtmlSlimParser: after the main XML parse loop finishes, a finalization
+// flush (makePages) can produce additional pages. If the batch limit is hit
+// during finalization, the parser stays suspended with xmlDone_=true and
+// resumeParsing() only flushes remaining content without re-opening the file.
 class MockContentParser {
  public:
-  MockContentParser(int totalPages) : totalPages_(totalPages) {}
+  MockContentParser(int totalPages, int finalizationPages = 0)
+      : totalPages_(totalPages), finalizationPages_(finalizationPages) {}
 
   bool parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint16_t maxPages = 0,
                   const AbortCallback& shouldAbort = nullptr) {
@@ -29,36 +36,56 @@ class MockContentParser {
     uint16_t pagesCreated = 0;
     bool hitMaxPages = false;
 
-    for (int i = currentPage_; i < totalPages_; i++) {
-      if (shouldAbort && shouldAbort()) {
-        aborted_ = true;
-        break;
+    // Phase 1: Main content loop (XML parsing)
+    if (!inFinalization_) {
+      for (int i = currentPage_; i < totalPages_; i++) {
+        if (shouldAbort && shouldAbort()) {
+          aborted_ = true;
+          break;
+        }
+
+        // Simulate parse failure (e.g., XML_GetBuffer returns null)
+        if (failAfterPages_ > 0 && pagesCreated >= failAfterPages_) {
+          break;
+        }
+
+        if (hitMaxPages) break;
+
+        onPageComplete(std::make_unique<Page>(i));
+        pagesCreated++;
+        currentPage_ = i + 1;
+
+        if (maxPages > 0 && pagesCreated >= maxPages) {
+          hitMaxPages = true;
+        }
       }
 
-      // Simulate parse failure (e.g., XML_GetBuffer returns null)
-      if (failAfterPages_ > 0 && pagesCreated >= failAfterPages_) {
-        break;
+      // If main loop done and not interrupted, enter finalization
+      if (!hitMaxPages && !aborted_ && currentPage_ >= totalPages_ && finalizationPages_ > 0) {
+        inFinalization_ = true;
       }
+    }
 
-      if (hitMaxPages) break;
+    // Phase 2: Finalization flush (post-XML makePages)
+    if (inFinalization_ && !hitMaxPages && !aborted_) {
+      for (int i = finalizationProduced_; i < finalizationPages_; i++) {
+        if (hitMaxPages) break;
 
-      onPageComplete(std::make_unique<Page>(i));
-      pagesCreated++;
-      currentPage_ = i + 1;
+        onPageComplete(std::make_unique<Page>(totalPages_ + i));
+        pagesCreated++;
+        finalizationProduced_++;
 
-      if (maxPages > 0 && pagesCreated >= maxPages) {
-        hitMaxPages = true;
+        if (maxPages > 0 && pagesCreated >= maxPages) {
+          hitMaxPages = true;
+        }
       }
     }
 
     bool success = !aborted_ && !failAfterPages_;
 
     // Core logic: hasMore_ tracks whether more content remains unparsed.
-    // reachedEnd: true when we've consumed all available content
-    // hitMaxPages: stopped at page limit (but only matters if content remains)
-    // aborted_: stopped due to timeout/memory, more content exists
-    // !success && pagesCreated > 0: parse error mid-chapter, partial content exists
-    bool reachedEnd = (currentPage_ >= totalPages_);
+    bool reachedEnd = (currentPage_ >= totalPages_) &&
+                      (finalizationPages_ == 0 || finalizationProduced_ >= finalizationPages_);
     hasMore_ = (!reachedEnd && hitMaxPages) || aborted_ || (!reachedEnd && !success && pagesCreated > 0);
 
     return success;
@@ -69,24 +96,30 @@ class MockContentParser {
 
   // canResume() mirrors the real ContentParser contract:
   // Returns true when internal state allows continuing without re-parsing from start.
-  bool canResume() const { return currentPage_ > 0 && hasMore_; }
+  bool canResume() const { return (currentPage_ > 0 || inFinalization_) && hasMore_; }
 
   void reset() {
     currentPage_ = 0;
     hasMore_ = true;
     aborted_ = false;
+    inFinalization_ = false;
+    finalizationProduced_ = 0;
   }
 
   int currentPage() const { return currentPage_; }
+  bool isInFinalization() const { return inFinalization_; }
 
   // Simulate parse failure after N pages (e.g., XML_GetBuffer returns null mid-chapter)
   void setFailAfterPages(int n) { failAfterPages_ = n; }
 
  private:
   int totalPages_;
+  int finalizationPages_ = 0;
   int currentPage_ = 0;
+  int finalizationProduced_ = 0;
   bool hasMore_ = true;
   bool aborted_ = false;
+  bool inFinalization_ = false;
   int failAfterPages_ = 0;
 };
 
@@ -657,6 +690,120 @@ int main() {
     cache.extend(parser, 100);
     runner.expectEq(static_cast<uint16_t>(total), cache.pageCount(), "mixed_final_count");
     runner.expectFalse(cache.isPartial(), "mixed_complete");
+  }
+
+  // ============================================
+  // Finalization flush tests (xmlDone_ scenario)
+  // ============================================
+  // These tests model the two-phase parsing in ChapterHtmlSlimParser:
+  // Phase 1: XML parse loop produces pages from content
+  // Phase 2: Post-XML finalization flush (makePages) produces additional pages
+  // The xmlDone_ fix ensures batch limits during finalization don't lose content.
+
+  // Test 26: Finalization pages produced when no batch limit
+  {
+    MockContentParser parser(5, 3);  // 5 main + 3 finalization = 8 total
+    MockPageCache cache;
+
+    bool ok = cache.create(parser, 0);  // Unlimited
+    runner.expectTrue(ok, "finalize_unbatched_success");
+    runner.expectEq(static_cast<uint16_t>(8), cache.pageCount(), "finalize_unbatched_count");
+    runner.expectFalse(cache.isPartial(), "finalize_unbatched_complete");
+  }
+
+  // Test 27: Batch limit hit during finalization flush
+  // Main loop produces 5 pages, batch=7 allows 2 finalization pages,
+  // leaving 1 finalization page for resume.
+  {
+    MockContentParser parser(5, 3);  // 5 main + 3 finalization
+    MockPageCache cache;
+
+    cache.create(parser, 7);
+    runner.expectEq(static_cast<uint16_t>(7), cache.pageCount(), "finalize_batch_initial");
+    runner.expectTrue(cache.isPartial(), "finalize_batch_partial");
+    runner.expectTrue(parser.isInFinalization(), "finalize_batch_in_finalization");
+    runner.expectTrue(parser.canResume(), "finalize_batch_can_resume");
+
+    // Resume produces remaining finalization page
+    cache.extend(parser, 5);
+    runner.expectEq(static_cast<uint16_t>(8), cache.pageCount(), "finalize_batch_final");
+    runner.expectFalse(cache.isPartial(), "finalize_batch_complete");
+  }
+
+  // Test 28: Batch limit hit exactly at main/finalization boundary
+  // All main pages fit in batch, finalization pages spill to next batch.
+  {
+    MockContentParser parser(5, 3);  // 5 main + 3 finalization
+    MockPageCache cache;
+
+    cache.create(parser, 5);  // Exactly fits main loop
+    runner.expectEq(static_cast<uint16_t>(5), cache.pageCount(), "finalize_boundary_initial");
+    runner.expectTrue(cache.isPartial(), "finalize_boundary_partial");
+
+    // Resume produces all finalization pages
+    cache.extend(parser, 5);
+    runner.expectEq(static_cast<uint16_t>(8), cache.pageCount(), "finalize_boundary_final");
+    runner.expectFalse(cache.isPartial(), "finalize_boundary_complete");
+  }
+
+  // Test 29: Finalization with batch size 1 (most granular)
+  // Each page is its own batch — maximizes suspend/resume transitions
+  // including transitions within finalization.
+  {
+    MockContentParser parser(3, 3);  // 3 main + 3 finalization = 6 total
+    MockPageCache cache;
+
+    cache.create(parser, 1);
+    runner.expectEq(static_cast<uint16_t>(1), cache.pageCount(), "finalize_batch1_initial");
+
+    // Extend one at a time through main + finalization
+    for (int i = 0; i < 5; i++) {
+      cache.extend(parser, 1);
+    }
+
+    runner.expectEq(static_cast<uint16_t>(6), cache.pageCount(), "finalize_batch1_final");
+    runner.expectFalse(cache.isPartial(), "finalize_batch1_complete");
+  }
+
+  // Test 30: Batched vs unbatched with finalization produces same total
+  // Core invariant: finalization pages must not be lost during batching.
+  {
+    const int mainPages = 13;
+    const int finalPages = 4;
+    const int total = mainPages + finalPages;
+
+    // Unbatched
+    MockContentParser parserAll(mainPages, finalPages);
+    MockPageCache cacheAll;
+    cacheAll.create(parserAll, 0);
+
+    // Batched in chunks of 5
+    MockContentParser parserBatch(mainPages, finalPages);
+    MockPageCache cacheBatch;
+    cacheBatch.create(parserBatch, 5);
+    while (cacheBatch.isPartial()) {
+      cacheBatch.extend(parserBatch, 5);
+    }
+
+    runner.expectEq(static_cast<uint16_t>(total), cacheAll.pageCount(), "finalize_total_unbatched");
+    runner.expectEq(cacheAll.pageCount(), cacheBatch.pageCount(), "finalize_batch_vs_unbatch");
+    runner.expectFalse(cacheAll.isPartial(), "finalize_unbatched_done");
+    runner.expectFalse(cacheBatch.isPartial(), "finalize_batched_done");
+  }
+
+  // Test 31: Only finalization pages, no main content
+  // Edge case: XML is empty but finalization still produces pages.
+  {
+    MockContentParser parser(0, 3);
+    MockPageCache cache;
+
+    cache.create(parser, 2);
+    runner.expectEq(static_cast<uint16_t>(2), cache.pageCount(), "finalize_only_initial");
+    runner.expectTrue(cache.isPartial(), "finalize_only_partial");
+
+    cache.extend(parser, 5);
+    runner.expectEq(static_cast<uint16_t>(3), cache.pageCount(), "finalize_only_final");
+    runner.expectFalse(cache.isPartial(), "finalize_only_complete");
   }
 
   return runner.allPassed() ? 0 : 1;

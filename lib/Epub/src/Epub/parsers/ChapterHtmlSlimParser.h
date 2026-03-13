@@ -122,6 +122,7 @@ class ChapterHtmlSlimParser {
   size_t bytesRead_ = 0;
   int lastProgress_ = -1;
   bool suspended_ = false;  // True when parser is suspended mid-parse (can resume)
+  bool xmlDone_ = false;    // XML parser finished but content remains to flush
 
   bool initParser();
   bool parseLoop();
