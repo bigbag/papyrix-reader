@@ -514,7 +514,7 @@ void loop() {
 
   inputManager.update();
 
-  if (millis() - lastMemPrint >= 10000) {
+  if (!papyrix::core.cpu.isThrottled() && millis() - lastMemPrint >= 10000) {
     LOG_DBG(TAG, "Free: %d bytes, Total: %d bytes, Min Free: %d bytes, MaxAlloc: %d bytes", ESP.getFreeHeap(),
             ESP.getHeapSize(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
     lastMemPrint = millis();
@@ -561,16 +561,12 @@ void loop() {
   // so rendering always happens at full CPU/SPI speed after wake.
   // Idea: CrossPoint HalPowerManager by @ngxson (https://github.com/ngxson)
   static constexpr unsigned long kIdlePowerSavingMs = 3000;
-  static bool cpuThrottled = false;
-  const bool isIdle =
-      (currentBootMode == papyrix::BootMode::READER) && (papyrix::core.input.idleTimeMs() >= kIdlePowerSavingMs);
-
-  if (isIdle && !cpuThrottled) {
-    setCpuFrequencyMhz(10);
-    cpuThrottled = true;
-  } else if (!isIdle && cpuThrottled) {
-    setCpuFrequencyMhz(160);
-    cpuThrottled = false;
+  if (currentBootMode == papyrix::BootMode::READER) {
+    if (papyrix::core.input.idleTimeMs() >= kIdlePowerSavingMs) {
+      papyrix::core.cpu.throttle();
+    } else {
+      papyrix::core.cpu.unthrottle();
+    }
   }
 
   // Update state machine (handles transitions and rendering)
@@ -589,9 +585,5 @@ void loop() {
   // Add delay at the end of the loop to prevent tight spinning
   // Increase delay after idle to save power (~4x less CPU load)
   // Idea: https://github.com/crosspoint-reader/crosspoint-reader/commit/0991782 by @ngxson (https://github.com/ngxson)
-  if (isIdle) {
-    delay(50);
-  } else {
-    delay(10);
-  }
+  delay(papyrix::core.cpu.loopDelayMs());
 }

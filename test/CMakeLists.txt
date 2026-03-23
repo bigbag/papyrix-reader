@@ -222,6 +222,15 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${TEST_SRC}
       ${TEST_HELPERS}
     )
+  elseif(TEST_NAME STREQUAL "CpuDriverTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/src/drivers/Cpu.cpp
+      ${TEST_HELPERS}
+    )
+    target_include_directories(${TEST_NAME} PRIVATE
+      ${PROJECT_ROOT}/src
+    )
   else()
     add_executable(${TEST_NAME} ${TEST_SRC} ${TEST_HELPERS})
   endif()

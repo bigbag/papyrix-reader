@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../content/ContentHandle.h"
+#include "../drivers/Cpu.h"
 #include "../drivers/Display.h"
 #include "../drivers/Input.h"
 #include "../drivers/Network.h"
@@ -18,6 +19,7 @@ struct Core {
   drivers::Storage storage;
   drivers::Input input;
   drivers::Network network;
+  drivers::Cpu cpu;
 
   // === Settings ===
   Settings settings;

@@ -61,6 +61,8 @@ inline void pinMode(int, int) {}
 inline void digitalWrite(int, int) {}
 inline int digitalRead(int) { return 0; }
 inline void delay(unsigned long) {}
+inline uint32_t g_mockCpuFreqMhz = 160;
+inline void setCpuFrequencyMhz(uint32_t freq) { g_mockCpuFreqMhz = freq; }
 
 // Arduino constants
 #ifndef OUTPUT

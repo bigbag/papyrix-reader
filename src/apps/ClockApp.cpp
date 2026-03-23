@@ -210,6 +210,7 @@ bool update(Core& core) {
   // Periodic NTP sync
   uint32_t ntpInterval = NTP_SYNC_INTERVALS[state.ntpSyncSetting];
   if (ntpInterval > 0 && now - state.lastNtpSyncMs >= ntpInterval) {
+    core.cpu.unthrottle();
     syncNtpAutoConnect(core);
     state.lastNtpSyncMs = now;
     return true;
@@ -219,13 +220,17 @@ bool update(Core& core) {
   struct tm timeinfo;
   if (getLocalTime(&timeinfo, 0)) {
     if (timeinfo.tm_min != state.lastRenderedMin) {
+      core.cpu.unthrottle();
       return true;
     }
   } else if (now - state.lastNtpSyncMs >= 10000) {
     // No time yet — refresh periodically so display updates after NTP sync
+    core.cpu.unthrottle();
     state.lastNtpSyncMs = now;
     return true;
   }
+
+  core.cpu.throttle();
   return false;
 }
 
@@ -367,7 +372,9 @@ void render(Core& core) {
 }
 
 void exit(Core& core) {
-  (void)core;
+  core.cpu.unthrottle();
+  renderer.clearScreen(THEME.backgroundColor);
+  renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
   LOG_INF(TAG, "Clock app exit");
 }
 
@@ -402,6 +409,7 @@ void onMenuButton(Core& core, Button btn) {
       break;
     case Button::Center:
       if (state.menuSelected == 4) {
+        core.cpu.unthrottle();
         syncNtpAutoConnect(core);
         state.lastNtpSyncMs = millis();
       }

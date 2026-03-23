@@ -141,6 +141,11 @@ StateTransition AppLauncherState::update(Core& core) {
     if (APPS[activeApp_].update && APPS[activeApp_].update(core)) {
       needsRender_ = true;
     }
+
+    // Ensure full CPU speed for responsive display I/O when rendering
+    if (needsRender_) {
+      core.cpu.unthrottle();
+    }
   }
 
   if (core.pendingSync == SyncMode::WifiSetup) {
@@ -208,6 +213,7 @@ void AppLauncherState::launchApp(Core& core) {
   }
 
   mode_ = Mode::App;
+  menuView_.needsRender = false;
   needsRender_ = true;
 }
 
