@@ -38,6 +38,7 @@ void MarkdownParser::reset() {
   currentOffset_ = 0;
   hasMore_ = true;
   isRtl_ = false;
+  pendingTextBlock_.reset();
 }
 
 int MarkdownParser::getCurrentFontStyle(const ParseContext& ctx) const {
@@ -92,9 +93,14 @@ void MarkdownParser::flushTextBlock(ParseContext& ctx) {
                                          if (!ctx.hitMaxPages) {
                                            addLineToPage(ctx, textBlock);
                                          }
-                                       });
+                                       },
+                                       true,
+                                       [&ctx]() -> bool { return ctx.hitMaxPages; });
 
-  ctx.textBlock.reset();
+  if (!ctx.hitMaxPages) {
+    ctx.textBlock.reset();
+  }
+  // else: textBlock still has unconsumed words — preserve for next batch
 
   switch (config_.spacingLevel) {
     case 1:
@@ -370,6 +376,22 @@ bool MarkdownParser::parsePages(const std::function<void(std::unique_ptr<Page>)>
   md_parser_t parser;
   md_parser_init(&parser, tokenCallback, &ctx);
 
+  // Resume: flush any pending text block carried over from a previous interrupted batch
+  if (pendingTextBlock_) {
+    ctx.textBlock = std::move(pendingTextBlock_);
+    flushTextBlock(ctx);
+    if (ctx.hitMaxPages) {
+      // Still can't fit — save and return
+      pendingTextBlock_ = std::move(ctx.textBlock);
+      if (ctx.currentPage && !ctx.currentPage->elements.empty() && onPageComplete) {
+        onPageComplete(std::move(ctx.currentPage));
+        ctx.pagesCreated++;
+      }
+      file.close();
+      return true;
+    }
+  }
+
   // Start with a paragraph block
   startNewTextBlock(ctx, config_.paragraphAlignment);
 
@@ -430,7 +452,8 @@ bool MarkdownParser::parsePages(const std::function<void(std::unique_ptr<Page>)>
                 addLineToPage(ctx, textBlock);
               }
             },
-            false);
+            false,
+            [&ctx]() -> bool { return ctx.hitMaxPages; });
       }
     }
   }
@@ -442,6 +465,13 @@ bool MarkdownParser::parsePages(const std::function<void(std::unique_ptr<Page>)>
   if (ctx.currentPage && !ctx.currentPage->elements.empty() && onPageComplete) {
     onPageComplete(std::move(ctx.currentPage));
     ctx.pagesCreated++;
+  }
+
+  // Save any unconsumed text block for the next parsePages call
+  if (ctx.hitMaxPages && ctx.textBlock && !ctx.textBlock->isEmpty()) {
+    pendingTextBlock_ = std::move(ctx.textBlock);
+  } else {
+    pendingTextBlock_.reset();
   }
 
   currentOffset_ += bytesProcessed;

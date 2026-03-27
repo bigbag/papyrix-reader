@@ -376,7 +376,9 @@ void Fb2Parser::makePages() {
                                              if (hitMaxPages_) {
                                                continueProcessing = false;
                                              }
-                                           });
+                                           },
+                                           true,
+                                           [&continueProcessing]() -> bool { return !continueProcessing; });
 
   // Paragraph spacing (same pattern as PlainTextParser/ChapterHtmlSlimParser)
   if (!hitMaxPages_) {
@@ -388,9 +390,9 @@ void Fb2Parser::makePages() {
         currentPageNextY_ += lineHeight;
         break;
     }
+    currentTextBlock_.reset();
   }
-
-  currentTextBlock_.reset();
+  // else: currentTextBlock_ still has unconsumed words — preserve for next batch
 }
 
 void Fb2Parser::addLineToPage(std::shared_ptr<TextBlock> line) {
