@@ -24,6 +24,7 @@ void PlainTextParser::reset() {
   currentOffset_ = 0;
   hasMore_ = true;
   isRtl_ = false;
+  pendingBlock_.reset();
 }
 
 bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint16_t maxPages,
@@ -85,9 +86,14 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
                                           if (!addLineToPage(line)) {
                                             continueProcessing = false;
                                           }
-                                        });
+                                        },
+                                        true,
+                                        [&]() -> bool { return !continueProcessing; });
 
-    currentBlock.reset();
+    if (continueProcessing) {
+      currentBlock.reset();
+    }
+    // else: currentBlock still has unconsumed words — preserve it
     return continueProcessing;
   };
 
@@ -101,8 +107,25 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
   }
 
   startNewPage();
-  currentBlock.reset(new ParsedText(static_cast<TextBlock::BLOCK_STYLE>(config_.paragraphAlignment),
-                                    config_.indentLevel, config_.hyphenation, true, isRtl_));
+
+  // Resume: flush any pending block carried over from a previous interrupted batch
+  if (pendingBlock_) {
+    currentBlock = std::move(pendingBlock_);
+    if (!flushBlock()) {
+      // Still can't fit — save pending block and return
+      pendingBlock_ = std::move(currentBlock);
+      if (currentPage && !currentPage->elements.empty()) {
+        onPageComplete(std::move(currentPage));
+      }
+      file.close();
+      return true;
+    }
+  }
+
+  if (!currentBlock) {
+    currentBlock.reset(new ParsedText(static_cast<TextBlock::BLOCK_STYLE>(config_.paragraphAlignment),
+                                      config_.indentLevel, config_.hyphenation, true, isRtl_));
+  }
 
   while (file.available() > 0) {
     // Check for abort every few iterations
@@ -133,6 +156,8 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
 
         // Flush current block (paragraph)
         if (!flushBlock()) {
+          // currentBlock still has unconsumed words — save for next call
+          pendingBlock_ = std::move(currentBlock);
           currentOffset_ = file.position() - (bytesRead - i - 1);
           hasMore_ = true;
           file.close();

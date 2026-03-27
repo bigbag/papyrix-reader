@@ -697,7 +697,7 @@ bool ChapterHtmlSlimParser::parseLoop() {
       currentTextBlock->setUseGreedyBreaking(true);
       currentTextBlock->layoutAndExtractLines(
           renderer, config.fontId, config.viewportWidth,
-          [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); }, false,
+          [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); }, true,
           [this]() -> bool { return stopRequested_ || shouldAbort(); });
     }
   } while (!done);

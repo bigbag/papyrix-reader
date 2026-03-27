@@ -9,6 +9,7 @@
 #include "ContentParser.h"
 
 class GfxRenderer;
+class ParsedText;
 
 /**
  * Content parser for plain text files (TXT, Markdown).
@@ -22,6 +23,10 @@ class PlainTextParser : public ContentParser {
   size_t currentOffset_ = 0;
   bool hasMore_ = true;
   bool isRtl_ = false;
+
+  // Carries over unconsumed words from a paragraph that was
+  // interrupted by a page-batch limit.
+  std::unique_ptr<ParsedText> pendingBlock_;
 
  public:
   PlainTextParser(std::string filepath, GfxRenderer& renderer, const RenderConfig& config);

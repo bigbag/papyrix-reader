@@ -56,6 +56,10 @@ class MarkdownParser : public ContentParser {
   // Line buffer for reading from file
   char lineBuffer_[LINE_BUFFER_SIZE];
 
+  // Carries over unconsumed words from a text block that was
+  // interrupted by a page-batch limit.
+  std::unique_ptr<ParsedText> pendingTextBlock_;
+
   // Parsing context passed through md_parser callback
   struct ParseContext {
     MarkdownParser* self;
