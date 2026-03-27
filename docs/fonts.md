@@ -128,6 +128,14 @@ A sans-serif font with complete Arabic script support including contextual shapi
 - **Theme**: `light-arabic.theme`
 - **License**: OFL (Open Font License)
 
+### IBM Plex Sans Arabic
+
+IBM's Arabic typeface from the Plex family. A modern, clean sans-serif design with excellent Arabic presentation forms coverage (140/144 in Forms-B), making it highly compatible with Papyrix's Arabic shaper. Provides a refined reading experience for Arabic content.
+
+- **Styles**: Regular, Bold
+- **Theme**: `light-ibm-plex-arabic.theme`
+- **License**: OFL (Open Font License)
+
 ### CJK Fonts (Chinese/Japanese/Korean)
 
 For CJK texts, Papyrix uses external `.bin` format fonts that are streamed from the SD card due to their large size. The `.bin` format uses direct codepoint indexing (1-bit bitmap, MSB first) for the full BMP range (U+0000-U+FFEF).
