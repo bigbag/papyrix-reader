@@ -8,6 +8,8 @@
 #include <SDCardManager.h>
 #include <Utf8.h>
 
+#include "Fb2EncodingHandler.h"
+
 #define TAG "FB2_PARSE"
 
 #include <cstring>
@@ -94,7 +96,7 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
   file.seekSet(0);
 
   // Create Expat parser
-  xmlParser_ = XML_ParserCreate("UTF-8");
+  xmlParser_ = XML_ParserCreate(nullptr);
   if (!xmlParser_) {
     LOG_ERR(TAG, "Failed to create XML parser");
     file.close();
@@ -102,6 +104,7 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
   }
 
   XML_SetUserData(xmlParser_, this);
+  XML_SetUnknownEncodingHandler(xmlParser_, fb2UnknownEncodingHandler, nullptr);
   XML_SetElementHandler(xmlParser_, startElement, endElement);
   XML_SetCharacterDataHandler(xmlParser_, characterData);
 

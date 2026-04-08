@@ -6,6 +6,7 @@
 
 #include "test_utils.h"
 
+#include <Fb2EncodingHandler.h>
 #include <expat.h>
 
 #include <climits>
@@ -243,10 +244,11 @@ class TestFb2Parser {
   std::vector<TocItem> tocItems;
 
   bool parse(const std::string& xml) {
-    XML_Parser parser = XML_ParserCreate("UTF-8");
+    XML_Parser parser = XML_ParserCreate(nullptr);
     if (!parser) return false;
 
     XML_SetUserData(parser, this);
+    XML_SetUnknownEncodingHandler(parser, fb2UnknownEncodingHandler, nullptr);
     XML_SetElementHandler(parser, startElement, endElement);
     XML_SetCharacterDataHandler(parser, characterData);
 
@@ -760,6 +762,75 @@ int main() {
     runner.expectTrue(ok, "no_cover: parses successfully");
     runner.expectEqual("", parser.coverRef, "no_cover: empty cover ref");
     runner.expectEqual("", parser.coverContentType, "no_cover: empty content-type");
+  }
+
+  // ============================================
+  // Windows-1251 (CP1251) encoding support
+  // ============================================
+
+  // Test: Parse FB2 with windows-1251 encoding (Issue #99)
+  {
+    // "Война и мир" in CP1251: В=0xC2 о=0xEE й=0xE9 н=0xED а=0xE0 и=0xE8 м=0xEC р=0xF0
+    // "Лев" in CP1251: Л=0xCB е=0xE5 в=0xE2
+    // "Толстой" in CP1251: Т=0xD2 о=0xEE л=0xEB с=0xF1 т=0xF2 о=0xEE й=0xE9
+    std::string xml =
+        "<?xml version=\"1.0\" encoding=\"windows-1251\"?>"
+        "<FictionBook xmlns=\"http://www.gribuser.ru/xml/fictionbook/2.0\">"
+        "<description><title-info>"
+        "<author><first-name>\xCB\xE5\xE2</first-name>"
+        "<last-name>\xD2\xEE\xEB\xF1\xF2\xEE\xE9</last-name></author>"
+        "<book-title>\xC2\xEE\xE9\xED\xE0 \xE8 \xEC\xE8\xF0</book-title>"
+        "<lang>ru</lang>"
+        "</title-info></description>"
+        "<body><section><p>\xD2\xE5\xEA\xF1\xF2</p></section></body>"
+        "</FictionBook>";
+    TestFb2Parser parser;
+    bool ok = parser.parse(xml);
+    runner.expectTrue(ok, "cp1251: parses successfully");
+    // Expat converts CP1251 to UTF-8 internally
+    runner.expectEqual("\xD0\x92\xD0\xBE\xD0\xB9\xD0\xBD\xD0\xB0 \xD0\xB8 \xD0\xBC\xD0\xB8\xD1\x80", parser.title,
+                       "cp1251: title decoded to UTF-8");
+    runner.expectEqual(
+        "\xD0\x9B\xD0\xB5\xD0\xB2 \xD0\xA2\xD0\xBE\xD0\xBB\xD1\x81\xD1\x82\xD0\xBE\xD0\xB9", parser.author,
+        "cp1251: author decoded to UTF-8");
+    runner.expectEqual("ru", parser.language, "cp1251: language correct");
+  }
+
+  // Test: Parse FB2 with CP1251 encoding variant name
+  {
+    std::string xml =
+        "<?xml version=\"1.0\" encoding=\"cp1251\"?>"
+        "<FictionBook xmlns=\"http://www.gribuser.ru/xml/fictionbook/2.0\">"
+        "<description><title-info>"
+        "<book-title>\xCA\xED\xE8\xE3\xE0</book-title>"
+        "</title-info></description>"
+        "<body><section><p>ok</p></section></body>"
+        "</FictionBook>";
+    TestFb2Parser parser;
+    bool ok = parser.parse(xml);
+    runner.expectTrue(ok, "cp1251_variant: parses successfully");
+    // "Книга" (Kniga) in UTF-8
+    runner.expectEqual("\xD0\x9A\xD0\xBD\xD0\xB8\xD0\xB3\xD0\xB0", parser.title,
+                       "cp1251_variant: title decoded");
+  }
+
+  // Test: Parse FB2 with KOI8-R encoding
+  {
+    // "Тест" in KOI8-R: Т=0xF4 е=0xC5 с=0xD3 т=0xD4
+    std::string xml =
+        "<?xml version=\"1.0\" encoding=\"koi8-r\"?>"
+        "<FictionBook xmlns=\"http://www.gribuser.ru/xml/fictionbook/2.0\">"
+        "<description><title-info>"
+        "<book-title>\xF4\xC5\xD3\xD4</book-title>"
+        "</title-info></description>"
+        "<body><section><p>ok</p></section></body>"
+        "</FictionBook>";
+    TestFb2Parser parser;
+    bool ok = parser.parse(xml);
+    runner.expectTrue(ok, "koi8r: parses successfully");
+    // "Тест" in UTF-8
+    runner.expectEqual("\xD0\xA2\xD0\xB5\xD1\x81\xD1\x82", parser.title,
+                       "koi8r: title decoded to UTF-8");
   }
 
   return runner.allPassed() ? 0 : 1;

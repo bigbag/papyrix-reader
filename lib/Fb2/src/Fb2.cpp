@@ -11,6 +11,7 @@
 #include <Logging.h>
 
 #include "Base64Decoder.h"
+#include "Fb2EncodingHandler.h"
 
 #define TAG "FB2"
 #include <SDCardManager.h>
@@ -320,7 +321,7 @@ bool Fb2::parseXmlStream() {
     return false;
   }
 
-  xmlParser_ = XML_ParserCreate("UTF-8");
+  xmlParser_ = XML_ParserCreate(nullptr);
   if (!xmlParser_) {
     LOG_ERR(TAG, "Failed to create XML parser");
     file.close();
@@ -328,6 +329,7 @@ bool Fb2::parseXmlStream() {
   }
 
   XML_SetUserData(xmlParser_, this);
+  XML_SetUnknownEncodingHandler(xmlParser_, fb2UnknownEncodingHandler, nullptr);
   XML_SetElementHandler(xmlParser_, startElement, endElement);
   XML_SetCharacterDataHandler(xmlParser_, characterData);
 
