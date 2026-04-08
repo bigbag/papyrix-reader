@@ -10,6 +10,8 @@
 #include <FsHelpers.h>
 #include <Logging.h>
 
+#include "Base64Decoder.h"
+
 #define TAG "FB2"
 #include <SDCardManager.h>
 #include <Serialization.h>
@@ -17,7 +19,7 @@
 #include <cstring>
 
 namespace {
-constexpr uint8_t kMetaCacheVersion = 2;
+constexpr uint8_t kMetaCacheVersion = 4;
 constexpr char kMetaCacheFile[] = "/meta.bin";
 }  // namespace
 
@@ -118,8 +120,26 @@ void XMLCALL Fb2::startElement(void* userData, const XML_Char* name, const XML_C
     tag = name;
   }
 
-  // Skip binary content (base64-encoded images)
+  // Skip binary content (base64-encoded images), but capture cover content-type
   if (strcmp(tag, "binary") == 0) {
+    if (!self->coverRef.empty() && atts) {
+      bool isTargetBinary = false;
+      for (int i = 0; atts[i]; i += 2) {
+        if (strcmp(atts[i], "id") == 0 && atts[i + 1] && self->coverRef == atts[i + 1]) {
+          isTargetBinary = true;
+          break;
+        }
+      }
+      if (isTargetBinary) {
+        self->coverBinaryOffset_ = XML_GetCurrentByteIndex(self->xmlParser_);
+        for (int i = 0; atts[i]; i += 2) {
+          if (strcmp(atts[i], "content-type") == 0 && atts[i + 1]) {
+            self->coverContentType = atts[i + 1];
+            break;
+          }
+        }
+      }
+    }
     self->skipUntilDepth = self->depth - 1;
     return;
   }
@@ -141,6 +161,9 @@ void XMLCALL Fb2::startElement(void* userData, const XML_Char* name, const XML_C
     self->inFirstName = true;
   } else if (strcmp(tag, "last-name") == 0 && self->inAuthor) {
     self->inLastName = true;
+  } else if (strcmp(tag, "lang") == 0 && self->inTitleInfo) {
+    self->inLang = true;
+    self->language.clear();
   } else if (strcmp(tag, "coverpage") == 0) {
     self->inCoverPage = true;
   } else if (strcmp(tag, "image") == 0 && self->inCoverPage) {
@@ -160,11 +183,11 @@ void XMLCALL Fb2::startElement(void* userData, const XML_Char* name, const XML_C
         if ((strcmp(attr, "href") == 0 || strcmp(attrName, "l:href") == 0) && attrValue) {
           // Store the reference (remove # prefix)
           if (attrValue[0] == '#') {
-            self->coverPath = attrValue + 1;
+            self->coverRef = attrValue + 1;
           } else {
-            self->coverPath = attrValue;
+            self->coverRef = attrValue;
           }
-          LOG_INF(TAG, "Found cover reference: %s", self->coverPath.c_str());
+          LOG_INF(TAG, "Found cover reference: %s", self->coverRef.c_str());
           break;
         }
       }
@@ -223,6 +246,8 @@ void XMLCALL Fb2::endElement(void* userData, const XML_Char* name) {
     self->inAuthor = false;
     self->currentAuthorFirst.clear();
     self->currentAuthorLast.clear();
+  } else if (strcmp(tag, "lang") == 0 && self->inLang) {
+    self->inLang = false;
   } else if (strcmp(tag, "coverpage") == 0) {
     self->inCoverPage = false;
   } else if (strcmp(tag, "binary") == 0) {
@@ -278,6 +303,8 @@ void XMLCALL Fb2::characterData(void* userData, const XML_Char* s, int len) {
   // Extract metadata based on current context
   if (self->inBookTitle) {
     self->title.append(s, len);
+  } else if (self->inLang) {
+    self->language.append(s, len);
   } else if (self->inFirstName) {
     self->currentAuthorFirst.append(s, len);
   } else if (self->inLastName) {
@@ -348,7 +375,16 @@ void Fb2::postProcessMetadata() {
     }
   }
 
-  LOG_INF(TAG, "XML parsing complete: title='%s', author='%s'", title.c_str(), author.c_str());
+  // Trim language whitespace
+  while (!language.empty() && isspace(static_cast<unsigned char>(language.back()))) {
+    language.pop_back();
+  }
+  while (!language.empty() && isspace(static_cast<unsigned char>(language.front()))) {
+    language.erase(language.begin());
+  }
+
+  LOG_INF(TAG, "XML parsing complete: title='%s', author='%s', lang='%s'", title.c_str(), author.c_str(),
+          language.c_str());
 }
 
 bool Fb2::clearCache() const {
@@ -393,12 +429,104 @@ std::string Fb2::findCoverImage() const {
   return CoverHelpers::findCoverImage(dirPath, title);
 }
 
+bool Fb2::extractEmbeddedCover(const std::string& outputPath) const {
+  if (coverRef.empty() || coverBinaryOffset_ < 0) return false;
+
+  FsFile fb2File;
+  if (!SdMan.openFileForRead("FB2", filepath, fb2File)) {
+    return false;
+  }
+
+  if (!fb2File.seek(static_cast<uint32_t>(coverBinaryOffset_))) {
+    fb2File.close();
+    return false;
+  }
+
+  // Scan forward past '>' that closes the <binary ...> start tag.
+  // FB2 <binary> attributes are only id and content-type (simple filenames/MIME types),
+  // so '>' will not appear inside attribute values in well-formed FB2 files.
+  constexpr size_t kBufSize = 256;
+  uint8_t buf[kBufSize];
+  bool foundTagEnd = false;
+  int scanLimit = 512;
+
+  while (!foundTagEnd && scanLimit > 0 && fb2File.available() > 0) {
+    size_t toRead = static_cast<size_t>(scanLimit) < kBufSize ? static_cast<size_t>(scanLimit) : kBufSize;
+    size_t n = fb2File.read(buf, toRead);
+    if (n == 0) break;
+    scanLimit -= static_cast<int>(n);
+
+    for (size_t i = 0; i < n; i++) {
+      if (buf[i] == '>') {
+        // Seek back to just after '>'
+        fb2File.seek(fb2File.position() - (n - i - 1));
+        foundTagEnd = true;
+        break;
+      }
+    }
+  }
+
+  if (!foundTagEnd) {
+    fb2File.close();
+    return false;
+  }
+
+  FsFile outFile;
+  if (!SdMan.openFileForWrite("FB2", outputPath, outFile)) {
+    fb2File.close();
+    return false;
+  }
+
+  // Read base64 content until '</binary>' terminator.
+  // '<' cannot appear in base64, so the first '<' marks end of content.
+  Base64Decoder decoder;
+  bool done = false;
+  bool success = false;
+
+  auto writeCallback = [&outFile](const uint8_t* data, size_t sz) { return outFile.write(data, sz) == sz; };
+
+  while (!done && fb2File.available() > 0) {
+    size_t n = fb2File.read(buf, kBufSize);
+    if (n == 0) break;
+
+    // Find '<' that starts the closing tag
+    size_t feedLen = n;
+    for (size_t i = 0; i < n; i++) {
+      if (buf[i] == '<') {
+        feedLen = i;
+        done = true;
+        break;
+      }
+    }
+
+    if (feedLen > 0) {
+      decoder.feed(reinterpret_cast<const char*>(buf), static_cast<int>(feedLen), writeCallback);
+    }
+
+    if (decoder.failed()) break;
+  }
+
+  if (done && !decoder.failed()) {
+    success = decoder.finish(writeCallback);
+  }
+
+  outFile.close();
+  fb2File.close();
+
+  if (!success) {
+    SdMan.remove(outputPath.c_str());
+  }
+
+  LOG_INF(TAG, "Cover extraction %s", success ? "succeeded" : "failed");
+  return success;
+}
+
 bool Fb2::generateCoverBmp(bool use1BitDithering) const {
-  const auto coverPath = getCoverBmpPath();
+  const auto coverBmpPath = getCoverBmpPath();
   const auto failedMarkerPath = cachePath + "/.cover.failed";
 
   // Already generated
-  if (SdMan.exists(coverPath.c_str())) {
+  if (SdMan.exists(coverBmpPath.c_str())) {
     return true;
   }
 
@@ -407,11 +535,27 @@ bool Fb2::generateCoverBmp(bool use1BitDithering) const {
     return false;
   }
 
-  // Find a cover image
+  // Find a cover image (external file in same directory)
   std::string coverImagePath = findCoverImage();
+
+  // Try extracting embedded cover if no external image found
+  std::string tmpCoverPath;
+  if (coverImagePath.empty() && !coverRef.empty()) {
+    std::string ext = ".jpg";
+    if (coverContentType == "image/png") {
+      ext = ".png";
+    } else if (coverContentType == "image/bmp") {
+      ext = ".bmp";
+    }
+    tmpCoverPath = cachePath + "/.tmp_cover" + ext;
+    setupCacheDir();
+    if (extractEmbeddedCover(tmpCoverPath)) {
+      coverImagePath = tmpCoverPath;
+    }
+  }
+
   if (coverImagePath.empty()) {
     LOG_INF(TAG, "No cover image found");
-    // Create failure marker
     FsFile marker;
     if (SdMan.openFileForWrite("FB2", failedMarkerPath, marker)) {
       marker.close();
@@ -423,7 +567,13 @@ bool Fb2::generateCoverBmp(bool use1BitDithering) const {
   setupCacheDir();
 
   // Convert to BMP using shared helper
-  const bool success = CoverHelpers::convertImageToBmp(coverImagePath, coverPath, "FB2", use1BitDithering);
+  const bool success = CoverHelpers::convertImageToBmp(coverImagePath, coverBmpPath, "FB2", use1BitDithering);
+
+  // Clean up temp file
+  if (!tmpCoverPath.empty()) {
+    SdMan.remove(tmpCoverPath.c_str());
+  }
+
   if (!success) {
     // Create failure marker
     FsFile marker;
@@ -485,11 +635,19 @@ bool Fb2::loadMetaCache() {
   }
 
   if (!serialization::readString(file, title) || !serialization::readString(file, author) ||
-      !serialization::readString(file, coverPath)) {
+      !serialization::readString(file, coverRef) || !serialization::readString(file, language) ||
+      !serialization::readString(file, coverContentType)) {
     LOG_ERR(TAG, "Failed to read meta cache strings");
     file.close();
     return false;
   }
+
+  int64_t cachedOffset;
+  if (!serialization::readPodChecked(file, cachedOffset)) {
+    file.close();
+    return false;
+  }
+  coverBinaryOffset_ = cachedOffset;
 
   uint32_t cachedFileSize;
   if (!serialization::readPodChecked(file, cachedFileSize)) {
@@ -543,7 +701,10 @@ bool Fb2::saveMetaCache() const {
   serialization::writePod(file, kMetaCacheVersion);
   serialization::writeString(file, title);
   serialization::writeString(file, author);
-  serialization::writeString(file, coverPath);
+  serialization::writeString(file, coverRef);
+  serialization::writeString(file, language);
+  serialization::writeString(file, coverContentType);
+  serialization::writePod(file, coverBinaryOffset_);
 
   const uint32_t size32 = static_cast<uint32_t>(fileSize);
   serialization::writePod(file, size32);

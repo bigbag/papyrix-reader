@@ -32,6 +32,8 @@ class TestFb2Parser {
   bool inFirstName = false;
   bool inLastName = false;
   bool inAuthor = false;
+  bool inLang = false;
+  bool inCoverPage = false;
   std::string currentAuthorFirst;
   std::string currentAuthorLast;
 
@@ -45,7 +47,6 @@ class TestFb2Parser {
 
   static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
     auto* self = static_cast<TestFb2Parser*>(userData);
-    (void)atts;
 
     self->depth++;
 
@@ -75,6 +76,51 @@ class TestFb2Parser {
       self->inFirstName = true;
     } else if (strcmp(tag, "last-name") == 0 && self->inAuthor) {
       self->inLastName = true;
+    } else if (strcmp(tag, "lang") == 0 && self->inTitleInfo) {
+      self->inLang = true;
+      self->language.clear();
+    } else if (strcmp(tag, "coverpage") == 0) {
+      self->inCoverPage = true;
+    } else if (strcmp(tag, "image") == 0 && self->inCoverPage) {
+      if (atts) {
+        for (int i = 0; atts[i]; i += 2) {
+          const char* attrName = atts[i];
+          const char* attrValue = atts[i + 1];
+          const char* attr = strrchr(attrName, ':');
+          if (attr)
+            attr++;
+          else
+            attr = attrName;
+          if ((strcmp(attr, "href") == 0 || strcmp(attrName, "l:href") == 0) && attrValue) {
+            if (attrValue[0] == '#') {
+              self->coverRef = attrValue + 1;
+            } else {
+              self->coverRef = attrValue;
+            }
+            break;
+          }
+        }
+      }
+    } else if (strcmp(tag, "binary") == 0) {
+      // Capture content-type for the cover binary
+      if (!self->coverRef.empty() && atts) {
+        bool isTargetBinary = false;
+        for (int i = 0; atts[i]; i += 2) {
+          if (strcmp(atts[i], "id") == 0 && atts[i + 1] && self->coverRef == atts[i + 1]) {
+            isTargetBinary = true;
+            break;
+          }
+        }
+        if (isTargetBinary) {
+          for (int i = 0; atts[i]; i += 2) {
+            if (strcmp(atts[i], "content-type") == 0 && atts[i + 1]) {
+              self->coverContentType = atts[i + 1];
+              break;
+            }
+          }
+        }
+      }
+      self->skipUntilDepth = self->depth - 1;
     } else if (strcmp(tag, "body") == 0) {
       self->bodyCount_++;
       self->inBody = (self->bodyCount_ == 1);
@@ -127,6 +173,12 @@ class TestFb2Parser {
       self->inAuthor = false;
       self->currentAuthorFirst.clear();
       self->currentAuthorLast.clear();
+    } else if (strcmp(tag, "lang") == 0) {
+      self->inLang = false;
+    } else if (strcmp(tag, "coverpage") == 0) {
+      self->inCoverPage = false;
+    } else if (strcmp(tag, "binary") == 0) {
+      self->skipUntilDepth = INT_MAX;
     } else if (strcmp(tag, "body") == 0) {
       self->inBody = false;
     } else if (strcmp(tag, "title") == 0 && self->inSectionTitle_ && self->depth == self->sectionTitleDepth_) {
@@ -173,6 +225,8 @@ class TestFb2Parser {
 
     if (self->inBookTitle) {
       self->title.append(s, len);
+    } else if (self->inLang) {
+      self->language.append(s, len);
     } else if (self->inFirstName) {
       self->currentAuthorFirst.append(s, len);
     } else if (self->inLastName) {
@@ -183,6 +237,9 @@ class TestFb2Parser {
  public:
   std::string title;
   std::string author;
+  std::string language;
+  std::string coverRef;
+  std::string coverContentType;
   std::vector<TocItem> tocItems;
 
   bool parse(const std::string& xml) {
@@ -209,6 +266,14 @@ class TestFb2Parser {
       if (title[i] == '\n' || title[i] == '\r') {
         title[i] = ' ';
       }
+    }
+
+    // Post-process language
+    while (!language.empty() && isspace(static_cast<unsigned char>(language.back()))) {
+      language.pop_back();
+    }
+    while (!language.empty() && isspace(static_cast<unsigned char>(language.front()))) {
+      language.erase(language.begin());
     }
 
     XML_ParserFree(parser);
@@ -591,6 +656,110 @@ int main() {
     runner.expectEq(static_cast<size_t>(1), parser.tocItems.size(), "toc_utf8: 1 item");
     runner.expectEqual("\xD0\x93\xD0\xBB\xD0\xB0\xD0\xB2\xD0\xB0 1", parser.tocItems[0].title,
                        "toc_utf8: UTF-8 preserved");
+  }
+
+  // ============================================
+  // Language extraction
+  // ============================================
+
+  // Test: Parse <lang>ru</lang>
+  {
+    TestFb2Parser parser;
+    bool ok = parser.parse(makeFb2("<lang>ru</lang><book-title>Book</book-title>"));
+    runner.expectTrue(ok, "lang_ru: parses successfully");
+    runner.expectEqual("ru", parser.language, "lang_ru: correct language");
+  }
+
+  // Test: Parse <lang>en-US</lang>
+  {
+    TestFb2Parser parser;
+    bool ok = parser.parse(makeFb2("<lang>en-US</lang><book-title>Book</book-title>"));
+    runner.expectTrue(ok, "lang_en_us: parses successfully");
+    runner.expectEqual("en-US", parser.language, "lang_en_us: subtag preserved");
+  }
+
+  // Test: No <lang> element -> empty
+  {
+    TestFb2Parser parser;
+    bool ok = parser.parse(makeFb2("<book-title>Book</book-title>"));
+    runner.expectTrue(ok, "lang_missing: parses successfully");
+    runner.expectEqual("", parser.language, "lang_missing: empty string");
+  }
+
+  // Test: <lang> with whitespace -> trimmed
+  {
+    TestFb2Parser parser;
+    bool ok = parser.parse(makeFb2("<lang>  de  \n</lang><book-title>Book</book-title>"));
+    runner.expectTrue(ok, "lang_whitespace: parses successfully");
+    runner.expectEqual("de", parser.language, "lang_whitespace: trimmed");
+  }
+
+  // Test: <lang> in <document-info> should NOT be collected
+  {
+    std::string xml =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        "<FictionBook xmlns=\"http://www.gribuser.ru/xml/fictionbook/2.0\">"
+        "<description>"
+        "<title-info><book-title>Book</book-title></title-info>"
+        "<document-info><lang>en</lang></document-info>"
+        "</description>"
+        "<body><section><p>Text</p></section></body>"
+        "</FictionBook>";
+    TestFb2Parser parser;
+    bool ok = parser.parse(xml);
+    runner.expectTrue(ok, "lang_doc_info_excluded: parses successfully");
+    runner.expectEqual("", parser.language, "lang_doc_info_excluded: only title-info lang");
+  }
+
+  // ============================================
+  // Cover reference and content-type extraction
+  // ============================================
+
+  // Test: Parse cover reference from <coverpage>
+  {
+    TestFb2Parser parser;
+    bool ok = parser.parse(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        "<FictionBook xmlns=\"http://www.gribuser.ru/xml/fictionbook/2.0\" "
+        "xmlns:l=\"http://www.w3.org/1999/xlink\">"
+        "<description><title-info>"
+        "<book-title>Book</book-title>"
+        "<coverpage><image l:href=\"#cover.jpg\"/></coverpage>"
+        "</title-info></description>"
+        "<body><section><p>Text</p></section></body>"
+        "<binary id=\"cover.jpg\" content-type=\"image/jpeg\">base64data</binary>"
+        "</FictionBook>");
+    runner.expectTrue(ok, "cover_ref: parses successfully");
+    runner.expectEqual("cover.jpg", parser.coverRef, "cover_ref: correct reference");
+    runner.expectEqual("image/jpeg", parser.coverContentType, "cover_ref: correct content-type");
+  }
+
+  // Test: Cover reference with PNG content-type
+  {
+    TestFb2Parser parser;
+    bool ok = parser.parse(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        "<FictionBook xmlns=\"http://www.gribuser.ru/xml/fictionbook/2.0\" "
+        "xmlns:l=\"http://www.w3.org/1999/xlink\">"
+        "<description><title-info>"
+        "<book-title>Book</book-title>"
+        "<coverpage><image l:href=\"#img1.png\"/></coverpage>"
+        "</title-info></description>"
+        "<body><section><p>Text</p></section></body>"
+        "<binary id=\"img1.png\" content-type=\"image/png\">base64data</binary>"
+        "</FictionBook>");
+    runner.expectTrue(ok, "cover_png: parses successfully");
+    runner.expectEqual("img1.png", parser.coverRef, "cover_png: correct reference");
+    runner.expectEqual("image/png", parser.coverContentType, "cover_png: correct content-type");
+  }
+
+  // Test: No coverpage -> empty
+  {
+    TestFb2Parser parser;
+    bool ok = parser.parse(makeFb2("<book-title>Book</book-title>"));
+    runner.expectTrue(ok, "no_cover: parses successfully");
+    runner.expectEqual("", parser.coverRef, "no_cover: empty cover ref");
+    runner.expectEqual("", parser.coverContentType, "no_cover: empty content-type");
   }
 
   return runner.allPassed() ? 0 : 1;

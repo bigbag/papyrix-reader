@@ -1075,7 +1075,12 @@ void ReaderState::createOrExtendCache(Core& core) {
   } else if (type == ContentType::Fb2) {
     cachePath = contentCachePath(core.content.cacheDir(), config.fontId);
     if (!parser_) {
-      parser_.reset(new Fb2Parser(contentPath_, renderer_, config));
+      std::string lang;
+      auto* fb2Provider = core.content.asFb2();
+      if (fb2Provider && fb2Provider->getFb2()) {
+        lang = fb2Provider->getFb2()->getLanguage();
+      }
+      parser_.reset(new Fb2Parser(contentPath_, renderer_, config, lang));
       parserSpineIndex_ = 0;
     }
   } else if (type == ContentType::Html) {
@@ -1318,7 +1323,12 @@ void ReaderState::startBackgroundCaching(Core& core) {
           } else if (type == ContentType::Fb2 && !cacheTask_.shouldStop()) {
             cachePath = contentCachePath(coreRef.content.cacheDir(), config.fontId);
             if (!parser_) {
-              parser_.reset(new Fb2Parser(contentPath_, renderer_, config));
+              std::string lang;
+              auto* fb2Provider = coreRef.content.asFb2();
+              if (fb2Provider && fb2Provider->getFb2()) {
+                lang = fb2Provider->getFb2()->getLanguage();
+              }
+              parser_.reset(new Fb2Parser(contentPath_, renderer_, config, lang));
               parserSpineIndex_ = 0;
             }
           } else if (type == ContentType::Html && !cacheTask_.shouldStop()) {

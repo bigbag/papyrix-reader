@@ -31,7 +31,10 @@ class Fb2 {
   std::string cachePath;
   std::string title;
   std::string author;
-  std::string coverPath;
+  std::string coverRef;
+  std::string coverContentType;
+  std::string language;
+  int64_t coverBinaryOffset_ = -1;  // Byte offset of cover <binary> tag (-1 = not found)
   size_t fileSize;
   bool loaded;
 
@@ -47,6 +50,7 @@ class Fb2 {
   bool inAuthor = false;
   bool inTitleInfo = false;
   bool inCoverPage = false;
+  bool inLang = false;
   std::string currentAuthorFirst;
   std::string currentAuthorLast;
 
@@ -104,6 +108,7 @@ class Fb2 {
   // Metadata
   const std::string& getTitle() const { return title; }
   const std::string& getAuthor() const { return author; }
+  const std::string& getLanguage() const { return language; }
   size_t getFileSize() const { return fileSize; }
 
   // Cover image support
@@ -120,6 +125,13 @@ class Fb2 {
    * @return Number of bytes actually read
    */
   size_t readContent(uint8_t* buffer, size_t offset, size_t length) const;
+
+  /**
+   * Extract embedded cover image from FB2 <binary> element to file
+   * @param outputPath Path to write the decoded image
+   * @return true on success
+   */
+  bool extractEmbeddedCover(const std::string& outputPath) const;
 
   /**
    * Find a cover image in the same directory as the FB2 file

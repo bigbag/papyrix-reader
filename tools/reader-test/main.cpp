@@ -304,7 +304,7 @@ int main(int argc, char* argv[]) {
     printf("FB2: \"%s\" by %s (%d TOC entries)\n", fb2file.getTitle().c_str(), fb2file.getAuthor().c_str(),
            fb2file.tocCount());
 
-    Fb2Parser parser(filepath, gfx, config);
+    Fb2Parser parser(filepath, gfx, config, fb2file.getLanguage());
     std::string cachePath = outputDir + "/pages_0.bin";
     PageCache cache(cachePath);
     cache.create(parser, config, batchSize);

@@ -19,7 +19,7 @@
 #include "Serialization.h"
 
 namespace {
-constexpr uint8_t kMetaCacheVersion = 2;
+constexpr uint8_t kMetaCacheVersion = 4;
 }
 
 struct TocItem {
@@ -29,12 +29,16 @@ struct TocItem {
 
 // Write meta cache in the same format as Fb2::saveMetaCache()
 static void writeMetaCache(FsFile& file, const std::string& title, const std::string& author,
-                           const std::string& coverPath, uint32_t fileSize, uint16_t sectionCount,
-                           const std::vector<TocItem>& tocItems) {
+                           const std::string& coverRef, const std::string& language,
+                           const std::string& coverContentType, int64_t coverBinaryOffset, uint32_t fileSize,
+                           uint16_t sectionCount, const std::vector<TocItem>& tocItems) {
   serialization::writePod(file, kMetaCacheVersion);
   serialization::writeString(file, title);
   serialization::writeString(file, author);
-  serialization::writeString(file, coverPath);
+  serialization::writeString(file, coverRef);
+  serialization::writeString(file, language);
+  serialization::writeString(file, coverContentType);
+  serialization::writePod(file, coverBinaryOffset);
   serialization::writePod(file, fileSize);
   serialization::writePod(file, sectionCount);
 
@@ -52,7 +56,10 @@ static void writeMetaCache(FsFile& file, const std::string& title, const std::st
 struct MetaCacheData {
   std::string title;
   std::string author;
-  std::string coverPath;
+  std::string coverRef;
+  std::string language;
+  std::string coverContentType;
+  int64_t coverBinaryOffset = -1;
   uint32_t fileSize = 0;
   uint16_t sectionCount = 0;
   std::vector<TocItem> tocItems;
@@ -65,7 +72,12 @@ static bool readMetaCache(FsFile& file, MetaCacheData& data) {
   }
 
   if (!serialization::readString(file, data.title) || !serialization::readString(file, data.author) ||
-      !serialization::readString(file, data.coverPath)) {
+      !serialization::readString(file, data.coverRef) || !serialization::readString(file, data.language) ||
+      !serialization::readString(file, data.coverContentType)) {
+    return false;
+  }
+
+  if (!serialization::readPodChecked(file, data.coverBinaryOffset)) {
     return false;
   }
 
@@ -104,7 +116,10 @@ static bool readMetaCache(FsFile& file, MetaCacheData& data) {
 struct MetaCacheLut {
   std::string title;
   std::string author;
-  std::string coverPath;
+  std::string coverRef;
+  std::string language;
+  std::string coverContentType;
+  int64_t coverBinaryOffset = -1;
   uint32_t fileSize = 0;
   uint16_t sectionCount = 0;
   uint16_t tocItemCount = 0;
@@ -118,10 +133,12 @@ static bool buildMetaCacheLut(FsFile& file, MetaCacheLut& lut) {
   }
 
   if (!serialization::readString(file, lut.title) || !serialization::readString(file, lut.author) ||
-      !serialization::readString(file, lut.coverPath)) {
+      !serialization::readString(file, lut.coverRef) || !serialization::readString(file, lut.language) ||
+      !serialization::readString(file, lut.coverContentType)) {
     return false;
   }
 
+  if (!serialization::readPodChecked(file, lut.coverBinaryOffset)) return false;
   if (!serialization::readPodChecked(file, lut.fileSize)) return false;
   if (!serialization::readPodChecked(file, lut.sectionCount)) return false;
 
@@ -167,7 +184,7 @@ int main() {
     file.setBuffer("");
 
     std::vector<TocItem> toc = {{"Chapter 1", 0}, {"Chapter 2", 1}, {"Chapter 3", 2}};
-    writeMetaCache(file, "Test Book", "John Doe", "/cover.jpg", 123456, 3, toc);
+    writeMetaCache(file, "Test Book", "John Doe", "/cover.jpg", "en", "image/jpeg", 50000, 123456, 3, toc);
 
     file.seek(0);
     MetaCacheData data;
@@ -175,7 +192,10 @@ int main() {
     runner.expectTrue(ok, "roundtrip: reads successfully");
     runner.expectEqual("Test Book", data.title, "roundtrip: title");
     runner.expectEqual("John Doe", data.author, "roundtrip: author");
-    runner.expectEqual("/cover.jpg", data.coverPath, "roundtrip: coverPath");
+    runner.expectEqual("/cover.jpg", data.coverRef, "roundtrip: coverRef");
+    runner.expectEqual("en", data.language, "roundtrip: language");
+    runner.expectEqual("image/jpeg", data.coverContentType, "roundtrip: coverContentType");
+    runner.expectEq(static_cast<int64_t>(50000), data.coverBinaryOffset, "roundtrip: coverBinaryOffset");
     runner.expectEq(static_cast<uint32_t>(123456), data.fileSize, "roundtrip: fileSize");
     runner.expectEq(static_cast<uint16_t>(3), data.sectionCount, "roundtrip: sectionCount");
     runner.expectEq(static_cast<size_t>(3), data.tocItems.size(), "roundtrip: tocItems count");
@@ -190,7 +210,7 @@ int main() {
     FsFile file;
     file.setBuffer("");
 
-    writeMetaCache(file, "No Chapters", "Author", "", 5000, 0, {});
+    writeMetaCache(file, "No Chapters", "Author", "", "", "", -1, 5000, 0, {});
 
     file.seek(0);
     MetaCacheData data;
@@ -205,7 +225,7 @@ int main() {
     FsFile file;
     file.setBuffer("");
 
-    writeMetaCache(file, "", "", "", 0, 0, {});
+    writeMetaCache(file, "", "", "", "", "", -1, 0, 0, {});
 
     file.seek(0);
     MetaCacheData data;
@@ -213,7 +233,7 @@ int main() {
     runner.expectTrue(ok, "empty_strings: reads successfully");
     runner.expectEqual("", data.title, "empty_strings: empty title");
     runner.expectEqual("", data.author, "empty_strings: empty author");
-    runner.expectEqual("", data.coverPath, "empty_strings: empty coverPath");
+    runner.expectEqual("", data.coverRef, "empty_strings: empty coverRef");
     runner.expectEq(static_cast<uint32_t>(0), data.fileSize, "empty_strings: zero fileSize");
   }
 
@@ -229,7 +249,7 @@ int main() {
     writeMetaCache(file,
                    "\xD0\x92\xD0\xBE\xD0\xB9\xD0\xBD\xD0\xB0 \xD0\xB8 \xD0\xBC\xD0\xB8\xD1\x80",  // "Война и мир"
                    "\xD0\x9B\xD0\xB5\xD0\xB2 \xD0\xA2\xD0\xBE\xD0\xBB\xD1\x81\xD1\x82\xD0\xBE\xD0\xB9",  // "Лев Толстой"
-                   "", 999999, 2, toc);
+                   "", "ru", "", -1, 999999, 2, toc);
 
     file.seek(0);
     MetaCacheData data;
@@ -292,6 +312,10 @@ int main() {
     serialization::writeString(file, std::string("Title"));
     serialization::writeString(file, std::string("Author"));
     serialization::writeString(file, std::string(""));
+    serialization::writeString(file, std::string(""));
+    serialization::writeString(file, std::string(""));
+    int64_t offset = -1;
+    serialization::writePod(file, offset);
     uint32_t fs = 1000;
     serialization::writePod(file, fs);
     uint16_t sc = 5;
@@ -319,7 +343,7 @@ int main() {
     for (int i = 0; i < 100; i++) {
       toc.push_back({"Section " + std::to_string(i + 1), i});
     }
-    writeMetaCache(file, "Big Book", "Author", "", 5000000, 100, toc);
+    writeMetaCache(file, "Big Book", "Author", "", "", "", -1, 5000000, 100, toc);
 
     file.seek(0);
     MetaCacheData data;
@@ -336,7 +360,7 @@ int main() {
     FsFile file;
     file.setBuffer("");
 
-    writeMetaCache(file, "Large", "Author", "", 0xFFFFFFFE, 1, {{"Ch1", 0}});
+    writeMetaCache(file, "Large", "Author", "", "", "", -1, 0xFFFFFFFE, 1, {{"Ch1", 0}});
 
     file.seek(0);
     MetaCacheData data;
@@ -351,7 +375,7 @@ int main() {
     file.setBuffer("");
 
     std::vector<TocItem> toc = {{"Chapter 1", 0}, {"Chapter 2", 1}, {"Chapter 3", 2}};
-    writeMetaCache(file, "Lazy Book", "Jane Doe", "/cover.png", 54321, 3, toc);
+    writeMetaCache(file, "Lazy Book", "Jane Doe", "/cover.png", "fr", "image/png", 12345, 54321, 3, toc);
 
     file.seek(0);
     MetaCacheLut lut;
@@ -382,7 +406,7 @@ int main() {
     FsFile file;
     file.setBuffer("");
 
-    writeMetaCache(file, "No TOC", "Author", "", 1000, 0, {});
+    writeMetaCache(file, "No TOC", "Author", "", "", "", -1, 1000, 0, {});
 
     file.seek(0);
     MetaCacheLut lut;
@@ -405,7 +429,7 @@ int main() {
     for (int i = 0; i < 100; i++) {
       toc.push_back({"Section " + std::to_string(i + 1), i});
     }
-    writeMetaCache(file, "Big Book", "Author", "", 5000000, 100, toc);
+    writeMetaCache(file, "Big Book", "Author", "", "", "", -1, 5000000, 100, toc);
 
     file.seek(0);
     MetaCacheLut lut;
@@ -436,7 +460,7 @@ int main() {
         {"\xD0\x93\xD0\xBB\xD0\xB0\xD0\xB2\xD0\xB0 1", 0},
         {"\xD0\x93\xD0\xBB\xD0\xB0\xD0\xB2\xD0\xB0 2", 1},
     };
-    writeMetaCache(file, "UTF8", "Author", "", 1000, 2, toc);
+    writeMetaCache(file, "UTF8", "Author", "", "", "", -1, 1000, 2, toc);
 
     file.seek(0);
     MetaCacheLut lut;
@@ -459,6 +483,10 @@ int main() {
     serialization::writeString(file, std::string("Title"));
     serialization::writeString(file, std::string("Author"));
     serialization::writeString(file, std::string(""));
+    serialization::writeString(file, std::string(""));
+    serialization::writeString(file, std::string(""));
+    int64_t offset2 = -1;
+    serialization::writePod(file, offset2);
     uint32_t fs = 1000;
     serialization::writePod(file, fs);
     uint16_t sc = 5;
@@ -476,6 +504,55 @@ int main() {
     runner.expectFalse(ok, "lut_truncated: rejected");
     runner.expectEq(static_cast<uint16_t>(0), lut.tocItemCount, "lut_truncated: count reset to 0");
     runner.expectEq(static_cast<size_t>(0), lut.tocLut.size(), "lut_truncated: LUT cleared");
+  }
+
+  // Test 16: Language and coverContentType roundtrip
+  {
+    FsFile file;
+    file.setBuffer("");
+
+    writeMetaCache(file, "Russian Book", "Author", "cover.jpg", "ru", "image/jpeg", 75000, 10000, 1, {{"Ch1", 0}});
+
+    file.seek(0);
+    MetaCacheData data;
+    bool ok = readMetaCache(file, data);
+    runner.expectTrue(ok, "lang_roundtrip: reads successfully");
+    runner.expectEqual("ru", data.language, "lang_roundtrip: language preserved");
+    runner.expectEqual("image/jpeg", data.coverContentType, "lang_roundtrip: coverContentType preserved");
+    runner.expectEq(static_cast<int64_t>(75000), data.coverBinaryOffset, "lang_roundtrip: offset preserved");
+  }
+
+  // Test 17: Empty language and coverContentType
+  {
+    FsFile file;
+    file.setBuffer("");
+
+    writeMetaCache(file, "Book", "Author", "", "", "", -1, 5000, 0, {});
+
+    file.seek(0);
+    MetaCacheData data;
+    bool ok = readMetaCache(file, data);
+    runner.expectTrue(ok, "empty_lang: reads successfully");
+    runner.expectEqual("", data.language, "empty_lang: empty language");
+    runner.expectEqual("", data.coverContentType, "empty_lang: empty coverContentType");
+  }
+
+  // Test 18: LUT with language and coverContentType
+  {
+    FsFile file;
+    file.setBuffer("");
+
+    writeMetaCache(file, "French Book", "Author", "img.png", "fr", "image/png", 6000, 8000, 2,
+                   {{"Ch1", 0}, {"Ch2", 1}});
+
+    file.seek(0);
+    MetaCacheLut lut;
+    bool ok = buildMetaCacheLut(file, lut);
+    runner.expectTrue(ok, "lut_lang: builds LUT");
+    runner.expectEqual("fr", lut.language, "lut_lang: language preserved");
+    runner.expectEqual("image/png", lut.coverContentType, "lut_lang: coverContentType preserved");
+    runner.expectEq(static_cast<int64_t>(6000), lut.coverBinaryOffset, "lut_lang: offset preserved");
+    runner.expectEq(static_cast<uint16_t>(2), lut.tocItemCount, "lut_lang: 2 TOC items");
   }
 
   return runner.allPassed() ? 0 : 1;

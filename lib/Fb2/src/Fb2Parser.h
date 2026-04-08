@@ -18,7 +18,7 @@ class ParsedText;
 
 class Fb2Parser : public ContentParser {
  public:
-  Fb2Parser(std::string filepath, GfxRenderer& renderer, const RenderConfig& config);
+  Fb2Parser(std::string filepath, GfxRenderer& renderer, const RenderConfig& config, const std::string& language = "");
   ~Fb2Parser() override;
 
   bool parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint16_t maxPages = 0,
@@ -32,6 +32,7 @@ class Fb2Parser : public ContentParser {
   std::string filepath_;
   GfxRenderer& renderer_;
   RenderConfig config_;
+  std::string language_;
   bool hasMore_ = true;
   bool isRtl_ = false;
 

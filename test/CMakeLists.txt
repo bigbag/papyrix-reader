@@ -176,6 +176,14 @@ foreach(TEST_SRC ${TEST_SOURCES})
     target_include_directories(${TEST_NAME} PRIVATE
       ${PROJECT_ROOT}/lib/Fb2/src
     )
+  elseif(TEST_NAME STREQUAL "Fb2Base64Test")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${TEST_HELPERS}
+    )
+    target_include_directories(${TEST_NAME} PRIVATE
+      ${PROJECT_ROOT}/lib/Fb2/src
+    )
   elseif(TEST_NAME STREQUAL "LoggingTest")
     # Self-contained test with its own HardwareSerial.h mock (no TEST_HELPERS —
     # platform_stubs.h conflicts with the real Logging.h's logSerial/LOG_* defs).

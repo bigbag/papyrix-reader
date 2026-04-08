@@ -1,6 +1,7 @@
 #include "Fb2Parser.h"
 
 #include <GfxRenderer.h>
+#include <Hyphenation.h>
 #include <Logging.h>
 #include <Page.h>
 #include <ParsedText.h>
@@ -23,8 +24,9 @@ const char* stripNamespace(const char* name) {
 }
 }  // namespace
 
-Fb2Parser::Fb2Parser(std::string filepath, GfxRenderer& renderer, const RenderConfig& config)
-    : filepath_(std::move(filepath)), renderer_(renderer), config_(config) {}
+Fb2Parser::Fb2Parser(std::string filepath, GfxRenderer& renderer, const RenderConfig& config,
+                     const std::string& language)
+    : filepath_(std::move(filepath)), renderer_(renderer), config_(config), language_(language) {}
 
 Fb2Parser::~Fb2Parser() {
   if (xmlParser_) {
@@ -77,6 +79,8 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
   hitMaxPages_ = false;
   stopRequested_ = false;
   shouldAbort_ = shouldAbort;
+
+  Hyphenation::setLanguage(language_);
 
   // Single buffer reused for RTL peek and parsing (saves 4KB stack)
   uint8_t buffer[READ_CHUNK_SIZE + 1];
