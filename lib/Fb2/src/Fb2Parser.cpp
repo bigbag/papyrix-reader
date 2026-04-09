@@ -1,5 +1,6 @@
 #include "Fb2Parser.h"
 
+#include <ExpatEncodingHandler.h>
 #include <GfxRenderer.h>
 #include <Hyphenation.h>
 #include <Logging.h>
@@ -7,8 +8,6 @@
 #include <ParsedText.h>
 #include <SDCardManager.h>
 #include <Utf8.h>
-
-#include "Fb2EncodingHandler.h"
 
 #define TAG "FB2_PARSE"
 
@@ -104,7 +103,7 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
   }
 
   XML_SetUserData(xmlParser_, this);
-  XML_SetUnknownEncodingHandler(xmlParser_, fb2UnknownEncodingHandler, nullptr);
+  XML_SetUnknownEncodingHandler(xmlParser_, expatUnknownEncodingHandler, nullptr);
   XML_SetElementHandler(xmlParser_, startElement, endElement);
   XML_SetCharacterDataHandler(xmlParser_, characterData);
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <EncodingDetector.h>
 #include <RenderConfig.h>
 #include <ScriptDetector.h>
 #include <SdFat.h>
@@ -23,6 +24,9 @@ class PlainTextParser : public ContentParser {
   size_t currentOffset_ = 0;
   bool hasMore_ = true;
   bool isRtl_ = false;
+  Encoding detectedEncoding_ = Encoding::Utf8;
+  const int* encodingTable_ = nullptr;
+  size_t bomSkipBytes_ = 0;
 
   // Carries over unconsumed words from a paragraph that was
   // interrupted by a page-batch limit.

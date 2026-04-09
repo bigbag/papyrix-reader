@@ -38,6 +38,9 @@ void MarkdownParser::reset() {
   currentOffset_ = 0;
   hasMore_ = true;
   isRtl_ = false;
+  detectedEncoding_ = Encoding::Utf8;
+  encodingTable_ = nullptr;
+  bomSkipBytes_ = 0;
   pendingTextBlock_.reset();
 }
 
@@ -147,12 +150,19 @@ bool MarkdownParser::addLineToPage(ParseContext& ctx, std::shared_ptr<TextBlock>
 bool MarkdownParser::readLine(FsFile& file) {
   int i = 0;
   bool readAnyChar = false;
-  while (i < LINE_BUFFER_SIZE - 1) {
+  while (i < LINE_BUFFER_SIZE - 4) {
     int c = file.read();
     if (c < 0) break;
     readAnyChar = true;
     if (c == '\n') break;
     if (c == '\r') continue;
+    if (encodingTable_ && c >= 0x80) {
+      int cp = encodingTable_[c - 128];
+      if (cp > 0) {
+        i += codepointToUtf8(cp, &lineBuffer_[i]);
+      }
+      continue;
+    }
     lineBuffer_[i++] = static_cast<char>(c);
   }
   lineBuffer_[i] = '\0';
@@ -348,11 +358,16 @@ bool MarkdownParser::parsePages(const std::function<void(std::unique_ptr<Page>)>
 
   file.seekSet(currentOffset_);
 
-  if (currentOffset_ == 0 && !isRtl_) {
-    if (readLine(file)) {
-      isRtl_ = ScriptDetector::containsArabic(lineBuffer_);
+  if (currentOffset_ == 0) {
+    uint8_t peekBuf[513];
+    size_t peekBytes = file.read(peekBuf, 512);
+    if (peekBytes > 0) {
+      peekBuf[peekBytes] = '\0';
+      detectedEncoding_ = detectEncoding(peekBuf, peekBytes, bomSkipBytes_);
+      encodingTable_ = getEncodingTable(detectedEncoding_);
+      isRtl_ = ScriptDetector::containsArabic(reinterpret_cast<const char*>(peekBuf));
     }
-    file.seekSet(currentOffset_);
+    file.seekSet(currentOffset_ + bomSkipBytes_);
   }
 
   LOG_INF(TAG, "Parsing from offset %zu, file size %zu", currentOffset_, fileSize_);

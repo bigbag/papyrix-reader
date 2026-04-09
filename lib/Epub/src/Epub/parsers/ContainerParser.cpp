@@ -1,5 +1,6 @@
 #include "ContainerParser.h"
 
+#include <ExpatEncodingHandler.h>
 #include <Logging.h>
 
 #define TAG "CONTAINER"
@@ -11,6 +12,7 @@ bool ContainerParser::setup() {
     return false;
   }
 
+  XML_SetUnknownEncodingHandler(parser, expatUnknownEncodingHandler, nullptr);
   XML_SetUserData(parser, this);
   XML_SetElementHandler(parser, startElement, endElement);
   return true;

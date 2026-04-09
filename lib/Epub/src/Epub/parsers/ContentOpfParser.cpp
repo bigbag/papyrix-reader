@@ -1,5 +1,6 @@
 #include "ContentOpfParser.h"
 
+#include <ExpatEncodingHandler.h>
 #include <FsHelpers.h>
 #include <Logging.h>
 #include <Serialization.h>
@@ -60,6 +61,7 @@ bool ContentOpfParser::setup() {
     return false;
   }
 
+  XML_SetUnknownEncodingHandler(parser, expatUnknownEncodingHandler, nullptr);
   XML_SetUserData(parser, this);
   XML_SetElementHandler(parser, startElement, endElement);
   XML_SetCharacterDataHandler(parser, characterData);

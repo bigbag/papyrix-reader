@@ -28,6 +28,7 @@ include_directories(
   ${PROJECT_ROOT}/src
   ${PROJECT_ROOT}/src/core
   ${PROJECT_ROOT}/src/content
+  ${PROJECT_ROOT}/lib/Encoding/src
   ${PROJECT_ROOT}/lib/Utf8/src
   ${PROJECT_ROOT}/lib/Serialization/src
   ${PROJECT_ROOT}/lib/AsyncTask/src
@@ -173,9 +174,6 @@ foreach(TEST_SRC ${TEST_SOURCES})
     )
     target_compile_definitions(${TEST_NAME} PRIVATE XML_GE=0)
     target_link_libraries(${TEST_NAME} PRIVATE EXPAT::EXPAT)
-    target_include_directories(${TEST_NAME} PRIVATE
-      ${PROJECT_ROOT}/lib/Fb2/src
-    )
   elseif(TEST_NAME STREQUAL "Fb2Base64Test")
     add_executable(${TEST_NAME}
       ${TEST_SRC}

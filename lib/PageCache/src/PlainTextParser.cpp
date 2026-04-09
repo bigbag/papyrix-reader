@@ -24,6 +24,9 @@ void PlainTextParser::reset() {
   currentOffset_ = 0;
   hasMore_ = true;
   isRtl_ = false;
+  detectedEncoding_ = Encoding::Utf8;
+  encodingTable_ = nullptr;
+  bomSkipBytes_ = 0;
   pendingBlock_.reset();
 }
 
@@ -101,9 +104,11 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
     size_t peekBytes = file.read(buffer, READ_CHUNK_SIZE);
     if (peekBytes > 0) {
       buffer[peekBytes] = '\0';
+      detectedEncoding_ = detectEncoding(buffer, peekBytes, bomSkipBytes_);
+      encodingTable_ = getEncodingTable(detectedEncoding_);
       isRtl_ = ScriptDetector::containsArabic(reinterpret_cast<const char*>(buffer));
     }
-    file.seekSet(0);
+    file.seekSet(bomSkipBytes_);
   }
 
   startNewPage();
@@ -194,7 +199,16 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
         continue;
       }
 
-      partialWord += c;
+      if (encodingTable_ && static_cast<uint8_t>(c) >= 0x80) {
+        int cp = encodingTable_[static_cast<uint8_t>(c) - 128];
+        if (cp > 0) {
+          char utf8Buf[4];
+          int len = codepointToUtf8(cp, utf8Buf);
+          partialWord.append(utf8Buf, len);
+        }
+      } else {
+        partialWord += c;
+      }
 
       // Prevent extremely long words from accumulating
       if (partialWord.length() > 100) {

@@ -9,6 +9,7 @@
 #pragma once
 
 #include <ContentParser.h>
+#include <EncodingDetector.h>
 #include <RenderConfig.h>
 #include <ScriptDetector.h>
 #include <SdFat.h>
@@ -52,6 +53,9 @@ class MarkdownParser : public ContentParser {
   size_t currentOffset_ = 0;
   bool hasMore_ = true;
   bool isRtl_ = false;
+  Encoding detectedEncoding_ = Encoding::Utf8;
+  const int* encodingTable_ = nullptr;
+  size_t bomSkipBytes_ = 0;
 
   // Line buffer for reading from file
   char lineBuffer_[LINE_BUFFER_SIZE];

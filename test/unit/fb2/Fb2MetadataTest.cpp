@@ -6,7 +6,7 @@
 
 #include "test_utils.h"
 
-#include <Fb2EncodingHandler.h>
+#include <ExpatEncodingHandler.h>
 #include <expat.h>
 
 #include <climits>
@@ -248,7 +248,7 @@ class TestFb2Parser {
     if (!parser) return false;
 
     XML_SetUserData(parser, this);
-    XML_SetUnknownEncodingHandler(parser, fb2UnknownEncodingHandler, nullptr);
+    XML_SetUnknownEncodingHandler(parser, expatUnknownEncodingHandler, nullptr);
     XML_SetElementHandler(parser, startElement, endElement);
     XML_SetCharacterDataHandler(parser, characterData);
 

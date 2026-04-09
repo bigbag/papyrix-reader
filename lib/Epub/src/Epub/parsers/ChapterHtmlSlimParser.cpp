@@ -1,6 +1,7 @@
 #include "ChapterHtmlSlimParser.h"
 
 #include <Bitmap.h>
+#include <ExpatEncodingHandler.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <ImageConverter.h>
@@ -589,6 +590,8 @@ bool ChapterHtmlSlimParser::initParser() {
     LOG_ERR(TAG, "Couldn't allocate memory for parser");
     return false;
   }
+
+  XML_SetUnknownEncodingHandler(xmlParser_, expatUnknownEncodingHandler, nullptr);
 
   if (!SdMan.openFileForRead("EHP", filepath, file_)) {
     XML_ParserFree(xmlParser_);

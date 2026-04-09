@@ -1,0 +1,11 @@
+{
+  "name": "Encoding",
+  "version": "1.0.0",
+  "description": "Character encoding detection and conversion",
+  "frameworks": ["arduino", "espidf"],
+  "platforms": ["espressif32"],
+  "build": {
+    "srcDir": "src",
+    "includeDir": "src"
+  }
+}

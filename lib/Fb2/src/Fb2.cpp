@@ -7,11 +7,11 @@
 #include "Fb2.h"
 
 #include <CoverHelpers.h>
+#include <ExpatEncodingHandler.h>
 #include <FsHelpers.h>
 #include <Logging.h>
 
 #include "Base64Decoder.h"
-#include "Fb2EncodingHandler.h"
 
 #define TAG "FB2"
 #include <SDCardManager.h>
@@ -329,7 +329,7 @@ bool Fb2::parseXmlStream() {
   }
 
   XML_SetUserData(xmlParser_, this);
-  XML_SetUnknownEncodingHandler(xmlParser_, fb2UnknownEncodingHandler, nullptr);
+  XML_SetUnknownEncodingHandler(xmlParser_, expatUnknownEncodingHandler, nullptr);
   XML_SetElementHandler(xmlParser_, startElement, endElement);
   XML_SetCharacterDataHandler(xmlParser_, characterData);
 
