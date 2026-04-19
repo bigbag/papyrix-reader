@@ -6,6 +6,7 @@
 
 #include "test_utils.h"
 
+#include <EncodingDetector.h>
 #include <ExpatEncodingHandler.h>
 #include <expat.h>
 
@@ -244,7 +245,17 @@ class TestFb2Parser {
   std::vector<TocItem> tocItems;
 
   bool parse(const std::string& xml) {
-    XML_Parser parser = XML_ParserCreate(nullptr);
+    // Mirror production logic: if bytes are actually UTF-8, force Expat to UTF-8
+    // regardless of the declaration (handles mis-declared files). Genuine
+    // single-byte encodings fall through to the UnknownEncodingHandler path.
+    size_t bomSkip = 0;
+    const char* explicitEncoding = nullptr;
+    if (!xml.empty() && detectEncoding(reinterpret_cast<const uint8_t*>(xml.data()), xml.size(), bomSkip) ==
+                            Encoding::Utf8) {
+      explicitEncoding = "UTF-8";
+    }
+
+    XML_Parser parser = XML_ParserCreate(explicitEncoding);
     if (!parser) return false;
 
     XML_SetUserData(parser, this);
@@ -252,7 +263,9 @@ class TestFb2Parser {
     XML_SetElementHandler(parser, startElement, endElement);
     XML_SetCharacterDataHandler(parser, characterData);
 
-    if (XML_Parse(parser, xml.c_str(), static_cast<int>(xml.size()), 1) == XML_STATUS_ERROR) {
+    const char* data = xml.data() + bomSkip;
+    const int len = static_cast<int>(xml.size() - bomSkip);
+    if (XML_Parse(parser, data, len, 1) == XML_STATUS_ERROR) {
       XML_ParserFree(parser);
       return false;
     }
@@ -831,6 +844,43 @@ int main() {
     // "Тест" in UTF-8
     runner.expectEqual("\xD0\xA2\xD0\xB5\xD1\x81\xD1\x82", parser.title,
                        "koi8r: title decoded to UTF-8");
+  }
+
+  // Test: declaration says windows-1251 but bytes are actually UTF-8 (Issue #99 books/converted.fb2)
+  {
+    // "Тест" in literal UTF-8: \xD0\xA2\xD0\xB5\xD1\x81\xD1\x82
+    std::string xml =
+        "<?xml version=\"1.0\" encoding=\"windows-1251\"?>"
+        "<FictionBook xmlns=\"http://www.gribuser.ru/xml/fictionbook/2.0\">"
+        "<description><title-info>"
+        "<book-title>\xD0\xA2\xD0\xB5\xD1\x81\xD1\x82</book-title>"
+        "<lang>ru</lang>"
+        "</title-info></description>"
+        "<body><section><p>ok</p></section></body>"
+        "</FictionBook>";
+    TestFb2Parser parser;
+    bool ok = parser.parse(xml);
+    runner.expectTrue(ok, "misdeclared_utf8: parses successfully despite stale cp1251 declaration");
+    runner.expectEqual("\xD0\xA2\xD0\xB5\xD1\x81\xD1\x82", parser.title,
+                       "misdeclared_utf8: title preserved as UTF-8");
+    runner.expectEqual("ru", parser.language, "misdeclared_utf8: language correct");
+  }
+
+  // Test: UTF-8 BOM is stripped before parsing
+  {
+    std::string xml =
+        "\xEF\xBB\xBF"  // UTF-8 BOM
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        "<FictionBook xmlns=\"http://www.gribuser.ru/xml/fictionbook/2.0\">"
+        "<description><title-info>"
+        "<book-title>Bom</book-title>"
+        "</title-info></description>"
+        "<body><section><p>ok</p></section></body>"
+        "</FictionBook>";
+    TestFb2Parser parser;
+    bool ok = parser.parse(xml);
+    runner.expectTrue(ok, "utf8_bom: parses successfully");
+    runner.expectEqual("Bom", parser.title, "utf8_bom: title correct after BOM strip");
   }
 
   return runner.allPassed() ? 0 : 1;

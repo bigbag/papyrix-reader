@@ -496,6 +496,7 @@ void setup() {
 
   // Detect boot mode from RTC memory or settings
   currentBootMode = papyrix::detectBootMode();
+  papyrix::core.bootMode = currentBootMode;
 
   if (currentBootMode == papyrix::BootMode::READER) {
     initReaderMode();

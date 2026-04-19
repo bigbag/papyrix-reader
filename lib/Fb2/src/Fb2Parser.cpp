@@ -1,5 +1,6 @@
 #include "Fb2Parser.h"
 
+#include <EncodingDetector.h>
 #include <ExpatEncodingHandler.h>
 #include <GfxRenderer.h>
 #include <Hyphenation.h>
@@ -86,16 +87,24 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
   // Single buffer reused for RTL peek and parsing (saves 4KB stack)
   uint8_t buffer[READ_CHUNK_SIZE + 1];
 
-  // RTL detection on first chunk
+  // Peek first chunk for RTL + encoding detection
   size_t peekBytes = file.read(buffer, READ_CHUNK_SIZE);
+  const char* explicitEncoding = nullptr;
+  size_t bomSkip = 0;
   if (peekBytes > 0) {
     buffer[peekBytes] = '\0';
     isRtl_ = ScriptDetector::containsArabic(reinterpret_cast<const char*>(buffer));
+    // Override declared encoding when bytes are actually UTF-8 (mis-declared files).
+    // For genuine CP1251/KOI8-R, detection returns non-UTF-8 and we leave the
+    // declaration-driven path via expatUnknownEncodingHandler.
+    if (detectEncoding(buffer, peekBytes, bomSkip) == Encoding::Utf8) {
+      explicitEncoding = "UTF-8";
+    }
   }
-  file.seekSet(0);
+  file.seekSet(bomSkip);
 
   // Create Expat parser
-  xmlParser_ = XML_ParserCreate(nullptr);
+  xmlParser_ = XML_ParserCreate(explicitEncoding);
   if (!xmlParser_) {
     LOG_ERR(TAG, "Failed to create XML parser");
     file.close();

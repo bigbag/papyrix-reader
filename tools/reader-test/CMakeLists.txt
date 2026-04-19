@@ -76,6 +76,7 @@ target_include_directories(reader-test PRIVATE
   ${PROJECT_ROOT}/src/core
   ${PROJECT_ROOT}/src/content
   ${PROJECT_ROOT}/lib/Utf8/src
+  ${PROJECT_ROOT}/lib/Encoding/src
   ${PROJECT_ROOT}/lib/Serialization/src
   ${PROJECT_ROOT}/lib/AsyncTask/src
   ${PROJECT_ROOT}/lib/RenderTypes/src

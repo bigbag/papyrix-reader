@@ -6,6 +6,7 @@
 #include "../drivers/Input.h"
 #include "../drivers/Network.h"
 #include "../drivers/Storage.h"
+#include "BootMode.h"
 #include "EventQueue.h"
 #include "PapyrixSettings.h"
 #include "Result.h"
@@ -40,6 +41,9 @@ struct Core {
   // === Pending operations ===
   SyncMode pendingSync = SyncMode::None;
   int8_t pendingAppId = -1;
+
+  // === Boot mode this session is running in (set in main.cpp::setup) ===
+  BootMode bootMode = BootMode::UI;
 
   // === Lifecycle ===
   Result<void> init();

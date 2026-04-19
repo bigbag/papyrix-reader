@@ -6,6 +6,7 @@
 
 #include <cstring>
 
+#include "../core/BootMode.h"
 #include "../core/Core.h"
 #include "ThemeManager.h"
 
@@ -45,7 +46,15 @@ StateTransition ErrorState::update(Core& core) {
   Event e;
   while (core.events.pop(e)) {
     if (e.type == EventType::ButtonPress) {
-      // Any button press goes back to file list
+      // In Reader boot mode, FileList isn't a registered state — the only way
+      // back is to reboot into UI mode. Mirrors ReaderState's exit pattern.
+      if (core.bootMode == BootMode::READER) {
+        LOG_INF(TAG, "Reader-mode error dismissed — rebooting to UI");
+        showTransitionNotification("Returning to library...");
+        saveTransition(BootMode::UI, nullptr, ReturnTo::FILE_MANAGER);
+        vTaskDelay(50 / portTICK_PERIOD_MS);
+        ESP.restart();
+      }
       return StateTransition::to(StateId::FileList);
     }
   }

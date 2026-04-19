@@ -7,6 +7,7 @@
 #include "Fb2.h"
 
 #include <CoverHelpers.h>
+#include <EncodingDetector.h>
 #include <ExpatEncodingHandler.h>
 #include <FsHelpers.h>
 #include <Logging.h>
@@ -321,7 +322,22 @@ bool Fb2::parseXmlStream() {
     return false;
   }
 
-  xmlParser_ = XML_ParserCreate(nullptr);
+  constexpr size_t kChunkSize = 4096;
+  uint8_t buffer[kChunkSize];
+
+  // Peek first chunk for encoding detection. If bytes are actually UTF-8,
+  // force Expat to UTF-8 even when the declaration says CP1251/KOI8-R
+  // (mis-declared files). Genuine single-byte encodings fall through to the
+  // expatUnknownEncodingHandler path below.
+  const size_t peekBytes = file.read(buffer, kChunkSize);
+  const char* explicitEncoding = nullptr;
+  size_t bomSkip = 0;
+  if (peekBytes > 0 && detectEncoding(buffer, peekBytes, bomSkip) == Encoding::Utf8) {
+    explicitEncoding = "UTF-8";
+  }
+  file.seek(bomSkip);
+
+  xmlParser_ = XML_ParserCreate(explicitEncoding);
   if (!xmlParser_) {
     LOG_ERR(TAG, "Failed to create XML parser");
     file.close();
@@ -333,8 +349,6 @@ bool Fb2::parseXmlStream() {
   XML_SetElementHandler(xmlParser_, startElement, endElement);
   XML_SetCharacterDataHandler(xmlParser_, characterData);
 
-  constexpr size_t kChunkSize = 4096;
-  uint8_t buffer[kChunkSize];
   bool success = true;
 
   while (file.available() > 0) {

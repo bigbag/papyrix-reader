@@ -18,6 +18,7 @@
 #include <Html.h>
 #include <HtmlParser.h>
 #include <Page.h>
+#include <ParsedText.h>
 #include <GfxRenderer.h>
 #include <Markdown.h>
 #include <MarkdownParser.h>
