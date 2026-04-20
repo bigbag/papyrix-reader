@@ -258,6 +258,9 @@ void XMLCALL Fb2Parser::startElement(void* userData, const XML_Char* name, const
     }
   } else if (strcmp(localName, "emphasis") == 0) {
     self->italicUntilDepth_ = std::min(self->italicUntilDepth_, self->depth_);
+  } else if (strcmp(localName, "code") == 0) {
+    // FB2 <code> renders italic (no monospace font bundled) — mirrors EPUB behavior.
+    self->italicUntilDepth_ = std::min(self->italicUntilDepth_, self->depth_);
   } else if (strcmp(localName, "strong") == 0) {
     self->boldUntilDepth_ = std::min(self->boldUntilDepth_, self->depth_);
   } else if (strcmp(localName, "empty-line") == 0) {

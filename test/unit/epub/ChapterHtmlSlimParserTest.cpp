@@ -24,14 +24,14 @@
 const char* HEADER_TAGS[] = {"h1", "h2", "h3", "h4", "h5", "h6"};
 constexpr int NUM_HEADER_TAGS = 6;
 
-const char* BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote", "question", "answer", "quotation"};
-constexpr int NUM_BLOCK_TAGS = 8;
+const char* BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote", "question", "answer", "quotation", "pre"};
+constexpr int NUM_BLOCK_TAGS = 9;
 
 const char* BOLD_TAGS[] = {"b", "strong"};
 constexpr int NUM_BOLD_TAGS = 2;
 
-const char* ITALIC_TAGS[] = {"i", "em"};
-constexpr int NUM_ITALIC_TAGS = 2;
+const char* ITALIC_TAGS[] = {"i", "em", "code", "tt", "kbd", "samp"};
+constexpr int NUM_ITALIC_TAGS = 6;
 
 const char* IMAGE_TAGS[] = {"img"};
 constexpr int NUM_IMAGE_TAGS = 1;
@@ -113,6 +113,9 @@ class TestParser {
   int skipUntilDepth = INT_MAX;
   int boldUntilDepth = INT_MAX;
   int italicUntilDepth = INT_MAX;
+  int preformattedUntilDepth = INT_MAX;
+  int preWsPending = 0;
+  bool inPreWsRun = false;
   bool pendingRtl = false;
   int rtlUntilDepth = INT_MAX;
   uint16_t blockCount = 0;
@@ -265,6 +268,14 @@ class TestParser {
     if (matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS)) {
       self->flushText();
       self->blockCount++;
+      // <pre> forces LEFT_ALIGN and enters preformatted whitespace mode.
+      if (strcmp(name, "pre") == 0) {
+        self->preformattedUntilDepth = std::min(self->preformattedUntilDepth, self->depth);
+        self->preWsPending = 0;
+        self->currentBlockStyle = BlockStyle::LEFT;
+        self->depth++;
+        return;
+      }
       // Determine block style: CSS text-align > inheritance > default
       BlockStyle blockStyle = BlockStyle::LEFT;
       bool hasExplicitAlign = false;
@@ -294,13 +305,15 @@ class TestParser {
       }
     }
 
-    // Bold tags
+    // Bold tags - flush before setting so the preceding text captures non-bold style.
     if (matches(name, BOLD_TAGS, NUM_BOLD_TAGS)) {
+      self->flushText();
       self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
     }
 
-    // Italic tags
+    // Italic tags - flush before setting so the preceding text captures non-italic style.
     if (matches(name, ITALIC_TAGS, NUM_ITALIC_TAGS)) {
+      self->flushText();
       self->italicUntilDepth = std::min(self->italicUntilDepth, self->depth);
     } else if (strcmp(name, "ul") == 0 || strcmp(name, "ol") == 0) {
       self->listStack.push_back({self->depth, strcmp(name, "ol") == 0, 0});
@@ -321,8 +334,47 @@ class TestParser {
       return;
     }
 
+    const bool preformatted = self->depth > self->preformattedUntilDepth;
+
     for (int i = 0; i < len; i++) {
       char c = s[i];
+      if (preformatted) {
+        if (c == '\r') continue;
+        if (c == '\n') {
+          // New pre line = new text element (mirrors startNewTextBlock in production)
+          self->flushText();
+          self->preWsPending = 0;
+          self->inPreWsRun = false;
+          self->currentBlockStyle = BlockStyle::LEFT;
+          continue;
+        }
+        if (c == ' ' || c == '\t') {
+          const int expansion = (c == '\t') ? 4 : 1;
+          if (self->inPreWsRun) {
+            // Subsequent whitespace in a run → preserve as NBSPs.
+            self->preWsPending += expansion;
+          } else if (!self->currentText.empty()) {
+            // First whitespace after a word: one breakable separator, rest as NBSPs.
+            self->currentText += ' ';
+            self->inPreWsRun = true;
+            self->preWsPending = expansion - 1;
+          } else {
+            // Leading whitespace on a line → all NBSPs.
+            self->preWsPending += expansion;
+            self->inPreWsRun = true;
+          }
+          continue;
+        }
+        // Non-whitespace: prepend pending NBSPs (U+00A0 = 0xC2 0xA0 in UTF-8).
+        for (int k = 0; k < self->preWsPending; k++) {
+          self->currentText += static_cast<char>(0xc2);
+          self->currentText += static_cast<char>(0xa0);
+        }
+        self->preWsPending = 0;
+        self->inPreWsRun = false;
+        self->currentText += c;
+        continue;
+      }
       if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
         if (!self->currentText.empty() && self->currentText.back() != ' ') {
           self->currentText += ' ';
@@ -351,10 +403,13 @@ class TestParser {
 
     const bool headerOrBlockTag =
         matches(name, HEADER_TAGS, NUM_HEADER_TAGS) || matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS);
+    const bool italicOrBoldTag =
+        matches(name, BOLD_TAGS, NUM_BOLD_TAGS) || matches(name, ITALIC_TAGS, NUM_ITALIC_TAGS);
 
-    // Flush text on block tag close
+    // Flush text on block tag close, and on inline style tag close so the
+    // styled run gets captured with its own style before the flag resets.
     size_t prevCount = self->elements.size();
-    if (headerOrBlockTag) {
+    if (headerOrBlockTag || italicOrBoldTag) {
       self->flushText();
     }
 
@@ -374,6 +429,10 @@ class TestParser {
     }
     if (self->italicUntilDepth == self->depth) {
       self->italicUntilDepth = INT_MAX;
+    }
+    if (self->preformattedUntilDepth == self->depth) {
+      self->preformattedUntilDepth = INT_MAX;
+      self->preWsPending = 0;
     }
     if (self->rtlUntilDepth == self->depth) {
       self->rtlUntilDepth = INT_MAX;
@@ -1767,6 +1826,154 @@ int main() {
     size_t b2 = text.find("\xe2\x80\xa2", b1 + 3);
     runner.expectTrue(b2 != std::string::npos, "3level_nest: second bullet");
     runner.expectTrue(text.find("1.") != std::string::npos, "3level_nest: numbered item");
+  }
+
+  // ============================================
+  // Monospace tag tests (issue #94)
+  // ============================================
+
+  // NBSP is U+00A0, UTF-8 encoded as 0xC2 0xA0
+  const std::string NBSP = std::string("\xc2\xa0");
+
+  // Test 104: Inline <code> renders italic
+  {
+    TestParser parser;
+    bool ok = parser.parse("<html><body><p>run <code>foo</code> now</p></body></html>");
+    runner.expectTrue(ok, "code_italic: parses");
+    bool foundItalicFoo = false;
+    for (const auto& elem : parser.elements) {
+      if (elem.type == TestParser::ParsedElement::TEXT && elem.content.find("foo") != std::string::npos && elem.isItalic) {
+        foundItalicFoo = true;
+      }
+    }
+    runner.expectTrue(foundItalicFoo, "code_italic: foo marked italic");
+  }
+
+  // Test 105: <tt>, <kbd>, <samp> also render italic
+  {
+    TestParser parser;
+    bool ok = parser.parse(
+        "<html><body><p><tt>TT</tt><kbd>KBD</kbd><samp>SAMP</samp></p></body></html>");
+    runner.expectTrue(ok, "mono_inline_tags: parses");
+    int italicCount = 0;
+    for (const auto& elem : parser.elements) {
+      if (elem.type == TestParser::ParsedElement::TEXT && elem.isItalic) italicCount++;
+    }
+    runner.expectTrue(italicCount >= 1, "mono_inline_tags: at least one italic text element");
+    std::string all = parser.getAllText();
+    runner.expectTrue(all.find("TT") != std::string::npos, "mono_inline_tags: tt content");
+    runner.expectTrue(all.find("KBD") != std::string::npos, "mono_inline_tags: kbd content");
+    runner.expectTrue(all.find("SAMP") != std::string::npos, "mono_inline_tags: samp content");
+  }
+
+  // Test 106: <pre> creates a block with LEFT_ALIGN
+  {
+    TestParser parser;
+    bool ok = parser.parse("<html><body><pre>code here</pre></body></html>");
+    runner.expectTrue(ok, "pre_block: parses");
+    runner.expectTrue(parser.getBlockStyleForText("code here") == BlockStyle::LEFT, "pre_block: LEFT_ALIGN");
+  }
+
+  // Test 107: <pre> preserves newlines as separate text elements
+  {
+    TestParser parser;
+    bool ok = parser.parse("<html><body><pre>line1\nline2\nline3</pre></body></html>");
+    runner.expectTrue(ok, "pre_newlines: parses");
+    int lineElements = 0;
+    for (const auto& elem : parser.elements) {
+      if (elem.type == TestParser::ParsedElement::TEXT &&
+          (elem.content.find("line1") != std::string::npos ||
+           elem.content.find("line2") != std::string::npos ||
+           elem.content.find("line3") != std::string::npos)) {
+        lineElements++;
+      }
+    }
+    runner.expectTrue(lineElements >= 3, "pre_newlines: three separate text elements");
+  }
+
+  // Test 108: <pre> preserves runs of spaces as NBSPs
+  {
+    TestParser parser;
+    bool ok = parser.parse("<html><body><pre>a   b</pre></body></html>");
+    runner.expectTrue(ok, "pre_multispace: parses");
+    // 3 spaces = 1 breakable space + 2 NBSPs preserved
+    std::string text = parser.getAllText();
+    size_t nbspCount = 0;
+    for (size_t pos = 0; (pos = text.find(NBSP, pos)) != std::string::npos; pos += NBSP.size()) nbspCount++;
+    runner.expectTrue(nbspCount >= 2, "pre_multispace: NBSPs preserved");
+    runner.expectTrue(text.find("a") != std::string::npos && text.find("b") != std::string::npos,
+                      "pre_multispace: both words present");
+  }
+
+  // Test 109: <pre> preserves leading indentation
+  {
+    TestParser parser;
+    bool ok = parser.parse("<html><body><pre>  indented</pre></body></html>");
+    runner.expectTrue(ok, "pre_leading: parses");
+    std::string text = parser.getAllText();
+    runner.expectTrue(text.find(NBSP + NBSP) != std::string::npos, "pre_leading: 2 leading NBSPs");
+    runner.expectTrue(text.find("indented") != std::string::npos, "pre_leading: word present");
+  }
+
+  // Test 110: <pre><code> nesting renders italic with preserved whitespace
+  {
+    TestParser parser;
+    bool ok = parser.parse("<html><body><pre><code>fn x:\n  return y</code></pre></body></html>");
+    runner.expectTrue(ok, "pre_code_nested: parses");
+    bool anyItalic = false;
+    int blocks = 0;
+    for (const auto& elem : parser.elements) {
+      if (elem.type == TestParser::ParsedElement::TEXT) {
+        blocks++;
+        if (elem.isItalic) anyItalic = true;
+      }
+    }
+    runner.expectTrue(anyItalic, "pre_code_nested: content is italic");
+    runner.expectTrue(blocks >= 2, "pre_code_nested: newline split into multiple blocks");
+  }
+
+  // Test 111: Whitespace outside <pre> still collapses
+  {
+    TestParser parser;
+    bool ok = parser.parse("<html><body><p>a    b</p></body></html>");
+    runner.expectTrue(ok, "non_pre_whitespace: parses");
+    std::string text = parser.getAllText();
+    runner.expectTrue(text.find(NBSP) == std::string::npos, "non_pre_whitespace: no NBSPs outside pre");
+  }
+
+  // Test 112: Preformatted mode resets after </pre>
+  {
+    TestParser parser;
+    bool ok = parser.parse(
+        "<html><body><pre>pre  content</pre><p>after  text</p></body></html>");
+    runner.expectTrue(ok, "pre_scope_reset: parses");
+    bool preHasNbsp = false;
+    bool afterHasNbsp = false;
+    for (const auto& elem : parser.elements) {
+      if (elem.type == TestParser::ParsedElement::TEXT) {
+        if (elem.content.find("pre") != std::string::npos && elem.content.find(NBSP) != std::string::npos) {
+          preHasNbsp = true;
+        }
+        if (elem.content.find("after") != std::string::npos && elem.content.find(NBSP) != std::string::npos) {
+          afterHasNbsp = true;
+        }
+      }
+    }
+    runner.expectTrue(preHasNbsp, "pre_scope_reset: pre content has NBSPs");
+    runner.expectFalse(afterHasNbsp, "pre_scope_reset: content after </pre> does not");
+  }
+
+  // Test 113: <pre> expands \t to 4 units (1 breakable space + 3 NBSPs)
+  {
+    TestParser parser;
+    bool ok = parser.parse("<html><body><pre>a\tb</pre></body></html>");
+    runner.expectTrue(ok, "pre_tab: parses");
+    std::string text = parser.getAllText();
+    size_t nbspCount = 0;
+    for (size_t pos = 0; (pos = text.find(NBSP, pos)) != std::string::npos; pos += NBSP.size()) nbspCount++;
+    runner.expectTrue(nbspCount >= 3, "pre_tab: tab produced >=3 NBSPs");
+    runner.expectTrue(text.find("a") != std::string::npos && text.find("b") != std::string::npos,
+                      "pre_tab: both words present");
   }
 
   return runner.allPassed() ? 0 : 1;

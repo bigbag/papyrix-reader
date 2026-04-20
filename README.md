@@ -35,6 +35,7 @@ This project is **not affiliated with Xteink**; it's built as a community projec
 ### Reading & Format Support
 - [x] EPUB 2 and EPUB 3 parsing (nav.xhtml with NCX fallback)
 - [x] CSS stylesheet parsing (text-align, font-style, font-weight, text-indent, margins, direction)
+- [x] Preformatted text (`<pre>`) and inline code (`<code>`, `<tt>`, `<kbd>`, `<samp>`) rendered as italic (no monospace font bundled)
 - [x] FB2 (FictionBook 2.0) support with metadata, TOC navigation, and metadata caching (no inline images)
 - [x] HTML (.html, .htm) file support (standalone HTML documents)
 - [x] XTC/XTCH native format support

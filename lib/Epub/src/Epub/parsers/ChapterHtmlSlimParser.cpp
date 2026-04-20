@@ -24,13 +24,14 @@ constexpr int NUM_HEADER_TAGS = sizeof(HEADER_TAGS) / sizeof(HEADER_TAGS[0]);
 // Minimum file size (in bytes) to show progress bar - smaller chapters don't benefit from it
 constexpr size_t MIN_SIZE_FOR_PROGRESS = 50 * 1024;  // 50KB
 
-const char* BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote", "question", "answer", "quotation"};
+const char* BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote", "question", "answer", "quotation", "pre"};
 constexpr int NUM_BLOCK_TAGS = sizeof(BLOCK_TAGS) / sizeof(BLOCK_TAGS[0]);
 
 const char* BOLD_TAGS[] = {"b", "strong"};
 constexpr int NUM_BOLD_TAGS = sizeof(BOLD_TAGS) / sizeof(BOLD_TAGS[0]);
 
-const char* ITALIC_TAGS[] = {"i", "em"};
+// Monospace inline tags render as italic: no monospace font is bundled, italic is the visual cue.
+const char* ITALIC_TAGS[] = {"i", "em", "code", "tt", "kbd", "samp"};
 constexpr int NUM_ITALIC_TAGS = sizeof(ITALIC_TAGS) / sizeof(ITALIC_TAGS[0]);
 
 const char* IMAGE_TAGS[] = {"img"};
@@ -319,6 +320,12 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       const auto style = self->currentTextBlock ? self->currentTextBlock->getStyle()
                                                 : static_cast<TextBlock::BLOCK_STYLE>(self->config.paragraphAlignment);
       self->startNewTextBlock(style);
+    } else if (strcmp(name, "pre") == 0) {
+      // Force LEFT_ALIGN (justify would misalign code) and enter preformatted mode so
+      // characterData() preserves newlines and runs of spaces.
+      self->preformattedUntilDepth = min(self->preformattedUntilDepth, self->depth);
+      self->preWsPending = 0;
+      self->startNewTextBlock(TextBlock::LEFT_ALIGN);
     } else {
       // Determine block style: CSS text-align takes precedence, then inheritance, then default
       TextBlock::BLOCK_STYLE blockStyle = static_cast<TextBlock::BLOCK_STYLE>(self->config.paragraphAlignment);
@@ -398,8 +405,42 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   const XML_Char FEFF_BYTE_2 = static_cast<XML_Char>(0xBB);
   const XML_Char FEFF_BYTE_3 = static_cast<XML_Char>(0xBF);
 
+  const bool preformatted = self->depth > self->preformattedUntilDepth;
+
   for (int i = 0; i < len; i++) {
-    if (isWhitespace(s[i])) {
+    if (preformatted) {
+      const char c = s[i];
+      if (c == '\r') continue;  // normalize \r\n to \n
+      if (c == '\n') {
+        if (self->partWordBufferIndex > 0) self->flushPartWordBuffer();
+        self->preWsPending = 0;
+        self->startNewTextBlock(TextBlock::LEFT_ALIGN);
+        continue;
+      }
+      if (c == ' ' || c == '\t') {
+        const int expansion = (c == '\t') ? 4 : 1;
+        if (self->partWordBufferIndex > 0) {
+          // First whitespace after a word: keep one breakable space (word separator),
+          // stash the rest as non-breaking spaces attached to the next word.
+          self->flushPartWordBuffer();
+          self->preWsPending = expansion - 1;
+        } else {
+          self->preWsPending += expansion;
+        }
+        continue;
+      }
+      // Non-whitespace: flush any pending preserved whitespace as NBSP prefix.
+      // Flush mid-drain if the buffer fills, so very long indents don't get truncated.
+      while (self->preWsPending > 0) {
+        if (self->partWordBufferIndex > MAX_WORD_SIZE - 2) {
+          self->flushPartWordBuffer();
+        }
+        self->partWordBuffer[self->partWordBufferIndex++] = static_cast<char>(0xc2);
+        self->partWordBuffer[self->partWordBufferIndex++] = static_cast<char>(0xa0);
+        self->preWsPending--;
+      }
+      // Fall through to regular accumulation below.
+    } else if (isWhitespace(s[i])) {
       // Currently looking at whitespace, if there's anything in the partWordBuffer, flush it
       if (self->partWordBufferIndex > 0) {
         self->flushPartWordBuffer();
@@ -496,6 +537,10 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   }
   if (self->cssItalicUntilDepth == self->depth) {
     self->cssItalicUntilDepth = INT_MAX;
+  }
+  if (self->preformattedUntilDepth == self->depth) {
+    self->preformattedUntilDepth = INT_MAX;
+    self->preWsPending = 0;
   }
   if (self->rtlUntilDepth_ == self->depth) {
     self->rtlUntilDepth_ = INT_MAX;

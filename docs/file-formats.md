@@ -146,6 +146,7 @@ The image is converted to 1-bit dithered BMP format for display.
 - **Titles/Subtitles** — Rendered bold and centered
 - **Paragraphs** (`<p>`) — Standard paragraph layout with configurable alignment
 - **Emphasis** (`<emphasis>`) — Italic font style
+- **Code** (`<code>`) — Italic font style (no monospace font is bundled; mirrors `<emphasis>`)
 - **Strong** (`<strong>`) — Bold font style
 - **Empty lines** (`<empty-line>`) — Vertical spacing
 - **TOC navigation** — Built from section titles, supports jumping to sections
@@ -182,7 +183,8 @@ The image is converted to 1-bit dithered BMP format for display.
 - **Headings** (`<h1>`–`<h6>`) — Rendered bold and centered
 - **Paragraphs** (`<p>`) — Standard paragraph layout with configurable alignment
 - **Bold** (`<b>`, `<strong>`) — Bold font style
-- **Italic** (`<i>`, `<em>`) — Italic font style
+- **Italic** (`<i>`, `<em>`, `<code>`, `<tt>`, `<kbd>`, `<samp>`) — Italic font style (no monospace font is bundled; code-ish inline tags render italic)
+- **Preformatted** (`<pre>`) — Block element, forced left-align; line breaks preserved, tabs expand to 4 spaces, and runs of spaces are preserved via non-breaking spaces
 - **List items** (`<li>`) — Rendered as block elements (list containers `<ul>`/`<ol>` are treated as inline)
 - **Blockquotes** (`<blockquote>`) — Indented block style
 - **Divs** (`<div>`) — Block-level grouping

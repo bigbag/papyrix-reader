@@ -174,6 +174,14 @@ foreach(TEST_SRC ${TEST_SOURCES})
     )
     target_compile_definitions(${TEST_NAME} PRIVATE XML_GE=0)
     target_link_libraries(${TEST_NAME} PRIVATE EXPAT::EXPAT)
+  elseif(TEST_NAME STREQUAL "Fb2StyleTest")
+    find_package(EXPAT REQUIRED)
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${TEST_HELPERS}
+    )
+    target_compile_definitions(${TEST_NAME} PRIVATE XML_GE=0)
+    target_link_libraries(${TEST_NAME} PRIVATE EXPAT::EXPAT)
   elseif(TEST_NAME STREQUAL "Fb2Base64Test")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
