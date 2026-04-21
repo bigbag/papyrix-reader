@@ -69,6 +69,41 @@ static bool joinsToLeft(JoiningType jt) { return jt == JoiningType::DUAL_JOINING
 // Check if a joining type can join to the right (has a connection on its right side)
 static bool joinsToRight(JoiningType jt) { return jt == JoiningType::DUAL_JOINING || jt == JoiningType::RIGHT_JOINING; }
 
+// Unicode Bidi_Mirrored property (subset): characters whose glyph must be swapped
+// when they end up in a resolved RTL context. Only pairs actually seen in books are
+// included to keep the table compact; curly quotes (U+201C..U+201D, U+2018..U+2019)
+// are intentionally absent because Unicode marks them Bidi_Mirrored=No.
+static uint32_t bidiMirror(uint32_t cp) {
+  switch (cp) {
+    case 0x0028:
+      return 0x0029;  // ( -> )
+    case 0x0029:
+      return 0x0028;  // ) -> (
+    case 0x005B:
+      return 0x005D;  // [ -> ]
+    case 0x005D:
+      return 0x005B;  // ] -> [
+    case 0x007B:
+      return 0x007D;  // { -> }
+    case 0x007D:
+      return 0x007B;  // } -> {
+    case 0x003C:
+      return 0x003E;  // < -> >
+    case 0x003E:
+      return 0x003C;  // > -> <
+    case 0x00AB:
+      return 0x00BB;  // « -> »
+    case 0x00BB:
+      return 0x00AB;  // » -> «
+    case 0x2039:
+      return 0x203A;  // ‹ -> ›
+    case 0x203A:
+      return 0x2039;  // › -> ‹
+    default:
+      return cp;
+  }
+}
+
 std::vector<uint32_t> shapeText(const char* text) {
   if (!text || !*text) return {};
 
@@ -158,13 +193,16 @@ std::vector<uint32_t> shapeText(const char* text) {
 
   for (size_t i = 0; i < len; i++) {
     uint32_t c = shaped[i];
-    if ((c >= 0x0600 && c <= 0x06FF) || (c >= 0x0750 && c <= 0x077F) || (c >= 0xFB50 && c <= 0xFDFF) ||
-        (c >= 0xFE70 && c <= 0xFEFF)) {
+    // Digits (EN + AN) — European, Arabic-Indic, Extended Arabic-Indic (Persian/Urdu).
+    // Checked before the Arabic range so AN digits (U+0660-0669) don't get swept into RTL.
+    if ((c >= '0' && c <= '9') || (c >= 0x0660 && c <= 0x0669) || (c >= 0x06F0 && c <= 0x06F9)) {
+      dirs[i] = BidiDir::LTR;
+    } else if ((c >= 0x0600 && c <= 0x06FF) || (c >= 0x0750 && c <= 0x077F) || (c >= 0xFB50 && c <= 0xFDFF) ||
+               (c >= 0xFE70 && c <= 0xFEFF)) {
       dirs[i] = BidiDir::RTL;
-    } else if (c >= '0' && c <= '9') {
-      dirs[i] = BidiDir::LTR;  // European digits are always LTR
-    } else if (c <= 0x20 || c == '(' || c == ')' || c == '[' || c == ']' || c == ',' || c == '.' || c == ':' ||
-               c == ';' || c == '-' || c == '!' || c == '?' || c == '/' || c == '\'' || c == '"') {
+    } else if (c <= 0x20 || c == '(' || c == ')' || c == '[' || c == ']' || c == '{' || c == '}' || c == '<' ||
+               c == '>' || c == ',' || c == '.' || c == ':' || c == ';' || c == '-' || c == '!' || c == '?' ||
+               c == '/' || c == '\'' || c == '"' || c == 0x00AB || c == 0x00BB || c == 0x2039 || c == 0x203A) {
       dirs[i] = BidiDir::NEUTRAL;
     } else {
       dirs[i] = BidiDir::LTR;
@@ -244,9 +282,10 @@ std::vector<uint32_t> shapeText(const char* text) {
   visual.reserve(len);
   for (int r = static_cast<int>(runs.size()) - 1; r >= 0; r--) {
     if (runs[r].dir == BidiDir::RTL) {
-      // RTL run: reverse chars (logical RTL → visual LTR)
+      // RTL run: reverse chars (logical RTL → visual LTR) and apply Bidi_Mirrored
+      // to characters like ( ) [ ] « » resolved to RTL context
       for (int i = static_cast<int>(runs[r].end) - 1; i >= static_cast<int>(runs[r].start); i--) {
-        visual.push_back(shaped[i]);
+        visual.push_back(bidiMirror(shaped[i]));
       }
     } else {
       // LTR run: keep char order

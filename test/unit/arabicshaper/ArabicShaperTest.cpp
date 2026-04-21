@@ -314,5 +314,141 @@ int main() {
     runner.expectTrue(latinOrdered, "bug fix: 'Lewis' chars in correct LTR order");
   }
 
+  // ============================================
+  // Bidi_Mirrored + AN-digit tests (issue #103)
+  // ============================================
+
+  // Test 29: Parens mirrored in pure Arabic (issue #103 case 1)
+  // Logical: (جدًا)  — paren codepoints resolve to RTL, glyphs must be swapped
+  // Expected visual: '(' on left, ')' on right
+  {
+    auto result = shapeText("(\xD8\xAC\xD8\xAF\xD9\x8B\xD8\xA7)");
+    runner.expectEq(static_cast<size_t>(6), result.size(), "mirror parens: count");
+    if (result.size() == 6) {
+      runner.expectEq(static_cast<uint32_t>('('), result[0], "mirror parens: ( on visual left");
+      runner.expectEq(static_cast<uint32_t>(')'), result[5], "mirror parens: ) on visual right");
+    }
+  }
+
+  // Test 30: Guillemets mirrored in Arabic (issue #103 case 2)
+  // Logical: «ا»  — expect « on left, » on right after mirroring
+  {
+    auto result = shapeText("\xC2\xAB\xD8\xA7\xC2\xBB");
+    runner.expectEq(static_cast<size_t>(3), result.size(), "mirror guillemets: count");
+    if (result.size() == 3) {
+      runner.expectEq(static_cast<uint32_t>(0x00AB), result[0], "mirror guillemets: « on visual left");
+      runner.expectEq(static_cast<uint32_t>(0x00BB), result[2], "mirror guillemets: » on visual right");
+    }
+  }
+
+  // Test 31: Arabic-Indic digit run preserves LTR order (issue #103 case 3)
+  // Logical: ١٨٩٤-١٩٦٢ (Arabic-Indic digits for "1894-1962")
+  // Digits (AN) and '-' form an LTR run — must NOT be reversed
+  {
+    auto result = shapeText("\xD9\xA1\xD9\xA8\xD9\xA9\xD9\xA4-\xD9\xA1\xD9\xA9\xD9\xA6\xD9\xA2");
+    runner.expectEq(static_cast<size_t>(9), result.size(), "AN digits: count");
+    if (result.size() == 9) {
+      runner.expectEq(static_cast<uint32_t>(0x0661), result[0], "AN digits: ١ at 0");
+      runner.expectEq(static_cast<uint32_t>(0x0668), result[1], "AN digits: ٨ at 1");
+      runner.expectEq(static_cast<uint32_t>(0x0669), result[2], "AN digits: ٩ at 2");
+      runner.expectEq(static_cast<uint32_t>(0x0664), result[3], "AN digits: ٤ at 3");
+      runner.expectEq(static_cast<uint32_t>('-'), result[4], "AN digits: - at 4");
+      runner.expectEq(static_cast<uint32_t>(0x0661), result[5], "AN digits: ١ at 5");
+      runner.expectEq(static_cast<uint32_t>(0x0669), result[6], "AN digits: ٩ at 6");
+      runner.expectEq(static_cast<uint32_t>(0x0666), result[7], "AN digits: ٦ at 7");
+      runner.expectEq(static_cast<uint32_t>(0x0662), result[8], "AN digits: ٢ at 8");
+    }
+  }
+
+  // Test 32: Arabic-Indic digits embedded with Arabic letter
+  // Logical: ص١٢ — digits keep logical order, Arabic letter on the right visually
+  {
+    auto result = shapeText("\xD8\xB5\xD9\xA1\xD9\xA2");
+    runner.expectEq(static_cast<size_t>(3), result.size(), "AN embedded: count");
+    if (result.size() == 3) {
+      // LTR digit run appears first in visual order (base RTL reverses run order)
+      runner.expectEq(static_cast<uint32_t>(0x0661), result[0], "AN embedded: ١ before ٢");
+      runner.expectEq(static_cast<uint32_t>(0x0662), result[1], "AN embedded: ٢ second");
+      // Sad is the only Arabic letter; its shaped form lives in U+FE70..U+FEFF
+      runner.expectTrue(result[2] >= 0x0600 && result[2] <= 0xFEFF, "AN embedded: Sad on visual right");
+    }
+  }
+
+  // Test 33: Square brackets mirrored in pure Arabic
+  // Logical: [ا] — bracket codepoints resolve to RTL, glyphs must be swapped
+  {
+    auto result = shapeText("[\xD8\xA7]");
+    runner.expectEq(static_cast<size_t>(3), result.size(), "mirror brackets: count");
+    if (result.size() == 3) {
+      runner.expectEq(static_cast<uint32_t>('['), result[0], "mirror brackets: [ on visual left");
+      runner.expectEq(static_cast<uint32_t>(']'), result[2], "mirror brackets: ] on visual right");
+    }
+  }
+
+  // Test 34: Curly braces mirrored in pure Arabic
+  // Logical: {ا} — brace codepoints resolve to RTL, glyphs must be swapped
+  {
+    auto result = shapeText("{\xD8\xA7}");
+    runner.expectEq(static_cast<size_t>(3), result.size(), "mirror braces: count");
+    if (result.size() == 3) {
+      runner.expectEq(static_cast<uint32_t>('{'), result[0], "mirror braces: { on visual left");
+      runner.expectEq(static_cast<uint32_t>('}'), result[2], "mirror braces: } on visual right");
+    }
+  }
+
+  // Test 35: Single guillemets and angle brackets mirrored in pure Arabic
+  {
+    // Logical: ‹ا›  (U+2039, U+0627, U+203A)
+    auto result = shapeText("\xE2\x80\xB9\xD8\xA7\xE2\x80\xBA");
+    runner.expectEq(static_cast<size_t>(3), result.size(), "mirror single guillemets: count");
+    if (result.size() == 3) {
+      runner.expectEq(static_cast<uint32_t>(0x2039), result[0], "mirror single guillemets: ‹ on visual left");
+      runner.expectEq(static_cast<uint32_t>(0x203A), result[2], "mirror single guillemets: › on visual right");
+    }
+
+    // Logical: <ا>
+    auto result2 = shapeText("<\xD8\xA7>");
+    runner.expectEq(static_cast<size_t>(3), result2.size(), "mirror angle brackets: count");
+    if (result2.size() == 3) {
+      runner.expectEq(static_cast<uint32_t>('<'), result2[0], "mirror angle brackets: < on visual left");
+      runner.expectEq(static_cast<uint32_t>('>'), result2[2], "mirror angle brackets: > on visual right");
+    }
+  }
+
+  // Test 36: Extended Arabic-Indic (Persian/Urdu) digits keep LTR order
+  // Logical: ۱۲۳ (U+06F1, U+06F2, U+06F3) — must form an LTR run, not be reversed
+  {
+    auto result = shapeText("\xDB\xB1\xDB\xB2\xDB\xB3");
+    runner.expectEq(static_cast<size_t>(3), result.size(), "Persian digits: count");
+    if (result.size() == 3) {
+      runner.expectEq(static_cast<uint32_t>(0x06F1), result[0], "Persian digits: ۱ at 0");
+      runner.expectEq(static_cast<uint32_t>(0x06F2), result[1], "Persian digits: ۲ at 1");
+      runner.expectEq(static_cast<uint32_t>(0x06F3), result[2], "Persian digits: ۳ at 2");
+    }
+
+    // Logical: ص۱۲ — Persian digits embedded with Arabic letter
+    auto result2 = shapeText("\xD8\xB5\xDB\xB1\xDB\xB2");
+    runner.expectEq(static_cast<size_t>(3), result2.size(), "Persian embedded: count");
+    if (result2.size() == 3) {
+      // LTR digit run appears first in visual order (base RTL reverses run order)
+      runner.expectEq(static_cast<uint32_t>(0x06F1), result2[0], "Persian embedded: ۱ before ۲");
+      runner.expectEq(static_cast<uint32_t>(0x06F2), result2[1], "Persian embedded: ۲ second");
+      runner.expectTrue(result2[2] >= 0x0600 && result2[2] <= 0xFEFF, "Persian embedded: Sad on visual right");
+    }
+  }
+
+  // Test 37: Parens in LTR-only context are NOT mirrored (regression guard)
+  // Input has no Arabic, so the entire run is LTR — bidiMirror() must not be applied
+  {
+    auto result = shapeText("(Hi)");
+    runner.expectEq(static_cast<size_t>(4), result.size(), "LTR parens: count");
+    if (result.size() == 4) {
+      runner.expectEq(static_cast<uint32_t>('('), result[0], "LTR parens: ( unchanged at 0");
+      runner.expectEq(static_cast<uint32_t>('H'), result[1], "LTR parens: H at 1");
+      runner.expectEq(static_cast<uint32_t>('i'), result[2], "LTR parens: i at 2");
+      runner.expectEq(static_cast<uint32_t>(')'), result[3], "LTR parens: ) unchanged at 3");
+    }
+  }
+
   return runner.allPassed() ? 0 : 1;
 }
