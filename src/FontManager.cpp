@@ -37,6 +37,21 @@ bool FontManager::loadFontFamily(const char* familyName, int fontId) {
 
   // Check if directory exists
   if (!SdMan.exists(basePath)) {
+    LOG_ERR(TAG, "Custom font '%s' not found at %s", familyName, basePath);
+
+    // Hint: detect the common mistake of dropping a raw .ttf/.otf/.epdfont next to the fonts dir
+    const char* const rawExts[] = {".ttf", ".otf", ".epdfont"};
+    for (const char* ext : rawExts) {
+      char rawPath[80];
+      snprintf(rawPath, sizeof(rawPath), "%s/%s%s", CONFIG_FONTS_DIR, familyName, ext);
+      if (SdMan.exists(rawPath)) {
+        LOG_ERR(TAG,
+                "Hint: '%s' exists but fonts must live in '%s/regular.epdfont' - "
+                "convert with scripts/fontconvert.py",
+                rawPath, basePath);
+        break;
+      }
+    }
     return false;
   }
 
@@ -55,6 +70,7 @@ bool FontManager::loadFontFamily(const char* familyName, int fontId) {
 
     if (!SdMan.exists(fontPath)) {
       if (s.style == EpdFontFamily::REGULAR) {
+        LOG_ERR(TAG, "Custom font '%s': missing required file regular.epdfont in %s", familyName, basePath);
         return false;  // Regular is required
       }
       continue;
@@ -69,6 +85,8 @@ bool FontManager::loadFontFamily(const char* familyName, int fontId) {
     LoadedFont loaded = _useStreamingFonts ? loadStreamingFont(fontPath) : loadSingleFont(fontPath);
 
     if (!loaded.font && !loaded.streamingFont) {
+      LOG_ERR(TAG, "Custom font '%s': failed to load regular.epdfont (corrupt, truncated, or wrong format)",
+              familyName);
       return false;  // Regular is required
     }
 
@@ -78,6 +96,7 @@ bool FontManager::loadFontFamily(const char* familyName, int fontId) {
       if (!loaded.font) {
         delete loaded.streamingFont;
         loaded.streamingFont = nullptr;
+        LOG_ERR(TAG, "Custom font '%s': out of memory wrapping streaming font", familyName);
         return false;
       }
       renderer->setStreamingFont(fontId, s.style, loaded.streamingFont);

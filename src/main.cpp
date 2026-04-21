@@ -288,6 +288,8 @@ void applyThemeFonts() {
     if (customFontId != builtinFontId) {
       *targetFontId = customFontId;
       LOG_INF(TAG, "Reader font: %s (ID: %d)", fontFamilyName, customFontId);
+    } else {
+      LOG_ERR(TAG, "Theme requested custom font '%s' but it failed to load - using builtin", fontFamilyName);
     }
   }
 }
