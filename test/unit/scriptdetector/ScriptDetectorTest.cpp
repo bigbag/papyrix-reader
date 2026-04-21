@@ -25,9 +25,10 @@ int main() {
   runner.expectTrue(ScriptDetector::isArabicCodepoint(0xFB50), "isArabic: U+FB50 start of Pres. Forms-A");
   runner.expectTrue(ScriptDetector::isArabicCodepoint(0xFDFF), "isArabic: U+FDFF end of Pres. Forms-A");
 
-  // Test 4: Arabic Presentation Forms-B (U+FE70-U+FEFF)
+  // Test 4: Arabic Presentation Forms-B (U+FE70-U+FEFE; U+FEFF excluded as BOM/ZWNBSP)
   runner.expectTrue(ScriptDetector::isArabicCodepoint(0xFE70), "isArabic: U+FE70 start of Pres. Forms-B");
-  runner.expectTrue(ScriptDetector::isArabicCodepoint(0xFEFF), "isArabic: U+FEFF end of Pres. Forms-B");
+  runner.expectTrue(ScriptDetector::isArabicCodepoint(0xFEFE), "isArabic: U+FEFE end of Pres. Forms-B");
+  runner.expectFalse(ScriptDetector::isArabicCodepoint(0xFEFF), "isArabic: U+FEFF (BOM/ZWNBSP) not Arabic");
 
   // Test 5: Boundary - not Arabic
   runner.expectFalse(ScriptDetector::isArabicCodepoint(0x05FF), "isArabic: U+05FF before Arabic block");
@@ -71,6 +72,14 @@ int main() {
 
   // Test 14: Arabic Presentation Form-B char (Fathatan U+FE70 = 0xEF 0xB9 0xB0)
   runner.expectTrue(ScriptDetector::containsArabic("\xEF\xB9\xB0"), "containsArabic: Pres. Form-B char");
+
+  // Test 14a: UTF-8 BOM alone must NOT be classified as Arabic (regression for issue #99 —
+  // previously U+FEFF was in the Arabic range, making every UTF-8-with-BOM file render RTL).
+  runner.expectFalse(ScriptDetector::containsArabic("\xEF\xBB\xBF"), "containsArabic: UTF-8 BOM alone");
+  runner.expectFalse(ScriptDetector::containsArabic("\xEF\xBB\xBFHello"), "containsArabic: BOM + ASCII");
+  // BOM + Cyrillic "Дуглас" (U+0414 U+0443 U+0433 U+043B U+0430 U+0441)
+  runner.expectFalse(ScriptDetector::containsArabic("\xEF\xBB\xBF\xD0\x94\xD1\x83\xD0\xB3\xD0\xBB\xD0\xB0\xD1\x81"),
+                     "containsArabic: BOM + Cyrillic");
 
   // ============================================
   // classify() tests (Arabic additions)
