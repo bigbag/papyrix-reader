@@ -149,6 +149,11 @@ The image is converted to 1-bit dithered BMP format for display.
 - **Code** (`<code>`) — Italic font style (no monospace font is bundled; mirrors `<emphasis>`)
 - **Strong** (`<strong>`) — Bold font style
 - **Empty lines** (`<empty-line>`) — Vertical spacing
+- **Poetry** (`<poem>`, `<stanza>`, `<v>`) — Verse lines rendered left-aligned with spacing between stanzas
+- **Text attribution** (`<text-author>`) — Author attribution lines
+- **Quotations** (`<cite>`) — Block quotations with visual spacing
+- **Epigraphs** (`<epigraph>`) — Epigraph blocks with visual spacing
+- **Annotations** (`<annotation>`) — Annotation blocks with visual spacing
 - **TOC navigation** — Built from section titles, supports jumping to sections
 - **RTL detection** — Arabic text detected from first chunk, enables RTL layout
 - **Namespace handling** — Strips XML namespace prefixes for compatibility

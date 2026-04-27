@@ -109,6 +109,15 @@ static std::string wrap(const std::string& bodyContent) {
          "</FictionBook>";
 }
 
+static std::string wrapSection(const std::string& sectionContent) {
+  return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+         "<FictionBook xmlns=\"http://www.gribuser.ru/xml/fictionbook/2.0\">"
+         "<body><section>" +
+         sectionContent +
+         "</section></body>"
+         "</FictionBook>";
+}
+
 // Find the first run whose text contains `needle`.
 static const StyledRun* findRun(const std::vector<StyledRun>& runs, const std::string& needle) {
   for (const auto& r : runs) {
@@ -206,6 +215,61 @@ int main() {
     if (ra && rb) {
       runner.expectTrue(ra->italic && rb->italic, "emphasis_and_code_equivalent: both italic");
       runner.expectFalse(ra->bold || rb->bold, "emphasis_and_code_equivalent: neither bold");
+    }
+  }
+
+  // Test 7: Text inside <v> (verse line) is captured
+  {
+    TestFb2StyleParser parser;
+    bool ok = parser.parse(wrapSection("<poem><stanza><v>hello world</v></stanza></poem>"));
+    runner.expectTrue(ok, "verse_text_captured: parses");
+    const StyledRun* r = findRun(parser.runs, "hello");
+    runner.expectTrue(r != nullptr, "verse_text_captured: verse text found");
+  }
+
+  // Test 8: Emphasis inside <v> produces italic
+  {
+    TestFb2StyleParser parser;
+    bool ok = parser.parse(wrapSection("<poem><stanza><v><emphasis>italic verse</emphasis></v></stanza></poem>"));
+    runner.expectTrue(ok, "verse_italic_emphasis: parses");
+    const StyledRun* r = findRun(parser.runs, "italic verse");
+    runner.expectTrue(r != nullptr, "verse_italic_emphasis: run found");
+    if (r) {
+      runner.expectTrue(r->italic, "verse_italic_emphasis: italic set");
+    }
+  }
+
+  // Test 9: Text inside <text-author> is captured
+  {
+    TestFb2StyleParser parser;
+    bool ok = parser.parse(
+        wrapSection("<poem><stanza><v>line</v></stanza><text-author>Author Name</text-author></poem>"));
+    runner.expectTrue(ok, "text_author_captured: parses");
+    const StyledRun* r = findRun(parser.runs, "Author");
+    runner.expectTrue(r != nullptr, "text_author_captured: text-author text found");
+  }
+
+  // Test 10: Multiple <v> elements both captured
+  {
+    TestFb2StyleParser parser;
+    bool ok = parser.parse(wrapSection("<poem><stanza><v>first</v><v>second</v></stanza></poem>"));
+    runner.expectTrue(ok, "multiple_verses: parses");
+    const StyledRun* r1 = findRun(parser.runs, "first");
+    const StyledRun* r2 = findRun(parser.runs, "second");
+    runner.expectTrue(r1 != nullptr, "multiple_verses: first verse found");
+    runner.expectTrue(r2 != nullptr, "multiple_verses: second verse found");
+  }
+
+  // Test 11: Strong inside <v> produces bold
+  {
+    TestFb2StyleParser parser;
+    bool ok = parser.parse(wrapSection("<poem><stanza><v><strong>bold verse</strong></v></stanza></poem>"));
+    runner.expectTrue(ok, "verse_strong_bold: parses");
+    const StyledRun* r = findRun(parser.runs, "bold verse");
+    runner.expectTrue(r != nullptr, "verse_strong_bold: run found");
+    if (r) {
+      runner.expectTrue(r->bold, "verse_strong_bold: bold set");
+      runner.expectFalse(r->italic, "verse_strong_bold: italic not set");
     }
   }
 

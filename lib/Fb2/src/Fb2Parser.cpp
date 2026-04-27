@@ -24,6 +24,19 @@ const char* stripNamespace(const char* name) {
   const char* local = strrchr(name, ':');
   return local ? local + 1 : name;
 }
+
+const char* PARAGRAPH_TAGS[] = {"v", "text-author"};
+constexpr int NUM_PARAGRAPH_TAGS = sizeof(PARAGRAPH_TAGS) / sizeof(PARAGRAPH_TAGS[0]);
+
+const char* BLOCK_TAGS[] = {"poem", "stanza", "cite", "epigraph", "annotation"};
+constexpr int NUM_BLOCK_TAGS = sizeof(BLOCK_TAGS) / sizeof(BLOCK_TAGS[0]);
+
+bool matches(const char* tag, const char* tags[], int count) {
+  for (int i = 0; i < count; i++) {
+    if (strcmp(tag, tags[i]) == 0) return true;
+  }
+  return false;
+}
 }  // namespace
 
 Fb2Parser::Fb2Parser(std::string filepath, GfxRenderer& renderer, const RenderConfig& config,
@@ -271,6 +284,17 @@ void XMLCALL Fb2Parser::startElement(void* userData, const XML_Char* name, const
     self->addVerticalSpacing(1);
   } else if (strcmp(localName, "image") == 0) {
     // Skip images in v1
+  } else if (matches(localName, PARAGRAPH_TAGS, NUM_PARAGRAPH_TAGS)) {
+    self->inParagraph_ = true;
+    if (!self->currentTextBlock_) {
+      self->startNewTextBlock(TextBlock::LEFT_ALIGN);
+    }
+  } else if (matches(localName, BLOCK_TAGS, NUM_BLOCK_TAGS)) {
+    self->flushPartWordBuffer();
+    if (self->currentTextBlock_ && !self->currentTextBlock_->isEmpty()) {
+      self->makePages();
+    }
+    self->addVerticalSpacing(1);
   }
 
   self->depth_++;
@@ -327,6 +351,18 @@ void XMLCALL Fb2Parser::endElement(void* userData, const XML_Char* name) {
     if (self->currentTextBlock_ && !self->currentTextBlock_->isEmpty()) {
       self->makePages();
     }
+  } else if (matches(localName, PARAGRAPH_TAGS, NUM_PARAGRAPH_TAGS)) {
+    self->inParagraph_ = false;
+    self->flushPartWordBuffer();
+    if (self->currentTextBlock_ && !self->currentTextBlock_->isEmpty()) {
+      self->makePages();
+    }
+  } else if (matches(localName, BLOCK_TAGS, NUM_BLOCK_TAGS)) {
+    self->flushPartWordBuffer();
+    if (self->currentTextBlock_ && !self->currentTextBlock_->isEmpty()) {
+      self->makePages();
+    }
+    self->addVerticalSpacing(1);
   }
 }
 
