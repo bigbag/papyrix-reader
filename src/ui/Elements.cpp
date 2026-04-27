@@ -705,15 +705,15 @@ void readerStatusBar(const GfxRenderer& r, const Theme& t, int marginLeft, int m
     r.fillRect(x + 1, y + 1, filledWidth, batteryHeight - 2, t.primaryTextBlack);
   }
 
-  // 2. Page numbers (right side)
-  char pageStr[16];
-  if (data.isPartial || data.totalPages == 0) {
-    snprintf(pageStr, sizeof(pageStr), "%d/-", data.currentPage);
+  // 2. Book progress percentage (right side)
+  char progressStr[12];
+  if (data.bookProgressPercent < 0.0f) {
+    snprintf(progressStr, sizeof(progressStr), "--.-%%");
   } else {
-    snprintf(pageStr, sizeof(pageStr), "%d/%d", data.currentPage, data.totalPages);
+    snprintf(progressStr, sizeof(progressStr), "%.1f%%", data.bookProgressPercent);
   }
-  int pageTextWidth = r.getTextWidth(t.smallFontId, pageStr);
-  r.drawText(t.smallFontId, screenWidth - marginRight - pageTextWidth, textY, pageStr, t.primaryTextBlack);
+  int pageTextWidth = r.getTextWidth(t.smallFontId, progressStr);
+  r.drawText(t.smallFontId, screenWidth - marginRight - pageTextWidth, textY, progressStr, t.primaryTextBlack);
 
   // 3. Title (center)
   if (data.title && data.title[0] != '\0') {

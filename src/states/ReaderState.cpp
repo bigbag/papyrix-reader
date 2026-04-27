@@ -17,6 +17,7 @@
 #include <Serialization.h>
 #include <esp_system.h>
 
+#include <algorithm>
 #include <cstring>
 
 #include "../Battery.h"
@@ -119,6 +120,92 @@ std::vector<std::pair<std::string, uint16_t>> ReaderState::loadAnchorMap(const s
   }
   file.close();
   return anchors;
+}
+
+// --- Book progress tracking (EPUB) ---
+
+std::string ReaderState::spinePageIndexPath(const std::string& epubCachePath) {
+  return epubCachePath + "/sections/spine_pages.bin";
+}
+
+void ReaderState::loadSpinePageIndex(const std::string& epubCachePath, size_t spineCount) {
+  spinePageCounts_.assign(spineCount, 0);
+
+  const std::string path = spinePageIndexPath(epubCachePath);
+  if (!SdMan.exists(path.c_str())) return;
+
+  FsFile file;
+  if (!SdMan.openFileForRead("RDR", path, file)) return;
+
+  uint16_t version = 0;
+  uint16_t count = 0;
+  if (!serialization::readPodChecked(file, version) || version != 1 ||
+      !serialization::readPodChecked(file, count)) {
+    file.close();
+    return;
+  }
+
+  const uint16_t readCount = static_cast<uint16_t>(std::min(static_cast<size_t>(count), spineCount));
+  for (uint16_t i = 0; i < readCount; i++) {
+    uint32_t pages = 0;
+    if (!serialization::readPodChecked(file, pages)) break;
+    spinePageCounts_[i] = pages;
+  }
+  file.close();
+}
+
+void ReaderState::saveSpinePageIndex() const {
+  if (epubCachePath_.empty() || spinePageCounts_.empty()) return;
+
+  const std::string path = spinePageIndexPath(epubCachePath_);
+  FsFile file;
+  if (!SdMan.openFileForWrite("RDR", path, file)) return;
+
+  serialization::writePod(file, static_cast<uint16_t>(1));
+  serialization::writePod(file, static_cast<uint16_t>(spinePageCounts_.size()));
+  for (const uint32_t pages : spinePageCounts_) {
+    serialization::writePod(file, pages);
+  }
+  file.close();
+}
+
+void ReaderState::updateSpinePageCount(int spineIndex, uint32_t pageCount) {
+  if (spineIndex < 0 || pageCount == 0) return;
+  if (spineIndex >= static_cast<int>(spinePageCounts_.size())) {
+    spinePageCounts_.resize(static_cast<size_t>(spineIndex) + 1, 0);
+  }
+  if (spinePageCounts_[spineIndex] == pageCount) return;
+  spinePageCounts_[spineIndex] = pageCount;
+  saveSpinePageIndex();
+}
+
+float ReaderState::calcBookProgressPercent() const {
+  if (spinePageCounts_.empty()) return -1.0f;
+
+  // Cover page (sectionPage == -1) is treated as 0%
+  if (currentSectionPage_ < 0) return 0.0f;
+
+  // Sum pages in all spines before the current one; abort if any is unknown
+  uint32_t pagesBeforeCurrent = 0;
+  for (int i = 0; i < currentSpineIndex_; i++) {
+    if (i >= static_cast<int>(spinePageCounts_.size()) || spinePageCounts_[i] == 0) return -1.0f;
+    pagesBeforeCurrent += spinePageCounts_[i];
+  }
+
+  // Current spine must be known
+  if (currentSpineIndex_ >= static_cast<int>(spinePageCounts_.size()) ||
+      spinePageCounts_[currentSpineIndex_] == 0) {
+    return -1.0f;
+  }
+
+  uint32_t totalKnown = 0;
+  for (const uint32_t count : spinePageCounts_) {
+    totalKnown += count;
+  }
+  if (totalKnown == 0) return -1.0f;
+
+  const uint32_t absolutePage = pagesBeforeCurrent + static_cast<uint32_t>(currentSectionPage_ + 1);
+  return static_cast<float>(absolutePage) / static_cast<float>(totalKnown) * 100.0f;
 }
 
 int ReaderState::calcFirstContentSpine(bool hasCover, int textStartIndex, size_t spineCount) {
@@ -325,6 +412,9 @@ void ReaderState::enter(Core& core) {
         // Get the spine index for the first text content (from <guide> element)
         textStartIndex_ = epub->getSpineIndexForTextReference();
         LOG_DBG(TAG, "Text starts at spine index %d", textStartIndex_);
+        // Load cached per-spine page counts for book progress tracking
+        epubCachePath_ = epub->getCachePath();
+        loadSpinePageIndex(epubCachePath_, epub->getSpineItemsCount());
       }
       break;
     }
@@ -417,6 +507,8 @@ void ReaderState::exit(Core& core) {
 
   contentLoaded_ = false;
   contentPath_[0] = '\0';
+  epubCachePath_.clear();
+  spinePageCounts_.clear();
 
   // Reset orientation to Portrait for UI
   renderer_.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -1143,7 +1235,7 @@ void ReaderState::renderStatusBar(Core& core, int marginRight, int marginBottom,
   const uint16_t millivolts = batteryMonitor.readMillivolts();
   data.batteryPercent = (millivolts < 100) ? -1 : BatteryMonitor::percentageFromMillivolts(millivolts);
 
-  // Page info
+  // Page info and book progress
   // Note: renderCachedPage() already stopped the task, so we own pageCache_
   if (type == ContentType::Epub) {
     auto* provider = core.content.asEpub();
@@ -1155,12 +1247,16 @@ void ReaderState::renderStatusBar(Core& core, int marginRight, int marginBottom,
       } else {
         data.isPartial = true;
       }
+      data.bookProgressPercent = calcBookProgressPercent();
     } else {
       return;
     }
   } else {
     data.currentPage = currentSectionPage_ + 1;
     data.totalPages = core.content.pageCount();
+    if (data.totalPages > 0) {
+      data.bookProgressPercent = static_cast<float>(data.currentPage) / static_cast<float>(data.totalPages) * 100.0f;
+    }
   }
 
   ui::readerStatusBar(renderer_, theme, marginLeft, marginRight, marginBottom, data);
@@ -1295,6 +1391,7 @@ void ReaderState::startBackgroundCaching(Core& core) {
           const auto vp = getReaderViewport(coreRef.settings.statusBar != 0);
           const auto config = coreRef.settings.getRenderConfig(theme, vp.width, vp.height);
           std::string cachePath;
+          int spineToCache = -1;
 
           if (type == ContentType::Epub) {
             auto* provider = coreRef.content.asEpub();
@@ -1302,7 +1399,7 @@ void ReaderState::startBackgroundCaching(Core& core) {
               const auto* epub = provider->getEpub();
               std::string imageCachePath = coreRef.settings.showImages ? (epub->getCachePath() + "/images") : "";
               // When on cover page (sectionPage=-1), cache the first content spine
-              int spineToCache = spineIndex;
+              spineToCache = spineIndex;
               if (sectionPage == -1) {
                 spineToCache = calcFirstContentSpine(coverExists, textStart, epub->getSpineItemsCount());
               }
@@ -1347,6 +1444,9 @@ void ReaderState::startBackgroundCaching(Core& core) {
 
           if (parser_ && !cachePath.empty() && !cacheTask_.shouldStop()) {
             backgroundCacheImpl(*parser_, cachePath, config);
+            if (type == ContentType::Epub && pageCache_ && !cacheTask_.shouldStop()) {
+              updateSpinePageCount(spineToCache, pageCache_->pageCount());
+            }
           }
         }
 

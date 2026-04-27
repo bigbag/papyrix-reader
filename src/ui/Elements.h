@@ -135,6 +135,7 @@ struct ReaderStatusBarData {
   int batteryPercent;      // -1 if unavailable
   uint8_t mode;            // Settings::StatusBarMode
   bool isPartial = false;  // True when page cache is incomplete
+  float bookProgressPercent = -1.0f;  // -1 = unknown, 0.0-100.0 = percentage of book read
 };
 
 // Reader status bar - Battery (left), title (center), page numbers (right)

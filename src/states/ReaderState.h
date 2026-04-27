@@ -4,6 +4,8 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "../content/BookmarkManager.h"
 #include "../content/ReaderNavigation.h"
@@ -152,6 +154,16 @@ class ReaderState : public State {
   char cachedChapterTitle_[64] = "";
   int cachedChapterSpine_ = -1;
   int cachedChapterPage_ = -1;
+
+  // Spine page counts for book-level progress tracking (EPUB only)
+  std::string epubCachePath_;
+  std::vector<uint32_t> spinePageCounts_;
+
+  static std::string spinePageIndexPath(const std::string& epubCachePath);
+  void loadSpinePageIndex(const std::string& epubCachePath, size_t spineCount);
+  void saveSpinePageIndex() const;
+  void updateSpinePageCount(int spineIndex, uint32_t pageCount);
+  float calcBookProgressPercent() const;
 
   // TOC overlay mode
   bool tocMode_ = false;
