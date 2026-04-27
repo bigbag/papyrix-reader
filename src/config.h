@@ -3,59 +3,59 @@
 /**
  * Generated with:
  *  ruby -rdigest -e 'puts [
- *    "./lib/EpdFont/builtinFonts/reader_xsmall_regular_2b.h",
- *    "./lib/EpdFont/builtinFonts/reader_xsmall_bold_2b.h",
- *    "./lib/EpdFont/builtinFonts/reader_xsmall_italic_2b.h",
+ *    "./lib/EpdFont/src/builtinFonts/reader_xsmall_regular_2b.h",
+ *    "./lib/EpdFont/src/builtinFonts/reader_xsmall_bold_2b.h",
+ *    "./lib/EpdFont/src/builtinFonts/reader_xsmall_italic_2b.h",
  *  ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
  */
-#define READER_FONT_ID_XSMALL (-1054355880)
+#define READER_FONT_ID_XSMALL 1482658666
 
 /**
  * Generated with:
  *  ruby -rdigest -e 'puts [
- *    "./lib/EpdFont/builtinFonts/reader_2b.h",
- *    "./lib/EpdFont/builtinFonts/reader_bold_2b.h",
- *    "./lib/EpdFont/builtinFonts/reader_italic_2b.h",
+ *    "./lib/EpdFont/src/builtinFonts/reader_2b.h",
+ *    "./lib/EpdFont/src/builtinFonts/reader_bold_2b.h",
+ *    "./lib/EpdFont/src/builtinFonts/reader_italic_2b.h",
  *  ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
  */
-#define READER_FONT_ID 805076859
+#define READER_FONT_ID (-1039698260)
 
 /**
  * Generated with:
  *  ruby -rdigest -e 'puts [
- *    "./lib/EpdFont/builtinFonts/reader_medium_2b.h",
- *    "./lib/EpdFont/builtinFonts/reader_medium_bold_2b.h",
- *    "./lib/EpdFont/builtinFonts/reader_medium_italic_2b.h",
+ *    "./lib/EpdFont/src/builtinFonts/reader_medium_2b.h",
+ *    "./lib/EpdFont/src/builtinFonts/reader_medium_bold_2b.h",
+ *    "./lib/EpdFont/src/builtinFonts/reader_medium_italic_2b.h",
  *  ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
  */
-#define READER_FONT_ID_MEDIUM 1664483350
+#define READER_FONT_ID_MEDIUM 55684430
 
 /**
  * Generated with:
  *  ruby -rdigest -e 'puts [
- *    "./lib/EpdFont/builtinFonts/reader_large_2b.h",
- *    "./lib/EpdFont/builtinFonts/reader_large_bold_2b.h",
- *    "./lib/EpdFont/builtinFonts/reader_large_italic_2b.h",
+ *    "./lib/EpdFont/src/builtinFonts/reader_large_2b.h",
+ *    "./lib/EpdFont/src/builtinFonts/reader_large_bold_2b.h",
+ *    "./lib/EpdFont/src/builtinFonts/reader_large_italic_2b.h",
  *  ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
  */
-#define READER_FONT_ID_LARGE 1574539415
+#define READER_FONT_ID_LARGE 871335967
 
 /**
  * Generated with:
  *  ruby -rdigest -e 'puts [
- *    "./lib/EpdFont/builtinFonts/ui_12.h",
- *    "./lib/EpdFont/builtinFonts/ui_bold_12.h",
+ *    "./lib/EpdFont/src/builtinFonts/ui_12.h",
+ *    "./lib/EpdFont/src/builtinFonts/ui_bold_12.h",
  *  ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
  */
-#define UI_FONT_ID 133654340
+#define UI_FONT_ID 124520636
 
 /**
  * Generated with:
  *  ruby -rdigest -e 'puts [
- *    "./lib/EpdFont/builtinFonts/small14.h",
+ *    "./lib/EpdFont/src/builtinFonts/small14.h",
  *  ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
  */
-#define SMALL_FONT_ID 96157773
+#define SMALL_FONT_ID 347147518
 
 // System directory for settings and cache
 #define PAPYRIX_DIR "/.papyrix"

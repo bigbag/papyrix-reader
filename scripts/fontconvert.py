@@ -33,13 +33,16 @@ INTERVALS_BASE = [
     (0x0250, 0x02AF),  # IPA Extensions
     (0x0300, 0x036F),  # Combining Diacritical Marks
     (0x0370, 0x03FF),  # Greek and Coptic
-    (0x0400, 0x04FF),  # Cyrillic
+    (0x0400, 0x052F),  # Cyrillic + Cyrillic Supplement
     (0x1E00, 0x1EFF),  # Latin Extended Additional (Vietnamese tones)
     (0x2000, 0x206F),  # General Punctuation
     (0x2070, 0x209F),  # Superscripts and Subscripts
     (0x20A0, 0x20CF),  # Currency Symbols
+    (0x2100, 0x214F),  # Letterlike Symbols (№, ™, Ω, etc.)
+    (0x2150, 0x218F),  # Number Forms (fractions, Roman numerals)
     (0x2190, 0x21FF),  # Arrows
     (0x2200, 0x22FF),  # Mathematical Operators
+    (0xFB00, 0xFB06),  # Latin Ligatures (ﬁ, ﬂ, ﬀ, ﬃ, ﬄ)
     (0xFFFD, 0xFFFD),  # Replacement Character
 ]
 
