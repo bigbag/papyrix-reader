@@ -106,7 +106,9 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
       buffer[peekBytes] = '\0';
       detectedEncoding_ = detectEncoding(buffer, peekBytes, bomSkipBytes_);
       encodingTable_ = getEncodingTable(detectedEncoding_);
-      isRtl_ = ScriptDetector::containsArabic(reinterpret_cast<const char*>(buffer));
+      if (detectedEncoding_ == Encoding::Utf8) {
+        isRtl_ = ScriptDetector::containsArabic(reinterpret_cast<const char*>(buffer));
+      }
     }
     file.seekSet(bomSkipBytes_);
   }

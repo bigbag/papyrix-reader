@@ -365,7 +365,9 @@ bool MarkdownParser::parsePages(const std::function<void(std::unique_ptr<Page>)>
       peekBuf[peekBytes] = '\0';
       detectedEncoding_ = detectEncoding(peekBuf, peekBytes, bomSkipBytes_);
       encodingTable_ = getEncodingTable(detectedEncoding_);
-      isRtl_ = ScriptDetector::containsArabic(reinterpret_cast<const char*>(peekBuf));
+      if (detectedEncoding_ == Encoding::Utf8) {
+        isRtl_ = ScriptDetector::containsArabic(reinterpret_cast<const char*>(peekBuf));
+      }
     }
     file.seekSet(currentOffset_ + bomSkipBytes_);
   }

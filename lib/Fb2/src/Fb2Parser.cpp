@@ -106,12 +106,12 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
   size_t bomSkip = 0;
   if (peekBytes > 0) {
     buffer[peekBytes] = '\0';
-    isRtl_ = ScriptDetector::containsArabic(reinterpret_cast<const char*>(buffer));
     // Override declared encoding when bytes are actually UTF-8 (mis-declared files).
     // For genuine CP1251/KOI8-R, detection returns non-UTF-8 and we leave the
     // declaration-driven path via expatUnknownEncodingHandler.
     if (detectEncoding(buffer, peekBytes, bomSkip) == Encoding::Utf8) {
       explicitEncoding = "UTF-8";
+      isRtl_ = ScriptDetector::containsArabic(reinterpret_cast<const char*>(buffer));
     }
   }
   file.seekSet(bomSkip);
