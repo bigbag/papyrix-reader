@@ -1160,7 +1160,12 @@ void ReaderState::renderStatusBar(Core& core, int marginRight, int marginBottom,
     }
   } else {
     data.currentPage = currentSectionPage_ + 1;
-    data.totalPages = core.content.pageCount();
+    if (pageCache_) {
+      data.totalPages = pageCache_->pageCount();
+      data.isPartial = pageCache_->isPartial();
+    } else {
+      data.isPartial = true;
+    }
   }
 
   ui::readerStatusBar(renderer_, theme, marginLeft, marginRight, marginBottom, data);
