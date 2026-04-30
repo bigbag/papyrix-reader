@@ -368,7 +368,7 @@ To clear cached data, use **Settings > Cleanup** (see [User Guide](docs/user_gui
 
 Due the way it's currently implemented, the cache is not automatically cleared when a book is deleted and moving a book file will use a new cache directory, resetting the reading progress.
 
-For more details on the internal file structures, see the [file formats document](./docs/file-formats.md).
+For more details on the internal file structures, see the [file formats document](./docs/file-formats.md). For how the cache is built (chunked partial caching, on-demand extension, foreground vs. background, ownership model) see [Rendering Pipeline § Page Caching](./docs/rendering-pipeline.md#page-caching).
 
 ## Related Tools
 

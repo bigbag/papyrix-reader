@@ -350,6 +350,16 @@ Once you have opened a book, the button layout changes to facilitate reading.
 * **Return to Home:** Press **Back** to close the book and return to the Book Selection screen.
 * **Reader Menu:** Press **Confirm** to open the Reader Menu (access chapters and bookmarks).
 
+### Status Bar
+
+When **Settings → Reader → Status Bar** is enabled, the bottom of the reading screen shows battery, current chapter or book title, and the page indicator on the right. The page indicator has three forms:
+
+- **`123/456`** — exact total. The whole book has been laid out and cached.
+- **`123/456~`** — the total is an estimate. Either the cache is still being built incrementally (the number grows as you read) or — for non-EPUB formats with no cache yet (e.g. just after **Clear Book Cache**) — it is a file-size heuristic. The number snaps to the exact total once caching finishes.
+- **`123/-`** — unknown. Content is still loading. Transient.
+
+EPUB chapters cache one chapter at a time, so `~` typically clears as soon as the current chapter finishes caching. TXT / Markdown / FB2 / HTML cache the whole book in chunks, so `~` may persist until you've read through (or paged past) the entire book.
+
 ### 4.1 Reader Menu
 
 Press **Confirm** while reading to open the Reader Menu. The menu provides two options:

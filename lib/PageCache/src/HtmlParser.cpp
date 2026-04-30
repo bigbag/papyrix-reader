@@ -41,6 +41,10 @@ const std::vector<std::pair<std::string, uint16_t>>& HtmlParser::getAnchorMap() 
   return anchorMap_;
 }
 
+uint32_t HtmlParser::bytesConsumed() const { return liveParser_ ? liveParser_->bytesRead() : 0; }
+
+uint32_t HtmlParser::totalBytes() const { return liveParser_ ? liveParser_->totalSize() : 0; }
+
 bool HtmlParser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint16_t maxPages,
                             const AbortCallback& shouldAbort) {
   // RESUME PATH

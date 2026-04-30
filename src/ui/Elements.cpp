@@ -707,8 +707,10 @@ void readerStatusBar(const GfxRenderer& r, const Theme& t, int marginLeft, int m
 
   // 2. Page numbers (right side)
   char pageStr[16];
-  if (data.isPartial || data.totalPages == 0) {
+  if (data.totalPages <= 0) {
     snprintf(pageStr, sizeof(pageStr), "%d/-", data.currentPage);
+  } else if (data.isPartial) {
+    snprintf(pageStr, sizeof(pageStr), "%d/%d~", data.currentPage, data.totalPages);
   } else {
     snprintf(pageStr, sizeof(pageStr), "%d/%d", data.currentPage, data.totalPages);
   }

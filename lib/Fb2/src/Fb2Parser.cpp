@@ -76,6 +76,7 @@ void Fb2Parser::reset() {
   pagesCreated_ = 0;
   hitMaxPages_ = false;
   fileSize_ = 0;
+  bytesConsumed_ = 0;
   anchorMap_.clear();
 }
 
@@ -135,6 +136,7 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
   while (file.available() > 0) {
     if (shouldAbort_ && (++abortCheckCounter % 10 == 0) && shouldAbort_()) {
       LOG_INF(TAG, "Aborted by external request");
+      bytesConsumed_ = static_cast<uint32_t>(XML_GetCurrentByteIndex(xmlParser_)) + static_cast<uint32_t>(bomSkip);
       XML_ParserFree(xmlParser_);
       xmlParser_ = nullptr;
       file.close();
@@ -150,6 +152,7 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
         XML_STATUS_ERROR) {
       LOG_ERR(TAG, "Parse error at line %lu: %s", XML_GetCurrentLineNumber(xmlParser_),
               XML_ErrorString(XML_GetErrorCode(xmlParser_)));
+      bytesConsumed_ = static_cast<uint32_t>(XML_GetCurrentByteIndex(xmlParser_)) + static_cast<uint32_t>(bomSkip);
       XML_ParserFree(xmlParser_);
       xmlParser_ = nullptr;
       file.close();
@@ -157,6 +160,7 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
     }
 
     if (stopRequested_) {
+      bytesConsumed_ = static_cast<uint32_t>(XML_GetCurrentByteIndex(xmlParser_)) + static_cast<uint32_t>(bomSkip);
       XML_ParserFree(xmlParser_);
       xmlParser_ = nullptr;
       file.close();
@@ -177,6 +181,7 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
     pagesCreated_++;
   }
 
+  bytesConsumed_ = static_cast<uint32_t>(XML_GetCurrentByteIndex(xmlParser_)) + static_cast<uint32_t>(bomSkip);
   XML_ParserFree(xmlParser_);
   xmlParser_ = nullptr;
   file.close();

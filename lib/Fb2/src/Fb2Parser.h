@@ -27,6 +27,8 @@ class Fb2Parser : public ContentParser {
   bool canResume() const override { return false; }
   void reset() override;
   const std::vector<std::pair<std::string, uint16_t>>& getAnchorMap() const override { return anchorMap_; }
+  uint32_t bytesConsumed() const override { return bytesConsumed_; }
+  uint32_t totalBytes() const override { return static_cast<uint32_t>(fileSize_); }
 
  private:
   std::string filepath_;
@@ -75,6 +77,10 @@ class Fb2Parser : public ContentParser {
 
   // File reading
   size_t fileSize_ = 0;
+  // Snapshot of expat's cumulative byte index (+ BOM skip) at end of last
+  // parsePages() call. Used by PageCache to extrapolate the total page count
+  // while the cache is partial.
+  uint32_t bytesConsumed_ = 0;
 
   // XML callbacks
   static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** atts);

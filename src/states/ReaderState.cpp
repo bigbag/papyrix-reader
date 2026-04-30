@@ -1161,9 +1161,16 @@ void ReaderState::renderStatusBar(Core& core, int marginRight, int marginBottom,
   } else {
     data.currentPage = currentSectionPage_ + 1;
     if (pageCache_) {
-      data.totalPages = pageCache_->pageCount();
-      data.isPartial = pageCache_->isPartial();
+      if (pageCache_->isPartial()) {
+        const uint32_t est = pageCache_->estimatedTotalPages();
+        data.totalPages = est > 0 ? static_cast<int>(est) : static_cast<int>(pageCache_->pageCount());
+        data.isPartial = true;
+      } else {
+        data.totalPages = pageCache_->pageCount();
+        data.isPartial = false;
+      }
     } else {
+      data.totalPages = static_cast<int>(core.content.pageCount());
       data.isPartial = true;
     }
   }

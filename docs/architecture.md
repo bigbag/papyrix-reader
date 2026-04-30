@@ -91,10 +91,14 @@ The unified interface provides:
 
 Unified page caching system for all content types:
 
-- **Partial caching**: Caches N pages at a time to save RAM
-- **Extend-on-demand**: Automatically extends cache when near end
-- **Background caching**: FreeRTOS task for pre-rendering pages
-- **Serialization**: Writes cached pages to SD card for instant reload
+- **Partial caching**: 5 pages laid out at a time (`PageCache::DEFAULT_CACHE_CHUNK`) so peak RAM stays bounded.
+- **Extend-on-demand**: When the reader approaches the cached tail, `PageCache::extend()` appends another chunk; the header is rewritten only after new data is durable, so power loss mid-extend leaves the previous cache intact.
+- **Format-specific parsers**: each `ContentType` has a `ContentParser` (Epub / Fb2 / Html / Markdown / PlainText); the cache logic itself is shared.
+- **Cache key**: `fontId` + render config; changing font invalidates automatically.
+- **Background caching**: FreeRTOS task pre-renders ahead while the user reads, with an ownership model that needs no mutexes on `pageCache_` / `parser_`.
+- **Serialization**: Pages written to SD card; in-memory LUT mapped from disk for O(1) page seek.
+
+See [Rendering Pipeline § Page Caching](rendering-pipeline.md#page-caching) for the full flow and [File Formats](file-formats.md) for the on-disk page record layout.
 
 ### Progress Manager
 

@@ -32,6 +32,12 @@ class PageCache {
   bool isPartial_ = false;
   RenderConfig config_;
   uint32_t lutOffset_ = 0;  // Cached LUT offset for extend operations
+  // Last sample of parser progress, used to extrapolate the total page count
+  // while the cache is partial (see estimatedTotalPages()). Persisted in the
+  // cache header so cold-loaded partial caches can show an estimate without
+  // waiting for the next extend.
+  uint32_t bytesConsumed_ = 0;
+  uint32_t totalBytes_ = 0;
 
   bool writeHeader(bool isPartial);
   bool writeLut(const std::vector<uint32_t>& lut);
@@ -95,4 +101,24 @@ class PageCache {
   bool isPartial() const { return isPartial_; }
   bool needsExtension(uint16_t currentPage) const { return isPartial_ && currentPage >= pageCount_ - EXTEND_THRESHOLD; }
   const std::string& path() const { return cachePath_; }
+
+  // Suppress the worst early-skew sample (description page + first chunk).
+  // 3 cached pages is enough that the body/metadata ratio has stabilized.
+  static constexpr uint16_t kMinPagesForEstimate = 3;
+
+  /**
+   * Extrapolate the total page count from the parser's source-byte progress
+   * captured during the last create()/extend(). Returns 0 when no sample is
+   * available yet (e.g. EpubChapterParser, or fewer than kMinPagesForEstimate
+   * cached pages). Caller falls back to pageCount() in that case.
+   * Thread-safety: shares the same access pattern as pageCount_/isPartial_;
+   * ReaderState's ownership model (stopBackgroundCaching before render)
+   * already serializes background-task writes against main-thread reads.
+   */
+  uint32_t estimatedTotalPages() const {
+    if (pageCount_ < kMinPagesForEstimate) return 0;
+    if (bytesConsumed_ == 0 || totalBytes_ == 0) return 0;
+    if (bytesConsumed_ >= totalBytes_) return pageCount_;
+    return static_cast<uint32_t>(static_cast<uint64_t>(totalBytes_) * pageCount_ / bytesConsumed_);
+  }
 };

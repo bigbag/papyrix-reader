@@ -62,4 +62,17 @@ class ContentParser {
     static const std::vector<std::pair<std::string, uint16_t>> empty;
     return empty;
   }
+
+  /**
+   * Bytes consumed from the source by the parser so far. Used to extrapolate
+   * total page count while the cache is still partial. Returns 0 when not
+   * tracked (e.g. EpubChapterParser, where pages are chapter-relative).
+   */
+  virtual uint32_t bytesConsumed() const { return 0; }
+
+  /**
+   * Total source bytes available to this parser (file size for whole-file
+   * parsers, chapter size for chaptered parsers). 0 if unknown.
+   */
+  virtual uint32_t totalBytes() const { return 0; }
 };

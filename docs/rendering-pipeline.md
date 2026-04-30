@@ -101,15 +101,69 @@ Line 791: *"Re-render BW instead of restoring from backup (saves 48KB peak alloc
 
 **Extra RAM: 0 bytes.** The cost is CPU time — 3 additional full-page renders (LSB, MSB, BW restore) plus status bar refresh.
 
-## Background Caching Task
+## Page Caching
 
-The page pre-caching task runs on a FreeRTOS background thread (`src/states/ReaderState.cpp:35`):
+Pages are laid out once and serialized to SD card so subsequent renders are reads, not re-layouts. Layout depends on viewport, font, hyphenation, and CSS, so the cache file is keyed by `fontId` and the on-disk render config — changing font invalidates the cache automatically (`lib/PageCache/src/PageCache.cpp` header layout, version 18).
+
+### Chunked, partial cache
+
+To stay within RAM, only a few pages are laid out at a time. `PageCache::DEFAULT_CACHE_CHUNK = 5` (`lib/PageCache/src/PageCache.h:24`):
+
+1. `PageCache::create()` opens the cache file, calls `parser.parsePages(callback, maxPages=5, shouldAbort)`.
+2. The parser emits `Page` objects via the callback. Each page is serialized to disk; its file offset is recorded in an in-memory LUT.
+3. When 5 pages are emitted, the parser stops. `isPartial_ = parser.hasMoreContent()` records whether more text remains.
+4. The LUT is appended after the page data and the header is rewritten with `pageCount`, `isPartial`, and the LUT offset.
+
+Resulting layout:
+
+```
+[header (37 B)] [page 0] [page 1] ... [page N-1] [LUT: N × uint32 file offsets]
+```
+
+### Extension
+
+When the user nears the end of the cached range (`PageCache::needsExtension()`), `PageCache::extend()` re-runs the parser from the start with `skipPages = pageCount_`: previously-cached pages are emitted-and-discarded by the callback until the parser reaches new content, then the next chunk is appended **after the old LUT**. The header is rewritten only after the new pages and new LUT are durable, so a power loss mid-extend leaves the previous cache intact.
+
+(`ContentParser::canResume()` is a hook for hot-extend — currently true for EPUB only; non-EPUB parsers re-parse from the start.)
+
+### Format-specific parsers
+
+`ReaderState::createOrExtendCache()` (`src/states/ReaderState.cpp:1049`) picks a `ContentParser` (`lib/PageCache/src/ContentParser.h`) by `ContentType`:
+
+- **EPUB** — `EpubChapterParser`
+- **Markdown** — `MarkdownParser`
+- **FB2** — `Fb2Parser` (gets language hint for hyphenation)
+- **HTML** — `HtmlParser`
+- **TXT** — `PlainTextParser`
+
+EPUB caches one chapter per spine index (`epub_<hash>/sections/<idx>.bin`); other formats use a single `pages_<fontId>.bin`. See [docs/file-formats.md](file-formats.md) for the on-disk page record layout.
+
+### Foreground vs. background
+
+Two entry points:
+
+**Foreground** — `renderCachedPage()` in `src/states/ReaderState.cpp:823`. If the current page isn't cached yet, draws an "Indexing..." overlay and calls `createOrExtendCache()` synchronously. Blocks UI.
+
+**Background** — `startBackgroundCaching()` (`src/states/ReaderState.cpp:1252`) spawns a FreeRTOS task to extend the cache by another chunk while the user reads:
 
 ```
 Stack: 12,288 bytes (12KB)
 ```
 
-Pages are cached to SD card, not held in RAM. The ownership model ensures the main thread and background task never access the parser or page cache simultaneously — no mutex overhead on shared data.
+`stopBackgroundCaching()` requests cooperative cancellation via `AbortCallback`; the task self-deletes (never `vTaskDelete` — would corrupt mutexes; see `CLAUDE.md` threading rules).
+
+### Ownership
+
+Pages live on SD card, not in RAM. The ownership model avoids mutexes on `pageCache_` / `parser_`:
+
+- Background task owns them while it's running.
+- Main thread takes over only after `stopBackgroundCaching()` has confirmed the task self-deleted.
+
+No simultaneous access → no mutex overhead on the hot path.
+
+### When the total page count becomes exact
+
+`pageCache_->pageCount()` reflects only the pages currently cached. Until `parser.hasMoreContent()` returns false, `isPartial_` stays true and the page total is an estimate. The reader status bar reflects this with a `~` suffix on the total — see [User Guide § Reading Mode](user_guide.md#status-bar) for the user-visible semantics.
 
 ## Memory Summary
 

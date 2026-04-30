@@ -11,23 +11,28 @@
 #include "ContentParser.h"
 
 namespace {
-constexpr uint8_t CACHE_FILE_VERSION = 18;  // v18: external font priority (try external before builtin)
+constexpr uint8_t CACHE_FILE_VERSION = 19;  // v19: + bytesConsumed/totalBytes for partial-cache page-total estimate
 
-// Header layout:
-// - version (1 byte)
-// - fontId (4 bytes)
-// - lineCompression (4 bytes)
-// - indentLevel (1 byte)
-// - spacingLevel (1 byte)
-// - paragraphAlignment (1 byte)
-// - hyphenation (1 byte)
-// - showImages (1 byte)
-// - viewportWidth (2 bytes)
-// - viewportHeight (2 bytes)
-// - pageCount (2 bytes)
-// - isPartial (1 byte)
-// - lutOffset (4 bytes)
-constexpr uint32_t HEADER_SIZE = 1 + 4 + 4 + 1 + 1 + 1 + 1 + 1 + 2 + 2 + 2 + 1 + 4;
+// Header layout (offsets are absolute from start of file):
+// - version (1 byte)        @ 0
+// - fontId (4 bytes)        @ 1
+// - lineCompression (4)     @ 5
+// - indentLevel (1)         @ 9
+// - spacingLevel (1)        @ 10
+// - paragraphAlignment (1)  @ 11
+// - hyphenation (1)         @ 12
+// - showImages (1)          @ 13
+// - viewportWidth (2)       @ 14
+// - viewportHeight (2)      @ 16
+// - pageCount (2)           @ 18
+// - isPartial (1)           @ 20
+// - lutOffset (4)           @ 21
+// - bytesConsumed (4)       @ 25  (v19+)
+// - totalBytes (4)          @ 29  (v19+)
+constexpr uint32_t kPageCountOffset = 18;
+constexpr uint32_t kLutOffsetOffset = 21;
+constexpr uint32_t kBytesConsumedOffset = 25;
+constexpr uint32_t kHeaderSize = 33;
 }  // namespace
 
 PageCache::PageCache(std::string cachePath) : cachePath_(std::move(cachePath)) {}
@@ -47,6 +52,8 @@ bool PageCache::writeHeader(bool isPartial) {
   serialization::writePod(file_, pageCount_);
   serialization::writePod(file_, static_cast<uint8_t>(isPartial ? 1 : 0));
   serialization::writePod(file_, static_cast<uint32_t>(0));  // LUT offset placeholder
+  serialization::writePod(file_, bytesConsumed_);
+  serialization::writePod(file_, totalBytes_);
   return true;
 }
 
@@ -62,10 +69,12 @@ bool PageCache::writeLut(const std::vector<uint32_t>& lut) {
   }
 
   // Update header with final values
-  file_.seek(HEADER_SIZE - 4 - 1 - 2);  // Seek to pageCount
+  file_.seek(kPageCountOffset);
   serialization::writePod(file_, pageCount_);
   serialization::writePod(file_, static_cast<uint8_t>(isPartial_ ? 1 : 0));
   serialization::writePod(file_, lutOffset);
+  serialization::writePod(file_, bytesConsumed_);
+  serialization::writePod(file_, totalBytes_);
 
   return true;
 }
@@ -76,25 +85,25 @@ bool PageCache::loadLut(std::vector<uint32_t>& lut) {
   }
 
   const size_t fileSize = file_.size();
-  if (fileSize < HEADER_SIZE) {
-    LOG_ERR(TAG, "File too small: %zu (need %u)", fileSize, HEADER_SIZE);
+  if (fileSize < kHeaderSize) {
+    LOG_ERR(TAG, "File too small: %zu (need %u)", fileSize, kHeaderSize);
     file_.close();
     return false;
   }
 
   // Read lutOffset from header
-  file_.seek(HEADER_SIZE - 4);
+  file_.seek(kLutOffsetOffset);
   serialization::readPod(file_, lutOffset_);
 
   // Validate lutOffset before seeking
-  if (lutOffset_ < HEADER_SIZE || lutOffset_ >= fileSize) {
+  if (lutOffset_ < kHeaderSize || lutOffset_ >= fileSize) {
     LOG_ERR(TAG, "Invalid lutOffset: %u (file size: %zu)", lutOffset_, fileSize);
     file_.close();
     return false;
   }
 
   // Read pageCount from header
-  file_.seek(HEADER_SIZE - 4 - 1 - 2);
+  file_.seek(kPageCountOffset);
   serialization::readPod(file_, pageCount_);
 
   // Read existing LUT entries
@@ -124,11 +133,16 @@ bool PageCache::loadRaw() {
   }
 
   // Skip config fields, read pageCount and isPartial
-  file_.seek(HEADER_SIZE - 4 - 1 - 2);
+  file_.seek(kPageCountOffset);
   serialization::readPod(file_, pageCount_);
   uint8_t partial;
   serialization::readPod(file_, partial);
   isPartial_ = (partial != 0);
+
+  // Skip lutOffset, read bytesConsumed/totalBytes
+  file_.seek(kBytesConsumedOffset);
+  serialization::readPod(file_, bytesConsumed_);
+  serialization::readPod(file_, totalBytes_);
 
   file_.close();
   return true;
@@ -172,6 +186,11 @@ bool PageCache::load(const RenderConfig& config) {
   serialization::readPod(file_, partial);
   isPartial_ = (partial != 0);
   config_ = config;
+
+  // Skip lutOffset, read parser-progress sample
+  file_.seek(kBytesConsumedOffset);
+  serialization::readPod(file_, bytesConsumed_);
+  serialization::readPod(file_, totalBytes_);
 
   file_.close();
   LOG_INF(TAG, "Loaded: %d pages, partial=%d", pageCount_, isPartial_);
@@ -266,6 +285,8 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
   }
 
   isPartial_ = parser.hasMoreContent();
+  bytesConsumed_ = parser.bytesConsumed();
+  totalBytes_ = parser.totalBytes();
 
   if (!writeLut(lut)) {
     file_.close();
@@ -320,6 +341,8 @@ bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const Ab
         chunk, shouldAbort);
 
     isPartial_ = parser.hasMoreContent();
+    bytesConsumed_ = parser.bytesConsumed();
+    totalBytes_ = parser.totalBytes();
 
     if (!parseOk && pageCount_ == pagesBefore) {
       file_.close();
@@ -372,12 +395,12 @@ std::unique_ptr<Page> PageCache::loadPage(uint16_t pageNum) {
     const size_t fileSize = file_.size();
 
     // Read LUT offset from header
-    file_.seek(HEADER_SIZE - 4);
+    file_.seek(kLutOffsetOffset);
     uint32_t lutOffset;
     serialization::readPod(file_, lutOffset);
 
     // Validate LUT offset
-    if (lutOffset < HEADER_SIZE || lutOffset >= fileSize) {
+    if (lutOffset < kHeaderSize || lutOffset >= fileSize) {
       LOG_ERR(TAG, "Invalid LUT offset: %u (file size: %zu)", lutOffset, fileSize);
       file_.close();
       continue;
@@ -389,7 +412,7 @@ std::unique_ptr<Page> PageCache::loadPage(uint16_t pageNum) {
     serialization::readPod(file_, pagePos);
 
     // Validate page position
-    if (pagePos < HEADER_SIZE || pagePos >= fileSize) {
+    if (pagePos < kHeaderSize || pagePos >= fileSize) {
       LOG_ERR(TAG, "Invalid page position: %u (file size: %zu)", pagePos, fileSize);
       file_.close();
       continue;

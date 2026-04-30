@@ -41,4 +41,6 @@ class PlainTextParser : public ContentParser {
   bool hasMoreContent() const override { return hasMore_; }
   bool canResume() const override { return currentOffset_ > 0 && hasMore_; }
   void reset() override;
+  uint32_t bytesConsumed() const override { return static_cast<uint32_t>(currentOffset_); }
+  uint32_t totalBytes() const override { return static_cast<uint32_t>(fileSize_); }
 };
