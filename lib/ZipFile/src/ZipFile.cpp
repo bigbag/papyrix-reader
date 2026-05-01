@@ -361,6 +361,7 @@ int ZipFile::fillUncompressedSizes(std::vector<SizeTarget>& targets, std::vector
       if (it->index < sizes.size()) {
         sizes[it->index] = uncompressedSize;
         matched++;
+        if (matched >= static_cast<int>(targets.size())) break;
       }
     }
 
