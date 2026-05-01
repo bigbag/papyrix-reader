@@ -137,6 +137,7 @@ bool isUsbConnected() { return digitalRead(UART0_RXD) == HIGH; }
 struct WakeupInfo {
   esp_reset_reason_t resetReason;
   bool isPowerButton;
+  bool usbColdBoot;
 };
 
 WakeupInfo getWakeupInfo() {
@@ -150,7 +151,12 @@ WakeupInfo getWakeupInfo() {
       (!usbConnected && wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON) ||
       (usbConnected && wakeupCause == ESP_SLEEP_WAKEUP_GPIO && resetReason == ESP_RST_DEEPSLEEP);
 
-  return {resetReason, isPowerButton};
+  // USB plugged into a powered-off device cold-boots the chip without a button press.
+  // Restricted to ESP_RST_POWERON so any other reset reason (UNKNOWN/USB/JTAG/SW/...) — including
+  // dev flashes — still boots normally.
+  const bool usbColdBoot = usbConnected && wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON;
+
+  return {resetReason, isPowerButton, usbColdBoot};
 }
 
 // Verify long press on wake-up from deep sleep
@@ -306,8 +312,19 @@ static papyrix::BootMode currentBootMode = papyrix::BootMode::UI;
 // Early initialization - common to both boot modes
 // Returns false if critical initialization failed
 bool earlyInit() {
-  // Only start serial if USB connected
   pinMode(UART0_RXD, INPUT);
+  inputManager.begin();
+
+  // Detect USB cold-boot before any heavy init (USB CDC, SD, settings) so a USB hotplug
+  // on a powered-off device returns to sleep without a multi-second wake-up.
+  const auto wakeup = getWakeupInfo();
+  if (wakeup.usbColdBoot) {
+    esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
+    disableGpioPullsForSleep();
+    esp_deep_sleep_start();
+  }
+
+  // Only start serial if USB connected
   if (isUsbConnected()) {
     Serial.begin(115200);
     delay(SERIAL_INIT_DELAY_MS);  // Allow USB CDC to initialize
@@ -316,8 +333,6 @@ bool earlyInit() {
       delay(SERIAL_INIT_DELAY_MS);
     }
   }
-
-  inputManager.begin();
 
   // Initialize SPI and SD card before wakeup verification so settings are available
   SPI.begin(EPD_SCLK, SD_SPI_MISO, EPD_MOSI, EPD_CS);
@@ -333,7 +348,6 @@ bool earlyInit() {
   papyrix::core.settings.loadFromFile();
   rtcPowerButtonDurationMs = papyrix::core.settings.getPowerButtonDuration();
 
-  const auto wakeup = getWakeupInfo();
   if (wakeup.isPowerButton) {
     verifyWakeupLongPress(wakeup.resetReason);
   }

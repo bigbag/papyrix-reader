@@ -83,6 +83,53 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata) {
   bookMetadata.coverItemHref = opfParser.coverItemHref;
   bookMetadata.textReferenceHref = opfParser.textReferenceHref;
 
+  if (bookMetadata.coverItemHref.empty() && !opfParser.guideCoverPageHref.empty()) {
+    constexpr size_t MAX_GUIDE_COVER_WRAPPER_SIZE = 64 * 1024;
+    LOG_DBG(TAG, "No cover from metadata, trying guide cover page: %s", opfParser.guideCoverPageHref.c_str());
+
+    size_t wrapperSize = 0;
+    if (getItemSize(opfParser.guideCoverPageHref, &wrapperSize) && wrapperSize > MAX_GUIDE_COVER_WRAPPER_SIZE) {
+      LOG_ERR(TAG, "Guide cover wrapper too large (%zu > %zu), skipping", wrapperSize, MAX_GUIDE_COVER_WRAPPER_SIZE);
+    } else {
+      size_t coverPageSize;
+      uint8_t* coverPageData = readItemContentsToBytes(opfParser.guideCoverPageHref, &coverPageSize, true);
+      if (coverPageData) {
+        const std::string coverPageHtml(reinterpret_cast<const char*>(coverPageData), coverPageSize);
+        free(coverPageData);
+
+        std::string coverPageBase;
+        const auto lastSlash = opfParser.guideCoverPageHref.rfind('/');
+        if (lastSlash != std::string::npos) {
+          coverPageBase = opfParser.guideCoverPageHref.substr(0, lastSlash + 1);
+        }
+
+        std::string imageRef;
+        for (const char* pattern : {"xlink:href=\"", "src=\""}) {
+          const size_t patternLen = strlen(pattern);
+          auto pos = coverPageHtml.find(pattern);
+          while (pos != std::string::npos) {
+            pos += patternLen;
+            const auto endPos = coverPageHtml.find('"', pos);
+            if (endPos == std::string::npos) break;
+            auto ref = coverPageHtml.substr(pos, endPos - pos);
+            ref = ref.substr(0, ref.find_first_of("?#"));
+            if (FsHelpers::isJpegFile(ref) || FsHelpers::isPngFile(ref)) {
+              imageRef = std::move(ref);
+              break;
+            }
+            pos = coverPageHtml.find(pattern, endPos);
+          }
+          if (!imageRef.empty()) break;
+        }
+
+        if (!imageRef.empty()) {
+          bookMetadata.coverItemHref = FsHelpers::normalisePath(coverPageBase + imageRef);
+          LOG_INF(TAG, "Found cover image from guide: %s", bookMetadata.coverItemHref.c_str());
+        }
+      }
+    }
+  }
+
   if (!opfParser.tocNcxPath.empty()) {
     tocNcxItem = opfParser.tocNcxPath;
   }

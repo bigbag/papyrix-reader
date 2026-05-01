@@ -164,7 +164,9 @@ void pngDrawCallback(pngle_t* pngle, uint32_t x, uint32_t y, uint32_t w, uint32_
       ctx->currentSrcY++;
       const uint32_t srcY_fp = static_cast<uint32_t>(ctx->currentSrcY) << 16;
 
-      if (srcY_fp >= ctx->nextOutY_srcStart && ctx->currentOutY < ctx->outHeight) {
+      // Output all rows whose boundaries we've crossed (handles both up- and downscaling).
+      // For upscaling, one source row may produce multiple output rows.
+      while (srcY_fp >= ctx->nextOutY_srcStart && ctx->currentOutY < ctx->outHeight) {
         memset(ctx->outRowBuffer, 0, ctx->bytesPerRow);
         for (int outX = 0; outX < ctx->outWidth; outX++) {
           const uint8_t gray = adjustPixel((ctx->rowCount[outX] > 0) ? (ctx->rowAccum[outX] / ctx->rowCount[outX]) : 0);
@@ -183,9 +185,15 @@ void pngDrawCallback(pngle_t* pngle, uint32_t x, uint32_t y, uint32_t w, uint32_
         ctx->bmpOut->write(ctx->outRowBuffer, ctx->bytesPerRow);
         ctx->currentOutY++;
 
+        ctx->nextOutY_srcStart = static_cast<uint32_t>(ctx->currentOutY + 1) * ctx->scaleY_fp;
+
+        // For upscaling, the next output row may pull from the same source data — keep
+        // accumulators around. Only reset when advancing past this source row.
+        if (srcY_fp >= ctx->nextOutY_srcStart) {
+          continue;
+        }
         memset(ctx->rowAccum, 0, ctx->outWidth * sizeof(uint32_t));
         memset(ctx->rowCount, 0, ctx->outWidth * sizeof(uint16_t));
-        ctx->nextOutY_srcStart = static_cast<uint32_t>(ctx->currentOutY + 1) * ctx->scaleY_fp;
       }
     }
   }
@@ -213,7 +221,7 @@ void pngInitCallback(pngle_t* pngle, uint32_t w, uint32_t h) {
   ctx->needsScaling = false;
 
   if (ctx->targetMaxWidth > 0 && ctx->targetMaxHeight > 0 &&
-      (static_cast<int>(w) > ctx->targetMaxWidth || static_cast<int>(h) > ctx->targetMaxHeight)) {
+      (static_cast<int>(w) != ctx->targetMaxWidth || static_cast<int>(h) != ctx->targetMaxHeight)) {
     const float scaleToFitWidth = static_cast<float>(ctx->targetMaxWidth) / w;
     const float scaleToFitHeight = static_cast<float>(ctx->targetMaxHeight) / h;
     const float scale = (scaleToFitWidth < scaleToFitHeight) ? scaleToFitWidth : scaleToFitHeight;

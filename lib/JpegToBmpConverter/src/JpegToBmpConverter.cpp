@@ -298,28 +298,23 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   uint32_t scaleY_fp = 65536;
   bool needsScaling = false;
 
-  if (targetWidth > 0 && targetHeight > 0 && (imageInfo.m_width > targetWidth || imageInfo.m_height > targetHeight)) {
-    // Calculate scale to fit within target dimensions while maintaining aspect ratio
+  if (targetWidth > 0 && targetHeight > 0 && (imageInfo.m_width != targetWidth || imageInfo.m_height != targetHeight)) {
     const float scaleToFitWidth = static_cast<float>(targetWidth) / imageInfo.m_width;
     const float scaleToFitHeight = static_cast<float>(targetHeight) / imageInfo.m_height;
-    // Choose smaller scale factor to ensure image fits within target dimensions (contain mode)
     const float scale = std::min(scaleToFitWidth, scaleToFitHeight);
 
     outWidth = static_cast<int>(imageInfo.m_width * scale);
     outHeight = static_cast<int>(imageInfo.m_height * scale);
 
-    // Ensure at least 1 pixel
     if (outWidth < 1) outWidth = 1;
     if (outHeight < 1) outHeight = 1;
 
-    // Calculate fixed-point scale factors (source pixels per output pixel)
-    // scaleX_fp = (srcWidth << 16) / outWidth
     scaleX_fp = (static_cast<uint32_t>(imageInfo.m_width) << 16) / outWidth;
     scaleY_fp = (static_cast<uint32_t>(imageInfo.m_height) << 16) / outHeight;
     needsScaling = true;
 
-    LOG_INF(TAG, "Pre-scaling %dx%d -> %dx%d (fit to %dx%d)", imageInfo.m_width, imageInfo.m_height, outWidth,
-            outHeight, targetWidth, targetHeight);
+    LOG_INF(TAG, "Scaling %dx%d -> %dx%d (target %dx%d)", imageInfo.m_width, imageInfo.m_height, outWidth, outHeight,
+            targetWidth, targetHeight);
   }
 
   // Write BMP header with output dimensions
@@ -563,12 +558,11 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
           rowCount[outX] += count;
         }
 
-        // Check if we've crossed into the next output row
-        // Current source Y in fixed point: y << 16
+        // Output all rows whose boundaries we've crossed (handles both up- and downscaling).
+        // For upscaling, one source row may produce multiple output rows.
         const uint32_t srcY_fp = static_cast<uint32_t>(y + 1) << 16;
 
-        // Output row when source Y crosses the boundary
-        if (srcY_fp >= nextOutY_srcStart && currentOutY < outHeight) {
+        while (srcY_fp >= nextOutY_srcStart && currentOutY < outHeight) {
           memset(rowBuffer, 0, bytesPerRow);
 
           if (USE_8BIT_OUTPUT && !oneBit) {
@@ -616,12 +610,15 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
           bmpOut.write(rowBuffer, bytesPerRow);
           currentOutY++;
 
-          // Reset accumulators for next output row
+          nextOutY_srcStart = static_cast<uint32_t>(currentOutY + 1) * scaleY_fp;
+
+          // For upscaling, the next output row may pull from the same source data —
+          // keep the accumulators around. Only reset when we're advancing past this source row.
+          if (srcY_fp >= nextOutY_srcStart) {
+            continue;
+          }
           memset(rowAccum, 0, outWidth * sizeof(uint32_t));
           memset(rowCount, 0, outWidth * sizeof(uint16_t));
-
-          // Update boundary for next output row
-          nextOutY_srcStart = static_cast<uint32_t>(currentOutY + 1) * scaleY_fp;
         }
       }
     }
