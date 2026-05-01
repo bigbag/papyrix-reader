@@ -108,17 +108,11 @@ class FsFile {
   // Overload for void* (used by some libraries)
   int read(void* buf, size_t len) { return read(static_cast<uint8_t*>(buf), len); }
 
-  // Read into uint16_t* (used for reading 16-bit values)
-  int read(uint16_t* buf, size_t len) {
-    int bytes = read(reinterpret_cast<uint8_t*>(buf), len * 2);
-    return bytes > 0 ? bytes / 2 : bytes;
-  }
+  // Read into uint16_t* (len is byte count, matching FsFile byte-oriented read)
+  int read(uint16_t* buf, size_t len) { return read(reinterpret_cast<uint8_t*>(buf), len); }
 
-  // Read into uint32_t* (used for reading 32-bit values)
-  int read(uint32_t* buf, size_t len) {
-    int bytes = read(reinterpret_cast<uint8_t*>(buf), len * 4);
-    return bytes > 0 ? bytes / 4 : bytes;
-  }
+  // Read into uint32_t* (len is byte count, matching FsFile byte-oriented read)
+  int read(uint32_t* buf, size_t len) { return read(reinterpret_cast<uint8_t*>(buf), len); }
 
   size_t write(uint8_t byte) {
     if (!isOpen_) return 0;
