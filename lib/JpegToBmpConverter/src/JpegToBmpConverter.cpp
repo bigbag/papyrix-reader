@@ -442,6 +442,11 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
         }
         free(mcuRowBuffer);
         free(rowBuffer);
+        delete[] rowAccum;
+        delete[] rowCount;
+        delete atkinsonDitherer;
+        delete fsDitherer;
+        delete atkinson1BitDitherer;
         return false;
       }
 

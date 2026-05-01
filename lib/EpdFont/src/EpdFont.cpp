@@ -61,14 +61,6 @@ void EpdFont::getTextDimensions(const char* string, int* w, int* h) const {
   *h = maxY - minY;
 }
 
-bool EpdFont::hasPrintableChars(const char* string) const {
-  int w = 0, h = 0;
-
-  getTextDimensions(string, &w, &h);
-
-  return w > 0 || h > 0;
-}
-
 const EpdGlyph* EpdFont::getGlyph(const uint32_t cp) const {
   // Check cache first for O(1) lookup of hot glyphs
   const EpdGlyph* cached = glyphCache.lookup(cp);

@@ -79,9 +79,8 @@ ContentOpfParser::~ContentOpfParser() {
   if (tempItemStore) {
     tempItemStore.close();
   }
-  if (SdMan.exists((cachePath + itemCacheFile).c_str())) {
-    SdMan.remove((cachePath + itemCacheFile).c_str());
-  }
+  const auto itemCachePath = cachePath + itemCacheFile;
+  if (SdMan.exists(itemCachePath.c_str())) { SdMan.remove(itemCachePath.c_str()); }
 }
 
 size_t ContentOpfParser::write(const uint8_t data) { return write(&data, 1); }

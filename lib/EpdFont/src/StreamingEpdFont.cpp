@@ -363,12 +363,6 @@ void StreamingEpdFont::getTextDimensions(const char* string, int* w, int* h) con
   *h = maxY - minY;
 }
 
-bool StreamingEpdFont::hasPrintableChars(const char* string) const {
-  int w = 0, h = 0;
-  getTextDimensions(string, &w, &h);
-  return w > 0 || h > 0;
-}
-
 size_t StreamingEpdFont::getMemoryUsage() const {
   size_t usage = sizeof(StreamingEpdFont);
   usage += _glyphsSize;

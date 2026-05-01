@@ -72,11 +72,6 @@ class StreamingEpdFont {
   void getTextDimensions(const char* string, int* w, int* h) const;
 
   /**
-   * Check if string contains any printable characters.
-   */
-  bool hasPrintableChars(const char* string) const;
-
-  /**
    * Get font data structure (for compatibility with EpdFont interface).
    * Note: The bitmap pointer is nullptr in streaming mode.
    */

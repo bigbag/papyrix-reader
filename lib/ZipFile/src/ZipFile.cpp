@@ -516,6 +516,7 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
     const auto deflatedData = static_cast<uint8_t*>(malloc(deflatedDataSize));
     if (deflatedData == nullptr) {
       LOG_ERR(TAG, "Failed to allocate memory for decompression buffer");
+      free(data);
       if (!wasOpen) {
         close();
       }
@@ -552,6 +553,7 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
     // Continue out of block with data set
   } else {
     LOG_ERR(TAG, "Unsupported compression method");
+    free(data);
     if (!wasOpen) {
       close();
     }

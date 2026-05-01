@@ -58,6 +58,9 @@ Result<void> Network::connect(const char* ssid, const char* password) {
 
   LOG_INF(TAG, "Connecting to %s...", ssid);
 
+  WiFi.persistent(false);
+  WiFi.disconnect(true, true);
+  delay(100);
   WiFi.begin(ssid, password);
 
   // Wait for connection with timeout
