@@ -30,9 +30,10 @@ class GfxRenderer {
 
  private:
   static constexpr size_t BW_BUFFER_CHUNK_SIZE = 8000;  // 8KB chunks to allow for non-contiguous memory
-  static constexpr size_t BW_BUFFER_NUM_CHUNKS = EInkDisplay::BUFFER_SIZE / BW_BUFFER_CHUNK_SIZE;
-  static_assert(BW_BUFFER_CHUNK_SIZE * BW_BUFFER_NUM_CHUNKS == EInkDisplay::BUFFER_SIZE,
-                "BW buffer chunking does not line up with display buffer size");
+  // Sized to cover the largest supported panel (X3: 52272 B). Last chunk is partial on X3,
+  // unused on X4 (48000 B uses 6 of 7 slots). Runtime size comes from einkDisplay.
+  static constexpr size_t BW_BUFFER_NUM_CHUNKS =
+      (EInkDisplay::MAX_BUFFER_SIZE + BW_BUFFER_CHUNK_SIZE - 1) / BW_BUFFER_CHUNK_SIZE;
 
   EInkDisplay& einkDisplay;
   RenderMode renderMode;
@@ -70,8 +71,9 @@ class GfxRenderer {
   mutable ExternalFontResolver _externalFontResolver = nullptr;
   mutable void* _externalFontResolverCtx = nullptr;
 
-  // Pre-allocated row buffers for bitmap rendering (reduces heap fragmentation)
-  // Sized for max screen dimension (800 pixels): outputRow = 800/4 = 200 bytes, rowBytes = 800*3 = 2400 bytes (24bpp)
+  // Pre-allocated row buffers for bitmap rendering (reduces heap fragmentation).
+  // Sized for the largest supported panel width (X4=800, X3=792 — both ≤ 800):
+  // outputRow = 800/4 = 200 bytes, rowBytes = 800*3 = 2400 bytes (24bpp).
   static constexpr size_t BITMAP_OUTPUT_ROW_SIZE = (EInkDisplay::DISPLAY_WIDTH + 3) / 4;
   static constexpr size_t BITMAP_ROW_BYTES_SIZE = EInkDisplay::DISPLAY_WIDTH * 3;  // 24-bit max
   uint8_t* bitmapOutputRow_ = nullptr;
@@ -103,6 +105,10 @@ class GfxRenderer {
     // Ensure non-zero (0 is our empty sentinel)
     return hash == 0 ? 1 : hash;
   }
+
+  // Maps logical (x, y) to the panel's native gate orientation. Uses runtime
+  // panel dimensions from einkDisplay so it works on both X4 (800x480) and X3 (792x528).
+  void rotateCoordinates(int x, int y, int* rotatedX, int* rotatedY) const;
 
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, const int* y, bool pixelState,
                   EpdFontFamily::Style style, int fontId) const;
@@ -240,7 +246,7 @@ class GfxRenderer {
 
   // Low level functions
   uint8_t* getFrameBuffer() const;
-  static size_t getBufferSize();
+  size_t getBufferSize() const;
   void grayscaleRevert() const;
   void getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const;
 };

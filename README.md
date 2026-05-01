@@ -13,22 +13,34 @@
 [![Calibre](https://img.shields.io/badge/docs-Calibre_Wireless-green)](docs/calibre.md)
 
 
-A lightweight, user-friendly firmware for the **Xteink X4** e-paper display reader.
-Built using **PlatformIO** and targeting the **ESP32-C3** microcontroller.
+A lightweight, user-friendly firmware for the **Xteink X4** and **Xteink X3** e-paper display readers.
+Built using **PlatformIO** and targeting the **ESP32-C3** microcontroller. A single firmware
+auto-detects the panel variant at boot via I²C signature scan (BQ27220 fuel gauge, DS3231 RTC, QMI8658 IMU).
 
 ![Home screen](./docs/images/device.jpg)
 
 ## Motivation
 
-E-paper devices are fantastic for reading, but most commercially available readers are closed systems with limited customisation. The **Xteink X4** is an affordable e-paper device, however the official firmware remains closed.
+E-paper devices are fantastic for reading, but most commercially available readers are closed systems with limited customisation. The **Xteink X4** and **Xteink X3** are affordable e-paper devices, however the official firmware remains closed.
 
 Papyrix aims to:
 * Provide a **lightweight, open-source alternative** to the official firmware.
 * Offer a **document reader** capable of handling EPUB content on constrained hardware.
 * Support **customisable font, layout, and display** options.
-* Run purely on the **Xteink X4 hardware**.
+* Run purely on the **Xteink X3 / X4 hardware** from a single auto-detecting firmware.
 
 This project is **not affiliated with Xteink**; it's built as a community project.
+
+## Supported devices
+
+| Device | Panel | Portrait viewport | Notes |
+|---|---|---|---|
+| Xteink X4 | 800×480 SSD1677 | 480×800 | Original target — full feature set |
+| Xteink X3 | 792×528 SSD1677 | 528×792 | Detected at boot via I²C probe (BQ27220, DS3231, QMI8658). DS3231 RTC and QMI8658 IMU are detected but not yet used. |
+
+Page caches are stored in device-specific subdirectories (`/.papyrix/cache/` for X4,
+`/.papyrix/cache/x3/` for X3) so an SD card moved between devices renders correctly
+on each panel.
 
 ## Features
 

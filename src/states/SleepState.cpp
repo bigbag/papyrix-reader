@@ -26,6 +26,7 @@
 #include "../ThemeManager.h"
 #include "../config.h"
 #include "../core/Core.h"
+#include "../drivers/Device.h"
 #include "../images/PapyrixLogo.h"
 
 extern InputManager inputManager;
@@ -193,35 +194,36 @@ void SleepState::renderCoverSleepScreen(Core& core) const {
 
   std::string coverBmpPath;
   const char* bookPath = core.settings.lastBookPath;
+  const char* cacheDir = papyrix::drivers::Device::instance().cacheDir();
 
   // Generate cover BMP based on file type (creates temporary wrapper to generate cover)
   if (FsHelpers::isXtcFile(bookPath)) {
-    Xtc xtc(bookPath, PAPYRIX_CACHE_DIR);
+    Xtc xtc(bookPath, cacheDir);
     if (xtc.load() && xtc.generateCoverBmp()) {
       coverBmpPath = xtc.getCoverBmpPath();
     }
   } else if (FsHelpers::isTxtFile(bookPath)) {
-    Txt txt(bookPath, PAPYRIX_CACHE_DIR);
+    Txt txt(bookPath, cacheDir);
     if (txt.load() && txt.generateCoverBmp(true)) {
       coverBmpPath = txt.getCoverBmpPath();
     }
   } else if (FsHelpers::isMarkdownFile(bookPath)) {
-    Markdown md(bookPath, PAPYRIX_CACHE_DIR);
+    Markdown md(bookPath, cacheDir);
     if (md.load() && md.generateCoverBmp(true)) {
       coverBmpPath = md.getCoverBmpPath();
     }
   } else if (FsHelpers::isEpubFile(bookPath)) {
-    Epub epub(bookPath, PAPYRIX_CACHE_DIR);
+    Epub epub(bookPath, cacheDir);
     if (epub.load() && epub.generateCoverBmp(true)) {
       coverBmpPath = epub.getCoverBmpPath();
     }
   } else if (FsHelpers::isFb2File(bookPath)) {
-    Fb2 fb2(bookPath, PAPYRIX_CACHE_DIR);
+    Fb2 fb2(bookPath, cacheDir);
     if (fb2.load() && fb2.generateCoverBmp(true)) {
       coverBmpPath = fb2.getCoverBmpPath();
     }
   } else if (FsHelpers::isHtmlFile(bookPath)) {
-    Html html(bookPath, PAPYRIX_CACHE_DIR);
+    Html html(bookPath, cacheDir);
     if (html.load() && html.generateCoverBmp(true)) {
       coverBmpPath = html.getCoverBmpPath();
     }

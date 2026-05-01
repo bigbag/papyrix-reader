@@ -24,11 +24,11 @@ class Display {
   // Buffer access
   uint8_t* getBuffer();
   const uint8_t* getBuffer() const;
-  static constexpr size_t bufferSize();
+  size_t bufferSize() const;
 
-  // Dimensions
-  static constexpr uint16_t width();
-  static constexpr uint16_t height();
+  // Dimensions (runtime — depends on detected device variant)
+  uint16_t width() const;
+  uint16_t height() const;
 
   // Rendering control
   void markDirty() { dirty_ = true; }
@@ -47,15 +47,6 @@ class Display {
   bool dirty_ = false;
   bool initialized_ = false;
 };
-
-// Inline constexpr methods
-constexpr size_t Display::bufferSize() {
-  return 48000;  // 800 * 480 / 8 = 48000 bytes
-}
-
-constexpr uint16_t Display::width() { return 800; }
-
-constexpr uint16_t Display::height() { return 480; }
 
 }  // namespace drivers
 }  // namespace papyrix

@@ -34,6 +34,7 @@
 #include "ThemeManager.h"
 #include "config.h"
 #include "content/ContentTypes.h"
+#include "drivers/Device.h"
 #include "ui/Elements.h"
 
 #define TAG "MAIN"
@@ -132,7 +133,16 @@ static EpdFontFamily& readerFontFamilyLarge() {
   return f;
 }
 
-bool isUsbConnected() { return digitalRead(UART0_RXD) == HIGH; }
+bool isUsbConnected() {
+  // X3 has no USB-detect line on UART0_RXD (pin 20 is the I²C SDA on X3),
+  // so on X3 we read the BQ27220 fuel gauge — positive current = USB is
+  // supplying charge. earlyInit() runs Device::probe() before any caller of
+  // this function, so the variant is always known by the time we get here.
+  if (papyrix::drivers::Device::instance().isX3()) {
+    return batteryMonitor.isCharging();
+  }
+  return digitalRead(UART0_RXD) == HIGH;
+}
 
 struct WakeupInfo {
   esp_reset_reason_t resetReason;
@@ -175,10 +185,18 @@ void verifyWakeupLongPress(esp_reset_reason_t resetReason) {
     return;
   }
 
-  // Give the user up to 1000ms to start holding the power button, and must hold for the configured duration
+  // Give the user up to 1000ms to start holding the power button, and must hold for the configured duration.
   const auto start = millis();
   bool abort = false;
   const uint16_t requiredPressDuration = papyrix::core.settings.getPowerButtonDuration();
+
+  // Subtract the boot time already elapsed from the hold-time requirement: assume the user
+  // pressed the power button at millis()==0 (device-on event) and has held it through boot.
+  // Without this, the X3 takes longer to reach this point (Device probe, heavier display init)
+  // than the X4, so the user perceives a much longer required hold.
+  // Idea ported from crosspoint-reader src/main.cpp::verifyPowerButtonDuration.
+  const uint16_t calibratedPressDuration =
+      (start < requiredPressDuration) ? static_cast<uint16_t>(requiredPressDuration - start) : 1;
 
   inputManager.update();
   // Verify the user has actually pressed
@@ -191,8 +209,8 @@ void verifyWakeupLongPress(esp_reset_reason_t resetReason) {
     do {
       delay(10);
       inputManager.update();
-    } while (inputManager.isPressed(InputManager::BTN_POWER) && inputManager.getHeldTime() < requiredPressDuration);
-    abort = inputManager.getHeldTime() < requiredPressDuration;
+    } while (inputManager.isPressed(InputManager::BTN_POWER) && inputManager.getHeldTime() < calibratedPressDuration);
+    abort = inputManager.getHeldTime() < calibratedPressDuration;
   } else {
     abort = true;
   }
@@ -233,6 +251,9 @@ void setupReaderFontForSize(papyrix::Settings::FontSize fontSize) {
 }
 
 void setupDisplayAndFonts(bool allReaderSizes = true) {
+  if (papyrix::drivers::Device::instance().isX3()) {
+    einkDisplay.setDisplayX3();
+  }
   einkDisplay.begin();
   renderer.begin();
   LOG_INF(TAG, "Display initialized");
@@ -314,6 +335,13 @@ static papyrix::BootMode currentBootMode = papyrix::BootMode::UI;
 bool earlyInit() {
   pinMode(UART0_RXD, INPUT);
   inputManager.begin();
+
+  // Detect hardware variant (X3 vs X4) before getWakeupInfo() — on X3,
+  // isUsbConnected() must route through the BQ27220 fuel gauge, otherwise
+  // a power-button cold boot reads pin 20 (I²C SDA, floats HIGH on X3) as
+  // "USB connected" and the usbColdBoot fast-path sleeps the device. Probe
+  // only touches I²C and NVS (no SPI/SD/display), so it's safe to run here.
+  papyrix::drivers::Device::instance().probe();
 
   // Detect USB cold-boot before any heavy init (USB CDC, SD, settings) so a USB hotplug
   // on a powered-off device returns to sleep without a multi-second wake-up.

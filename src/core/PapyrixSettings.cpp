@@ -8,6 +8,7 @@
 #include "../FontManager.h"
 #include "../Theme.h"
 #include "../config.h"
+#include "../drivers/Device.h"
 #include "../drivers/Storage.h"
 
 #define TAG "SETTINGS"
@@ -29,6 +30,9 @@ Result<void> Settings::save(drivers::Storage& storage) const {
   // Make sure the directories exist
   storage.mkdir(PAPYRIX_DIR);
   storage.mkdir(PAPYRIX_CACHE_DIR);
+  // X3 caches live in a subdirectory so an SD card moved between an X4 and an X3
+  // doesn't load X4-shaped page layouts on the X3 panel. No-op on X4 (path matches above).
+  storage.mkdir(drivers::Device::instance().cacheDir());
 
   FsFile outputFile;
   auto result = storage.openWrite(PAPYRIX_SETTINGS_FILE, outputFile);
@@ -221,6 +225,7 @@ RenderConfig Settings::getRenderConfig(const Theme& theme, uint16_t viewportWidt
 bool Settings::saveToFile() const {
   SdMan.mkdir(PAPYRIX_DIR);
   SdMan.mkdir(PAPYRIX_CACHE_DIR);
+  SdMan.mkdir(drivers::Device::instance().cacheDir());
 
   FsFile outputFile;
   if (!SdMan.openFileForWrite("SET", PAPYRIX_SETTINGS_FILE, outputFile)) {

@@ -27,6 +27,7 @@
 #include "../content/ReaderNavigation.h"
 #include "../core/BootMode.h"
 #include "../core/Core.h"
+#include "../drivers/Device.h"
 #include "../ui/Elements.h"
 #include "../ui/views/ReaderViews.h"
 #include "ThemeManager.h"
@@ -295,7 +296,7 @@ void ReaderState::enter(Core& core) {
   }
 
   // Open content using ContentHandle
-  auto result = core.content.open(contentPath_, PAPYRIX_CACHE_DIR);
+  auto result = core.content.open(contentPath_, papyrix::drivers::Device::instance().cacheDir());
   if (!result.ok()) {
     LOG_ERR(TAG, "Failed to open content: %s", errorToString(result.err));
     // Store error message for ErrorState to display

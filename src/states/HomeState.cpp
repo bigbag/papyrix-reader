@@ -12,6 +12,7 @@
 #include "../config.h"
 #include "../core/BootMode.h"
 #include "../core/Core.h"
+#include "../drivers/Device.h"
 #include "Battery.h"
 #include "FontManager.h"
 #include "MappedInputManager.h"
@@ -72,7 +73,7 @@ void HomeState::loadLastBook(Core& core) {
   const char* savedPath = core.settings.lastBookPath;
   if (savedPath[0] != '\0' && core.storage.exists(savedPath)) {
     // Open temporarily to get metadata
-    auto result = core.content.open(savedPath, PAPYRIX_CACHE_DIR);
+    auto result = core.content.open(savedPath, papyrix::drivers::Device::instance().cacheDir());
     if (result.ok()) {
       const auto& meta = core.content.metadata();
       view_.setBook(meta.title, meta.author, savedPath);

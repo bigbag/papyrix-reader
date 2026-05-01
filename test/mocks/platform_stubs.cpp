@@ -6,12 +6,14 @@
 
 #include "LittleFS.h"
 #include "WString.h"
+#include "Wire.h"
 
 // Global mock instances
 MockSerial Serial;
 MockSPI SPI;
 MockESP ESP;
 MockLittleFS LittleFS;
+TwoWire Wire;
 
 void MockSerial::printf(const char* fmt, ...) {
   va_list args;

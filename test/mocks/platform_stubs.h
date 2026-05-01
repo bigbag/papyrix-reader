@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <math.h>  // global ::round used by Arduino-style code
 
 // ESP32 heap caps stubs
 #ifndef MALLOC_CAP_8BIT
@@ -61,6 +62,7 @@ inline void pinMode(int, int) {}
 inline void digitalWrite(int, int) {}
 inline int digitalRead(int) { return 0; }
 inline void delay(unsigned long) {}
+inline uint32_t analogReadMilliVolts(uint8_t) { return 0; }
 inline uint32_t g_mockCpuFreqMhz = 160;
 inline void setCpuFrequencyMhz(uint32_t freq) { g_mockCpuFreqMhz = freq; }
 

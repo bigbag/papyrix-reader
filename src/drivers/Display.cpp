@@ -3,6 +3,8 @@
 #include <EInkDisplay.h>
 #include <config.h>
 
+#include "Device.h"
+
 // Global display instance reference (defined in main.cpp)
 extern EInkDisplay& display;
 
@@ -14,12 +16,21 @@ Result<void> Display::init() {
     return Ok();
   }
 
+  if (Device::instance().isX3()) {
+    display.setDisplayX3();
+  }
   display.begin();
   initialized_ = true;
   dirty_ = false;
 
   return Ok();
 }
+
+uint16_t Display::width() const { return display.getDisplayWidth(); }
+
+uint16_t Display::height() const { return display.getDisplayHeight(); }
+
+size_t Display::bufferSize() const { return display.getBufferSize(); }
 
 void Display::shutdown() {
   if (initialized_) {

@@ -60,11 +60,4 @@ constexpr size_t Author = 64;
 constexpr size_t TocTitle = 64;
 }  // namespace BufferSize
 
-// Screen dimensions (X4 e-paper)
-namespace Screen {
-constexpr uint16_t Width = 480;
-constexpr uint16_t Height = 800;
-constexpr size_t BufferSize = (Width * Height) / 8;  // 1-bit display
-}  // namespace Screen
-
 }  // namespace papyrix

@@ -108,6 +108,11 @@ class FsFile : public Print {
     return w;
   }
 
+  // Overload matching SdFat's char* signature (used by Fb2 section file generation).
+  size_t write(const char* buf, size_t len) {
+    return write(reinterpret_cast<const uint8_t*>(buf), len);
+  }
+
   bool seek(size_t pos) {
     if (!fp_) return false;
     return fseek(fp_, static_cast<long>(pos), SEEK_SET) == 0;
