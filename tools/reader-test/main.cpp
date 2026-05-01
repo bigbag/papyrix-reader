@@ -302,18 +302,24 @@ int main(int argc, char* argv[]) {
       return 1;
     }
     fb2file.setupCacheDir();
-    printf("FB2: \"%s\" by %s (%d TOC entries)\n", fb2file.getTitle().c_str(), fb2file.getAuthor().c_str(),
-           fb2file.tocCount());
+    const uint16_t sectionCount = fb2file.getSectionCount();
+    printf("FB2: \"%s\" by %s (%u sections, %d TOC entries)\n", fb2file.getTitle().c_str(),
+           fb2file.getAuthor().c_str(), static_cast<unsigned>(sectionCount), fb2file.tocCount());
 
-    Fb2Parser parser(filepath, gfx, config, fb2file.getLanguage());
-    std::string cachePath = outputDir + "/pages_0.bin";
-    PageCache cache(cachePath);
-    cache.create(parser, config, batchSize);
-    while (batchSize > 0 && cache.isPartial()) {
-      cache.extend(parser, batchSize);
+    int totalPages = 0;
+    for (uint16_t s = 0; s < sectionCount; s++) {
+      Fb2Parser parser(fb2file.getSectionPath(static_cast<int>(s)), gfx, config, fb2file.getLanguage());
+      std::string cachePath = outputDir + "/pages_" + std::to_string(s) + ".bin";
+      PageCache cache(cachePath);
+      cache.create(parser, config, batchSize);
+      while (batchSize > 0 && cache.isPartial()) {
+        cache.extend(parser, batchSize);
+      }
+      totalPages += cache.pageCount();
+      if (dump) dumpPages(cache, gfx, FONT_ID);
     }
-    printf("FB2: %d pages -> %s\n", cache.pageCount(), cachePath.c_str());
-    if (dump) dumpPages(cache, gfx, FONT_ID);
+    printf("FB2: %d pages across %u sections -> %s/pages_*.bin\n", totalPages,
+           static_cast<unsigned>(sectionCount), outputDir.c_str());
 
   } else if (type == HTML_FILE) {
     Html htmlFile(filepath, outputDir);

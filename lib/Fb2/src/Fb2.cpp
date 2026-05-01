@@ -25,6 +25,7 @@ constexpr uint8_t kMetaCacheVersion = 5;
 constexpr char kMetaCacheFile[] = "/meta.bin";
 constexpr char kSectionFilePrefix[] = "/section_";
 constexpr char kSectionFileSuffix[] = ".fb2";
+constexpr char kSectionCacheMarker[] = "/.section_cache_v2";
 }  // namespace
 
 std::string Fb2::metaCachePath() const { return cachePath + kMetaCacheFile; }
@@ -70,6 +71,9 @@ bool Fb2::load() {
   if (loadMetaCache()) {
     loaded = true;
     LOG_INF(TAG, "Loaded from cache: %s (title: '%s', author: '%s')", filepath.c_str(), title.c_str(), author.c_str());
+    if (!generateSectionFiles()) {
+      LOG_ERR(TAG, "Failed to generate section files (cache path)");
+    }
     return true;
   }
 
@@ -520,6 +524,17 @@ bool Fb2::generateSectionFiles() {
 
   setupCacheDir();
 
+  // Drop stale section files when the cache marker is missing.
+  const std::string markerPath = cachePath + kSectionCacheMarker;
+  if (!SdMan.exists(markerPath.c_str())) {
+    for (size_t i = 0; i < sectionOffsets_.size(); i++) {
+      const std::string oldPath = sectionFilePath(static_cast<int>(i));
+      if (SdMan.exists(oldPath.c_str())) {
+        SdMan.remove(oldPath.c_str());
+      }
+    }
+  }
+
   std::string xmlDecl = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
   FsFile declFile;
   if (SdMan.openFileForRead("FB2", filepath, declFile)) {
@@ -541,6 +556,19 @@ bool Fb2::generateSectionFiles() {
       "  <body>\n";
   const std::string wrapperEnd = "  </body>\n</FictionBook>\n";
 
+  // Stored offsets are hints; the actual <section / </section> tag bytes are
+  // authoritative — tolerant of small offset drift (e.g. BOM-stripped expat indices).
+  // We track <section> nesting depth across reads so an inner close tag does not
+  // truncate the outer section's copy.
+  constexpr size_t kStartBackoff = 16;
+  constexpr size_t kAnchorWindowSize = 128;
+  constexpr char kStartTag[] = "<section";
+  constexpr size_t kStartTagLen = sizeof(kStartTag) - 1;
+  constexpr char kEndTag[] = "</section>";
+  constexpr size_t kEndTagLen = sizeof(kEndTag) - 1;
+  constexpr size_t kCopyBufSize = 4096;
+  constexpr uint32_t kCopyOverhead = 1024;
+
   bool allOk = true;
   for (size_t i = 0; i < sectionOffsets_.size(); i++) {
     const std::string outPath = sectionFilePath(static_cast<int>(i));
@@ -557,37 +585,121 @@ bool Fb2::generateSectionFiles() {
       continue;
     }
 
-    // Write XML declaration (original encoding) + wrapper start
     outFile.write(xmlDecl.c_str(), xmlDecl.size());
     outFile.write(wrapperStart.c_str(), wrapperStart.size());
 
-    // Copy section content from original file
+    bool sectionWritten = false;
     FsFile inFile;
     if (SdMan.openFileForRead("FB2", filepath, inFile)) {
-      const uint32_t start = sectionOffsets_[i].startOffset;
-      const uint32_t end = sectionOffsets_[i].endOffset;
-      const uint32_t len = (end > start) ? (end - start) : 0;
-      if (len > 0 && inFile.seek(start)) {
-        constexpr size_t kCopyBufSize = 4096;
-        uint8_t copyBuf[kCopyBufSize];
-        uint32_t remaining = len;
-        while (remaining > 0) {
-          size_t toRead = (remaining < kCopyBufSize) ? remaining : kCopyBufSize;
-          size_t n = inFile.read(copyBuf, toRead);
+      const uint32_t hintStart = sectionOffsets_[i].startOffset;
+      const uint32_t hintEnd = sectionOffsets_[i].endOffset;
+
+      // Anchor the start: scan a small window around the hint for "<section".
+      const uint32_t windowStart = (hintStart > kStartBackoff) ? (hintStart - kStartBackoff) : 0;
+      uint32_t actualStart = 0;
+      bool startAnchored = false;
+      if (inFile.seek(windowStart)) {
+        uint8_t windowBuf[kAnchorWindowSize];
+        const size_t winRead = inFile.read(windowBuf, kAnchorWindowSize);
+        for (size_t j = 0; j + kStartTagLen <= winRead; j++) {
+          if (memcmp(windowBuf + j, kStartTag, kStartTagLen) == 0) {
+            actualStart = windowStart + static_cast<uint32_t>(j);
+            startAnchored = true;
+            break;
+          }
+        }
+      }
+
+      if (!startAnchored) {
+        LOG_ERR(TAG, "section %u: <section start tag not found near offset %u",
+                static_cast<unsigned int>(i), static_cast<unsigned int>(windowStart));
+      } else if (!inFile.seek(actualStart)) {
+        LOG_ERR(TAG, "section %u: seek to %u failed", static_cast<unsigned int>(i),
+                static_cast<unsigned int>(actualStart));
+      } else {
+        // Cap the copy so a corrupt input cannot run away.
+        const uint32_t span = (hintEnd > actualStart) ? (hintEnd - actualStart) : 0;
+        const uint32_t copyCap = span + kCopyOverhead;
+
+        uint8_t copyBuf[kCopyBufSize + kEndTagLen];
+        uint32_t consumed = 0;
+        size_t carry = 0;
+        bool foundClose = false;
+        int depth = 0;
+
+        while (consumed < copyCap) {
+          size_t maxRead = copyCap - consumed;
+          if (maxRead > kCopyBufSize) maxRead = kCopyBufSize;
+          const size_t n = inFile.read(copyBuf + carry, maxRead);
           if (n == 0) break;
-          outFile.write(copyBuf, n);
-          remaining -= static_cast<uint32_t>(n);
+          consumed += static_cast<uint32_t>(n);
+          const size_t bufLen = carry + n;
+
+          size_t closeAt = SIZE_MAX;
+          size_t j = 0;
+          while (j + kStartTagLen <= bufLen) {
+            if (j + kEndTagLen <= bufLen && memcmp(copyBuf + j, kEndTag, kEndTagLen) == 0) {
+              depth--;
+              if (depth <= 0) {
+                closeAt = j;
+                break;
+              }
+              j += kEndTagLen;
+            } else if (memcmp(copyBuf + j, kStartTag, kStartTagLen) == 0) {
+              depth++;
+              j += kStartTagLen;
+            } else {
+              j++;
+            }
+          }
+
+          if (closeAt != SIZE_MAX) {
+            outFile.write(copyBuf, closeAt + kEndTagLen);
+            foundClose = true;
+            break;
+          }
+
+          // Carry last (kEndTagLen-1) bytes — a tag may straddle a read boundary.
+          if (bufLen > kEndTagLen - 1) {
+            const size_t writeLen = bufLen - (kEndTagLen - 1);
+            outFile.write(copyBuf, writeLen);
+            carry = kEndTagLen - 1;
+            memmove(copyBuf, copyBuf + writeLen, carry);
+          } else {
+            carry = bufLen;
+          }
+        }
+
+        if (foundClose) {
+          sectionWritten = true;
+        } else {
+          LOG_ERR(TAG, "section %u: </section> close tag not found within %u byte cap",
+                  static_cast<unsigned int>(i), static_cast<unsigned int>(copyCap));
         }
       }
       inFile.close();
     }
 
-    // Write wrapper end
+    if (!sectionWritten) {
+      outFile.close();
+      SdMan.remove(outPath.c_str());
+      allOk = false;
+      continue;
+    }
+
     outFile.write(wrapperEnd.c_str(), wrapperEnd.size());
     outFile.close();
   }
 
-  LOG_INF(TAG, "Generated %u section files", static_cast<unsigned int>(sectionOffsets_.size()));
+  if (allOk) {
+    FsFile marker;
+    if (SdMan.openFileForWrite("FB2", markerPath, marker)) {
+      marker.close();
+    }
+  }
+
+  LOG_INF(TAG, "Generated %u section files (allOk=%d)",
+          static_cast<unsigned int>(sectionOffsets_.size()), allOk ? 1 : 0);
   return allOk;
 }
 
