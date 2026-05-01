@@ -363,7 +363,7 @@ char getKeyboardChar(const KeyboardState& state) {
   return '\0';
 }
 
-void battery(const GfxRenderer& r, const Theme& t, int x, int y, int percent) {
+void battery(const GfxRenderer& r, const Theme& t, int x, int y, int percent, bool charging) {
   // Simple battery icon: [====]
   const int battW = 30;
   const int battH = 14;
@@ -382,6 +382,20 @@ void battery(const GfxRenderer& r, const Theme& t, int x, int y, int percent) {
   const int fillW = ((battW - 4) * percent) / 100;
   if (fillW > 0) {
     r.fillRect(x + 2, iconY + 2, fillW, battH - 4, t.primaryTextBlack);
+  }
+
+  if (charging) {
+    // Small zig-zag bolt centered in the body. Punch a background-color halo
+    // first so the bolt stays readable both over the empty white area and
+    // over the filled black area.
+    const int boltCx = x + battW / 2;
+    const int boltTop = iconY + 2;
+    const int boltBot = iconY + battH - 3;
+    const int boltMid = (boltTop + boltBot) / 2;
+    r.fillRect(boltCx - 3, boltTop - 1, 7, boltBot - boltTop + 3, t.backgroundColor);
+    r.drawLine(boltCx + 2, boltTop, boltCx - 1, boltMid, t.primaryTextBlack);
+    r.drawLine(boltCx - 1, boltMid, boltCx + 1, boltMid, t.primaryTextBlack);
+    r.drawLine(boltCx + 1, boltMid, boltCx - 2, boltBot, t.primaryTextBlack);
   }
 
   // Percentage text

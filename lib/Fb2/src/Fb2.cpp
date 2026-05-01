@@ -435,8 +435,10 @@ bool Fb2::scanSectionOffsets() {
     if (c->skipUntilDepth < c->depth) return;
 
     const char* tag = strrchr(name, ':');
-    if (tag) tag++;
-    else tag = name;
+    if (tag)
+      tag++;
+    else
+      tag = name;
 
     if (strcmp(tag, "binary") == 0) {
       c->skipUntilDepth = c->depth - 1;
@@ -461,8 +463,10 @@ bool Fb2::scanSectionOffsets() {
   auto scanEnd = [](void* userData, const XML_Char* name) {
     auto* c = static_cast<SectionScanCtx*>(userData);
     const char* tag = strrchr(name, ':');
-    if (tag) tag++;
-    else tag = name;
+    if (tag)
+      tag++;
+    else
+      tag = name;
 
     if (strcmp(tag, "binary") == 0) {
       c->skipUntilDepth = INT_MAX;
@@ -936,7 +940,8 @@ bool Fb2::loadMetaCache() {
     sectionOffsets_.reserve(sectionOffsetCount);
     for (uint16_t i = 0; i < sectionOffsetCount; i++) {
       SectionOffset off;
-      if (!serialization::readPodChecked(file, off.startOffset) || !serialization::readPodChecked(file, off.endOffset)) {
+      if (!serialization::readPodChecked(file, off.startOffset) ||
+          !serialization::readPodChecked(file, off.endOffset)) {
         sectionOffsets_.clear();
         break;
       }

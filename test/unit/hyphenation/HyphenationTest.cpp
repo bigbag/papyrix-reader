@@ -393,6 +393,43 @@ int main() {
     runner.expectTrue(hasPatternBreak, "de: has pattern-based breaks within Satellitensystem");
   }
 
+  // ============================================
+  // LiangHyphenation: fixed-buffer overflow (silent skip)
+  // ============================================
+  // The Liang hyphenator stores augmented-word data in fixed stack buffers
+  // (MAX_WORD_BYTES=160, MAX_WORD_CHARS=70). Words exceeding either cap must
+  // return an empty break list rather than crash or write past the buffer.
+
+  {
+    Hyphenation::setLanguage("de");
+    // 80 ASCII letters — exceeds MAX_WORD_CHARS (70) including the two '.' sentinels
+    std::string longAscii(80, 'a');
+    auto breaks = Hyphenation::breakOffsets(longAscii, false);
+    runner.expectTrue(breaks.empty(), "de: 80-char word overflows char cap, returns no breaks");
+  }
+
+  {
+    Hyphenation::setLanguage("de");
+    // 60 ASCII letters — well within both caps; must not crash
+    std::string shortAscii(60, 'a');
+    auto breaks = Hyphenation::breakOffsets(shortAscii, false);
+    (void)breaks;  // any result is acceptable; absence of UB is the assertion
+    runner.expectTrue(true, "de: 60-char word stays within caps, no crash");
+  }
+
+  {
+    Hyphenation::setLanguage("de");
+    // 75 ä codepoints (UTF-8 0xC3 0xA4 each = 150 bytes). Char count exceeds
+    // MAX_WORD_CHARS (70) before byte count would exceed MAX_WORD_BYTES (160).
+    std::string longUmlaut;
+    longUmlaut.reserve(150);
+    for (int i = 0; i < 75; ++i) {
+      longUmlaut.append("\xC3\xA4");
+    }
+    auto breaks = Hyphenation::breakOffsets(longUmlaut, false);
+    runner.expectTrue(breaks.empty(), "de: 75-char multi-byte word overflows char cap, returns no breaks");
+  }
+
   // Reset to English for consistent state
   Hyphenation::setLanguage("en");
 

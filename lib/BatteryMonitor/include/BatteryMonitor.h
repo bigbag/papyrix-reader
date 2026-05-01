@@ -9,6 +9,11 @@ class BatteryMonitor {
   // Read voltage and return percentage (0-100)
   uint16_t readPercentage() const;
 
+  // EMA-smoothed percentage (0-100). Suppresses ADC jitter so the UI doesn't
+  // flicker. Single-threaded; use the singleton in src/Battery.h for shared
+  // smoothing across UI surfaces.
+  uint16_t readSmoothedPercentage() const;
+
   // Read the battery voltage in millivolts (accounts for divider)
   uint16_t readMillivolts() const;
 
@@ -27,4 +32,10 @@ class BatteryMonitor {
  private:
   uint8_t _adcPin;
   float _dividerMultiplier;
+  // EMA state for readSmoothedPercentage(). Holds smoothed percentage * 10
+  // to keep one decimal of precision. Mutable so the smoothing can run from
+  // a const method; callers must invoke it from a single thread (papyrix
+  // polls battery on the main loop only).
+  mutable uint16_t _smoothedScaled = 0;
+  mutable bool _smoothInitialized = false;
 };

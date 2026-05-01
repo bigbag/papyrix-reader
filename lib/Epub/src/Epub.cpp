@@ -6,6 +6,7 @@
 #include <Logging.h>
 #include <SDCardManager.h>
 #include <ZipFile.h>
+#include <esp_heap_caps.h>
 
 #define TAG "EPUB"
 
@@ -227,7 +228,26 @@ bool Epub::parseCssFiles() {
 
   cssParser_.reset(new CssParser());
 
+  // Skip CSS that would risk OOM during parsing or that exceeds the parser's cap.
+  // 64 KB heap headroom matches what CSS parsing peaks at (style map + expat workspace).
+  // 64 KB size cap mirrors CssParser::MAX_CSS_FILE_SIZE so both checks agree.
+  constexpr size_t MIN_HEAP_FOR_CSS_PARSING = 64 * 1024;
+  constexpr size_t MAX_CSS_FILE_SIZE = 64 * 1024;
+
   for (const auto& cssHref : cssFiles_) {
+    const size_t freeHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+    if (freeHeap < MIN_HEAP_FOR_CSS_PARSING) {
+      LOG_ERR(TAG, "Insufficient heap for CSS (%zu < %zu), skipping: %s", freeHeap, MIN_HEAP_FOR_CSS_PARSING,
+              cssHref.c_str());
+      continue;
+    }
+
+    size_t cssFileSize = 0;
+    if (getItemSize(cssHref, &cssFileSize) && cssFileSize > MAX_CSS_FILE_SIZE) {
+      LOG_ERR(TAG, "CSS file too large (%zu > %zu), skipping: %s", cssFileSize, MAX_CSS_FILE_SIZE, cssHref.c_str());
+      continue;
+    }
+
     // Extract CSS file to temp location
     const auto tmpCssPath = getCachePath() + "/.tmp_css.css";
 

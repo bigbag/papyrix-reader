@@ -276,6 +276,62 @@ int main() {
                       "parseInlineStyle: font-style italic");
   }
 
+  // ============================================
+  // Selector filtering: combinators and complex selectors are skipped
+  // ============================================
+  // The matcher only supports tag, .class, and tag.class selectors. Anything
+  // containing combinators (+ > ~), descendant whitespace, attribute ([),
+  // pseudo (:), id (#), or universal (*) is skipped at parseRule() time so
+  // it doesn't fill MAX_CSS_RULES with rules that can never match.
+
+  // Test 17: combinator/complex selectors are dropped, simple ones kept
+  {
+    SdMan.clearFiles();
+    SdMan.registerFile("/combinators.css",
+                       "p { text-align: center; }\n"
+                       ".note { font-style: italic; }\n"
+                       "div > p { font-weight: bold; }\n"
+                       "div + p { font-weight: bold; }\n"
+                       "div ~ p { font-weight: bold; }\n"
+                       "div p { font-weight: bold; }\n"
+                       "* { font-weight: bold; }\n"
+                       "#id { font-weight: bold; }\n"
+                       "a:hover { font-weight: bold; }\n"
+                       "[type=text] { font-weight: bold; }\n");
+
+    CssParser parser;
+    bool ok = parser.parseFile("/combinators.css");
+    runner.expectTrue(ok, "selector filter: parseFile succeeds");
+    runner.expectEq(static_cast<size_t>(2), parser.getStyleCount(), "selector filter: only p and .note kept");
+
+    CssStyle p = parser.getTagStyle("p");
+    runner.expectTrue(p.hasTextAlign && p.textAlign == TextAlign::Center,
+                      "selector filter: simple tag rule preserved");
+    runner.expectFalse(p.hasFontWeight, "selector filter: combinator rules did not bleed into p");
+
+    const CssStyle* note = parser.getStyleForClass(".note");
+    runner.expectTrue(note != nullptr && note->hasFontStyle && note->fontStyle == CssFontStyle::Italic,
+                      "selector filter: simple class rule preserved");
+  }
+
+  // Test 18: comma-separated list keeps supported parts, drops unsupported parts
+  {
+    SdMan.clearFiles();
+    SdMan.registerFile("/mixed_comma.css", "p, div > span, .keep, a:hover { text-align: right; }\n");
+
+    CssParser parser;
+    parser.parseFile("/mixed_comma.css");
+    // Only "p" and ".keep" should survive; "div > span" and "a:hover" are dropped.
+    runner.expectEq(static_cast<size_t>(2), parser.getStyleCount(), "selector filter: comma list keeps 2 of 4");
+
+    CssStyle p = parser.getTagStyle("p");
+    runner.expectTrue(p.hasTextAlign && p.textAlign == TextAlign::Right,
+                      "selector filter: p kept from comma list");
+    const CssStyle* keep = parser.getStyleForClass(".keep");
+    runner.expectTrue(keep != nullptr && keep->hasTextAlign && keep->textAlign == TextAlign::Right,
+                      "selector filter: .keep kept from comma list");
+  }
+
   SdMan.clearFiles();
   return runner.allPassed() ? 0 : 1;
 }

@@ -9,3 +9,6 @@ inline BatteryMonitor& getBatteryMonitor() {
 }
 
 #define batteryMonitor getBatteryMonitor()
+
+// Defined in main.cpp; reads UART0_RXD which floats high when USB is plugged in.
+bool isUsbConnected();

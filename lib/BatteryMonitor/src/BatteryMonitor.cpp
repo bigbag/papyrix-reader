@@ -10,6 +10,17 @@ BatteryMonitor::BatteryMonitor(uint8_t adcPin, float dividerMultiplier)
 
 uint16_t BatteryMonitor::readPercentage() const { return percentageFromMillivolts(readMillivolts()); }
 
+uint16_t BatteryMonitor::readSmoothedPercentage() const {
+  const uint16_t raw = readPercentage();
+  if (!_smoothInitialized) {
+    _smoothedScaled = raw * 10;
+    _smoothInitialized = true;
+  } else {
+    _smoothedScaled = (_smoothedScaled * 9 + raw * 10) / 10;
+  }
+  return _smoothedScaled / 10;
+}
+
 uint16_t BatteryMonitor::readMillivolts() const {
   const uint16_t mv = readRawMillivolts();
   return static_cast<uint16_t>(mv * _dividerMultiplier);

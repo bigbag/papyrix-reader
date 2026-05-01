@@ -11,7 +11,10 @@ const LanguageHyphenator* Hyphenator::cachedHyphenator_ = nullptr;
 
 namespace {
 
-struct Iso639Mapping { const char* iso639_2; const char* iso639_1; };
+struct Iso639Mapping {
+  const char* iso639_2;
+  const char* iso639_1;
+};
 static constexpr Iso639Mapping kIso639Mappings[] = {
     {"eng", "en"}, {"fra", "fr"}, {"fre", "fr"}, {"deu", "de"}, {"ger", "de"},
     {"rus", "ru"}, {"spa", "es"}, {"ita", "it"}, {"ukr", "uk"},
@@ -30,7 +33,10 @@ const LanguageHyphenator* hyphenatorForLanguage(const std::string& langTag) {
   if (primary.empty()) return nullptr;
 
   for (const auto& m : kIso639Mappings) {
-    if (primary == m.iso639_2) { primary = m.iso639_1; break; }
+    if (primary == m.iso639_2) {
+      primary = m.iso639_1;
+      break;
+    }
   }
 
   return getLanguageHyphenatorForPrimaryTag(primary);

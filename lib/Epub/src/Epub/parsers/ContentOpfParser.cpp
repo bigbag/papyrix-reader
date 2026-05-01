@@ -80,7 +80,9 @@ ContentOpfParser::~ContentOpfParser() {
     tempItemStore.close();
   }
   const auto itemCachePath = cachePath + itemCacheFile;
-  if (SdMan.exists(itemCachePath.c_str())) { SdMan.remove(itemCachePath.c_str()); }
+  if (SdMan.exists(itemCachePath.c_str())) {
+    SdMan.remove(itemCachePath.c_str());
+  }
 }
 
 size_t ContentOpfParser::write(const uint8_t data) { return write(&data, 1); }
@@ -249,6 +251,15 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       if (properties == "nav" || properties.find("nav ") == 0 || properties.find(" nav") != std::string::npos) {
         self->tocNavPath = href;
         LOG_INF(TAG, "Found EPUB 3 nav document: %s", href.c_str());
+      }
+    }
+
+    // EPUB 3: Check for cover image (properties contains "cover-image")
+    if (!properties.empty() && self->coverItemHref.empty()) {
+      if (properties == "cover-image" || properties.find("cover-image ") == 0 ||
+          properties.find(" cover-image") != std::string::npos) {
+        self->coverItemHref = href;
+        LOG_INF(TAG, "Found EPUB 3 cover image: %s", href.c_str());
       }
     }
 

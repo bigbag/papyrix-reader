@@ -313,7 +313,7 @@ bool render(Core& core) {
     drawDayOfWeek(theme, 20, 50, timeinfo.tm_wday);
 
     // Battery top-right
-    ui::battery(renderer, theme, 380, 26, batteryMonitor.readPercentage());
+    ui::battery(renderer, theme, 380, 26, batteryMonitor.readSmoothedPercentage(), isUsbConnected());
 
     // Determine digits
     int hour = timeinfo.tm_hour;

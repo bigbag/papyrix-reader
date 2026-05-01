@@ -58,6 +58,7 @@ class TestOpfParser {
     IN_BOOK_TITLE,
     IN_BOOK_AUTHOR,
     IN_BOOK_LANGUAGE,
+    IN_MANIFEST,
     IN_OTHER,
   };
 
@@ -65,7 +66,6 @@ class TestOpfParser {
 
   static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
     auto* self = static_cast<TestOpfParser*>(userData);
-    (void)atts;
 
     if (self->state == START && (strcmp(name, "package") == 0 || strcmp(name, "opf:package") == 0)) {
       self->state = IN_PACKAGE;
@@ -73,6 +73,10 @@ class TestOpfParser {
     }
     if (self->state == IN_PACKAGE && (strcmp(name, "metadata") == 0 || strcmp(name, "opf:metadata") == 0)) {
       self->state = IN_METADATA;
+      return;
+    }
+    if (self->state == IN_PACKAGE && (strcmp(name, "manifest") == 0 || strcmp(name, "opf:manifest") == 0)) {
+      self->state = IN_MANIFEST;
       return;
     }
     if (self->state == IN_METADATA && strcmp(name, "dc:title") == 0) {
@@ -90,7 +94,28 @@ class TestOpfParser {
       self->state = IN_BOOK_LANGUAGE;
       return;
     }
-    // Skip manifest/spine/guide - not needed for metadata tests
+    // Mirror ContentOpfParser's EPUB 3 cover-image detection on <manifest>/<item>.
+    // Production code: lib/Epub/src/Epub/parsers/ContentOpfParser.cpp (cover-image
+    // block in startElement). First-match wins via the coverItemHref.empty() guard.
+    if (self->state == IN_MANIFEST && (strcmp(name, "item") == 0 || strcmp(name, "opf:item") == 0)) {
+      std::string href;
+      std::string properties;
+      for (int i = 0; atts[i]; i += 2) {
+        if (strcmp(atts[i], "href") == 0) {
+          href = atts[i + 1];
+        } else if (strcmp(atts[i], "properties") == 0) {
+          properties = atts[i + 1];
+        }
+      }
+      if (!properties.empty() && self->coverItemHref.empty()) {
+        if (properties == "cover-image" || properties.find("cover-image ") == 0 ||
+            properties.find(" cover-image") != std::string::npos) {
+          self->coverItemHref = href;
+        }
+      }
+      return;
+    }
+    (void)atts;
   }
 
   static void XMLCALL characterData(void* userData, const XML_Char* s, int len) {
@@ -159,6 +184,10 @@ class TestOpfParser {
       self->state = IN_PACKAGE;
       return;
     }
+    if (self->state == IN_MANIFEST && (strcmp(name, "manifest") == 0 || strcmp(name, "opf:manifest") == 0)) {
+      self->state = IN_PACKAGE;
+      return;
+    }
     if (self->state == IN_PACKAGE && (strcmp(name, "package") == 0 || strcmp(name, "opf:package") == 0)) {
       self->state = START;
       return;
@@ -169,6 +198,7 @@ class TestOpfParser {
   std::string title;
   std::string author;
   std::string language;
+  std::string coverItemHref;
 
   bool parse(const std::string& xml) {
     XML_Parser parser = XML_ParserCreate(nullptr);
@@ -195,6 +225,20 @@ static std::string makeOpf(const std::string& metadataContent) {
          "<metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\">" +
          metadataContent +
          "</metadata>"
+         "</package>";
+}
+
+// Helper to build an OPF XML containing both metadata and manifest. Used by
+// the EPUB 3 cover-image tests below.
+static std::string makeOpfWithManifest(const std::string& manifestContent) {
+  return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+         "<package xmlns=\"http://www.idpf.org/2007/opf\">"
+         "<metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\">"
+         "<dc:title>Test</dc:title>"
+         "</metadata>"
+         "<manifest>" +
+         manifestContent +
+         "</manifest>"
          "</package>";
 }
 
@@ -435,6 +479,80 @@ int main() {
     // Empty first dc:creator produces empty string; second one sees non-empty
     // (empty string is still empty so separator is not added)
     runner.expectEqual("Real Author", parser.author, "empty_first_author: only real author");
+  }
+
+  // ============================================
+  // EPUB 3 cover-image property on manifest items
+  // ============================================
+  // Verifies the rule applied in
+  // lib/Epub/src/Epub/parsers/ContentOpfParser.cpp: a manifest <item> whose
+  // properties attribute contains the token "cover-image" populates
+  // coverItemHref. The test mirror in TestOpfParser uses the identical match
+  // logic; first match wins.
+
+  // Test: lone cover-image property
+  {
+    TestOpfParser parser;
+    bool ok = parser.parse(makeOpfWithManifest(
+        "<item id=\"cover\" href=\"images/cover.jpg\" media-type=\"image/jpeg\" properties=\"cover-image\"/>"));
+    runner.expectTrue(ok, "cover_lone: parses successfully");
+    runner.expectEqual("images/cover.jpg", parser.coverItemHref, "cover_lone: href captured");
+  }
+
+  // Test: cover-image as prefix in space-separated list
+  {
+    TestOpfParser parser;
+    bool ok = parser.parse(makeOpfWithManifest(
+        "<item id=\"cover\" href=\"cover.png\" media-type=\"image/png\" properties=\"cover-image nav\"/>"));
+    runner.expectTrue(ok, "cover_prefix: parses successfully");
+    runner.expectEqual("cover.png", parser.coverItemHref, "cover_prefix: href captured");
+  }
+
+  // Test: cover-image as suffix in space-separated list
+  {
+    TestOpfParser parser;
+    bool ok = parser.parse(makeOpfWithManifest(
+        "<item id=\"cover\" href=\"img/c.jpg\" media-type=\"image/jpeg\" properties=\"nav cover-image\"/>"));
+    runner.expectTrue(ok, "cover_suffix: parses successfully");
+    runner.expectEqual("img/c.jpg", parser.coverItemHref, "cover_suffix: href captured");
+  }
+
+  // Test: cover-image in the middle of a space-separated list
+  {
+    TestOpfParser parser;
+    bool ok = parser.parse(makeOpfWithManifest(
+        "<item id=\"cover\" href=\"middle.jpg\" media-type=\"image/jpeg\" "
+        "properties=\"nav cover-image scripted\"/>"));
+    runner.expectTrue(ok, "cover_middle: parses successfully");
+    runner.expectEqual("middle.jpg", parser.coverItemHref, "cover_middle: href captured");
+  }
+
+  // Test: no cover-image property at all
+  {
+    TestOpfParser parser;
+    bool ok = parser.parse(makeOpfWithManifest(
+        "<item id=\"nav\" href=\"toc.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/>"));
+    runner.expectTrue(ok, "cover_absent: parses successfully");
+    runner.expectEqual("", parser.coverItemHref, "cover_absent: coverItemHref empty");
+  }
+
+  // Test: item without any properties attribute
+  {
+    TestOpfParser parser;
+    bool ok = parser.parse(makeOpfWithManifest(
+        "<item id=\"chap1\" href=\"chapter1.xhtml\" media-type=\"application/xhtml+xml\"/>"));
+    runner.expectTrue(ok, "cover_no_properties_attr: parses successfully");
+    runner.expectEqual("", parser.coverItemHref, "cover_no_properties_attr: coverItemHref empty");
+  }
+
+  // Test: first item with cover-image wins over later ones
+  {
+    TestOpfParser parser;
+    bool ok = parser.parse(makeOpfWithManifest(
+        "<item id=\"first\" href=\"first.jpg\" media-type=\"image/jpeg\" properties=\"cover-image\"/>"
+        "<item id=\"second\" href=\"second.jpg\" media-type=\"image/jpeg\" properties=\"cover-image\"/>"));
+    runner.expectTrue(ok, "cover_first_wins: parses successfully");
+    runner.expectEqual("first.jpg", parser.coverItemHref, "cover_first_wins: first href captured");
   }
 
   return runner.allPassed() ? 0 : 1;

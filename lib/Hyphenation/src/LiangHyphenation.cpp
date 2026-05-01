@@ -7,72 +7,106 @@ namespace {
 
 using EmbeddedAutomaton = SerializedHyphenationPatterns;
 
-struct AugmentedWord {
-  std::vector<uint8_t> bytes;
-  std::vector<size_t> charByteOffsets;
-  std::vector<int32_t> byteToCharIndex;
+// Fixed buffers avoid per-word heap churn that fragments DRAM enough to block
+// the 32 KB inflate ring buffer allocation. Sized for German (longest word
+// ~63 codepoints * 2 UTF-8 bytes + 2 sentinels). Words exceeding the cap are
+// silently skipped (no hyphenation).
+static constexpr size_t MAX_WORD_BYTES = 160;
+static constexpr size_t MAX_WORD_CHARS = 70;
 
-  bool empty() const { return bytes.empty(); }
-  size_t charCount() const { return charByteOffsets.size(); }
+struct AugmentedWord {
+  uint8_t bytes[MAX_WORD_BYTES];
+  size_t charByteOffsets[MAX_WORD_CHARS];
+  int32_t byteToCharIndex[MAX_WORD_BYTES];
+  size_t byteLen = 0;
+  size_t charCount_ = 0;
+
+  bool empty() const { return byteLen == 0; }
+  size_t charCount() const { return charCount_; }
 };
 
-size_t encodeUtf8(uint32_t cp, std::vector<uint8_t>& out) {
+size_t encodeUtf8(uint32_t cp, AugmentedWord& word) {
+  if ((cp >= 0xD800u && cp <= 0xDFFFu) || cp > 0x10FFFFu) {
+    return 0;
+  }
+
+  uint8_t encoded[4];
+  size_t len = 0;
+
   if (cp <= 0x7Fu) {
-    out.push_back(static_cast<uint8_t>(cp));
-    return 1;
+    encoded[len++] = static_cast<uint8_t>(cp);
+  } else if (cp <= 0x7FFu) {
+    encoded[len++] = static_cast<uint8_t>(0xC0u | ((cp >> 6) & 0x1Fu));
+    encoded[len++] = static_cast<uint8_t>(0x80u | (cp & 0x3Fu));
+  } else if (cp <= 0xFFFFu) {
+    encoded[len++] = static_cast<uint8_t>(0xE0u | ((cp >> 12) & 0x0Fu));
+    encoded[len++] = static_cast<uint8_t>(0x80u | ((cp >> 6) & 0x3Fu));
+    encoded[len++] = static_cast<uint8_t>(0x80u | (cp & 0x3Fu));
+  } else {
+    encoded[len++] = static_cast<uint8_t>(0xF0u | ((cp >> 18) & 0x07u));
+    encoded[len++] = static_cast<uint8_t>(0x80u | ((cp >> 12) & 0x3Fu));
+    encoded[len++] = static_cast<uint8_t>(0x80u | ((cp >> 6) & 0x3Fu));
+    encoded[len++] = static_cast<uint8_t>(0x80u | (cp & 0x3Fu));
   }
-  if (cp <= 0x7FFu) {
-    out.push_back(static_cast<uint8_t>(0xC0u | ((cp >> 6) & 0x1Fu)));
-    out.push_back(static_cast<uint8_t>(0x80u | (cp & 0x3Fu)));
-    return 2;
+
+  if (word.byteLen + len > MAX_WORD_BYTES) {
+    return 0;
   }
-  if (cp <= 0xFFFFu) {
-    out.push_back(static_cast<uint8_t>(0xE0u | ((cp >> 12) & 0x0Fu)));
-    out.push_back(static_cast<uint8_t>(0x80u | ((cp >> 6) & 0x3Fu)));
-    out.push_back(static_cast<uint8_t>(0x80u | (cp & 0x3Fu)));
-    return 3;
+  for (size_t i = 0; i < len; ++i) {
+    word.bytes[word.byteLen++] = encoded[i];
   }
-  out.push_back(static_cast<uint8_t>(0xF0u | ((cp >> 18) & 0x07u)));
-  out.push_back(static_cast<uint8_t>(0x80u | ((cp >> 12) & 0x3Fu)));
-  out.push_back(static_cast<uint8_t>(0x80u | ((cp >> 6) & 0x3Fu)));
-  out.push_back(static_cast<uint8_t>(0x80u | (cp & 0x3Fu)));
-  return 4;
+  return len;
 }
 
-AugmentedWord buildAugmentedWord(const std::vector<CodepointInfo>& cps, const LiangWordConfig& config) {
-  AugmentedWord word;
+bool buildAugmentedWord(AugmentedWord& word, const std::vector<CodepointInfo>& cps, const LiangWordConfig& config) {
+  word.byteLen = 0;
+  word.charCount_ = 0;
+
   if (cps.empty()) {
-    return word;
+    return false;
   }
 
-  word.bytes.reserve(cps.size() * 2 + 2);
-  word.charByteOffsets.reserve(cps.size() + 2);
-
-  word.charByteOffsets.push_back(0);
-  word.bytes.push_back('.');
+  word.charByteOffsets[word.charCount_++] = 0;
+  word.bytes[word.byteLen++] = '.';
 
   for (const auto& info : cps) {
     if (!config.isLetter(info.value)) {
-      word.bytes.clear();
-      word.charByteOffsets.clear();
-      word.byteToCharIndex.clear();
-      return word;
+      word.byteLen = 0;
+      word.charCount_ = 0;
+      return false;
     }
-    word.charByteOffsets.push_back(word.bytes.size());
-    encodeUtf8(config.toLower(info.value), word.bytes);
+    if (word.charCount_ >= MAX_WORD_CHARS - 1) {
+      word.byteLen = 0;
+      word.charCount_ = 0;
+      return false;
+    }
+    word.charByteOffsets[word.charCount_++] = word.byteLen;
+    if (encodeUtf8(config.toLower(info.value), word) == 0) {
+      word.byteLen = 0;
+      word.charCount_ = 0;
+      return false;
+    }
   }
 
-  word.charByteOffsets.push_back(word.bytes.size());
-  word.bytes.push_back('.');
+  if (word.charCount_ >= MAX_WORD_CHARS || word.byteLen >= MAX_WORD_BYTES) {
+    word.byteLen = 0;
+    word.charCount_ = 0;
+    return false;
+  }
+  word.charByteOffsets[word.charCount_++] = word.byteLen;
+  word.bytes[word.byteLen++] = '.';
 
-  word.byteToCharIndex.assign(word.bytes.size(), -1);
-  for (size_t i = 0; i < word.charByteOffsets.size(); ++i) {
+  for (size_t i = 0; i < word.byteLen; ++i) {
+    word.byteToCharIndex[i] = -1;
+  }
+  for (size_t i = 0; i < word.charCount_; ++i) {
     const size_t offset = word.charByteOffsets[i];
-    if (offset < word.byteToCharIndex.size()) {
+    if (offset < word.byteLen) {
       word.byteToCharIndex[offset] = static_cast<int32_t>(i);
     }
   }
-  return word;
+
+  return true;
 }
 
 struct AutomatonState {
@@ -186,8 +220,8 @@ bool transition(const EmbeddedAutomaton& automaton, const AutomatonState& state,
   return false;
 }
 
-std::vector<size_t> collectBreakIndexes(const std::vector<CodepointInfo>& cps, const std::vector<uint8_t>& scores,
-                                        const size_t minPrefix, const size_t minSuffix) {
+std::vector<size_t> collectBreakIndexes(const std::vector<CodepointInfo>& cps, const uint8_t* scores,
+                                        const size_t scoresSize, const size_t minPrefix, const size_t minSuffix) {
   std::vector<size_t> indexes;
   const size_t cpCount = cps.size();
   if (cpCount < 2) {
@@ -205,7 +239,7 @@ std::vector<size_t> collectBreakIndexes(const std::vector<CodepointInfo>& cps, c
     }
 
     const size_t scoreIdx = breakIndex + 1;
-    if (scoreIdx >= scores.size()) {
+    if (scoreIdx >= scoresSize) {
       break;
     }
     if ((scores[scoreIdx] & 1u) == 0) {
@@ -221,8 +255,8 @@ std::vector<size_t> collectBreakIndexes(const std::vector<CodepointInfo>& cps, c
 
 std::vector<size_t> liangBreakIndexes(const std::vector<CodepointInfo>& cps,
                                       const SerializedHyphenationPatterns& patterns, const LiangWordConfig& config) {
-  const auto augmented = buildAugmentedWord(cps, config);
-  if (augmented.empty()) {
+  AugmentedWord augmented;
+  if (!buildAugmentedWord(augmented, cps, config)) {
     return {};
   }
 
@@ -233,13 +267,16 @@ std::vector<size_t> liangBreakIndexes(const std::vector<CodepointInfo>& cps,
     return {};
   }
 
-  std::vector<uint8_t> scores(augmented.charCount(), 0);
+  uint8_t scores[MAX_WORD_CHARS];
+  for (size_t i = 0; i < augmented.charCount_; ++i) {
+    scores[i] = 0;
+  }
 
-  for (size_t charStart = 0; charStart < augmented.charByteOffsets.size(); ++charStart) {
+  for (size_t charStart = 0; charStart < augmented.charCount_; ++charStart) {
     const size_t byteStart = augmented.charByteOffsets[charStart];
     AutomatonState state = root;
 
-    for (size_t cursor = byteStart; cursor < augmented.bytes.size(); ++cursor) {
+    for (size_t cursor = byteStart; cursor < augmented.byteLen; ++cursor) {
       AutomatonState next;
       if (!transition(automaton, state, augmented.bytes[cursor], next)) {
         break;
@@ -255,7 +292,7 @@ std::vector<size_t> liangBreakIndexes(const std::vector<CodepointInfo>& cps,
 
           offset += dist;
           const size_t splitByte = byteStart + offset;
-          if (splitByte >= augmented.byteToCharIndex.size()) {
+          if (splitByte >= augmented.byteLen) {
             continue;
           }
 
@@ -263,12 +300,12 @@ std::vector<size_t> liangBreakIndexes(const std::vector<CodepointInfo>& cps,
           if (boundary < 0) {
             continue;
           }
-          if (boundary < 2 || boundary + 2 > static_cast<int32_t>(augmented.charCount())) {
+          if (boundary < 2 || boundary + 2 > static_cast<int32_t>(augmented.charCount_)) {
             continue;
           }
 
           const size_t idx = static_cast<size_t>(boundary);
-          if (idx >= scores.size()) {
+          if (idx >= augmented.charCount_) {
             continue;
           }
           scores[idx] = std::max(scores[idx], level);
@@ -277,5 +314,5 @@ std::vector<size_t> liangBreakIndexes(const std::vector<CodepointInfo>& cps,
     }
   }
 
-  return collectBreakIndexes(cps, scores, config.minPrefix, config.minSuffix);
+  return collectBreakIndexes(cps, scores, augmented.charCount_, config.minPrefix, config.minSuffix);
 }

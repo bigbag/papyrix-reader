@@ -266,7 +266,14 @@ void CssParser::parseRule(const std::string& selector, const std::string& proper
 
     std::string singleSelector = trim(selector.substr(start, end - start));
 
-    if (!singleSelector.empty()) {
+    // Only accept tag, .class, and tag.class. Skip combinators (+>~), descendant
+    // (whitespace inside trimmed selector), attribute ([), pseudo (:), ID (#),
+    // and wildcard (*) — the matcher can't apply them, and keeping them would
+    // fill MAX_CSS_RULES with rules that never match.
+    const bool supportedSelector =
+        !singleSelector.empty() && singleSelector.find_first_of("+>[:#~* ") == std::string::npos;
+
+    if (supportedSelector) {
       CssStyle style;
 
       // Split properties by semicolon

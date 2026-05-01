@@ -61,6 +61,7 @@ struct HomeView {
 
   // UI state
   int8_t batteryPercent = 100;
+  bool batteryCharging = false;
   bool needsRender = true;
 
   void setBook(const char* title, const char* author, const char* path) {
@@ -102,9 +103,17 @@ struct HomeView {
     }
   }
 
+  void setBatteryCharging(bool charging) {
+    if (batteryCharging != charging) {
+      batteryCharging = charging;
+      needsRender = true;
+    }
+  }
+
   void clear() {
     clearBook();
     batteryPercent = 100;
+    batteryCharging = false;
   }
 };
 

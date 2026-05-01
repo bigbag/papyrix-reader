@@ -101,8 +101,9 @@ void HomeState::loadLastBook(Core& core) {
 }
 
 void HomeState::updateBattery() {
-  int percent = batteryMonitor.readPercentage();
+  int percent = batteryMonitor.readSmoothedPercentage();
   view_.setBattery(percent);
+  view_.setBatteryCharging(isUsbConnected());
 }
 
 StateTransition HomeState::update(Core& core) {
