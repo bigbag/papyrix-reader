@@ -21,8 +21,10 @@
 #include <cstring>
 
 namespace {
-constexpr uint8_t kMetaCacheVersion = 4;
+constexpr uint8_t kMetaCacheVersion = 5;
 constexpr char kMetaCacheFile[] = "/meta.bin";
+constexpr char kSectionFilePrefix[] = "/section_";
+constexpr char kSectionFileSuffix[] = ".fb2";
 }  // namespace
 
 std::string Fb2::metaCachePath() const { return cachePath + kMetaCacheFile; }
@@ -86,7 +88,15 @@ bool Fb2::load() {
     return false;
   }
 
+  if (!scanSectionOffsets()) {
+    LOG_ERR(TAG, "Failed to scan section offsets");
+  }
+
   saveMetaCache();
+
+  if (!generateSectionFiles()) {
+    LOG_ERR(TAG, "Failed to generate section files");
+  }
 
   // Free TOC strings, rebuild as compact LUT from cache
   std::vector<TocItem>().swap(tocItems_);
@@ -95,7 +105,8 @@ bool Fb2::load() {
   }
 
   loaded = true;
-  LOG_INF(TAG, "Loaded FB2: %s (title: '%s', author: '%s')", filepath.c_str(), title.c_str(), author.c_str());
+  LOG_INF(TAG, "Loaded FB2: %s (title: '%s', author: '%s', sections: %u)", filepath.c_str(), title.c_str(),
+          author.c_str(), static_cast<unsigned int>(sectionOffsets_.size()));
   return true;
 }
 
@@ -373,6 +384,223 @@ bool Fb2::parseXmlStream() {
   XML_ParserFree(xmlParser_);
   xmlParser_ = nullptr;
   return success;
+}
+
+bool Fb2::scanSectionOffsets() {
+  LOG_INF(TAG, "Scanning section offsets");
+
+  FsFile file;
+  if (!SdMan.openFileForRead("FB2", filepath, file)) {
+    return false;
+  }
+
+  constexpr size_t kChunkSize = 4096;
+  uint8_t buffer[kChunkSize];
+
+  const size_t peekBytes = file.read(buffer, kChunkSize);
+  const char* explicitEncoding = nullptr;
+  size_t bomSkip = 0;
+  if (peekBytes > 0 && detectEncoding(buffer, peekBytes, bomSkip) == Encoding::Utf8) {
+    explicitEncoding = "UTF-8";
+  }
+  file.seek(bomSkip);
+
+  struct SectionScanCtx {
+    std::vector<SectionOffset>* offsets;
+    int depth = 0;
+    int skipUntilDepth = INT_MAX;
+    bool inBody = false;
+    int bodyCount = 0;
+    XML_Parser parser = nullptr;
+    std::vector<int> sectionStack;  // Tracks open <section> → section index
+  };
+
+  SectionScanCtx ctx;
+  ctx.offsets = &sectionOffsets_;
+  sectionOffsets_.clear();
+
+  XML_Parser parser = XML_ParserCreate(explicitEncoding);
+  if (!parser) {
+    LOG_ERR(TAG, "Failed to create section scanner parser");
+    file.close();
+    return false;
+  }
+  ctx.parser = parser;
+
+  auto scanStart = [](void* userData, const XML_Char* name, const XML_Char** atts) {
+    (void)atts;
+    auto* c = static_cast<SectionScanCtx*>(userData);
+    c->depth++;
+    if (c->depth >= 100) return;
+    if (c->skipUntilDepth < c->depth) return;
+
+    const char* tag = strrchr(name, ':');
+    if (tag) tag++;
+    else tag = name;
+
+    if (strcmp(tag, "binary") == 0) {
+      c->skipUntilDepth = c->depth - 1;
+      return;
+    }
+    if (strcmp(tag, "body") == 0) {
+      c->bodyCount++;
+      c->inBody = (c->bodyCount == 1);
+      return;
+    }
+    if (strcmp(tag, "section") == 0 && c->inBody) {
+      int64_t byteIdx = XML_GetCurrentByteIndex(c->parser);
+      if (byteIdx >= 0) {
+        SectionOffset off;
+        off.startOffset = static_cast<uint32_t>(byteIdx);
+        c->offsets->push_back(off);
+        c->sectionStack.push_back(static_cast<int>(c->offsets->size()) - 1);
+      }
+    }
+  };
+
+  auto scanEnd = [](void* userData, const XML_Char* name) {
+    auto* c = static_cast<SectionScanCtx*>(userData);
+    const char* tag = strrchr(name, ':');
+    if (tag) tag++;
+    else tag = name;
+
+    if (strcmp(tag, "binary") == 0) {
+      c->skipUntilDepth = INT_MAX;
+    }
+    if (strcmp(tag, "body") == 0) {
+      c->inBody = false;
+    }
+    if (strcmp(tag, "section") == 0 && c->inBody && !c->sectionStack.empty()) {
+      int sectionIdx = c->sectionStack.back();
+      c->sectionStack.pop_back();
+      int64_t byteIdx = XML_GetCurrentByteIndex(c->parser);
+      if (byteIdx >= 0) {
+        // Include the full </name> closing tag (XML_GetCurrentByteIndex points to '<')
+        uint32_t endOffset = static_cast<uint32_t>(byteIdx) + static_cast<uint32_t>(strlen(name)) + 3;
+        (*c->offsets)[sectionIdx].endOffset = endOffset;
+      }
+    }
+    c->depth--;
+  };
+
+  XML_SetUserData(parser, &ctx);
+  XML_SetUnknownEncodingHandler(parser, expatUnknownEncodingHandler, nullptr);
+  XML_SetElementHandler(parser, scanStart, scanEnd);
+
+  bool success = true;
+  while (file.available() > 0) {
+    const size_t bytesRead = file.read(buffer, kChunkSize);
+    if (bytesRead == 0) break;
+    const int done = (file.available() == 0) ? 1 : 0;
+    if (XML_Parse(parser, reinterpret_cast<const char*>(buffer), static_cast<int>(bytesRead), done) ==
+        XML_STATUS_ERROR) {
+      success = false;
+      break;
+    }
+  }
+
+  file.close();
+  XML_ParserFree(parser);
+
+  if (success) {
+    LOG_INF(TAG, "Scanned %u section offsets", static_cast<unsigned int>(sectionOffsets_.size()));
+  }
+  return success;
+}
+
+bool Fb2::generateSectionFiles() {
+  if (sectionOffsets_.empty()) {
+    LOG_INF(TAG, "No sections to generate");
+    return true;
+  }
+
+  setupCacheDir();
+
+  std::string xmlDecl = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+  FsFile declFile;
+  if (SdMan.openFileForRead("FB2", filepath, declFile)) {
+    char declBuf[256];
+    size_t declRead = declFile.read(declBuf, sizeof(declBuf));
+    for (size_t j = 0; j + 1 < declRead; j++) {
+      if (declBuf[j] == '?' && declBuf[j + 1] == '>') {
+        xmlDecl.assign(declBuf, j + 2);
+        xmlDecl += "\n";
+        break;
+      }
+    }
+    declFile.close();
+  }
+
+  const std::string wrapperStart =
+      "<FictionBook xmlns=\"http://www.gribuser.ru/xml/fictionbook/2.0\" "
+      "xmlns:l=\"http://www.w3.org/1999/xlink\">\n"
+      "  <body>\n";
+  const std::string wrapperEnd = "  </body>\n</FictionBook>\n";
+
+  bool allOk = true;
+  for (size_t i = 0; i < sectionOffsets_.size(); i++) {
+    const std::string outPath = sectionFilePath(static_cast<int>(i));
+
+    // Skip if already exists
+    if (SdMan.exists(outPath.c_str())) {
+      continue;
+    }
+
+    FsFile outFile;
+    if (!SdMan.openFileForWrite("FB2", outPath, outFile)) {
+      LOG_ERR(TAG, "Failed to create section file: %s", outPath.c_str());
+      allOk = false;
+      continue;
+    }
+
+    // Write XML declaration (original encoding) + wrapper start
+    outFile.write(xmlDecl.c_str(), xmlDecl.size());
+    outFile.write(wrapperStart.c_str(), wrapperStart.size());
+
+    // Copy section content from original file
+    FsFile inFile;
+    if (SdMan.openFileForRead("FB2", filepath, inFile)) {
+      const uint32_t start = sectionOffsets_[i].startOffset;
+      const uint32_t end = sectionOffsets_[i].endOffset;
+      const uint32_t len = (end > start) ? (end - start) : 0;
+      if (len > 0 && inFile.seek(start)) {
+        constexpr size_t kCopyBufSize = 4096;
+        uint8_t copyBuf[kCopyBufSize];
+        uint32_t remaining = len;
+        while (remaining > 0) {
+          size_t toRead = (remaining < kCopyBufSize) ? remaining : kCopyBufSize;
+          size_t n = inFile.read(copyBuf, toRead);
+          if (n == 0) break;
+          outFile.write(copyBuf, n);
+          remaining -= static_cast<uint32_t>(n);
+        }
+      }
+      inFile.close();
+    }
+
+    // Write wrapper end
+    outFile.write(wrapperEnd.c_str(), wrapperEnd.size());
+    outFile.close();
+  }
+
+  LOG_INF(TAG, "Generated %u section files", static_cast<unsigned int>(sectionOffsets_.size()));
+  return allOk;
+}
+
+std::string Fb2::sectionFilePath(int sectionIndex) const {
+  return cachePath + kSectionFilePrefix + std::to_string(sectionIndex) + kSectionFileSuffix;
+}
+
+std::string Fb2::getSectionPath(int sectionIndex) const {
+  if (sectionIndex < 0 || sectionIndex >= static_cast<int>(sectionOffsets_.size())) {
+    return filepath;  // Fallback to original file
+  }
+  return sectionFilePath(sectionIndex);
+}
+
+int Fb2::getSectionForTocEntry(int tocIndex) const {
+  TocItem item = getTocItem(static_cast<uint16_t>(tocIndex));
+  return item.sectionIndex;
 }
 
 void Fb2::postProcessMetadata() {
@@ -701,6 +929,21 @@ bool Fb2::loadMetaCache() {
     }
   }
 
+  // Load section offsets (v5+)
+  uint16_t sectionOffsetCount;
+  if (serialization::readPodChecked(file, sectionOffsetCount)) {
+    sectionOffsets_.clear();
+    sectionOffsets_.reserve(sectionOffsetCount);
+    for (uint16_t i = 0; i < sectionOffsetCount; i++) {
+      SectionOffset off;
+      if (!serialization::readPodChecked(file, off.startOffset) || !serialization::readPodChecked(file, off.endOffset)) {
+        sectionOffsets_.clear();
+        break;
+      }
+      sectionOffsets_.push_back(off);
+    }
+  }
+
   file.close();
   return true;
 }
@@ -737,8 +980,16 @@ bool Fb2::saveMetaCache() const {
     serialization::writePod(file, idx);
   }
 
+  // Save section offsets (v5+)
+  const uint16_t sectionOffsetCount = static_cast<uint16_t>(sectionOffsets_.size());
+  serialization::writePod(file, sectionOffsetCount);
+  for (const auto& off : sectionOffsets_) {
+    serialization::writePod(file, off.startOffset);
+    serialization::writePod(file, off.endOffset);
+  }
+
   file.close();
-  LOG_INF(TAG, "Saved meta cache (%u TOC items)", tocItemCount);
+  LOG_INF(TAG, "Saved meta cache (%u TOC items, %u sections)", tocItemCount, sectionOffsetCount);
   return true;
 }
 

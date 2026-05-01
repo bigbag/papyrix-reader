@@ -78,4 +78,24 @@ Result<TocEntry> Fb2Provider::getTocEntry(uint16_t index) const {
   return Ok(entry);
 }
 
+int Fb2Provider::getSectionCount() const {
+  if (!fb2) return 0;
+  return fb2->getSectionCount();
+}
+
+std::string Fb2Provider::getSectionPath(int sectionIndex) const {
+  if (!fb2) return "";
+  return fb2->getSectionPath(sectionIndex);
+}
+
+std::string Fb2Provider::getSectionCachePath(int sectionIndex) const {
+  if (!fb2) return "";
+  return fb2->getCachePath() + "/pages_" + std::to_string(sectionIndex) + ".bin";
+}
+
+int Fb2Provider::getSectionForTocEntry(int tocIndex) const {
+  if (!fb2) return 0;
+  return fb2->getSectionForTocEntry(tocIndex);
+}
+
 }  // namespace papyrix

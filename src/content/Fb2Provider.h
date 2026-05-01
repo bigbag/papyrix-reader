@@ -32,6 +32,12 @@ struct Fb2Provider {
   uint16_t tocCount() const;
   Result<TocEntry> getTocEntry(uint16_t index) const;
 
+  // Section (spine) access for per-section caching
+  int getSectionCount() const;
+  std::string getSectionPath(int sectionIndex) const;
+  std::string getSectionCachePath(int sectionIndex) const;
+  int getSectionForTocEntry(int tocIndex) const;
+
   // Direct access
   Fb2* getFb2() { return fb2.get(); }
   const Fb2* getFb2() const { return fb2.get(); }

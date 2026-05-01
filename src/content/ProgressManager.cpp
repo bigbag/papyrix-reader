@@ -30,14 +30,15 @@ bool ProgressManager::save(Core& core, const char* cacheDir, ContentType type, c
 
   uint8_t data[4];
 
-  if (type == ContentType::Epub) {
-    // EPUB: save spine index and section page (4 bytes)
+  if (type == ContentType::Epub || type == ContentType::Fb2) {
+    // EPUB/FB2: save spine index and section page (4 bytes)
     data[0] = progress.spineIndex & 0xFF;
     data[1] = (progress.spineIndex >> 8) & 0xFF;
     data[2] = progress.sectionPage & 0xFF;
     data[3] = (progress.sectionPage >> 8) & 0xFF;
     file.write(data, 4);
-    LOG_DBG(TAG, "Saved EPUB: spine=%d page=%d", progress.spineIndex, progress.sectionPage);
+    LOG_DBG(TAG, "Saved %s: spine=%d page=%d", type == ContentType::Epub ? "EPUB" : "FB2", progress.spineIndex,
+            progress.sectionPage);
   } else if (type == ContentType::Xtc) {
     // XTC: save flat page number (4 bytes)
     data[0] = progress.flatPage & 0xFF;
@@ -92,10 +93,11 @@ ProgressManager::Progress ProgressManager::load(Core& core, const char* cacheDir
     return progress;
   }
 
-  if (type == ContentType::Epub) {
+  if (type == ContentType::Epub || type == ContentType::Fb2) {
     progress.spineIndex = data[0] | (data[1] << 8);
     progress.sectionPage = data[2] | (data[3] << 8);
-    LOG_DBG(TAG, "Loaded EPUB: spine=%d page=%d", progress.spineIndex, progress.sectionPage);
+    LOG_DBG(TAG, "Loaded %s: spine=%d page=%d", type == ContentType::Epub ? "EPUB" : "FB2", progress.spineIndex,
+            progress.sectionPage);
   } else if (type == ContentType::Xtc) {
     progress.flatPage = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
     LOG_DBG(TAG, "Loaded XTC: page %u", progress.flatPage);
@@ -112,15 +114,31 @@ ProgressManager::Progress ProgressManager::load(Core& core, const char* cacheDir
 ProgressManager::Progress ProgressManager::validate(Core& core, ContentType type, const Progress& progress) {
   Progress validated = progress;
 
-  if (type == ContentType::Epub) {
-    // Validate spine index
-    auto* provider = core.content.asEpub();
-    if (provider && provider->getEpub()) {
-      uint32_t spineCount = provider->getEpub()->getSpineItemsCount();
-      if (validated.spineIndex < 0) {
-        validated.spineIndex = 0;
+  if (type == ContentType::Epub || type == ContentType::Fb2) {
+    // Validate spine index (section index for FB2)
+    size_t spineCount = 1;
+    if (type == ContentType::Epub) {
+      auto* provider = core.content.asEpub();
+      if (provider && provider->getEpub()) {
+        spineCount = provider->getEpub()->getSpineItemsCount();
       }
-      if (validated.spineIndex >= static_cast<int>(spineCount)) {
+    } else {  // Fb2
+      auto* fb2Provider = core.content.asFb2();
+      if (fb2Provider && fb2Provider->getFb2()) {
+        spineCount = fb2Provider->getSectionCount();
+      }
+    }
+    if (validated.spineIndex < 0) {
+      validated.spineIndex = 0;
+    }
+    if (validated.spineIndex >= static_cast<int>(spineCount)) {
+      // Old FB2 progress stored flat page in first 2 bytes (bytes 2-3 were 0).
+      // If spineIndex >= sectionCount, this is likely an old-format file.
+      // Reset to start of book as safe fallback.
+      if (type == ContentType::Fb2) {
+        validated.spineIndex = 0;
+        validated.sectionPage = 0;
+      } else {
         validated.spineIndex = spineCount > 0 ? spineCount - 1 : 0;
         validated.sectionPage = 0;
       }

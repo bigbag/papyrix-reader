@@ -19,8 +19,13 @@
 #include "Serialization.h"
 
 namespace {
-constexpr uint8_t kMetaCacheVersion = 4;
+constexpr uint8_t kMetaCacheVersion = 5;
 }
+
+struct SectionOffset {
+  uint32_t startOffset = 0;
+  uint32_t endOffset = 0;
+};
 
 struct TocItem {
   std::string title;
@@ -31,7 +36,8 @@ struct TocItem {
 static void writeMetaCache(FsFile& file, const std::string& title, const std::string& author,
                            const std::string& coverRef, const std::string& language,
                            const std::string& coverContentType, int64_t coverBinaryOffset, uint32_t fileSize,
-                           uint16_t sectionCount, const std::vector<TocItem>& tocItems) {
+                           uint16_t sectionCount, const std::vector<TocItem>& tocItems,
+                           const std::vector<SectionOffset>& sectionOffsets = {}) {
   serialization::writePod(file, kMetaCacheVersion);
   serialization::writeString(file, title);
   serialization::writeString(file, author);
@@ -50,6 +56,13 @@ static void writeMetaCache(FsFile& file, const std::string& title, const std::st
     const int16_t idx = static_cast<int16_t>(item.sectionIndex);
     serialization::writePod(file, idx);
   }
+
+  const uint16_t sectionOffsetCount = static_cast<uint16_t>(sectionOffsets.size());
+  serialization::writePod(file, sectionOffsetCount);
+  for (const auto& off : sectionOffsets) {
+    serialization::writePod(file, off.startOffset);
+    serialization::writePod(file, off.endOffset);
+  }
 }
 
 // Read meta cache in the same format as Fb2::loadMetaCache()
@@ -63,6 +76,7 @@ struct MetaCacheData {
   uint32_t fileSize = 0;
   uint16_t sectionCount = 0;
   std::vector<TocItem> tocItems;
+  std::vector<SectionOffset> sectionOffsets;
 };
 
 static bool readMetaCache(FsFile& file, MetaCacheData& data) {
@@ -107,6 +121,22 @@ static bool readMetaCache(FsFile& file, MetaCacheData& data) {
     }
     item.sectionIndex = idx;
     data.tocItems.push_back(std::move(item));
+  }
+
+  // Load section offsets (v5+) — graceful: missing is OK
+  uint16_t sectionOffsetCount;
+  if (serialization::readPodChecked(file, sectionOffsetCount)) {
+    data.sectionOffsets.clear();
+    data.sectionOffsets.reserve(sectionOffsetCount);
+    for (uint16_t i = 0; i < sectionOffsetCount; i++) {
+      SectionOffset off;
+      if (!serialization::readPodChecked(file, off.startOffset) ||
+          !serialization::readPodChecked(file, off.endOffset)) {
+        data.sectionOffsets.clear();
+        break;
+      }
+      data.sectionOffsets.push_back(off);
+    }
   }
 
   return true;
@@ -553,6 +583,78 @@ int main() {
     runner.expectEqual("image/png", lut.coverContentType, "lut_lang: coverContentType preserved");
     runner.expectEq(static_cast<int64_t>(6000), lut.coverBinaryOffset, "lut_lang: offset preserved");
     runner.expectEq(static_cast<uint16_t>(2), lut.tocItemCount, "lut_lang: 2 TOC items");
+  }
+
+  // Test 19: Section offsets round-trip
+  {
+    FsFile file;
+    file.setBuffer("");
+
+    std::vector<SectionOffset> offsets = {{100, 500}, {600, 2000}};
+    writeMetaCache(file, "Book", "Author", "", "", "", -1, 5000, 2, {{"Ch1", 0}, {"Ch2", 1}}, offsets);
+
+    file.seek(0);
+    MetaCacheData data;
+    bool ok = readMetaCache(file, data);
+    runner.expectTrue(ok, "section_offsets_roundtrip: reads successfully");
+    runner.expectEq(static_cast<size_t>(2), data.sectionOffsets.size(), "section_offsets_roundtrip: 2 offsets");
+    runner.expectEq(static_cast<uint32_t>(100), data.sectionOffsets[0].startOffset, "section_offsets_roundtrip: [0] start");
+    runner.expectEq(static_cast<uint32_t>(500), data.sectionOffsets[0].endOffset, "section_offsets_roundtrip: [0] end");
+    runner.expectEq(static_cast<uint32_t>(600), data.sectionOffsets[1].startOffset, "section_offsets_roundtrip: [1] start");
+    runner.expectEq(static_cast<uint32_t>(2000), data.sectionOffsets[1].endOffset, "section_offsets_roundtrip: [1] end");
+  }
+
+  // Test 20: Zero section offsets
+  {
+    FsFile file;
+    file.setBuffer("");
+
+    writeMetaCache(file, "Book", "Author", "", "", "", -1, 5000, 0, {});
+
+    file.seek(0);
+    MetaCacheData data;
+    bool ok = readMetaCache(file, data);
+    runner.expectTrue(ok, "section_offsets_zero: reads successfully");
+    runner.expectEq(static_cast<size_t>(0), data.sectionOffsets.size(), "section_offsets_zero: empty");
+  }
+
+  // Test 21: Truncated section offsets — succeeds but offsets cleared
+  {
+    FsFile file;
+    file.setBuffer("");
+
+    // Manually write a valid header + TOC + sectionOffsetCount=2 but only half of first offset
+    writeMetaCache(file, "Book", "Author", "", "", "", -1, 5000, 0, {});
+    // Overwrite: seek back and rewrite with truncated section offsets appended manually
+    // Easier: write a fresh buffer from scratch
+    FsFile file2;
+    file2.setBuffer("");
+    serialization::writePod(file2, kMetaCacheVersion);
+    serialization::writeString(file2, std::string("Title"));
+    serialization::writeString(file2, std::string("Author"));
+    serialization::writeString(file2, std::string(""));
+    serialization::writeString(file2, std::string(""));
+    serialization::writeString(file2, std::string(""));
+    int64_t binaryOffset = -1;
+    serialization::writePod(file2, binaryOffset);
+    uint32_t fs = 1000;
+    serialization::writePod(file2, fs);
+    uint16_t sc = 0;
+    serialization::writePod(file2, sc);
+    uint16_t tocCount = 0;
+    serialization::writePod(file2, tocCount);
+    // Write sectionOffsetCount=2 but only startOffset of first (no endOffset, no second)
+    uint16_t sectionOffsetCount = 2;
+    serialization::writePod(file2, sectionOffsetCount);
+    uint32_t startOffset = 100;
+    serialization::writePod(file2, startOffset);
+    // endOffset missing — truncated here
+
+    file2.seek(0);
+    MetaCacheData data;
+    bool ok = readMetaCache(file2, data);
+    runner.expectTrue(ok, "section_offsets_truncated: still returns true (graceful)");
+    runner.expectEq(static_cast<size_t>(0), data.sectionOffsets.size(), "section_offsets_truncated: offsets cleared");
   }
 
   return runner.allPassed() ? 0 : 1;

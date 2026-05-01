@@ -13,6 +13,7 @@ enum class ContentType : uint8_t {
   Xtc,
   Txt,
   Markdown,
+  Fb2,
 };
 
 // Mock PageCache - minimal interface needed for navigation tests
@@ -63,7 +64,7 @@ class ReaderNavigation {
         result.position.flatPage = current.flatPage + 1;
         result.needsRender = true;
       }
-    } else if (type == ContentType::Epub) {
+    } else if (type == ContentType::Epub || type == ContentType::Fb2) {
       if (pageCount > 0 && current.sectionPage < pageCount - 1) {
         result.position.sectionPage = current.sectionPage + 1;
         result.needsRender = true;
@@ -102,7 +103,7 @@ class ReaderNavigation {
         result.position.flatPage = current.flatPage - 1;
         result.needsRender = true;
       }
-    } else if (type == ContentType::Epub) {
+    } else if (type == ContentType::Epub || type == ContentType::Fb2) {
       if (current.sectionPage > 0) {
         result.position.sectionPage = current.sectionPage - 1;
         result.needsRender = true;
@@ -382,6 +383,88 @@ int main() {
     auto result = ReaderNavigation::next(ContentType::Txt, pos, &cache, 0);
     runner.expectEq(5, result.position.sectionPage, "TXT partial: sectionPage advances to trigger extension");
     runner.expectTrue(result.needsRender, "TXT partial: needsRender is true");
+  }
+
+  // ============================================
+  // FB2 Navigation Tests
+  // ============================================
+
+  // Test 23: FB2 next() - advances sectionPage within section
+  {
+    PageCache cache(10, false);
+    ReaderNavigation::Position pos;
+    pos.spineIndex = 2;
+    pos.sectionPage = 3;
+    auto result = ReaderNavigation::next(ContentType::Fb2, pos, &cache, 0);
+    runner.expectEq(2, result.position.spineIndex, "FB2 next: spineIndex unchanged within section");
+    runner.expectEq(4, result.position.sectionPage, "FB2 next: sectionPage advances from 3 to 4");
+    runner.expectTrue(result.needsRender, "FB2 next: needsRender is true");
+    runner.expectFalse(result.needsCacheReset, "FB2 next: needsCacheReset is false within section");
+  }
+
+  // Test 24: FB2 next() - moves to next section at end of complete cache
+  {
+    PageCache cache(10, false);
+    ReaderNavigation::Position pos;
+    pos.spineIndex = 2;
+    pos.sectionPage = 9;
+    auto result = ReaderNavigation::next(ContentType::Fb2, pos, &cache, 0);
+    runner.expectEq(3, result.position.spineIndex, "FB2 next: spineIndex advances to next section");
+    runner.expectEq(0, result.position.sectionPage, "FB2 next: sectionPage resets to 0");
+    runner.expectTrue(result.needsRender, "FB2 next: needsRender is true");
+    runner.expectTrue(result.needsCacheReset, "FB2 next: needsCacheReset is true for section change");
+  }
+
+  // Test 25: FB2 next() - extends cache when partial (no section change)
+  {
+    PageCache cache(5, true);
+    ReaderNavigation::Position pos;
+    pos.spineIndex = 1;
+    pos.sectionPage = 4;
+    auto result = ReaderNavigation::next(ContentType::Fb2, pos, &cache, 0);
+    runner.expectEq(1, result.position.spineIndex, "FB2 next partial: spineIndex unchanged");
+    runner.expectEq(5, result.position.sectionPage, "FB2 next partial: sectionPage advances to trigger extension");
+    runner.expectTrue(result.needsRender, "FB2 next partial: needsRender is true");
+    runner.expectFalse(result.needsCacheReset, "FB2 next partial: needsCacheReset is false");
+  }
+
+  // Test 26: FB2 prev() - decrements sectionPage within section
+  {
+    PageCache cache(10, false);
+    ReaderNavigation::Position pos;
+    pos.spineIndex = 2;
+    pos.sectionPage = 5;
+    auto result = ReaderNavigation::prev(ContentType::Fb2, pos, &cache);
+    runner.expectEq(2, result.position.spineIndex, "FB2 prev: spineIndex unchanged within section");
+    runner.expectEq(4, result.position.sectionPage, "FB2 prev: sectionPage decrements from 5 to 4");
+    runner.expectTrue(result.needsRender, "FB2 prev: needsRender is true");
+    runner.expectFalse(result.needsCacheReset, "FB2 prev: needsCacheReset is false within section");
+  }
+
+  // Test 27: FB2 prev() - moves to previous section from sectionPage 0
+  {
+    PageCache cache(10, false);
+    ReaderNavigation::Position pos;
+    pos.spineIndex = 3;
+    pos.sectionPage = 0;
+    auto result = ReaderNavigation::prev(ContentType::Fb2, pos, &cache);
+    runner.expectEq(2, result.position.spineIndex, "FB2 prev: spineIndex decrements to 2");
+    runner.expectEq(static_cast<int>(INT16_MAX), result.position.sectionPage,
+                    "FB2 prev: sectionPage set to INT16_MAX (clamped later)");
+    runner.expectTrue(result.needsRender, "FB2 prev: needsRender is true");
+    runner.expectTrue(result.needsCacheReset, "FB2 prev: needsCacheReset is true for section change");
+  }
+
+  // Test 28: FB2 prev() - stays at first section, first page
+  {
+    PageCache cache(10, false);
+    ReaderNavigation::Position pos;
+    pos.spineIndex = 0;
+    pos.sectionPage = 0;
+    auto result = ReaderNavigation::prev(ContentType::Fb2, pos, &cache);
+    runner.expectEq(0, result.position.spineIndex, "FB2 prev: spineIndex stays at 0");
+    runner.expectEq(0, result.position.sectionPage, "FB2 prev: sectionPage stays at 0");
+    runner.expectFalse(result.needsRender, "FB2 prev: needsRender is false at start of book");
   }
 
   return runner.allPassed() ? 0 : 1;

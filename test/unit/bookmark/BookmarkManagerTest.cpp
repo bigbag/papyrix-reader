@@ -15,7 +15,7 @@ int BookmarkManager::findAt(const Bookmark* bookmarks, int count,
                             ContentType type, int spineIndex, int sectionPage,
                             uint32_t flatPage) {
   for (int i = 0; i < count; i++) {
-    if (type == ContentType::Epub) {
+    if (type == ContentType::Epub || type == ContentType::Fb2) {
       if (bookmarks[i].spineIndex == spineIndex &&
           bookmarks[i].sectionPage == sectionPage) {
         return i;
@@ -82,11 +82,29 @@ static void test_findAt_txt() {
   assert(BookmarkManager::findAt(bookmarks, 2, ContentType::Txt, 0, 15, 0) == 1);
   assert(BookmarkManager::findAt(bookmarks, 2, ContentType::Txt, 0, 4, 0) == -1);
 
-  // Same logic for Markdown and FB2
+  // Same logic for Markdown
   assert(BookmarkManager::findAt(bookmarks, 2, ContentType::Markdown, 0, 3, 0) == 0);
-  assert(BookmarkManager::findAt(bookmarks, 2, ContentType::Fb2, 0, 15, 0) == 1);
 
-  std::cout << "  PASS: findAt TXT/Markdown/FB2" << std::endl;
+  std::cout << "  PASS: findAt TXT/Markdown" << std::endl;
+}
+
+static void test_findAt_fb2() {
+  Bookmark bookmarks[2];
+  memset(bookmarks, 0, sizeof(bookmarks));
+
+  bookmarks[0].spineIndex = 0;
+  bookmarks[0].sectionPage = 5;
+  bookmarks[1].spineIndex = 1;
+  bookmarks[1].sectionPage = 3;
+
+  assert(BookmarkManager::findAt(bookmarks, 2, ContentType::Fb2, 0, 5, 0) == 0);
+  assert(BookmarkManager::findAt(bookmarks, 2, ContentType::Fb2, 1, 3, 0) == 1);
+  // Wrong spineIndex
+  assert(BookmarkManager::findAt(bookmarks, 2, ContentType::Fb2, 0, 3, 0) == -1);
+  // Wrong sectionPage for right spineIndex
+  assert(BookmarkManager::findAt(bookmarks, 2, ContentType::Fb2, 1, 5, 0) == -1);
+
+  std::cout << "  PASS: findAt FB2" << std::endl;
 }
 
 static void test_findAt_empty() {
@@ -115,6 +133,7 @@ int main() {
   test_findAt_epub();
   test_findAt_xtc();
   test_findAt_txt();
+  test_findAt_fb2();
   test_findAt_empty();
   test_bookmark_struct_size();
   test_max_bookmarks_constant();

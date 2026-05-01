@@ -680,12 +680,19 @@ void ReaderState::navigateNextChapter(Core& core) {
     return;
   }
 
-  if (type != ContentType::Epub) return;
+  if (type != ContentType::Epub && type != ContentType::Fb2) return;
 
-  auto* provider = core.content.asEpub();
-  if (!provider || !provider->getEpub()) return;
+  size_t spineCount = 1;
+  if (type == ContentType::Epub) {
+    auto* provider = core.content.asEpub();
+    if (!provider || !provider->getEpub()) return;
+    spineCount = provider->getEpub()->getSpineItemsCount();
+  } else {  // Fb2
+    auto* fb2Provider = core.content.asFb2();
+    if (!fb2Provider || !fb2Provider->getFb2()) return;
+    spineCount = fb2Provider->getSectionCount();
+  }
 
-  size_t spineCount = provider->getEpub()->getSpineItemsCount();
   if (currentSpineIndex_ + 1 >= static_cast<int>(spineCount)) return;
 
   stopBackgroundCaching();
@@ -734,7 +741,7 @@ void ReaderState::navigatePrevChapter(Core& core) {
     return;
   }
 
-  if (type != ContentType::Epub) return;
+  if (type != ContentType::Epub && type != ContentType::Fb2) return;
 
   stopBackgroundCaching();
 
@@ -743,12 +750,17 @@ void ReaderState::navigatePrevChapter(Core& core) {
     currentSectionPage_ = 0;
   } else {
     // Go to previous chapter
-    auto* provider = core.content.asEpub();
-    size_t spineCount = 1;
-    if (provider && provider->getEpub()) {
-      spineCount = provider->getEpub()->getSpineItemsCount();
+    int firstContentSpine = 0;
+    if (type == ContentType::Epub) {
+      size_t spineCount = 1;
+      auto* provider = core.content.asEpub();
+      if (provider && provider->getEpub()) {
+        spineCount = provider->getEpub()->getSpineItemsCount();
+      }
+      firstContentSpine = calcFirstContentSpine(hasCover_, textStartIndex_, spineCount);
+    } else {  // Fb2
+      firstContentSpine = 0;
     }
-    int firstContentSpine = calcFirstContentSpine(hasCover_, textStartIndex_, spineCount);
     if (currentSpineIndex_ <= firstContentSpine) {
       startBackgroundCaching(core);
       return;
@@ -825,14 +837,20 @@ void ReaderState::renderCachedPage(Core& core) {
   ContentType type = core.content.metadata().type;
   const auto vp = getReaderViewport(core.settings.statusBar != 0);
 
-  // Handle EPUB bounds
-  if (type == ContentType::Epub) {
-    auto* provider = core.content.asEpub();
-    if (!provider || !provider->getEpub()) return;
-
-    auto epub = provider->getEpubShared();
+  // Handle EPUB/FB2 bounds
+  if (type == ContentType::Epub || type == ContentType::Fb2) {
+    size_t spineCount = 0;
+    if (type == ContentType::Epub) {
+      auto* provider = core.content.asEpub();
+      if (!provider || !provider->getEpub()) return;
+      spineCount = provider->getEpub()->getSpineItemsCount();
+    } else {  // Fb2
+      auto* fb2Provider = core.content.asFb2();
+      if (!fb2Provider || !fb2Provider->getFb2()) return;
+      spineCount = fb2Provider->getSectionCount();
+    }
     if (currentSpineIndex_ < 0) currentSpineIndex_ = 0;
-    if (currentSpineIndex_ >= static_cast<int>(epub->getSpineItemsCount())) {
+    if (currentSpineIndex_ >= static_cast<int>(spineCount)) {
       renderer_.drawCenteredText(core.settings.getReaderFontId(theme), 300, "End of book", theme.primaryTextBlack,
                                  BOLD);
       renderer_.displayBuffer();
@@ -1029,8 +1047,14 @@ void ReaderState::loadCacheFromDisk(Core& core) {
       return;
     }
     cachePath = epubSectionCachePath(provider->getEpub()->getCachePath(), currentSpineIndex_);
-  } else if (type == ContentType::Markdown || type == ContentType::Txt || type == ContentType::Fb2 ||
-             type == ContentType::Html) {
+  } else if (type == ContentType::Fb2) {
+    auto* fb2Provider = core.content.asFb2();
+    if (!fb2Provider || !fb2Provider->getFb2()) {
+      LOG_ERR(TAG, "loadCacheFromDisk: no fb2 provider");
+      return;
+    }
+    cachePath = fb2Provider->getSectionCachePath(currentSpineIndex_);
+  } else if (type == ContentType::Markdown || type == ContentType::Txt || type == ContentType::Html) {
     cachePath = contentCachePath(core.content.cacheDir(), config.fontId);
   } else {
     LOG_ERR(TAG, "loadCacheFromDisk: unsupported content type %d", static_cast<int>(type));
@@ -1073,15 +1097,14 @@ void ReaderState::createOrExtendCache(Core& core) {
       parserSpineIndex_ = 0;
     }
   } else if (type == ContentType::Fb2) {
-    cachePath = contentCachePath(core.content.cacheDir(), config.fontId);
-    if (!parser_) {
-      std::string lang;
-      auto* fb2Provider = core.content.asFb2();
-      if (fb2Provider && fb2Provider->getFb2()) {
-        lang = fb2Provider->getFb2()->getLanguage();
-      }
-      parser_.reset(new Fb2Parser(contentPath_, renderer_, config, lang));
-      parserSpineIndex_ = 0;
+    auto* fb2Provider = core.content.asFb2();
+    if (!fb2Provider || !fb2Provider->getFb2()) return;
+    cachePath = fb2Provider->getSectionCachePath(currentSpineIndex_);
+
+    if (!parser_ || parserSpineIndex_ != currentSpineIndex_) {
+      std::string lang = fb2Provider->getFb2()->getLanguage();
+      parser_.reset(new Fb2Parser(fb2Provider->getSectionPath(currentSpineIndex_), renderer_, config, lang));
+      parserSpineIndex_ = currentSpineIndex_;
     }
   } else if (type == ContentType::Html) {
     cachePath = contentCachePath(core.content.cacheDir(), config.fontId);
@@ -1333,15 +1356,16 @@ void ReaderState::startBackgroundCaching(Core& core) {
               parserSpineIndex_ = 0;
             }
           } else if (type == ContentType::Fb2 && !cacheTask_.shouldStop()) {
-            cachePath = contentCachePath(coreRef.content.cacheDir(), config.fontId);
-            if (!parser_) {
-              std::string lang;
-              auto* fb2Provider = coreRef.content.asFb2();
-              if (fb2Provider && fb2Provider->getFb2()) {
-                lang = fb2Provider->getFb2()->getLanguage();
+            auto* fb2Provider = coreRef.content.asFb2();
+            if (fb2Provider && fb2Provider->getFb2()) {
+              int spineToCache = spineIndex;
+              if (sectionPage == -1) spineToCache = 0;
+              cachePath = fb2Provider->getSectionCachePath(spineToCache);
+              if (!parser_ || parserSpineIndex_ != spineToCache) {
+                std::string lang = fb2Provider->getFb2()->getLanguage();
+                parser_.reset(new Fb2Parser(fb2Provider->getSectionPath(spineToCache), renderer_, config, lang));
+                parserSpineIndex_ = spineToCache;
               }
-              parser_.reset(new Fb2Parser(contentPath_, renderer_, config, lang));
-              parserSpineIndex_ = 0;
             }
           } else if (type == ContentType::Html && !cacheTask_.shouldStop()) {
             cachePath = contentCachePath(coreRef.content.cacheDir(), config.fontId);
@@ -1552,30 +1576,12 @@ int ReaderState::findCurrentTocEntry(Core& core) {
     }
     return lastMatch;
   } else if (type == ContentType::Fb2) {
-    // For FB2, TOC entries store section indices — resolve to pages via anchor map
-    const Theme& theme = THEME_MANAGER.current();
-    const auto vp = getReaderViewport(core.settings.statusBar != 0);
-    const auto config = core.settings.getRenderConfig(theme, vp.width, vp.height);
-    std::string cachePath = contentCachePath(core.content.cacheDir(), config.fontId);
-
-    auto anchors = loadAnchorMap(cachePath);
-
+    // For FB2 with per-section caching, TOC entries store section indices
     const uint16_t count = core.content.tocCount();
     int lastMatch = -1;
     for (uint16_t i = 0; i < count; i++) {
       auto result = core.content.getTocEntry(i);
-      if (!result.ok()) continue;
-
-      std::string anchor = "section_" + std::to_string(result.value.pageIndex);
-      int entryPage = -1;
-      for (const auto& a : anchors) {
-        if (a.first == anchor) {
-          entryPage = a.second;
-          break;
-        }
-      }
-      if (entryPage < 0) continue;
-      if (entryPage <= currentSectionPage_) {
+      if (result.ok() && result.value.pageIndex <= static_cast<uint32_t>(currentSpineIndex_)) {
         lastMatch = i;
       }
     }
@@ -1654,32 +1660,17 @@ void ReaderState::jumpToTocEntry(Core& core, int tocIndex) {
     // For XTC, pageNum is page index
     currentPage_ = chapter.pageNum;
   } else if (type == ContentType::Fb2) {
-    // For FB2, pageNum is the section index — use anchor map to find the actual page
-    const Theme& theme = THEME_MANAGER.current();
-    const auto vp = getReaderViewport(core.settings.statusBar != 0);
-    const auto config = core.settings.getRenderConfig(theme, vp.width, vp.height);
-    std::string cachePath = contentCachePath(core.content.cacheDir(), config.fontId);
-    std::string anchor = "section_" + std::to_string(chapter.pageNum);
+    // For FB2, pageNum is the section index — treat like EPUB spine switch
+    auto* fb2Provider = core.content.asFb2();
+    if (!fb2Provider || !fb2Provider->getFb2()) return;
 
-    int page = loadAnchorPage(cachePath, anchor);
-
-    if (page < 0) {
-      renderer_.clearScreen(theme.backgroundColor);
-      ui::centeredMessage(renderer_, theme, core.settings.getReaderFontId(theme), "Indexing...");
-      renderer_.displayBuffer();
-
-      createOrExtendCache(core);
-      page = loadAnchorPage(cachePath, anchor);
-
-      while (page < 0 && pageCache_ && pageCache_->isPartial()) {
-        const size_t pagesBefore = pageCache_->pageCount();
-        createOrExtendCache(core);
-        if (!pageCache_ || pageCache_->pageCount() <= pagesBefore) break;
-        page = loadAnchorPage(cachePath, anchor);
-      }
+    if (static_cast<int>(chapter.pageNum) != currentSpineIndex_) {
+      currentSpineIndex_ = chapter.pageNum;
+      parser_.reset();
+      parserSpineIndex_ = -1;
+      pageCache_.reset();
     }
-
-    currentSectionPage_ = (page >= 0) ? page : 0;
+    currentSectionPage_ = 0;
   } else if (type == ContentType::Markdown || type == ContentType::Txt || type == ContentType::Html) {
     // For flat-page formats, pageNum is the section page index
     currentSectionPage_ = chapter.pageNum;

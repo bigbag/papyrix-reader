@@ -46,7 +46,7 @@ bool BookmarkManager::save(Core& core, const char* cacheDir, ContentType type, c
   for (int i = 0; i < count; i++) {
     const Bookmark& b = bookmarks[i];
     int len = 0;
-    if (type == ContentType::Epub) {
+    if (type == ContentType::Epub || type == ContentType::Fb2) {
       len = snprintf(line, sizeof(line), "Ch %d, Page %d: %s\n", b.spineIndex + 1, b.sectionPage + 1, b.label);
     } else if (type == ContentType::Xtc) {
       len = snprintf(line, sizeof(line), "Page %u: %s\n", static_cast<unsigned>(b.flatPage + 1), b.label);
@@ -115,7 +115,7 @@ int BookmarkManager::load(Core& core, const char* cacheDir, Bookmark* bookmarks,
 int BookmarkManager::findAt(const Bookmark* bookmarks, int count, ContentType type, int spineIndex, int sectionPage,
                             uint32_t flatPage) {
   for (int i = 0; i < count; i++) {
-    if (type == ContentType::Epub) {
+    if (type == ContentType::Epub || type == ContentType::Fb2) {
       if (bookmarks[i].spineIndex == spineIndex && bookmarks[i].sectionPage == sectionPage) {
         return i;
       }

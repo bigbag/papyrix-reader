@@ -26,6 +26,11 @@ class Fb2 {
     int sectionIndex = -1;  // Sequential section number (0-based)
   };
 
+  struct SectionOffset {
+    uint32_t startOffset = 0;
+    uint32_t endOffset = 0;
+  };
+
  private:
   std::string filepath;
   std::string cachePath;
@@ -37,6 +42,7 @@ class Fb2 {
   int64_t coverBinaryOffset_ = -1;  // Byte offset of cover <binary> tag (-1 = not found)
   size_t fileSize;
   bool loaded;
+  std::vector<SectionOffset> sectionOffsets_;
 
   // XML parsing state
   XML_Parser xmlParser_ = nullptr;
@@ -75,10 +81,13 @@ class Fb2 {
 
   // Helper methods
   bool parseXmlStream();
+  bool scanSectionOffsets();
+  bool generateSectionFiles();
   void postProcessMetadata();
   bool loadMetaCache();
   bool saveMetaCache() const;
   std::string metaCachePath() const;
+  std::string sectionFilePath(int sectionIndex) const;
 
  public:
   explicit Fb2(std::string filepath, const std::string& cacheDir);
@@ -145,4 +154,10 @@ class Fb2 {
   // TOC access (lazy: reads from cache file on demand)
   uint16_t tocCount() const { return tocItemCount_; }
   TocItem getTocItem(uint16_t index) const;
+
+  // Section access (for per-section spine emulation)
+  uint16_t getSectionCount() const { return static_cast<uint16_t>(sectionOffsets_.size()); }
+  std::string getSectionPath(int sectionIndex) const;
+  int getSectionForTocEntry(int tocIndex) const;
+  const std::vector<SectionOffset>& getSectionOffsets() const { return sectionOffsets_; }
 };

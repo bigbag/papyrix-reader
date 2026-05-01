@@ -20,7 +20,7 @@ ReaderNavigation::NavResult ReaderNavigation::next(ContentType type, const Posit
       result.position.flatPage = current.flatPage + 1;
       result.needsRender = true;
     }
-  } else if (type == ContentType::Epub) {
+  } else if (type == ContentType::Epub || type == ContentType::Fb2) {
     if (pageCount > 0 && current.sectionPage < pageCount - 1) {
       result.position.sectionPage = current.sectionPage + 1;
       result.needsRender = true;
@@ -29,7 +29,7 @@ ReaderNavigation::NavResult ReaderNavigation::next(ContentType type, const Posit
       result.position.sectionPage = current.sectionPage + 1;
       result.needsRender = true;
     } else if (pageCount > 0 && current.sectionPage >= pageCount - 1) {
-      // Cache is complete - move to next chapter
+      // Cache is complete - move to next chapter/section
       result.position.spineIndex = current.spineIndex + 1;
       result.position.sectionPage = 0;
       result.needsCacheReset = true;
@@ -59,7 +59,7 @@ ReaderNavigation::NavResult ReaderNavigation::prev(ContentType type, const Posit
       result.position.flatPage = current.flatPage - 1;
       result.needsRender = true;
     }
-  } else if (type == ContentType::Epub) {
+  } else if (type == ContentType::Epub || type == ContentType::Fb2) {
     if (current.sectionPage > 0) {
       result.position.sectionPage = current.sectionPage - 1;
       result.needsRender = true;
