@@ -892,6 +892,11 @@ bool ChapterHtmlSlimParser::resumeParsing() {
 void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
   if (stopRequested_) return;
 
+  if (!currentPage) {
+    currentPage.reset(new Page());
+    currentPageNextY = 0;
+  }
+
   const int lineHeight = renderer.getEffectiveLineHeight(config.fontId) * config.lineCompression;
 
   if (currentPageNextY + lineHeight > config.viewportHeight) {

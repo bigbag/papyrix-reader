@@ -1976,5 +1976,73 @@ int main() {
                       "pre_tab: both words present");
   }
 
+  // ============================================
+  // addLineToPage null-guard tests (A2 regression)
+  // ChapterHtmlSlimParser::addLineToPage must not dereference currentPage when
+  // it is null. The 750-word emergency-split path can invoke the line callback
+  // before makePages() ever creates the first Page. The guard added in A2:
+  //   if (!currentPage) { currentPage.reset(new Page()); currentPageNextY = 0; }
+  // prevents the load-access-fault. The tests below exercise the same guard
+  // logic through a self-contained helper that mirrors the production code.
+  // ============================================
+
+  // Minimal representation of the guarded addLineToPage state
+  struct AddLineState {
+    std::unique_ptr<int> page;  // nullptr = no page created yet (mirrors currentPage)
+    int nextY = 0;
+    int linesAdded = 0;
+    int viewportHeight = 100;
+    int lineHeight = 20;
+
+    // Mirrors the guarded addLineToPage:
+    // 1. Create page if null  2. Advance nextY or start new page
+    void addLine() {
+      if (!page) {
+        page.reset(new int(0));
+        nextY = 0;
+      }
+      if (nextY + lineHeight > viewportHeight) {
+        page.reset(new int(0));
+        nextY = 0;
+      }
+      nextY += lineHeight;
+      linesAdded++;
+    }
+  };
+
+  // Test 114: addLineToPage with null currentPage does not crash and creates a page
+  {
+    AddLineState state;
+    runner.expectTrue(state.page == nullptr, "addline_null_guard: page starts null");
+    state.addLine();  // Must not crash even though page was null
+    runner.expectTrue(state.page != nullptr, "addline_null_guard: page created on first call");
+    runner.expectEq(1, state.linesAdded, "addline_null_guard: line was recorded");
+    runner.expectEq(state.lineHeight, state.nextY, "addline_null_guard: nextY advanced");
+  }
+
+  // Test 115: Multiple addLine calls without prior init fill the page correctly
+  {
+    AddLineState state;
+    state.addLine();
+    state.addLine();
+    state.addLine();
+    runner.expectTrue(state.page != nullptr, "addline_multi: page exists");
+    runner.expectEq(3, state.linesAdded, "addline_multi: three lines recorded");
+    runner.expectEq(3 * state.lineHeight, state.nextY, "addline_multi: nextY accumulated");
+  }
+
+  // Test 116: Page rolls over when viewport is full (null-guard + pagination)
+  {
+    AddLineState state;
+    // viewportHeight=100, lineHeight=20 → fits 5 lines per page
+    for (int i = 0; i < 5; i++) state.addLine();
+    runner.expectEq(5, state.linesAdded, "addline_rollover: five lines added");
+    runner.expectEq(100, state.nextY, "addline_rollover: nextY at viewport height");
+    // 6th line triggers new page
+    state.addLine();
+    runner.expectEq(6, state.linesAdded, "addline_rollover: sixth line on new page");
+    runner.expectEq(state.lineHeight, state.nextY, "addline_rollover: nextY reset after rollover");
+  }
+
   return runner.allPassed() ? 0 : 1;
 }
