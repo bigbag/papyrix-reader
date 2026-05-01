@@ -29,6 +29,14 @@ std::vector<uint8_t> createMinimalZip();
 std::vector<uint8_t> createZipWithInvalidOffset(const char* name);
 std::vector<uint8_t> createZipWithUnsupportedCompression(const char* name);
 std::vector<uint8_t> createZipWithNamedEntries(const std::vector<std::pair<std::string, uint32_t>>& entries);
+// Like createZipWithNamedEntries but appends one extra CD entry (valid signature,
+// same name as poisonName, but size=poisonSize) after all normal entries.
+// If the early-exit break fires correctly the poison entry is never reached;
+// if it is reached, sizes[poisonIndex] will be overwritten with poisonSize.
+std::vector<uint8_t> createZipWithPoisonTrailingEntry(
+    const std::vector<std::pair<std::string, uint32_t>>& entries,
+    const std::string& poisonName,
+    uint32_t poisonSize);
 
 // Mock Print for stream testing
 class MockPrint : public Print {
@@ -293,6 +301,56 @@ int main() {
     runner.expectEq<uint32_t>(42, sizes[0], "FillSizes_NoMatch_SizeUnchanged");
   }
 
+  // Early-exit break: poison trailing entry is never reached
+  //
+  // The ZIP has 3 CD entries:
+  //   [0] "OEBPS/chapter1.html" size=5000  <- matches target B (index 1)
+  //   [1] "OEBPS/content.opf"   size=1234  <- matches target A (index 0)
+  //   [2] "OEBPS/content.opf"   size=9999  <- POISON: valid CD sig, same name,
+  //                                            wrong size for target A
+  //
+  // With the early-exit break (matched == targets.size()) the loop stops after
+  // entry [1] and never reads entry [2], so sizes remain correct and
+  // matched == 2.
+  //
+  // Without the early-exit break the loop continues, processes entry [2],
+  // overwrites sizes[A.index] with 9999, and matched becomes 3 — both
+  // matched != 2 and sizes[A.index] != 1234 would fail.
+  {
+    SdMan.reset();
+    const char* nameA = "OEBPS/content.opf";
+    const char* nameB = "OEBPS/chapter1.html";
+    const uint32_t correctSizeA = 1234;
+    const uint32_t correctSizeB = 5000;
+    const uint32_t poisonSizeA = 9999;
+
+    std::vector<std::pair<std::string, uint32_t>> entries = {
+        {nameB, correctSizeB},
+        {nameA, correctSizeA},
+    };
+    SdMan.setFileData("/test.zip",
+        createZipWithPoisonTrailingEntry(entries, nameA, poisonSizeA));
+    std::string path4 = "/test.zip";
+    ZipFile zip(path4);
+
+    std::vector<ZipFile::SizeTarget> targets = {
+        {ZipFile::fnvHash64(nameA, strlen(nameA)), static_cast<uint16_t>(strlen(nameA)), 0},
+        {ZipFile::fnvHash64(nameB, strlen(nameB)), static_cast<uint16_t>(strlen(nameB)), 1},
+    };
+    std::sort(targets.begin(), targets.end());
+    std::vector<uint32_t> sizes(2, 0);
+    int matched = zip.fillUncompressedSizes(targets, sizes);
+
+    uint32_t sizeA = 0, sizeB = 0;
+    for (auto& t : targets) {
+      if (t.hash == ZipFile::fnvHash64(nameA, strlen(nameA))) sizeA = sizes[t.index];
+      if (t.hash == ZipFile::fnvHash64(nameB, strlen(nameB))) sizeB = sizes[t.index];
+    }
+    runner.expectEq<int>(2, matched, "FillSizes_EarlyExit_CorruptTrailingEntry_NotReached_MatchedTwo");
+    runner.expectEq<uint32_t>(correctSizeA, sizeA, "FillSizes_EarlyExit_CorruptTrailingEntry_NotReached_SizeA");
+    runner.expectEq<uint32_t>(correctSizeB, sizeB, "FillSizes_EarlyExit_CorruptTrailingEntry_NotReached_SizeB");
+  }
+
   SdMan.reset();
   runner.printSummary();
   return runner.allPassed() ? 0 : 1;
@@ -441,6 +499,81 @@ std::vector<uint8_t> createZipWithUnsupportedCompression(const char* name) {
   data.push_back((cdOffset >> 16) & 0xFF);
   data.push_back((cdOffset >> 24) & 0xFF);
   data.insert(data.end(), {0x00, 0x00});
+
+  return data;
+}
+
+// Build a ZIP with named entries plus one extra "poison" CD entry at the end.
+// The poison entry has a valid CD signature and the given name/size.  It is
+// appended after all normal entries so that, if the early-exit break in
+// fillUncompressedSizes fires correctly, the poison entry is never read.
+// If the break is absent the loop processes the poison entry and may
+// overwrite a previously-correct size value.
+std::vector<uint8_t> createZipWithPoisonTrailingEntry(
+    const std::vector<std::pair<std::string, uint32_t>>& entries,
+    const std::string& poisonName,
+    uint32_t poisonSize) {
+  // Reuse the same builder logic as createZipWithNamedEntries but with an
+  // extra entry appended.
+  auto allEntries = entries;
+  allEntries.emplace_back(poisonName, poisonSize);
+  // The EOCD entry count reflects only the real entries so the ZIP looks
+  // slightly malformed (entry count != actual CD records), but
+  // fillUncompressedSizes iterates until a bad signature or EOF — it does
+  // not use the EOCD entry count to bound the loop — so all 3 CD records
+  // are visible to the scanner.
+  //
+  // We build the full byte stream manually to control the EOCD count field.
+  auto u16le = [](std::vector<uint8_t>& v, uint16_t val) {
+    v.push_back(val & 0xFF);
+    v.push_back((val >> 8) & 0xFF);
+  };
+  auto u32le = [](std::vector<uint8_t>& v, uint32_t val) {
+    v.push_back(val & 0xFF);
+    v.push_back((val >> 8) & 0xFF);
+    v.push_back((val >> 16) & 0xFF);
+    v.push_back((val >> 24) & 0xFF);
+  };
+
+  std::vector<uint8_t> data;
+  const uint32_t cdOffset = 0;
+
+  for (const auto& entry : allEntries) {
+    const std::string& name = entry.first;
+    const uint32_t uncompressedSize = entry.second;
+    const auto nameLen = static_cast<uint16_t>(name.size());
+    data.insert(data.end(), {0x50, 0x4b, 0x01, 0x02});
+    u16le(data, 0x0314);
+    u16le(data, 0x0014);
+    u16le(data, 0x0000);
+    u16le(data, 0x0000);
+    u16le(data, 0x0000);
+    u16le(data, 0x0000);
+    u32le(data, 0x00000000);
+    u32le(data, 0x00000000);
+    u32le(data, uncompressedSize);
+    u16le(data, nameLen);
+    u16le(data, 0);
+    u16le(data, 0);
+    u16le(data, 0);
+    u16le(data, 0);
+    u32le(data, 0);
+    u32le(data, 0);
+    for (char c : name) {
+      data.push_back(static_cast<uint8_t>(c));
+    }
+  }
+
+  // EOCD — report only the real (non-poison) entry count
+  const auto eocdOffset = static_cast<uint32_t>(data.size());
+  data.insert(data.end(), {0x50, 0x4b, 0x05, 0x06});
+  u16le(data, 0);
+  u16le(data, 0);
+  u16le(data, static_cast<uint16_t>(entries.size()));
+  u16le(data, static_cast<uint16_t>(entries.size()));
+  u32le(data, eocdOffset - cdOffset);
+  u32le(data, cdOffset);
+  u16le(data, 0);
 
   return data;
 }
