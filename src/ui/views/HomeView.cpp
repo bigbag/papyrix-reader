@@ -56,7 +56,7 @@ void render(const GfxRenderer& r, const Theme& t, const HomeView& v) {
     const int maxTitleHeight = availableHeight - authorHeight;
     const int maxTitleLines = std::max(1, maxTitleHeight / titleLineHeight);
 
-    const auto titleLines = r.wrapTextWithHyphenation(titleFontId, v.bookTitle, cardWidth, std::min(3, maxTitleLines));
+    const auto titleLines = r.wrapTextWithHyphenation(titleFontId, v.bookTitle, cardWidth, std::min(4, maxTitleLines));
 
     // Draw title lines centered
     int textY = textStartY;

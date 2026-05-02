@@ -611,8 +611,8 @@ bool Fb2::generateSectionFiles() {
       }
 
       if (!startAnchored) {
-        LOG_ERR(TAG, "section %u: <section start tag not found near offset %u",
-                static_cast<unsigned int>(i), static_cast<unsigned int>(windowStart));
+        LOG_ERR(TAG, "section %u: <section start tag not found near offset %u", static_cast<unsigned int>(i),
+                static_cast<unsigned int>(windowStart));
       } else if (!inFile.seek(actualStart)) {
         LOG_ERR(TAG, "section %u: seek to %u failed", static_cast<unsigned int>(i),
                 static_cast<unsigned int>(actualStart));
@@ -673,8 +673,8 @@ bool Fb2::generateSectionFiles() {
         if (foundClose) {
           sectionWritten = true;
         } else {
-          LOG_ERR(TAG, "section %u: </section> close tag not found within %u byte cap",
-                  static_cast<unsigned int>(i), static_cast<unsigned int>(copyCap));
+          LOG_ERR(TAG, "section %u: </section> close tag not found within %u byte cap", static_cast<unsigned int>(i),
+                  static_cast<unsigned int>(copyCap));
         }
       }
       inFile.close();
@@ -698,8 +698,8 @@ bool Fb2::generateSectionFiles() {
     }
   }
 
-  LOG_INF(TAG, "Generated %u section files (allOk=%d)",
-          static_cast<unsigned int>(sectionOffsets_.size()), allOk ? 1 : 0);
+  LOG_INF(TAG, "Generated %u section files (allOk=%d)", static_cast<unsigned int>(sectionOffsets_.size()),
+          allOk ? 1 : 0);
   return allOk;
 }
 

@@ -36,8 +36,8 @@ struct CardDimensions {
 };
 
 struct HomeView {
-  static constexpr int MAX_TITLE_LEN = 64;
-  static constexpr int MAX_AUTHOR_LEN = 48;
+  static constexpr int MAX_TITLE_LEN = 256;
+  static constexpr int MAX_AUTHOR_LEN = 96;
   static constexpr int MAX_PATH_LEN = 128;
 
   ButtonBar buttons{"", "File", "Apps", "Settings"};
@@ -65,15 +65,41 @@ struct HomeView {
   bool needsRender = true;
 
   void setBook(const char* title, const char* author, const char* path) {
-    strncpy(bookTitle, title, MAX_TITLE_LEN - 1);
-    bookTitle[MAX_TITLE_LEN - 1] = '\0';
-    strncpy(bookAuthor, author, MAX_AUTHOR_LEN - 1);
-    bookAuthor[MAX_AUTHOR_LEN - 1] = '\0';
+    copyUtf8Safe(bookTitle, title, MAX_TITLE_LEN);
+    copyUtf8Safe(bookAuthor, author, MAX_AUTHOR_LEN);
     strncpy(bookPath, path, MAX_PATH_LEN - 1);
     bookPath[MAX_PATH_LEN - 1] = '\0';
     hasBook = true;
     buttons.labels[0] = "Read";
     needsRender = true;
+  }
+
+  // strncpy can split a multi-byte UTF-8 codepoint at the tail (renders as tofu).
+  // If the last codepoint is incomplete, drop it.
+  static void copyUtf8Safe(char* dst, const char* src, int cap) {
+    strncpy(dst, src, cap - 1);
+    dst[cap - 1] = '\0';
+    int n = static_cast<int>(strlen(dst));
+    if (n == 0) return;
+    int leadIdx = n - 1;
+    while (leadIdx > 0 && (static_cast<unsigned char>(dst[leadIdx]) & 0xC0) == 0x80) {
+      --leadIdx;
+    }
+    const unsigned char lead = static_cast<unsigned char>(dst[leadIdx]);
+    int expect;
+    if (lead < 0x80)
+      expect = 1;
+    else if ((lead >> 5) == 0x6)
+      expect = 2;
+    else if ((lead >> 4) == 0xE)
+      expect = 3;
+    else if ((lead >> 3) == 0x1E)
+      expect = 4;
+    else
+      expect = 1;
+    if (n - leadIdx < expect) {
+      dst[leadIdx] = '\0';
+    }
   }
 
   void clearBook() {
