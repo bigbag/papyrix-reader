@@ -16,6 +16,9 @@ class EInkDisplay {
   EInkDisplay(int8_t, int8_t, int8_t, int8_t, int8_t, int8_t) { memset(frameBuffer_, 0xFF, BUFFER_SIZE); }
 
   uint8_t* getFrameBuffer() const { return const_cast<uint8_t*>(frameBuffer_); }
+  uint16_t getDisplayWidth() const { return DISPLAY_WIDTH; }
+  uint16_t getDisplayHeight() const { return DISPLAY_HEIGHT; }
+  uint16_t getDisplayWidthBytes() const { return DISPLAY_WIDTH_BYTES; }
   void clearScreen(uint8_t color = 0xFF) { memset(frameBuffer_, color, BUFFER_SIZE); }
   void displayBuffer(RefreshMode, bool) {}
   void displayWindow(int, int, int, int, bool) {}

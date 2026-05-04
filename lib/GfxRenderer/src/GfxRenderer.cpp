@@ -8,7 +8,9 @@
 #include <ThaiShaper.h>
 #include <Utf8.h>
 
+#include <algorithm>
 #include <cassert>
+#include <cstring>
 
 #define TAG "GFX"
 
@@ -261,8 +263,88 @@ void GfxRenderer::drawRect(const int x, const int y, const int width, const int 
 }
 
 void GfxRenderer::fillRect(const int x, const int y, const int width, const int height, const bool state) const {
-  for (int fillY = y; fillY < y + height; fillY++) {
-    drawLine(x, fillY, x + width - 1, fillY, state);
+  if (width <= 0 || height <= 0) return;
+
+  int physX, physY, physW, physH;
+  switch (orientation) {
+    case Portrait:
+      physX = y;
+      physY = einkDisplay.getDisplayHeight() - 1 - (x + width - 1);
+      physW = height;
+      physH = width;
+      break;
+    case LandscapeClockwise:
+      physX = einkDisplay.getDisplayWidth() - 1 - (x + width - 1);
+      physY = einkDisplay.getDisplayHeight() - 1 - (y + height - 1);
+      physW = width;
+      physH = height;
+      break;
+    case PortraitInverted:
+      physX = einkDisplay.getDisplayWidth() - 1 - (y + height - 1);
+      physY = x;
+      physW = height;
+      physH = width;
+      break;
+    case LandscapeCounterClockwise:
+    default:
+      physX = x;
+      physY = y;
+      physW = width;
+      physH = height;
+      break;
+  }
+
+  const int dw = static_cast<int>(einkDisplay.getDisplayWidth());
+  const int dh = static_cast<int>(einkDisplay.getDisplayHeight());
+  if (physX >= dw || physY >= dh || physX + physW <= 0 || physY + physH <= 0) return;
+
+  const int x0 = std::max(physX, 0);
+  const int y0 = std::max(physY, 0);
+  const int x1 = std::min(physX + physW - 1, dw - 1);
+  const int y1 = std::min(physY + physH - 1, dh - 1);
+
+  const int stride = einkDisplay.getDisplayWidthBytes();
+  const int byteStart = x0 / 8;
+  const int byteEnd = x1 / 8;
+
+  if (byteStart == byteEnd) {
+    const uint8_t mask = static_cast<uint8_t>((0xFF >> (x0 & 7)) & (0xFF << (7 - (x1 & 7))));
+    for (int row = y0; row <= y1; row++) {
+      uint8_t& b = frameBuffer[row * stride + byteStart];
+      if (state)
+        b &= ~mask;
+      else
+        b |= mask;
+    }
+    return;
+  }
+
+  const bool hasLeftEdge = (x0 & 7) != 0;
+  const bool hasRightEdge = (x1 & 7) != 7;
+  const uint8_t leftMask = static_cast<uint8_t>(0xFF >> (x0 & 7));
+  const uint8_t rightMask = static_cast<uint8_t>(0xFF << (7 - (x1 & 7)));
+  const uint8_t fill = state ? 0x00 : 0xFF;
+  const int fullStart = byteStart + (hasLeftEdge ? 1 : 0);
+  const int fullEnd = byteEnd - (hasRightEdge ? 1 : 0);
+  const int fullCount = fullEnd - fullStart + 1;
+
+  for (int row = y0; row <= y1; row++) {
+    uint8_t* rowPtr = &frameBuffer[row * stride];
+    if (hasLeftEdge) {
+      if (state)
+        rowPtr[byteStart] &= ~leftMask;
+      else
+        rowPtr[byteStart] |= leftMask;
+    }
+    if (fullCount > 0) {
+      memset(&rowPtr[fullStart], fill, fullCount);
+    }
+    if (hasRightEdge) {
+      if (state)
+        rowPtr[byteEnd] &= ~rightMask;
+      else
+        rowPtr[byteEnd] |= rightMask;
+    }
   }
 }
 
