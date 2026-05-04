@@ -89,6 +89,10 @@ inline void vTaskDelay(const TickType_t xTicksToDelay) {
   std::this_thread::sleep_for(std::chrono::milliseconds(xTicksToDelay));
 }
 
+inline void taskYIELD() {
+  std::this_thread::yield();
+}
+
 // Helper to clean up tasks after test
 inline void cleanupMockTasks() {
   auto& registry = getTaskRegistry();

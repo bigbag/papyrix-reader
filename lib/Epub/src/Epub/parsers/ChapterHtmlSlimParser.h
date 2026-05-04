@@ -93,8 +93,8 @@ class ChapterHtmlSlimParser {
   uint16_t pagesCreated_ = 0;
   uint16_t elementCounter_ = 0;
   bool cssHeapOk_ = true;
-  static constexpr uint32_t MAX_PARSE_TIME_MS = 20000;     // 20 second timeout
-  static constexpr uint16_t YIELD_CHECK_INTERVAL = 100;    // Check every 100 iterations
+  static constexpr uint32_t MAX_PARSE_TIME_MS = 20000;  // 20 second timeout
+  static constexpr uint16_t YIELD_CHECK_INTERVAL = 500;
   static constexpr uint16_t CSS_HEAP_CHECK_INTERVAL = 64;  // Check heap for CSS every 64 elements
   static constexpr size_t MIN_FREE_HEAP = 8192;            // 8KB minimum free heap
 

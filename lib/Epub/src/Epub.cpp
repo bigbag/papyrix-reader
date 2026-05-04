@@ -642,6 +642,18 @@ bool Epub::generateThumbBmp() const {
     return true;
   }
 
+  // If cover generation already failed, the same source image won't work for thumbnail either.
+  // Skip the expensive re-extraction from ZIP.
+  const auto coverFailedMarkerPath = cachePath + "/.cover.failed";
+  if (SdMan.exists(coverFailedMarkerPath.c_str())) {
+    LOG_DBG(TAG, "Cover generation failed previously, skipping thumbnail extraction");
+    FsFile marker;
+    if (SdMan.openFileForWrite("EBP", failedMarkerPath, marker)) {
+      marker.close();
+    }
+    return false;
+  }
+
   if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
     LOG_ERR(TAG, "Cannot generate thumb BMP, cache not loaded");
     return false;

@@ -675,7 +675,7 @@ bool ChapterHtmlSlimParser::parseLoop() {
         aborted_ = true;
         break;
       }
-      vTaskDelay(1);  // Yield to prevent watchdog reset
+      taskYIELD();
     }
 
     constexpr size_t kReadChunkSize = 1024;
