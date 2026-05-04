@@ -135,6 +135,8 @@ class EInkDisplay {
   void sendCommand(uint8_t command);
   void sendData(uint8_t data);
   void sendData(const uint8_t* data, uint16_t length);
+  void sendDataBatchBegin();
+  void sendDataBatchEnd();
   void waitForRefresh(const char* comment = nullptr);
   void waitWhileBusy(const char* comment = nullptr);
   void initDisplayController();

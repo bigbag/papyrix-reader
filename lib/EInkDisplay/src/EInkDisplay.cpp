@@ -374,6 +374,17 @@ void EInkDisplay::sendData(const uint8_t* data, uint16_t length) {
   SPI.endTransaction();
 }
 
+void EInkDisplay::sendDataBatchBegin() {
+  SPI.beginTransaction(spiSettings);
+  digitalWrite(_dc, HIGH);
+  digitalWrite(_cs, LOW);
+}
+
+void EInkDisplay::sendDataBatchEnd() {
+  digitalWrite(_cs, HIGH);
+  SPI.endTransaction();
+}
+
 void EInkDisplay::waitWhileBusy(const char* comment) {
   unsigned long start = millis();
   if (!_x3Mode) {
@@ -644,10 +655,12 @@ void EInkDisplay::copyGrayscaleLsbBuffers(const uint8_t* lsbBuffer) {
     // Send rows directly from frameBuffer (Y-mirrored via pointer arithmetic) —
     // no per-row copy buffer needed since we're not bit-inverting here.
     sendCommand(0x10);
+    sendDataBatchBegin();
     for (uint16_t y = 0; y < displayHeight; y++) {
       const uint16_t srcY = static_cast<uint16_t>(displayHeight - 1 - y);
-      sendData(lsbBuffer + static_cast<uint32_t>(srcY) * displayWidthBytes, displayWidthBytes);
+      SPI.writeBytes(lsbBuffer + static_cast<uint32_t>(srcY) * displayWidthBytes, displayWidthBytes);
     }
+    sendDataBatchEnd();
     _x3GrayState.lsbValid = true;
     return;
   }
@@ -666,10 +679,12 @@ void EInkDisplay::copyGrayscaleMsbBuffers(const uint8_t* msbBuffer) {
     }
 
     sendCommand(0x13);
+    sendDataBatchBegin();
     for (uint16_t y = 0; y < displayHeight; y++) {
       const uint16_t srcY = static_cast<uint16_t>(displayHeight - 1 - y);
-      sendData(msbBuffer + static_cast<uint32_t>(srcY) * displayWidthBytes, displayWidthBytes);
+      SPI.writeBytes(msbBuffer + static_cast<uint32_t>(srcY) * displayWidthBytes, displayWidthBytes);
     }
+    sendDataBatchEnd();
     return;
   }
   setRamArea(0, 0, displayWidth, displayHeight);
@@ -703,10 +718,12 @@ void EInkDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) {
     // compares from a coherent known state. Both writes are non-inverting, so we
     // send rows directly from bwBuffer without an intermediate copy buffer.
     auto sendMirroredPlaneDirect = [&](const uint8_t* plane) {
+      sendDataBatchBegin();
       for (uint16_t y = 0; y < displayHeight; y++) {
         const uint16_t srcY = static_cast<uint16_t>(displayHeight - 1 - y);
-        sendData(plane + static_cast<uint32_t>(srcY) * displayWidthBytes, displayWidthBytes);
+        SPI.writeBytes(plane + static_cast<uint32_t>(srcY) * displayWidthBytes, displayWidthBytes);
       }
+      sendDataBatchEnd();
     };
 
     sendCommand(0x13);
@@ -769,6 +786,7 @@ void EInkDisplay::displayBuffer(RefreshMode mode, const bool turnOffScreen) {
     // bypass the per-row copy buffer and DMA straight from frameBuffer — the
     // copy was only ever needed for the bit-inverted full-sync path.
     auto sendMirroredPlane = [&](const uint8_t* plane, bool invertBits) {
+      sendDataBatchBegin();
       if (invertBits) {
         for (uint16_t y = 0; y < displayHeight; y++) {
           const uint16_t srcY = static_cast<uint16_t>(displayHeight - 1 - y);
@@ -776,14 +794,15 @@ void EInkDisplay::displayBuffer(RefreshMode mode, const bool turnOffScreen) {
           for (uint16_t x = 0; x < displayWidthBytes; x++) {
             row[x] = static_cast<uint8_t>(~src[x]);
           }
-          sendData(row, displayWidthBytes);
+          SPI.writeBytes(row, displayWidthBytes);
         }
       } else {
         for (uint16_t y = 0; y < displayHeight; y++) {
           const uint16_t srcY = static_cast<uint16_t>(displayHeight - 1 - y);
-          sendData(plane + static_cast<uint32_t>(srcY) * displayWidthBytes, displayWidthBytes);
+          SPI.writeBytes(plane + static_cast<uint32_t>(srcY) * displayWidthBytes, displayWidthBytes);
         }
       }
+      sendDataBatchEnd();
     };
 
     const bool forcedFullSync = _x3ForceFullSyncNext;
@@ -1148,10 +1167,10 @@ void EInkDisplay::setCustomLUT(const bool enabled, const unsigned char* lutData)
     LOG_DBG(TAG, "Loading custom LUT...");
 
     // Load custom LUT (first 105 bytes: VS + TP/RP + frame rate)
+    uint8_t lutBuf[105];
+    memcpy_P(lutBuf, lutData, 105);
     sendCommand(CMD_WRITE_LUT);
-    for (uint16_t i = 0; i < 105; i++) {
-      sendData(pgm_read_byte(&lutData[i]));
-    }
+    sendData(lutBuf, 105);
 
     // Set voltage values from bytes 105-109
     sendCommand(CMD_GATE_VOLTAGE);  // VGH
