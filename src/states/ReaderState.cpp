@@ -1145,7 +1145,11 @@ void ReaderState::renderStatusBar(Core& core, int marginRight, int marginBottom,
 
   // Resolve chapter title if in Chapter mode (cached to avoid SD I/O on every render)
   if (data.mode == Settings::StatusChapter && core.content.tocCount() > 0) {
-    if (currentSpineIndex_ != cachedChapterSpine_ || currentSectionPage_ != cachedChapterPage_) {
+    // FB2 TOC maps to sections (spines) — title can't change within a spine
+    const bool needsUpdate = (type == ContentType::Fb2) ? (currentSpineIndex_ != cachedChapterSpine_)
+                                                        : (currentSpineIndex_ != cachedChapterSpine_ ||
+                                                           currentSectionPage_ != cachedChapterPage_);
+    if (needsUpdate) {
       cachedChapterTitle_[0] = '\0';
       int tocIndex = findCurrentTocEntry(core);
       if (tocIndex >= 0) {

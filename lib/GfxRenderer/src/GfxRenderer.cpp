@@ -14,6 +14,43 @@
 
 #define TAG "GFX"
 
+static inline void writeFB(uint8_t* fb, int stride, int physX, int physY, bool state) {
+  const int idx = physY * stride + (physX >> 3);
+  const uint8_t bit = static_cast<uint8_t>(1 << (7 - (physX & 7)));
+  if (state)
+    fb[idx] &= ~bit;
+  else
+    fb[idx] |= bit;
+}
+
+static inline bool extractFontPixel(const uint8_t* bitmap, int pixelPos, bool is2Bit, GfxRenderer::RenderMode mode,
+                                    bool pixelState, bool& outState) {
+  if (is2Bit) {
+    const uint8_t byte = bitmap[pixelPos / 4];
+    const uint8_t bitIdx = static_cast<uint8_t>((3 - pixelPos % 4) * 2);
+    const uint8_t bmpVal = (3 - (byte >> bitIdx)) & 0x3;
+    if (mode == GfxRenderer::BW && bmpVal < 3) {
+      outState = pixelState;
+      return true;
+    }
+    if (mode == GfxRenderer::GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
+      outState = false;
+      return true;
+    }
+    if (mode == GfxRenderer::GRAYSCALE_LSB && bmpVal == 1) {
+      outState = false;
+      return true;
+    }
+    return false;
+  }
+  const uint8_t byte = bitmap[pixelPos / 8];
+  if ((byte >> (7 - (pixelPos % 8))) & 1) {
+    outState = pixelState;
+    return true;
+  }
+  return false;
+}
+
 void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) { fontMap.insert({fontId, font}); }
 
 void GfxRenderer::removeFont(const int fontId) {
@@ -391,12 +428,21 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   const int destHeight = isScaled ? static_cast<int>(bitmap.getHeight() * scale) : bitmap.getHeight();
   const float invScale = isScaled ? (1.0f / scale) : 1.0f;
 
+  const int screenW = getScreenWidth();
+  const int screenH = getScreenHeight();
+  const int dxStart = std::max(0, -x);
+  const int dxEnd = std::min(destWidth, screenW - x);
+  if (dxStart >= dxEnd) return;
+
+  const int panelW = einkDisplay.getDisplayWidth();
+  const int panelH = einkDisplay.getDisplayHeight();
+  const int stride = einkDisplay.getDisplayWidthBytes();
+  const int bmpW = bitmap.getWidth();
+
   int lastSrcY = -1;
   for (int destY = 0; destY < destHeight; destY++) {
-    // For bottom-up BMPs, flip screen placement since readRow reads sequentially from file
     const int screenY = bitmap.isTopDown() ? (y + destY) : (y + destHeight - 1 - destY);
-    if (screenY < 0) continue;
-    if (screenY >= getScreenHeight()) continue;
+    if (screenY < 0 || screenY >= screenH) continue;
 
     int srcY = isScaled ? static_cast<int>(destY * invScale) : destY;
     if (srcY >= bitmap.getHeight()) srcY = bitmap.getHeight() - 1;
@@ -409,24 +455,37 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
       lastSrcY = srcY;
     }
 
-    for (int destX = 0; destX < destWidth; destX++) {
-      const int screenX = x + destX;
-      if (screenX < 0) continue;
-      if (screenX >= getScreenWidth()) break;
+#define DRAWBITMAP_INNER(PHYS_X_EXPR, PHYS_Y_EXPR)                                    \
+  for (int dx = dxStart; dx < dxEnd; dx++) {                                          \
+    int bmpX = isScaled ? static_cast<int>(dx * invScale) : dx;                       \
+    if (bmpX >= bmpW) bmpX = bmpW - 1;                                                \
+    const uint8_t val = (bitmapOutputRow_[bmpX / 4] >> (6 - ((bmpX * 2) % 8))) & 0x3; \
+    const int sX = x + dx;                                                            \
+    if (renderMode == BW && val < 3) {                                                \
+      writeFB(frameBuffer, stride, (PHYS_X_EXPR), (PHYS_Y_EXPR), true);               \
+    } else if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {               \
+      writeFB(frameBuffer, stride, (PHYS_X_EXPR), (PHYS_Y_EXPR), false);              \
+    } else if (renderMode == GRAYSCALE_LSB && val == 1) {                             \
+      writeFB(frameBuffer, stride, (PHYS_X_EXPR), (PHYS_Y_EXPR), false);              \
+    }                                                                                 \
+  }
 
-      int bmpX = isScaled ? static_cast<int>(destX * invScale) : destX;
-      if (bmpX >= bitmap.getWidth()) bmpX = bitmap.getWidth() - 1;
-
-      const uint8_t val = bitmapOutputRow_[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
-
-      if (renderMode == BW && val < 3) {
-        drawPixel(screenX, screenY);
-      } else if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
-        drawPixel(screenX, screenY, false);
-      } else if (renderMode == GRAYSCALE_LSB && val == 1) {
-        drawPixel(screenX, screenY, false);
-      }
+    switch (orientation) {
+      case LandscapeCounterClockwise:
+        DRAWBITMAP_INNER(sX, screenY)
+        break;
+      case Portrait:
+        DRAWBITMAP_INNER(screenY, panelH - 1 - sX)
+        break;
+      case LandscapeClockwise:
+        DRAWBITMAP_INNER(panelW - 1 - sX, panelH - 1 - screenY)
+        break;
+      case PortraitInverted:
+        DRAWBITMAP_INNER(panelW - 1 - screenY, sX)
+        break;
     }
+
+#undef DRAWBITMAP_INNER
   }
 }
 
@@ -980,47 +1039,48 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
   }
 
   if (bitmap != nullptr) {
-    const int screenHeight = getScreenHeight();
-    const int screenWidth = getScreenWidth();
+    const int screenW = getScreenWidth();
+    const int screenH = getScreenHeight();
+    const int logLeft = *x + left;
+    const int logTop = *y - glyph->top;
 
-    for (int glyphY = 0; glyphY < height; glyphY++) {
-      const int screenY = *y - glyph->top + glyphY;
-      if (screenY < 0 || screenY >= screenHeight) continue;
+    const int gxStart = std::max(0, -logLeft);
+    const int gxEnd = std::min(static_cast<int>(width), screenW - logLeft);
+    const int gyStart = std::max(0, -logTop);
+    const int gyEnd = std::min(static_cast<int>(height), screenH - logTop);
 
-      for (int glyphX = 0; glyphX < width; glyphX++) {
-        const int screenX = *x + left + glyphX;
-        if (screenX < 0 || screenX >= screenWidth) continue;
+    if (gxStart < gxEnd && gyStart < gyEnd) {
+      const int panelW = einkDisplay.getDisplayWidth();
+      const int panelH = einkDisplay.getDisplayHeight();
+      const int stride = einkDisplay.getDisplayWidthBytes();
 
-        const int pixelPosition = glyphY * width + glyphX;
+#define RENDERCHAR_INNER(PHYS_X_EXPR, PHYS_Y_EXPR)                                                  \
+  for (int gy = gyStart; gy < gyEnd; gy++) {                                                        \
+    const int sY = logTop + gy;                                                                     \
+    for (int gx = gxStart; gx < gxEnd; gx++) {                                                      \
+      bool st;                                                                                      \
+      if (!extractFontPixel(bitmap, gy * width + gx, is2Bit, renderMode, pixelState, st)) continue; \
+      const int sX = logLeft + gx;                                                                  \
+      writeFB(frameBuffer, stride, (PHYS_X_EXPR), (PHYS_Y_EXPR), st);                               \
+    }                                                                                               \
+  }
 
-        if (is2Bit) {
-          const uint8_t byte = bitmap[pixelPosition / 4];
-          const uint8_t bit_index = (3 - pixelPosition % 4) * 2;
-          // the direct bit from the font is 0 -> white, 1 -> light gray, 2 -> dark gray, 3 -> black
-          // we swap this to better match the way images and screen think about colors:
-          // 0 -> black, 1 -> dark grey, 2 -> light grey, 3 -> white
-          const uint8_t bmpVal = 3 - (byte >> bit_index) & 0x3;
-
-          if (renderMode == BW && bmpVal < 3) {
-            // Black (also paints over the grays in BW mode)
-            drawPixel(screenX, screenY, pixelState);
-          } else if (renderMode == GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
-            // Light gray (also mark the MSB if it's going to be a dark gray too)
-            // We have to flag pixels in reverse for the gray buffers, as 0 leave alone, 1 update
-            drawPixel(screenX, screenY, false);
-          } else if (renderMode == GRAYSCALE_LSB && bmpVal == 1) {
-            // Dark gray
-            drawPixel(screenX, screenY, false);
-          }
-        } else {
-          const uint8_t byte = bitmap[pixelPosition / 8];
-          const uint8_t bit_index = 7 - (pixelPosition % 8);
-
-          if ((byte >> bit_index) & 1) {
-            drawPixel(screenX, screenY, pixelState);
-          }
-        }
+      switch (orientation) {
+        case LandscapeCounterClockwise:
+          RENDERCHAR_INNER(sX, sY)
+          break;
+        case Portrait:
+          RENDERCHAR_INNER(sY, panelH - 1 - sX)
+          break;
+        case LandscapeClockwise:
+          RENDERCHAR_INNER(panelW - 1 - sX, panelH - 1 - sY)
+          break;
+        case PortraitInverted:
+          RENDERCHAR_INNER(panelW - 1 - sY, sX)
+          break;
       }
+
+#undef RENDERCHAR_INNER
     }
   }
 
@@ -1101,23 +1161,52 @@ void GfxRenderer::renderExternalGlyph(const uint32_t cp, int* x, const int y, co
   const int w = _externalFont->getCharWidth();
   const int h = _externalFont->getCharHeight();
   const int bytesPerRow = _externalFont->getBytesPerRow();
-  const int screenHeight = getScreenHeight();
-  const int screenWidth = getScreenWidth();
+  const int screenW = getScreenWidth();
+  const int screenH = getScreenHeight();
+  const int visibleGlyphW = w - minX;
 
-  for (int glyphY = 0; glyphY < h; glyphY++) {
-    const int screenY = y + glyphY;
-    if (screenY < 0 || screenY >= screenHeight) continue;
+  const int logLeft = *x;
+  const int logTop = y;
+  const int gxStart = std::max(0, -logLeft);
+  const int gxEnd = std::min(visibleGlyphW, screenW - logLeft);
+  const int gyStart = std::max(0, -logTop);
+  const int gyEnd = std::min(h, screenH - logTop);
 
-    for (int glyphX = minX; glyphX < w; glyphX++) {
-      const int screenX = *x + glyphX - minX;
-      if (screenX < 0 || screenX >= screenWidth) continue;
+  if (gxStart < gxEnd && gyStart < gyEnd) {
+    const int panelW = einkDisplay.getDisplayWidth();
+    const int panelH = einkDisplay.getDisplayHeight();
+    const int stride = einkDisplay.getDisplayWidthBytes();
 
-      const int byteIdx = glyphY * bytesPerRow + (glyphX / 8);
-      const int bitIdx = 7 - (glyphX % 8);
-      if ((bitmap[byteIdx] >> bitIdx) & 1) {
-        drawPixel(screenX, screenY, pixelState);
-      }
+#define EXTGLYPH_INNER(PHYS_X_EXPR, PHYS_Y_EXPR)                                \
+  for (int gy = gyStart; gy < gyEnd; gy++) {                                    \
+    const int sY = logTop + gy;                                                 \
+    for (int gx = gxStart; gx < gxEnd; gx++) {                                  \
+      const int glyphX = gx + minX;                                             \
+      const int byteIdx = gy * bytesPerRow + (glyphX / 8);                      \
+      const int bitIdx = 7 - (glyphX % 8);                                      \
+      if ((bitmap[byteIdx] >> bitIdx) & 1) {                                    \
+        const int sX = logLeft + gx;                                            \
+        writeFB(frameBuffer, stride, (PHYS_X_EXPR), (PHYS_Y_EXPR), pixelState); \
+      }                                                                         \
+    }                                                                           \
+  }
+
+    switch (orientation) {
+      case LandscapeCounterClockwise:
+        EXTGLYPH_INNER(sX, sY)
+        break;
+      case Portrait:
+        EXTGLYPH_INNER(sY, panelH - 1 - sX)
+        break;
+      case LandscapeClockwise:
+        EXTGLYPH_INNER(panelW - 1 - sX, panelH - 1 - sY)
+        break;
+      case PortraitInverted:
+        EXTGLYPH_INNER(panelW - 1 - sY, sX)
+        break;
     }
+
+#undef EXTGLYPH_INNER
   }
 
   *x += advanceX;
