@@ -90,7 +90,7 @@ String SDCardManager::readFile(const char* path) {
   String content;
   content.reserve(toRead);
 
-  uint8_t buf[256];
+  uint8_t buf[1024];
   size_t readSize = 0;
   while (f.available() && readSize < toRead) {
     const size_t chunkSize = min(sizeof(buf), toRead - readSize);
@@ -114,7 +114,7 @@ bool SDCardManager::readFileToStream(const char* path, Print& out, const size_t 
     return false;
   }
 
-  constexpr size_t localBufSize = 256;
+  constexpr size_t localBufSize = 1024;
   uint8_t buf[localBufSize];
   const size_t toRead = (chunkSize == 0) ? localBufSize : (chunkSize < localBufSize ? chunkSize : localBufSize);
 

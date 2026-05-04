@@ -14,7 +14,7 @@ constexpr const char* VOID_ELEMENTS[] = {"img",  "br",  "hr",    "input", "meta"
                                          "base", "col", "embed", "param", "source", "track", "wbr"};
 constexpr size_t VOID_ELEMENT_COUNT = sizeof(VOID_ELEMENTS) / sizeof(VOID_ELEMENTS[0]);
 constexpr size_t MAX_TAG_NAME_LENGTH = 8;
-constexpr size_t BUFFER_SIZE = 512;
+constexpr size_t BUFFER_SIZE = 1024;
 
 enum class State { Normal, InTagStart, InTagName, InTagAttrs, InQuote, InClosingTagName, InClosingTagRest };
 

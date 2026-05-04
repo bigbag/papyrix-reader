@@ -678,7 +678,7 @@ bool ChapterHtmlSlimParser::parseLoop() {
       taskYIELD();
     }
 
-    constexpr size_t kReadChunkSize = 1024;
+    constexpr size_t kReadChunkSize = 4096;
     constexpr size_t kDataUriPrefixSize = 10;  // max partial saved by DataUriStripper: "src=\"data:"
     void* const buf = XML_GetBuffer(xmlParser_, kReadChunkSize + kDataUriPrefixSize);
     if (!buf) {
