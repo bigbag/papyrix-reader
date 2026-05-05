@@ -56,8 +56,9 @@ bool renderCoverFromBmp(GfxRenderer& renderer, const std::string& bmpPath, int m
 
   renderer.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height);
 
-  // Display with refresh logic
-  if (pagesUntilFullRefresh <= 1) {
+  if (pagesPerRefreshValue == 0) {
+    renderer.displayBuffer(EInkDisplay::FAST_REFRESH, turnOffScreen);
+  } else if (pagesUntilFullRefresh <= 1) {
     renderer.displayBuffer(EInkDisplay::HALF_REFRESH, turnOffScreen);
     pagesUntilFullRefresh = pagesPerRefreshValue;
   } else {

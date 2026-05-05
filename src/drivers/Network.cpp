@@ -6,12 +6,25 @@
 #include <esp_wifi.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstring>
+#include <vector>
 
 #define TAG "NETWORK"
 
 namespace papyrix {
 namespace drivers {
+
+namespace {
+bool isBlankSsid(const char* ssid) {
+  if (!ssid) return true;
+  while (*ssid) {
+    if (!isspace(static_cast<unsigned char>(*ssid))) return false;
+    ++ssid;
+  }
+  return true;
+}
+}  // namespace
 
 Result<void> Network::init() {
   if (initialized_) {
@@ -158,19 +171,59 @@ int Network::getScanResults(WifiNetwork* out, int maxCount) {
     return 0;
   }
 
-  int count = std::min(static_cast<int>(result), maxCount);
-
-  for (int i = 0; i < count; i++) {
-    strncpy(out[i].ssid, WiFi.SSID(i).c_str(), sizeof(out[i].ssid) - 1);
-    out[i].ssid[sizeof(out[i].ssid) - 1] = '\0';
-    out[i].rssi = WiFi.RSSI(i);
-    out[i].secured = WiFi.encryptionType(i) != WIFI_AUTH_OPEN;
+  if (result == 0) {
+    LOG_INF(TAG, "Async scan returned 0 networks, retrying synchronously");
+    WiFi.scanDelete();
+    result = WiFi.scanNetworks(false, false, false, 500);
+    if (result == WIFI_SCAN_FAILED || result <= 0) {
+      LOG_ERR(TAG, "Synchronous scan fallback returned %d networks", static_cast<int>(result));
+      return 0;
+    }
   }
 
-  // Sort by signal strength (strongest first)
-  std::sort(out, out + count, [](const WifiNetwork& a, const WifiNetwork& b) { return a.rssi > b.rssi; });
+  const int rawCount = static_cast<int>(result);
+  std::vector<WifiNetwork> unique;
+  unique.reserve(rawCount);
 
-  LOG_INF(TAG, "Scan found %d networks", count);
+  for (int i = 0; i < rawCount; i++) {
+    String ssid = WiFi.SSID(i);
+    if (isBlankSsid(ssid.c_str())) continue;
+
+    const int rssi = WiFi.RSSI(i);
+    const bool secured = WiFi.encryptionType(i) != WIFI_AUTH_OPEN;
+
+    int existing = -1;
+    for (size_t j = 0; j < unique.size(); j++) {
+      if (strncmp(unique[j].ssid, ssid.c_str(), sizeof(unique[j].ssid)) == 0) {
+        existing = static_cast<int>(j);
+        break;
+      }
+    }
+
+    if (existing >= 0) {
+      if (rssi > unique[existing].rssi) {
+        unique[existing].rssi = rssi;
+        unique[existing].secured = secured;
+      }
+      continue;
+    }
+
+    WifiNetwork network{};
+    strncpy(network.ssid, ssid.c_str(), sizeof(network.ssid) - 1);
+    network.ssid[sizeof(network.ssid) - 1] = '\0';
+    network.rssi = rssi;
+    network.secured = secured;
+    unique.push_back(network);
+  }
+
+  std::sort(unique.begin(), unique.end(), [](const WifiNetwork& a, const WifiNetwork& b) { return a.rssi > b.rssi; });
+
+  const int count = std::min(static_cast<int>(unique.size()), maxCount);
+  for (int i = 0; i < count; i++) {
+    out[i] = unique[i];
+  }
+
+  LOG_INF(TAG, "Scan found %d networks (raw=%d)", count, rawCount);
   WiFi.scanDelete();
   return count;
 }

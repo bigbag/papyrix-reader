@@ -2,6 +2,13 @@
 
 #include <Utf8.h>
 
+#if __has_include(<esp_attr.h>)
+#include <esp_attr.h>
+#endif
+#ifndef IRAM_ATTR
+#define IRAM_ATTR
+#endif
+
 inline int min(const int a, const int b) { return a < b ? a : b; }
 inline int max(const int a, const int b) { return a < b ? b : a; }
 
@@ -61,7 +68,7 @@ void EpdFont::getTextDimensions(const char* string, int* w, int* h) const {
   *h = maxY - minY;
 }
 
-const EpdGlyph* EpdFont::getGlyph(const uint32_t cp) const {
+IRAM_ATTR const EpdGlyph* EpdFont::getGlyph(const uint32_t cp) const {
   // Check cache first for O(1) lookup of hot glyphs
   const EpdGlyph* cached = glyphCache.lookup(cp);
   if (cached) {

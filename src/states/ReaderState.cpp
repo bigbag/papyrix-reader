@@ -1239,9 +1239,12 @@ void ReaderState::renderXtcPage(Core& core) {
 
 void ReaderState::displayWithRefresh(Core& core) {
   const bool turnOffScreen = core.settings.sunlightFadingFix != 0;
-  if (pagesUntilFullRefresh_ <= 1) {
+  const int pagesPerRefreshValue = core.settings.getPagesPerRefreshValue();
+  if (pagesPerRefreshValue == 0) {
+    renderer_.displayBuffer(EInkDisplay::FAST_REFRESH, turnOffScreen);
+  } else if (pagesUntilFullRefresh_ <= 1) {
     renderer_.displayBuffer(EInkDisplay::HALF_REFRESH, turnOffScreen);
-    pagesUntilFullRefresh_ = core.settings.getPagesPerRefreshValue();
+    pagesUntilFullRefresh_ = pagesPerRefreshValue;
   } else {
     renderer_.displayBuffer(EInkDisplay::FAST_REFRESH, turnOffScreen);
     pagesUntilFullRefresh_--;

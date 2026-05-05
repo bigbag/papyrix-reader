@@ -8,6 +8,13 @@
 #include <cstring>
 #include <vector>
 
+#if __has_include(<esp_attr.h>)
+#include <esp_attr.h>
+#endif
+#ifndef IRAM_ATTR
+#define IRAM_ATTR
+#endif
+
 ExternalFont::~ExternalFont() { unload(); }
 
 void ExternalFont::unload() {
@@ -147,7 +154,7 @@ bool ExternalFont::load(const char* filepath) {
   return true;
 }
 
-int ExternalFont::findInCache(uint32_t codepoint) {
+IRAM_ATTR int ExternalFont::findInCache(uint32_t codepoint) {
   // O(1) hash table lookup with linear probing for collisions
   int hash = hashCodepoint(codepoint);
   for (int i = 0; i < CACHE_SIZE; i++) {

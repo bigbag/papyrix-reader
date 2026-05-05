@@ -4,9 +4,17 @@
 #include <Logging.h>
 #include <Serialization.h>
 
+#if __has_include(<esp_attr.h>)
+#include <esp_attr.h>
+#endif
+#ifndef IRAM_ATTR
+#define IRAM_ATTR
+#endif
+
 #define TAG "PAGE"
 
-void PageLine::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset, const bool black) {
+IRAM_ATTR void PageLine::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset,
+                                const bool black) {
   block->render(renderer, fontId, xPos + xOffset, yPos + yOffset, black);
 }
 
@@ -59,8 +67,8 @@ std::unique_ptr<PageImage> PageImage::deserialize(FsFile& file) {
   return std::unique_ptr<PageImage>(new PageImage(std::move(ib), xPos, yPos));
 }
 
-void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset,
-                  const bool black) const {
+IRAM_ATTR void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset,
+                            const bool black) const {
   for (auto& element : elements) {
     element->render(renderer, fontId, xOffset, yOffset, black);
   }

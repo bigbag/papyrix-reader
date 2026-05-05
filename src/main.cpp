@@ -70,7 +70,7 @@
 #define SD_SPI_MISO 7
 
 #define SERIAL_INIT_DELAY_MS 10
-#define SERIAL_READY_TIMEOUT_MS 3000
+#define SERIAL_READY_TIMEOUT_MS 150
 
 EInkDisplay einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_RST, EPD_BUSY);
 InputManager inputManager;

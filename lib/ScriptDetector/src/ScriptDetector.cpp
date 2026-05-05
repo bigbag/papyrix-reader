@@ -2,9 +2,16 @@
 
 #include <Utf8.h>
 
+#if __has_include(<esp_attr.h>)
+#include <esp_attr.h>
+#endif
+#ifndef IRAM_ATTR
+#define IRAM_ATTR
+#endif
+
 namespace ScriptDetector {
 
-bool isCjkCodepoint(uint32_t cp) {
+IRAM_ATTR bool isCjkCodepoint(uint32_t cp) {
   // CJK Unified Ideographs
   if (cp >= 0x4E00 && cp <= 0x9FFF) return true;
   // CJK Extension A

@@ -42,7 +42,7 @@ struct Settings {
   enum AutoSleepTimeout : uint8_t { Sleep5Min = 0, Sleep10Min = 1, Sleep15Min = 2, Sleep30Min = 3, SleepNever = 4 };
 
   // Pages per full refresh (to clear ghosting)
-  enum PagesPerRefresh : uint8_t { PPR1 = 0, PPR5 = 1, PPR10 = 2, PPR15 = 3, PPR30 = 4 };
+  enum PagesPerRefresh : uint8_t { PPR1 = 0, PPR5 = 1, PPR10 = 2, PPR15 = 3, PPR30 = 4, PPR0 = 5 };
 
   // Paragraph alignment (values match TextBlock::BLOCK_STYLE)
   enum ParagraphAlignment : uint8_t { AlignJustified = 0, AlignLeft = 1, AlignCenter = 2, AlignRight = 3 };
@@ -66,7 +66,7 @@ struct Settings {
   uint8_t shortPwrBtn = PowerIgnore;
   uint8_t orientation = Portrait;
   uint8_t fontSize = FontMedium;
-  uint8_t pagesPerRefresh = PPR15;
+  uint8_t pagesPerRefresh = PPR0;
   uint8_t sideButtonLayout = PrevNext;
   uint8_t autoSleepMinutes = Sleep10Min;
   uint8_t paragraphAlignment = AlignJustified;
@@ -116,7 +116,8 @@ struct Settings {
   bool hasExternalReaderFont(const Theme& theme) const;
 
   int getPagesPerRefreshValue() const {
-    constexpr int values[] = {1, 5, 10, 15, 30};
+    constexpr int values[] = {1, 5, 10, 15, 30, 0};
+    if (pagesPerRefresh >= 6) return 0;
     return values[pagesPerRefresh];
   }
 

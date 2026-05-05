@@ -4,10 +4,17 @@
 #include <Logging.h>
 #include <Serialization.h>
 
+#if __has_include(<esp_attr.h>)
+#include <esp_attr.h>
+#endif
+#ifndef IRAM_ATTR
+#define IRAM_ATTR
+#endif
+
 #define TAG "TEXT_BLOCK"
 
-void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int x, const int y,
-                       const bool black) const {
+IRAM_ATTR void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int x, const int y,
+                                 const bool black) const {
   for (const auto& wd : wordData) {
     renderer.drawText(fontId, wd.xPos + x, y, wd.word.c_str(), black, wd.style);
   }

@@ -100,9 +100,7 @@ class StreamingEpdFont {
   static constexpr int getCacheSize() { return CACHE_SIZE; }
 
  private:
-  // Cache configuration
-  // 64 entries balances hit rate vs RAM for Latin/Western fonts (fewer unique glyphs per page than CJK)
-  static constexpr int CACHE_SIZE = 64;
+  static constexpr int CACHE_SIZE = 192;
   static constexpr uint32_t INVALID_CODEPOINT = 0xFFFFFFFF;
 
   // Maximum allowed glyph bitmap size (defense against corrupted font files)

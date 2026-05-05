@@ -2,6 +2,13 @@
 #include <Arduino.h>
 #include <SPI.h>
 
+#if __has_include(<esp_attr.h>)
+#include <esp_attr.h>
+#endif
+#ifndef IRAM_ATTR
+#define IRAM_ATTR
+#endif
+
 class EInkDisplay {
  public:
   // Constructor with pin configuration
@@ -132,9 +139,9 @@ class EInkDisplay {
 
   // Low-level display control
   void resetDisplay();
-  void sendCommand(uint8_t command);
-  void sendData(uint8_t data);
-  void sendData(const uint8_t* data, uint16_t length);
+  void IRAM_ATTR sendCommand(uint8_t command);
+  void IRAM_ATTR sendData(uint8_t data);
+  void IRAM_ATTR sendData(const uint8_t* data, uint16_t length);
   void sendDataBatchBegin();
   void sendDataBatchEnd();
   void waitForRefresh(const char* comment = nullptr);
@@ -142,6 +149,6 @@ class EInkDisplay {
   void initDisplayController();
 
   // Low-level display operations
-  void setRamArea(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
-  void writeRamBuffer(uint8_t ramBuffer, const uint8_t* data, uint32_t size);
+  void IRAM_ATTR setRamArea(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
+  void IRAM_ATTR writeRamBuffer(uint8_t ramBuffer, const uint8_t* data, uint32_t size);
 };
