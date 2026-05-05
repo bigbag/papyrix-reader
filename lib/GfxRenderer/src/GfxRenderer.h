@@ -76,9 +76,9 @@ class GfxRenderer {
   // outputRow = 800/4 = 200 bytes, rowBytes = 800*3 = 2400 bytes (24bpp).
   static constexpr size_t BITMAP_OUTPUT_ROW_SIZE = (EInkDisplay::DISPLAY_WIDTH + 3) / 4;
   static constexpr size_t BITMAP_ROW_BYTES_SIZE = EInkDisplay::DISPLAY_WIDTH * 3;  // 24-bit max
-  uint8_t* bitmapOutputRow_ = nullptr;
-  uint8_t* bitmapRowBytes_ = nullptr;
-  void allocateBitmapRowBuffers();
+  mutable uint8_t* bitmapOutputRow_ = nullptr;
+  mutable uint8_t* bitmapRowBytes_ = nullptr;
+  bool ensureBitmapRowBuffers() const;
   void freeBitmapRowBuffers();
 
   // Word width cache: open-addressing flat hash table for O(1) lookup.
@@ -120,9 +120,7 @@ class GfxRenderer {
   void freeBwBufferChunks();
 
  public:
-  explicit GfxRenderer(EInkDisplay& einkDisplay) : einkDisplay(einkDisplay), renderMode(BW), orientation(Portrait) {
-    allocateBitmapRowBuffers();
-  }
+  explicit GfxRenderer(EInkDisplay& einkDisplay) : einkDisplay(einkDisplay), renderMode(BW), orientation(Portrait) {}
   ~GfxRenderer() { freeBitmapRowBuffers(); }
 
   static constexpr int VIEWABLE_MARGIN_TOP = 9;

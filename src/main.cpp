@@ -15,6 +15,8 @@
 #include <builtinFonts/reader_xsmall_regular_2b.h>
 #include <driver/gpio.h>
 #include <esp_system.h>
+
+#include "core/CrashDebug.h"
 // Medium font (16pt)
 #include <builtinFonts/reader_medium_2b.h>
 #include <builtinFonts/reader_medium_bold_2b.h>
@@ -381,6 +383,7 @@ bool earlyInit() {
   }
 
   LOG_INF(TAG, "Starting Papyrix version " PAPYRIX_VERSION);
+  papyrix::crashdebug::logBootInfo(wakeup.resetReason);
 
   // Initialize battery ADC pin with proper attenuation for 0-3.3V range
   analogSetPinAttenuation(BAT_GPIO0, ADC_11db);

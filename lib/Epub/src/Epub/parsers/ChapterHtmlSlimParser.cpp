@@ -988,6 +988,12 @@ std::string ChapterHtmlSlimParser::cacheImage(const std::string& src) {
 
   // Generate cache filename from hash
   size_t srcHash = std::hash<std::string>{}(resolvedPath);
+
+  // Session blacklist: image already failed with timeout/OOM this boot
+  if (sessionFailedImageHashes().count(srcHash)) {
+    LOG_DBG(TAG, "Skipping session-blacklisted image: %s", resolvedPath.c_str());
+    return "";
+  }
   std::string cachedBmpPath = imageCachePath + "/" + std::to_string(srcHash) + ".bmp";
 
   // Check if already cached
@@ -1053,6 +1059,7 @@ std::string ChapterHtmlSlimParser::cacheImage(const std::string& src) {
     if (SdMan.openFileForWrite("EHP", failedMarker, marker)) {
       marker.close();
     }
+    sessionFailedImageHashes().insert(srcHash);
     consecutiveImageFailures_++;
     return "";
   }

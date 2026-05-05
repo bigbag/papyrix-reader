@@ -1,9 +1,24 @@
 #pragma once
 #include <SdFat.h>
 
+#include <functional>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+enum class StreamReadResult : uint8_t {
+  Success,
+  OpenFailed,
+  NotFound,
+  InvalidOffset,
+  UnsupportedMethod,
+  AllocFailed,
+  Aborted,
+  ReadError,
+  WriteError,
+  DecompressionError,
+  SizeMismatch,
+};
 
 class ZipFile {
  public:
@@ -74,5 +89,9 @@ class ZipFile {
   // Due to the memory required to run each of these, it is recommended to not preopen the zip file for multiple
   // These functions will open and close the zip as needed
   uint8_t* readFileToMemory(const char* filename, size_t* size = nullptr, bool trailingNullByte = false);
-  bool readFileToStream(const char* filename, Print& out, size_t chunkSize, uint8_t* dictBuffer = nullptr);
+  bool readFileToStream(const char* filename, Print& out, size_t chunkSize, uint8_t* dictBuffer = nullptr,
+                        const std::function<bool()>& shouldAbort = nullptr);
+  StreamReadResult readFileToStreamDetailed(const char* filename, Print& out, size_t chunkSize,
+                                            uint8_t* dictBuffer = nullptr,
+                                            const std::function<bool()>& shouldAbort = nullptr);
 };

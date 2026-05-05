@@ -49,9 +49,26 @@ static size_t utf8RemoveLastChar(std::string& str) {
 }
 
 static void utf8TruncateChars(std::string& str, size_t numChars) {
-  for (size_t i = 0; i < numChars && !str.empty(); ++i) {
-    utf8RemoveLastChar(str);
+  if (str.empty() || numChars == 0) return;
+
+  const unsigned char* ptr = reinterpret_cast<const unsigned char*>(str.c_str());
+  size_t totalCp = 0;
+  while (*ptr) {
+    utf8NextCodepoint(&ptr);
+    totalCp++;
   }
+
+  if (numChars >= totalCp) {
+    str.clear();
+    return;
+  }
+
+  const size_t keepCp = totalCp - numChars;
+  ptr = reinterpret_cast<const unsigned char*>(str.c_str());
+  for (size_t i = 0; i < keepCp; i++) {
+    utf8NextCodepoint(&ptr);
+  }
+  str.resize(static_cast<size_t>(ptr - reinterpret_cast<const unsigned char*>(str.c_str())));
 }
 
 int main() {

@@ -14,6 +14,45 @@
 
 #define TAG "GFX"
 
+struct TextScriptFlags {
+  bool hasArabic = false;
+  bool hasThai = false;
+  bool hasCjk = false;
+};
+
+static inline TextScriptFlags detectTextScripts(const char* text) {
+  TextScriptFlags flags;
+  if (!text) return flags;
+  const unsigned char* ptr = reinterpret_cast<const unsigned char*>(text);
+  uint32_t cp;
+  while ((cp = utf8NextCodepoint(&ptr))) {
+    if (!flags.hasArabic && ScriptDetector::isArabicCodepoint(cp))
+      flags.hasArabic = true;
+    else if (!flags.hasThai && ScriptDetector::isThaiCodepoint(cp))
+      flags.hasThai = true;
+    else if (!flags.hasCjk && ScriptDetector::isCjkCodepoint(cp))
+      flags.hasCjk = true;
+    if (flags.hasArabic && flags.hasThai && flags.hasCjk) break;
+  }
+  return flags;
+}
+
+static std::vector<size_t> utf8PrefixBoundaries(const std::string& text) {
+  std::vector<size_t> boundaries;
+  boundaries.reserve(text.size() + 1);
+  boundaries.push_back(0);
+
+  const char* ptr = text.c_str();
+  while (*ptr) {
+    const char* next = ptr;
+    utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&next));
+    boundaries.push_back(static_cast<size_t>(next - text.c_str()));
+    ptr = next;
+  }
+
+  return boundaries;
+}
+
 static inline void writeFB(uint8_t* fb, int stride, int physX, int physY, bool state) {
   const int idx = physY * stride + (physX >> 3);
   const uint8_t bit = static_cast<uint8_t>(1 << (7 - (physX & 7)));
@@ -153,11 +192,11 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
     slot = (slot + 1) % MAX_WIDTH_CACHE_SIZE;
   }
 
-  // Check if text contains Arabic or Thai - use specialized width calculation
   int w = 0;
-  if (ScriptDetector::containsArabic(text)) {
+  const auto scripts = detectTextScripts(text);
+  if (scripts.hasArabic) {
     w = getArabicTextWidth(fontId, text, style);
-  } else if (ScriptDetector::containsThai(text)) {
+  } else if (scripts.hasThai) {
     w = getThaiTextWidth(fontId, text, style);
   } else if (isExternalFontAllowed(fontId) &&
              ((_externalFont && _externalFont->isLoaded()) || tryResolveExternalFont())) {
@@ -231,19 +270,16 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
 
   const auto& font = it->second;
 
-  // Check if text contains Arabic script - use Arabic rendering path
-  if (ScriptDetector::containsArabic(text)) {
+  const auto scripts = detectTextScripts(text);
+  if (scripts.hasArabic) {
     drawArabicText(fontId, x, y, text, black, style);
     return;
   }
-
-  // Check if text contains Thai script - use Thai rendering path if so
-  if (ScriptDetector::containsThai(text)) {
+  if (scripts.hasThai) {
     drawThaiText(fontId, x, y, text, black, style);
     return;
   }
 
-  // Standard rendering path for non-Thai text
   const int yPos = y + getFontAscenderSize(fontId);
   int xpos = x;
   int lastBaseX = x;
@@ -411,8 +447,7 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   const size_t outputRowSize = static_cast<size_t>((bitmap.getWidth() + 3) / 4);
   const size_t rowBytesSize = static_cast<size_t>(bitmap.getRowBytes());
 
-  if (!bitmapOutputRow_ || !bitmapRowBytes_) {
-    LOG_ERR(TAG, "!! Bitmap row buffers not allocated");
+  if (!ensureBitmapRowBuffers()) {
     return;
   }
 
@@ -609,16 +644,53 @@ void GfxRenderer::displayWindow(int x, int y, int width, int height, bool turnOf
 std::string GfxRenderer::truncatedText(const int fontId, const char* text, const int maxWidth,
                                        const EpdFontFamily::Style style) const {
   std::string item = text;
-  int itemWidth = getTextWidth(fontId, item.c_str(), style);
-  while (itemWidth > maxWidth && item.length() > 8) {
-    // Remove "..." first, then remove one UTF-8 char, then add "..." back
-    if (item.length() >= 3 && item.compare(item.length() - 3, 3, "...") == 0) {
-      item.resize(item.length() - 3);
-    }
-    utf8RemoveLastChar(item);
-    item.append("...");
-    itemWidth = getTextWidth(fontId, item.c_str(), style);
+  const int itemWidth = getTextWidth(fontId, item.c_str(), style);
+  if (itemWidth <= maxWidth || item.length() <= 8) {
+    return item;
   }
+
+  const std::vector<size_t> boundaries = utf8PrefixBoundaries(item);
+  const auto scripts = detectTextScripts(text);
+  const bool nonMonotonic = scripts.hasArabic || scripts.hasThai;
+
+  size_t best = 0;
+
+  if (nonMonotonic) {
+    // Arabic/Thai reshaping makes width non-monotonic w.r.t. prefix length — linear scan
+    for (size_t i = boundaries.size() - 1; i > 0; --i) {
+      std::string candidate = item.substr(0, boundaries[i]);
+      candidate.append("...");
+      if (getTextWidth(fontId, candidate.c_str(), style) <= maxWidth) {
+        best = i;
+        break;
+      }
+    }
+  } else {
+    size_t left = 0;
+    size_t right = boundaries.size() - 1;
+
+    while (left <= right) {
+      const size_t mid = left + (right - left) / 2;
+      std::string candidate = item.substr(0, boundaries[mid]);
+      candidate.append("...");
+      const int candidateWidth = getTextWidth(fontId, candidate.c_str(), style);
+
+      if (candidateWidth <= maxWidth) {
+        best = mid;
+        left = mid + 1;
+      } else {
+        if (mid == 0) break;
+        right = mid - 1;
+      }
+    }
+  }
+
+  if (best == 0) {
+    return "...";
+  }
+
+  item.resize(boundaries[best]);
+  item.append("...");
   return item;
 }
 
@@ -628,6 +700,9 @@ std::vector<std::string> GfxRenderer::breakWordWithHyphenation(const int fontId,
   if (!word || *word == '\0') return chunks;
 
   std::string remaining = word;
+  const auto scripts = detectTextScripts(word);
+  const bool nonMonotonic = scripts.hasArabic || scripts.hasThai;
+
   while (!remaining.empty()) {
     const int remainingWidth = getTextWidth(fontId, remaining.c_str(), style);
     if (remainingWidth <= maxWidth) {
@@ -635,39 +710,54 @@ std::vector<std::string> GfxRenderer::breakWordWithHyphenation(const int fontId,
       break;
     }
 
-    // Find max chars that fit with hyphen
-    std::string chunk;
-    const char* ptr = remaining.c_str();
-    const char* lastGoodPos = ptr;
+    const std::vector<size_t> boundaries = utf8PrefixBoundaries(remaining);
+    size_t best = 0;
 
-    while (*ptr) {
-      const char* nextChar = ptr;
-      utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&nextChar));
-
-      std::string testChunk = chunk;
-      testChunk.append(ptr, nextChar - ptr);
-      const int testWidth = getTextWidth(fontId, (testChunk + "-").c_str(), style);
-
-      if (testWidth > maxWidth && !chunk.empty()) break;
-
-      chunk = testChunk;
-      lastGoodPos = nextChar;
-      ptr = nextChar;
-    }
-
-    if (chunk.empty()) {
-      // Single char too wide - force it
-      const char* nextChar = remaining.c_str();
-      utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&nextChar));
-      chunk.append(remaining.c_str(), nextChar - remaining.c_str());
-      lastGoodPos = nextChar;
-    }
-
-    if (lastGoodPos < remaining.c_str() + remaining.size()) {
-      chunks.push_back(chunk + "-");
-      remaining = remaining.substr(lastGoodPos - remaining.c_str());
+    if (nonMonotonic) {
+      for (size_t i = boundaries.size() - 1; i > 0; --i) {
+        const bool hasTail = boundaries[i] < remaining.size();
+        std::string candidate = remaining.substr(0, boundaries[i]);
+        if (hasTail) candidate.push_back('-');
+        if (getTextWidth(fontId, candidate.c_str(), style) <= maxWidth) {
+          best = i;
+          break;
+        }
+      }
     } else {
-      chunks.push_back(chunk);
+      size_t left = 1;
+      size_t right = boundaries.size() - 1;
+
+      while (left <= right) {
+        const size_t mid = left + (right - left) / 2;
+        const bool hasTail = boundaries[mid] < remaining.size();
+        std::string candidate = remaining.substr(0, boundaries[mid]);
+        if (hasTail) {
+          candidate.push_back('-');
+        }
+
+        const int candidateWidth = getTextWidth(fontId, candidate.c_str(), style);
+        if (candidateWidth <= maxWidth) {
+          best = mid;
+          left = mid + 1;
+        } else {
+          if (mid == 0) break;
+          right = mid - 1;
+        }
+      }
+    }
+
+    if (best == 0) {
+      best = 1;
+    }
+
+    std::string chunk = remaining.substr(0, boundaries[best]);
+    const bool hasTail = boundaries[best] < remaining.size();
+    if (hasTail) {
+      chunk.push_back('-');
+      chunks.push_back(std::move(chunk));
+      remaining.erase(0, boundaries[best]);
+    } else {
+      chunks.push_back(std::move(chunk));
       remaining.clear();
     }
   }
@@ -1118,14 +1208,28 @@ void GfxRenderer::getOrientedViewableTRBL(int* outTop, int* outRight, int* outBo
   }
 }
 
-void GfxRenderer::allocateBitmapRowBuffers() {
+bool GfxRenderer::ensureBitmapRowBuffers() const {
+  if (bitmapOutputRow_ && bitmapRowBytes_) {
+    return true;
+  }
+
   bitmapOutputRow_ = static_cast<uint8_t*>(malloc(BITMAP_OUTPUT_ROW_SIZE));
   bitmapRowBytes_ = static_cast<uint8_t*>(malloc(BITMAP_ROW_BYTES_SIZE));
 
   if (!bitmapOutputRow_ || !bitmapRowBytes_) {
-    LOG_ERR(TAG, "!! Failed to allocate bitmap row buffers");
-    freeBitmapRowBuffers();
+    LOG_ERR(TAG, "!! Failed to allocate bitmap row buffers (%zu + %zu bytes)", BITMAP_OUTPUT_ROW_SIZE,
+            BITMAP_ROW_BYTES_SIZE);
+    if (bitmapOutputRow_) {
+      free(bitmapOutputRow_);
+      bitmapOutputRow_ = nullptr;
+    }
+    if (bitmapRowBytes_) {
+      free(bitmapRowBytes_);
+      bitmapRowBytes_ = nullptr;
+    }
+    return false;
   }
+  return true;
 }
 
 void GfxRenderer::freeBitmapRowBuffers() {
