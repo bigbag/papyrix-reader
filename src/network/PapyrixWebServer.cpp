@@ -5,6 +5,7 @@
 #include <FsHelpers.h>
 #include <Logging.h>
 #include <SDCardManager.h>
+#include <Utf8Nfc.h>
 #include <WiFi.h>
 #include <esp_heap_caps.h>
 
@@ -205,6 +206,16 @@ void PapyrixWebServer::handleUpload() {
 
   if (upload.status == UPLOAD_FILE_START) {
     upload_.fileName = upload.filename;
+    {
+      size_t len = upload_.fileName.length();
+      if (len > 0 && len < 256) {
+        char buf[256];
+        memcpy(buf, upload_.fileName.c_str(), len);
+        buf[len] = '\0';
+        size_t nfcLen = utf8NormalizeNfc(buf, len);
+        upload_.fileName = String(buf, nfcLen);
+      }
+    }
     upload_.size = 0;
     upload_.success = false;
     upload_.error = "";

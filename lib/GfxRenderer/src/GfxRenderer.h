@@ -184,6 +184,7 @@ class GfxRenderer {
   // Screen ops
   int getScreenWidth() const;
   int getScreenHeight() const;
+  void displayBufferDriveAll(bool turnOffScreen = false) const;
   void displayBuffer(EInkDisplay::RefreshMode refreshMode = EInkDisplay::FAST_REFRESH,
                      bool turnOffScreen = false) const;
   // EXPERIMENTAL: Windowed update - display only a rectangular region

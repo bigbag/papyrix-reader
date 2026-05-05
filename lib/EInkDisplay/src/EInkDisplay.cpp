@@ -621,6 +621,51 @@ void EInkDisplay::writeRamBuffer(uint8_t ramBuffer, const uint8_t* data, uint32_
   LOG_DBG(TAG, "%s RAM write complete (%lu ms)", bufferName, duration);
 }
 
+void EInkDisplay::writeRamBufferInverted(uint8_t ramBuffer, const uint8_t* data, uint32_t size) {
+  LOG_DBG(TAG, "Writing inverted buffer to %s RAM (%lu bytes)...", (ramBuffer == CMD_WRITE_RAM_BW) ? "BW" : "RED",
+          size);
+  SPI.beginTransaction(spiSettings);
+  digitalWrite(_cs, LOW);
+  digitalWrite(_dc, LOW);
+  SPI.transfer(ramBuffer);
+  digitalWrite(_dc, HIGH);
+  constexpr uint16_t kChunk = 256;
+  uint8_t buf[kChunk];
+  for (uint32_t off = 0; off < size; off += kChunk) {
+    const uint16_t len = (size - off < kChunk) ? static_cast<uint16_t>(size - off) : kChunk;
+    for (uint16_t j = 0; j < len; j++) buf[j] = ~data[off + j];
+    SPI.writeBytes(buf, len);
+  }
+  digitalWrite(_cs, HIGH);
+  SPI.endTransaction();
+}
+
+void EInkDisplay::displayBufferDriveAll(bool turnOffScreen) {
+  if (_x3Mode) {
+    requestResync();
+    displayBuffer(FAST_REFRESH, turnOffScreen);
+    return;
+  }
+  if (!isScreenOn) {
+    displayBuffer(HALF_REFRESH, turnOffScreen);
+    return;
+  }
+  grayscaleRevert();
+  setRamArea(0, 0, displayWidth, displayHeight);
+  writeRamBuffer(CMD_WRITE_RAM_BW, frameBuffer, bufferSize);
+  writeRamBufferInverted(CMD_WRITE_RAM_RED, frameBuffer, bufferSize);
+#ifndef EINK_DISPLAY_SINGLE_BUFFER_MODE
+  swapBuffers();
+#endif
+  refreshDisplay(FAST_REFRESH, turnOffScreen);
+  setRamArea(0, 0, displayWidth, displayHeight);
+#ifdef EINK_DISPLAY_SINGLE_BUFFER_MODE
+  writeRamBuffer(CMD_WRITE_RAM_RED, frameBuffer, bufferSize);
+#else
+  writeRamBuffer(CMD_WRITE_RAM_RED, frameBufferActive, bufferSize);
+#endif
+}
+
 void EInkDisplay::setFramebuffer(const uint8_t* bwBuffer) const { memcpy(frameBuffer, bwBuffer, bufferSize); }
 
 #ifndef EINK_DISPLAY_SINGLE_BUFFER_MODE

@@ -71,6 +71,7 @@ class EInkDisplay {
   // turnOffScreen: Power down display after refresh. Used for sunlight fading fix
   // on SSD1677 displays without resin protection (XTEINK X4).
   void displayBuffer(RefreshMode mode = FAST_REFRESH, bool turnOffScreen = false);
+  void displayBufferDriveAll(bool turnOffScreen = false);
   // EXPERIMENTAL: Windowed update - display only a rectangular region
   void displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, bool turnOffScreen = false);
   void displayGrayBuffer(bool turnOffScreen = false);
@@ -151,4 +152,5 @@ class EInkDisplay {
   // Low-level display operations
   void IRAM_ATTR setRamArea(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
   void IRAM_ATTR writeRamBuffer(uint8_t ramBuffer, const uint8_t* data, uint32_t size);
+  void IRAM_ATTR writeRamBufferInverted(uint8_t ramBuffer, const uint8_t* data, uint32_t size);
 };

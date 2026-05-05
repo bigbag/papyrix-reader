@@ -596,6 +596,14 @@ void GfxRenderer::invertScreen() const {
   }
 }
 
+void GfxRenderer::displayBufferDriveAll(bool turnOffScreen) const {
+  if (renderStartMs > 0) {
+    LOG_DBG(TAG, "Render took %lu ms", millis() - renderStartMs);
+    renderStartMs = 0;
+  }
+  einkDisplay.displayBufferDriveAll(turnOffScreen);
+}
+
 void GfxRenderer::displayBuffer(const EInkDisplay::RefreshMode refreshMode, bool turnOffScreen) const {
   if (renderStartMs > 0) {
     LOG_DBG(TAG, "Render took %lu ms", millis() - renderStartMs);

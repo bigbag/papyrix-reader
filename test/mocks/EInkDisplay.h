@@ -21,6 +21,7 @@ class EInkDisplay {
   uint16_t getDisplayWidthBytes() const { return DISPLAY_WIDTH_BYTES; }
   void clearScreen(uint8_t color = 0xFF) { memset(frameBuffer_, color, BUFFER_SIZE); }
   void displayBuffer(RefreshMode, bool) {}
+  void displayBufferDriveAll(bool = false) {}
   void displayWindow(int, int, int, int, bool) {}
   void drawImage(const uint8_t*, int, int, int, int) {}
   void grayscaleRevert() {}
