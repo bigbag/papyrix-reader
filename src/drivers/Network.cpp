@@ -175,8 +175,9 @@ int Network::getScanResults(WifiNetwork* out, int maxCount) {
     LOG_INF(TAG, "Async scan returned 0 networks, retrying synchronously");
     WiFi.scanDelete();
     result = WiFi.scanNetworks(false, false, false, 500);
-    if (result == WIFI_SCAN_FAILED || result <= 0) {
-      LOG_ERR(TAG, "Synchronous scan fallback returned %d networks", static_cast<int>(result));
+    if (result == WIFI_SCAN_FAILED || result < 0) {
+      LOG_ERR(TAG, "Synchronous scan fallback failed: %d", static_cast<int>(result));
+      WiFi.scanDelete();
       return 0;
     }
   }

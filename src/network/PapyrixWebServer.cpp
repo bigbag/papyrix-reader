@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <FsHelpers.h>
+#include <vector>
 #include <Logging.h>
 #include <SDCardManager.h>
 #include <Utf8Nfc.h>
@@ -208,12 +209,14 @@ void PapyrixWebServer::handleUpload() {
     upload_.fileName = upload.filename;
     {
       size_t len = upload_.fileName.length();
-      if (len > 0 && len < 256) {
-        char buf[256];
-        memcpy(buf, upload_.fileName.c_str(), len);
+      if (len > 0 && len < 512) {
+        std::vector<char> buf(len + 1);
+        memcpy(buf.data(), upload_.fileName.c_str(), len);
         buf[len] = '\0';
-        size_t nfcLen = utf8NormalizeNfc(buf, len);
-        upload_.fileName = String(buf, nfcLen);
+        size_t nfcLen = utf8NormalizeNfc(buf.data(), len);
+        upload_.fileName = String(buf.data(), nfcLen);
+      } else if (len >= 512) {
+        LOG_WRN(TAG, "Filename too long for NFC normalization: %zu bytes", len);
       }
     }
     upload_.size = 0;

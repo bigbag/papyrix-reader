@@ -1037,6 +1037,7 @@ std::string ChapterHtmlSlimParser::cacheImage(const std::string& src) {
     if (SdMan.openFileForWrite("EHP", failedMarker, marker)) {
       marker.close();
     }
+    sessionFailedImageHashes().insert(srcHash);
     consecutiveImageFailures_++;
     return "";
   }

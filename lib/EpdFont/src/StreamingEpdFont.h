@@ -15,7 +15,7 @@
  *
  * Memory comparison for typical 50KB font:
  *   - EpdFont: ~70KB (intervals + glyphs + bitmap all in RAM)
- *   - StreamingEpdFont: ~25KB (intervals + glyphs + cache only)
+ *   - StreamingEpdFont: ~30-60KB (intervals + glyphs + cache only)
  *
  * Trade-off: Slightly slower glyph access (SD card reads on cache miss)
  *            but significantly lower RAM usage.

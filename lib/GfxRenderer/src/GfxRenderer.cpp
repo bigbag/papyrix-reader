@@ -37,23 +37,21 @@ static inline TextScriptFlags detectTextScripts(const char* text) {
   return flags;
 }
 
-static std::vector<size_t> utf8PrefixBoundaries(const std::string& text) {
-  std::vector<size_t> boundaries;
-  boundaries.reserve(text.size() + 1);
-  boundaries.push_back(0);
+static void utf8PrefixBoundaries(const std::string& text, std::vector<size_t>& out) {
+  out.clear();
+  out.reserve(text.size() + 1);
+  out.push_back(0);
 
   const char* ptr = text.c_str();
   while (*ptr) {
     const char* next = ptr;
     utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&next));
-    boundaries.push_back(static_cast<size_t>(next - text.c_str()));
+    out.push_back(static_cast<size_t>(next - text.c_str()));
     ptr = next;
   }
-
-  return boundaries;
 }
 
-static inline void writeFB(uint8_t* fb, int stride, int physX, int physY, bool state) {
+__attribute__((always_inline)) static inline void writeFB(uint8_t* fb, int stride, int physX, int physY, bool state) {
   const int idx = physY * stride + (physX >> 3);
   const uint8_t bit = static_cast<uint8_t>(1 << (7 - (physX & 7)));
   if (state)
@@ -62,8 +60,34 @@ static inline void writeFB(uint8_t* fb, int stride, int physX, int physY, bool s
     fb[idx] |= bit;
 }
 
-static inline bool extractFontPixel(const uint8_t* bitmap, int pixelPos, bool is2Bit, GfxRenderer::RenderMode mode,
-                                    bool pixelState, bool& outState) {
+__attribute__((always_inline)) static inline void orientedWriteFB(uint8_t* fb, int stride, int sX, int sY,
+                                                                  GfxRenderer::Orientation o, int panelW, int panelH,
+                                                                  bool state) {
+  int pX, pY;
+  switch (o) {
+    case GfxRenderer::LandscapeCounterClockwise:
+      pX = sX;
+      pY = sY;
+      break;
+    case GfxRenderer::Portrait:
+      pX = sY;
+      pY = panelH - 1 - sX;
+      break;
+    case GfxRenderer::LandscapeClockwise:
+      pX = panelW - 1 - sX;
+      pY = panelH - 1 - sY;
+      break;
+    case GfxRenderer::PortraitInverted:
+      pX = panelW - 1 - sY;
+      pY = sX;
+      break;
+  }
+  writeFB(fb, stride, pX, pY, state);
+}
+
+__attribute__((always_inline)) static inline bool extractFontPixel(const uint8_t* bitmap, int pixelPos, bool is2Bit,
+                                                                    GfxRenderer::RenderMode mode, bool pixelState,
+                                                                    bool& outState) {
   if (is2Bit) {
     const uint8_t byte = bitmap[pixelPos / 4];
     const uint8_t bitIdx = static_cast<uint8_t>((3 - pixelPos % 4) * 2);
@@ -490,37 +514,19 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
       lastSrcY = srcY;
     }
 
-#define DRAWBITMAP_INNER(PHYS_X_EXPR, PHYS_Y_EXPR)                                    \
-  for (int dx = dxStart; dx < dxEnd; dx++) {                                          \
-    int bmpX = isScaled ? static_cast<int>(dx * invScale) : dx;                       \
-    if (bmpX >= bmpW) bmpX = bmpW - 1;                                                \
-    const uint8_t val = (bitmapOutputRow_[bmpX / 4] >> (6 - ((bmpX * 2) % 8))) & 0x3; \
-    const int sX = x + dx;                                                            \
-    if (renderMode == BW && val < 3) {                                                \
-      writeFB(frameBuffer, stride, (PHYS_X_EXPR), (PHYS_Y_EXPR), true);               \
-    } else if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {               \
-      writeFB(frameBuffer, stride, (PHYS_X_EXPR), (PHYS_Y_EXPR), false);              \
-    } else if (renderMode == GRAYSCALE_LSB && val == 1) {                             \
-      writeFB(frameBuffer, stride, (PHYS_X_EXPR), (PHYS_Y_EXPR), false);              \
-    }                                                                                 \
-  }
-
-    switch (orientation) {
-      case LandscapeCounterClockwise:
-        DRAWBITMAP_INNER(sX, screenY)
-        break;
-      case Portrait:
-        DRAWBITMAP_INNER(screenY, panelH - 1 - sX)
-        break;
-      case LandscapeClockwise:
-        DRAWBITMAP_INNER(panelW - 1 - sX, panelH - 1 - screenY)
-        break;
-      case PortraitInverted:
-        DRAWBITMAP_INNER(panelW - 1 - screenY, sX)
-        break;
+    for (int dx = dxStart; dx < dxEnd; dx++) {
+      int bmpX = isScaled ? static_cast<int>(dx * invScale) : dx;
+      if (bmpX >= bmpW) bmpX = bmpW - 1;
+      const uint8_t val = (bitmapOutputRow_[bmpX / 4] >> (6 - ((bmpX * 2) % 8))) & 0x3;
+      const int sX = x + dx;
+      if (renderMode == BW && val < 3) {
+        orientedWriteFB(frameBuffer, stride, sX, screenY, orientation, panelW, panelH, true);
+      } else if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
+        orientedWriteFB(frameBuffer, stride, sX, screenY, orientation, panelW, panelH, false);
+      } else if (renderMode == GRAYSCALE_LSB && val == 1) {
+        orientedWriteFB(frameBuffer, stride, sX, screenY, orientation, panelW, panelH, false);
+      }
     }
-
-#undef DRAWBITMAP_INNER
   }
 }
 
@@ -657,7 +663,8 @@ std::string GfxRenderer::truncatedText(const int fontId, const char* text, const
     return item;
   }
 
-  const std::vector<size_t> boundaries = utf8PrefixBoundaries(item);
+  std::vector<size_t> boundaries;
+  utf8PrefixBoundaries(item, boundaries);
   const auto scripts = detectTextScripts(text);
   const bool nonMonotonic = scripts.hasArabic || scripts.hasThai;
 
@@ -710,6 +717,7 @@ std::vector<std::string> GfxRenderer::breakWordWithHyphenation(const int fontId,
   std::string remaining = word;
   const auto scripts = detectTextScripts(word);
   const bool nonMonotonic = scripts.hasArabic || scripts.hasThai;
+  std::vector<size_t> boundaries;
 
   while (!remaining.empty()) {
     const int remainingWidth = getTextWidth(fontId, remaining.c_str(), style);
@@ -718,7 +726,7 @@ std::vector<std::string> GfxRenderer::breakWordWithHyphenation(const int fontId,
       break;
     }
 
-    const std::vector<size_t> boundaries = utf8PrefixBoundaries(remaining);
+    utf8PrefixBoundaries(remaining, boundaries);
     size_t best = 0;
 
     if (nonMonotonic) {
@@ -748,7 +756,6 @@ std::vector<std::string> GfxRenderer::breakWordWithHyphenation(const int fontId,
           best = mid;
           left = mid + 1;
         } else {
-          if (mid == 0) break;
           right = mid - 1;
         }
       }
@@ -1152,33 +1159,15 @@ void GfxRenderer::renderChar(const EpdFontFamily& fontFamily, const uint32_t cp,
       const int panelH = einkDisplay.getDisplayHeight();
       const int stride = einkDisplay.getDisplayWidthBytes();
 
-#define RENDERCHAR_INNER(PHYS_X_EXPR, PHYS_Y_EXPR)                                                  \
-  for (int gy = gyStart; gy < gyEnd; gy++) {                                                        \
-    const int sY = logTop + gy;                                                                     \
-    for (int gx = gxStart; gx < gxEnd; gx++) {                                                      \
-      bool st;                                                                                      \
-      if (!extractFontPixel(bitmap, gy * width + gx, is2Bit, renderMode, pixelState, st)) continue; \
-      const int sX = logLeft + gx;                                                                  \
-      writeFB(frameBuffer, stride, (PHYS_X_EXPR), (PHYS_Y_EXPR), st);                               \
-    }                                                                                               \
-  }
-
-      switch (orientation) {
-        case LandscapeCounterClockwise:
-          RENDERCHAR_INNER(sX, sY)
-          break;
-        case Portrait:
-          RENDERCHAR_INNER(sY, panelH - 1 - sX)
-          break;
-        case LandscapeClockwise:
-          RENDERCHAR_INNER(panelW - 1 - sX, panelH - 1 - sY)
-          break;
-        case PortraitInverted:
-          RENDERCHAR_INNER(panelW - 1 - sY, sX)
-          break;
+      for (int gy = gyStart; gy < gyEnd; gy++) {
+        const int sY = logTop + gy;
+        for (int gx = gxStart; gx < gxEnd; gx++) {
+          bool st;
+          if (!extractFontPixel(bitmap, gy * width + gx, is2Bit, renderMode, pixelState, st)) continue;
+          const int sX = logLeft + gx;
+          orientedWriteFB(frameBuffer, stride, sX, sY, orientation, panelW, panelH, st);
+        }
       }
-
-#undef RENDERCHAR_INNER
     }
   }
 
@@ -1289,36 +1278,18 @@ void GfxRenderer::renderExternalGlyph(const uint32_t cp, int* x, const int y, co
     const int panelH = einkDisplay.getDisplayHeight();
     const int stride = einkDisplay.getDisplayWidthBytes();
 
-#define EXTGLYPH_INNER(PHYS_X_EXPR, PHYS_Y_EXPR)                                \
-  for (int gy = gyStart; gy < gyEnd; gy++) {                                    \
-    const int sY = logTop + gy;                                                 \
-    for (int gx = gxStart; gx < gxEnd; gx++) {                                  \
-      const int glyphX = gx + minX;                                             \
-      const int byteIdx = gy * bytesPerRow + (glyphX / 8);                      \
-      const int bitIdx = 7 - (glyphX % 8);                                      \
-      if ((bitmap[byteIdx] >> bitIdx) & 1) {                                    \
-        const int sX = logLeft + gx;                                            \
-        writeFB(frameBuffer, stride, (PHYS_X_EXPR), (PHYS_Y_EXPR), pixelState); \
-      }                                                                         \
-    }                                                                           \
-  }
-
-    switch (orientation) {
-      case LandscapeCounterClockwise:
-        EXTGLYPH_INNER(sX, sY)
-        break;
-      case Portrait:
-        EXTGLYPH_INNER(sY, panelH - 1 - sX)
-        break;
-      case LandscapeClockwise:
-        EXTGLYPH_INNER(panelW - 1 - sX, panelH - 1 - sY)
-        break;
-      case PortraitInverted:
-        EXTGLYPH_INNER(panelW - 1 - sY, sX)
-        break;
+    for (int gy = gyStart; gy < gyEnd; gy++) {
+      const int sY = logTop + gy;
+      for (int gx = gxStart; gx < gxEnd; gx++) {
+        const int glyphX = gx + minX;
+        const int byteIdx = gy * bytesPerRow + (glyphX / 8);
+        const int bitIdx = 7 - (glyphX % 8);
+        if ((bitmap[byteIdx] >> bitIdx) & 1) {
+          const int sX = logLeft + gx;
+          orientedWriteFB(frameBuffer, stride, sX, sY, orientation, panelW, panelH, pixelState);
+        }
+      }
     }
-
-#undef EXTGLYPH_INNER
   }
 
   *x += advanceX;

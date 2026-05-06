@@ -347,7 +347,7 @@ void EInkDisplay::waitForRefresh(const char* comment) {
   }
 }
 
-void EInkDisplay::sendCommand(uint8_t command) {
+void IRAM_ATTR EInkDisplay::sendCommand(uint8_t command) {
   SPI.beginTransaction(spiSettings);
   digitalWrite(_dc, LOW);  // Command mode
   digitalWrite(_cs, LOW);  // Select chip
@@ -356,7 +356,7 @@ void EInkDisplay::sendCommand(uint8_t command) {
   SPI.endTransaction();
 }
 
-void EInkDisplay::sendData(uint8_t data) {
+void IRAM_ATTR EInkDisplay::sendData(uint8_t data) {
   SPI.beginTransaction(spiSettings);
   digitalWrite(_dc, HIGH);  // Data mode
   digitalWrite(_cs, LOW);   // Select chip
@@ -365,7 +365,7 @@ void EInkDisplay::sendData(uint8_t data) {
   SPI.endTransaction();
 }
 
-void EInkDisplay::sendData(const uint8_t* data, uint16_t length) {
+void IRAM_ATTR EInkDisplay::sendData(const uint8_t* data, uint16_t length) {
   SPI.beginTransaction(spiSettings);
   digitalWrite(_dc, HIGH);       // Data mode
   digitalWrite(_cs, LOW);        // Select chip
@@ -509,7 +509,7 @@ void EInkDisplay::initDisplayController() {
   LOG_INF(TAG, "SSD1677 controller initialized");
 }
 
-void EInkDisplay::setRamArea(const uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
+void IRAM_ATTR EInkDisplay::setRamArea(const uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
   constexpr uint8_t DATA_ENTRY_X_INC_Y_DEC = 0x01;
 
   // Reverse Y coordinate (gates are reversed on this display)
@@ -609,7 +609,7 @@ void EInkDisplay::drawImageTransparent(const uint8_t* imageData, const uint16_t 
   LOG_DBG(TAG, "Transparent image drawn to frame buffer");
 }
 
-void EInkDisplay::writeRamBuffer(uint8_t ramBuffer, const uint8_t* data, uint32_t size) {
+void IRAM_ATTR EInkDisplay::writeRamBuffer(uint8_t ramBuffer, const uint8_t* data, uint32_t size) {
   const char* bufferName = (ramBuffer == CMD_WRITE_RAM_BW) ? "BW" : "RED";
   const unsigned long startTime = millis();
   LOG_DBG(TAG, "Writing frame buffer to %s RAM (%lu bytes)...", bufferName, size);
@@ -621,7 +621,7 @@ void EInkDisplay::writeRamBuffer(uint8_t ramBuffer, const uint8_t* data, uint32_
   LOG_DBG(TAG, "%s RAM write complete (%lu ms)", bufferName, duration);
 }
 
-void EInkDisplay::writeRamBufferInverted(uint8_t ramBuffer, const uint8_t* data, uint32_t size) {
+void IRAM_ATTR EInkDisplay::writeRamBufferInverted(uint8_t ramBuffer, const uint8_t* data, uint32_t size) {
   LOG_DBG(TAG, "Writing inverted buffer to %s RAM (%lu bytes)...", (ramBuffer == CMD_WRITE_RAM_BW) ? "BW" : "RED",
           size);
   SPI.beginTransaction(spiSettings);

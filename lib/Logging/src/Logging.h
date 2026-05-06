@@ -38,8 +38,10 @@ void logPrintf(const char* level, const char* origin, const char* format, ...);
 
 #if LOG_LEVEL >= 1
 #define LOG_INF(origin, format, ...) logPrintf("[INF]", origin, format "\n", ##__VA_ARGS__)
+#define LOG_WRN(origin, format, ...) logPrintf("[WRN]", origin, format "\n", ##__VA_ARGS__)
 #else
 #define LOG_INF(origin, format, ...)
+#define LOG_WRN(origin, format, ...)
 #endif
 
 #if LOG_LEVEL >= 2
@@ -51,6 +53,7 @@ void logPrintf(const char* level, const char* origin, const char* format, ...);
 #define LOG_DBG(origin, format, ...)
 #define LOG_ERR(origin, format, ...)
 #define LOG_INF(origin, format, ...)
+#define LOG_WRN(origin, format, ...)
 #endif
 
 class MySerialImpl : public Print {
