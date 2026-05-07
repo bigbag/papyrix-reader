@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Developer-focused troubleshooting guide for the Xteink X4 running Papyrix firmware.
+Developer-focused troubleshooting guide for the Xteink X4 / X3 running Papyrix firmware.
 
 ---
 

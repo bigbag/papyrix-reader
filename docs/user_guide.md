@@ -5,7 +5,7 @@ the device.
 
 ## 1. Hardware Overview
 
-The device utilises the standard buttons on the Xtink X4 in the same layout:
+The device utilises the standard buttons on the Xteink X4 / X3 in the same layout:
 
 ### Button Layout
 
@@ -115,7 +115,7 @@ File transfer is accessible from the Home screen by pressing the **Left** button
 When you enter the screen, you'll be prompted to choose a network mode:
 
 * **Join Network:** Connect to an existing WiFi network. You'll see a list of available networks and can enter passwords as needed. Previously saved networks will connect automatically.
-* **Create Hotspot:** The X4 creates its own WiFi network that you can connect to directly from your computer or phone.
+* **Create Hotspot:** The device creates its own WiFi network that you can connect to directly from your computer or phone.
 
 ![On-screen Keyboard](images/keyboard.jpg)
 
@@ -313,7 +313,7 @@ You can customize the sleep screen by placing custom images in specific location
 
 #### Image Parameters
 
-- **Resolution:** 480 × 800 pixels (portrait mode)
+- **Resolution:** 480 × 800 pixels for X4, 528 × 792 pixels for X3 (portrait mode)
 - **Color depth:** 8-bit grayscale or 24-bit color
 - **Format:** BMP, uncompressed (BI_RGB)
 - **Display levels:** 4 grayscale (black, dark gray, light gray, white)

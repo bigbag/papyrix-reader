@@ -17,7 +17,7 @@ Papyrix is organized around a **state machine** architecture with **singleton ma
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  GfxRenderer  │  EpdFont  │  ThaiShaper  │  ArabicShaper  │  ScriptDetector │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  EInkDisplay  │  Storage  │  Input  │  Network                              │
+│  EInkDisplay  │  Storage  │  Input  │  Network  │  Device                    │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                    ESP32-C3 Hardware                                        │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -437,7 +437,8 @@ class HomeState : public State {
 ### Device Emulation
 
 - **Real font metrics**: Uses `reader_2b`, `reader_bold_2b`, `reader_italic_2b` built-in fonts with per-glyph `advanceX` lookup (not fixed-width approximation)
-- **Device viewport**: 464x765 pixels (480 - 2*(3+5) x 800 - 9 - (3+23)) with status bar, 464x788 without
+- **Device viewport** (X4 default): 464×765 pixels (480 − 2×(3+5) × 800 − 9 − (3+23)) with status bar, 464×788 without
+- **X3 viewport**: 512×757 with status bar, 512×780 without. Build with `-DPAPYRIX_TEST_X3` to use X3 panel dimensions in the mock EInkDisplay.
 - **Batched caching**: `--batch 5` emulates the device's batched page cache generation with suspend/resume cycles
 - **Status bar toggle**: `--no-statusbar` removes the 23px bottom margin, matching the device viewport when status bar is hidden
 - **Font ID**: `READER_FONT_ID = 1818981670`, same as device
