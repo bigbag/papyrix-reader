@@ -148,10 +148,13 @@ class ReaderState : public State {
   // Source state (where reader was opened from)
   StateId sourceState_ = StateId::Home;
 
-  // Cached chapter title for StatusChapter mode (avoids SD I/O on every render)
+  // Cached chapter title for StatusChapter mode (avoids SD I/O on every render).
+  // Valid while currentSpineIndex_ == cachedChapterSpine_ and
+  // cachedChapterStartPage_ <= currentSectionPage_ < cachedChapterEndPage_.
   char cachedChapterTitle_[64] = "";
   int cachedChapterSpine_ = -1;
-  int cachedChapterPage_ = -1;
+  int cachedChapterStartPage_ = 0;
+  int cachedChapterEndPage_ = 0;
 
   // TOC overlay mode
   bool tocMode_ = false;
@@ -163,7 +166,7 @@ class ReaderState : public State {
   void renderTocOverlay(Core& core);
   int tocVisibleCount() const;
   void populateTocView(Core& core);
-  int findCurrentTocEntry(Core& core);
+  int findCurrentTocEntry(Core& core, int* outRangeStart = nullptr, int* outRangeEnd = nullptr);
   void jumpToTocEntry(Core& core, int tocIndex);
 
   // Menu overlay mode

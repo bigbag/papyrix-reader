@@ -17,6 +17,7 @@
 #include <Serialization.h>
 #include <esp_system.h>
 
+#include <climits>
 #include <cstring>
 
 #include "../Battery.h"
@@ -1143,15 +1144,24 @@ void ReaderState::renderStatusBar(Core& core, int marginRight, int marginBottom,
   data.mode = core.settings.statusBar;
   data.title = core.content.metadata().title;
 
-  // Resolve chapter title if in Chapter mode (cached to avoid SD I/O on every render)
+  // Resolve chapter title if in Chapter mode (cached to avoid SD I/O on every render).
+  // EPUB resolution opens an .anchors file on SD, so we cache the page range over
+  // which the resolved title is valid and only re-resolve when crossing a boundary.
   if (data.mode == Settings::StatusChapter && core.content.tocCount() > 0) {
-    // FB2 TOC maps to sections (spines) — title can't change within a spine
-    const bool needsUpdate = (type == ContentType::Fb2) ? (currentSpineIndex_ != cachedChapterSpine_)
-                                                        : (currentSpineIndex_ != cachedChapterSpine_ ||
-                                                           currentSectionPage_ != cachedChapterPage_);
+    bool needsUpdate;
+    if (type == ContentType::Fb2) {
+      // FB2 TOC maps to sections (spines) — title can't change within a spine
+      needsUpdate = (currentSpineIndex_ != cachedChapterSpine_);
+    } else {
+      needsUpdate = (currentSpineIndex_ != cachedChapterSpine_ ||
+                     currentSectionPage_ < cachedChapterStartPage_ ||
+                     currentSectionPage_ >= cachedChapterEndPage_);
+    }
     if (needsUpdate) {
       cachedChapterTitle_[0] = '\0';
-      int tocIndex = findCurrentTocEntry(core);
+      int rangeStart = INT_MIN;
+      int rangeEnd = INT_MAX;
+      int tocIndex = findCurrentTocEntry(core, &rangeStart, &rangeEnd);
       if (tocIndex >= 0) {
         auto result = core.content.getTocEntry(tocIndex);
         if (result.ok()) {
@@ -1160,7 +1170,8 @@ void ReaderState::renderStatusBar(Core& core, int marginRight, int marginBottom,
         }
       }
       cachedChapterSpine_ = currentSpineIndex_;
-      cachedChapterPage_ = currentSectionPage_;
+      cachedChapterStartPage_ = rangeStart;
+      cachedChapterEndPage_ = rangeEnd;
     }
     if (cachedChapterTitle_[0] != '\0') {
       data.title = cachedChapterTitle_;
@@ -1529,7 +1540,7 @@ void ReaderState::populateTocView(Core& core) {
   }
 }
 
-int ReaderState::findCurrentTocEntry(Core& core) {
+int ReaderState::findCurrentTocEntry(Core& core, int* outRangeStart, int* outRangeEnd) {
   ContentType type = core.content.metadata().type;
 
   if (type == ContentType::Epub) {
@@ -1540,6 +1551,8 @@ int ReaderState::findCurrentTocEntry(Core& core) {
     // Start with spine-level match as fallback
     int bestMatch = epub->getTocIndexForSpineIndex(currentSpineIndex_);
     int bestMatchPage = -1;
+    int nextEntryPage = INT_MAX;  // smallest entryPage > currentSectionPage_ in this spine
+    bool hasUnresolvedAnchor = false;
 
     // Load anchor map once from disk (avoids reopening file per TOC entry)
     std::string cachePath = epubSectionCachePath(epub->getCachePath(), currentSpineIndex_);
@@ -1561,30 +1574,49 @@ int ReaderState::findCurrentTocEntry(Core& core) {
             break;
           }
         }
-        if (anchorPage < 0) continue;  // Anchor not resolved yet
+        if (anchorPage < 0) {
+          hasUnresolvedAnchor = true;
+          continue;
+        }
         entryPage = anchorPage;
       }
 
       if (entryPage <= currentSectionPage_ && entryPage >= bestMatchPage) {
         bestMatch = i;
         bestMatchPage = entryPage;
+      } else if (entryPage > currentSectionPage_ && entryPage < nextEntryPage) {
+        nextEntryPage = entryPage;
       }
     }
 
+    if (outRangeStart) *outRangeStart = (bestMatchPage >= 0) ? bestMatchPage : INT_MIN;
+    // Unresolved anchors mean an unknown chapter boundary may exist above currentSectionPage_;
+    // narrow the cache to the current page so we re-check once pre-render fills the anchor in.
+    if (outRangeEnd) *outRangeEnd = hasUnresolvedAnchor ? (currentSectionPage_ + 1) : nextEntryPage;
     return bestMatch;
   } else if (type == ContentType::Xtc) {
     // For XTC, find chapter containing current page
     const uint16_t count = core.content.tocCount();
     int lastMatch = -1;
+    int lastStart = INT_MIN;
+    int nextStart = INT_MAX;
     for (uint16_t i = 0; i < count; i++) {
       auto result = core.content.getTocEntry(i);
-      if (result.ok() && result.value.pageIndex <= static_cast<uint32_t>(currentPage_)) {
+      if (!result.ok()) continue;
+      const uint32_t p = result.value.pageIndex;
+      if (p <= currentPage_) {
         lastMatch = i;
+        lastStart = static_cast<int>(p);
+      } else if (p < static_cast<uint32_t>(nextStart)) {
+        nextStart = static_cast<int>(p);
       }
     }
+    if (outRangeStart) *outRangeStart = lastStart;
+    if (outRangeEnd) *outRangeEnd = nextStart;
     return lastMatch;
   } else if (type == ContentType::Fb2) {
-    // For FB2 with per-section caching, TOC entries store section indices
+    // For FB2 with per-section caching, TOC entries store section indices.
+    // Cache invalidates on spine change, so the page range is unbounded.
     const uint16_t count = core.content.tocCount();
     int lastMatch = -1;
     for (uint16_t i = 0; i < count; i++) {
@@ -1593,17 +1625,28 @@ int ReaderState::findCurrentTocEntry(Core& core) {
         lastMatch = i;
       }
     }
+    if (outRangeStart) *outRangeStart = INT_MIN;
+    if (outRangeEnd) *outRangeEnd = INT_MAX;
     return lastMatch;
   } else if (type == ContentType::Markdown || type == ContentType::Txt || type == ContentType::Html) {
     // For flat-page formats, find chapter whose pageIndex <= current section page
     const uint16_t count = core.content.tocCount();
     int lastMatch = -1;
+    int lastStart = INT_MIN;
+    int nextStart = INT_MAX;
     for (uint16_t i = 0; i < count; i++) {
       auto result = core.content.getTocEntry(i);
-      if (result.ok() && result.value.pageIndex <= static_cast<uint32_t>(currentSectionPage_)) {
+      if (!result.ok()) continue;
+      const int p = static_cast<int>(result.value.pageIndex);
+      if (p <= currentSectionPage_) {
         lastMatch = i;
+        lastStart = p;
+      } else if (p < nextStart) {
+        nextStart = p;
       }
     }
+    if (outRangeStart) *outRangeStart = lastStart;
+    if (outRangeEnd) *outRangeEnd = nextStart;
     return lastMatch;
   }
 
