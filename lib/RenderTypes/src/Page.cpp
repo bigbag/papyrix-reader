@@ -3,6 +3,7 @@
 #include <GfxRenderer.h>
 #include <Logging.h>
 #include <Serialization.h>
+#include <Utf8.h>
 
 #if __has_include(<esp_attr.h>)
 #include <esp_attr.h>
@@ -71,6 +72,33 @@ IRAM_ATTR void Page::render(GfxRenderer& renderer, const int fontId, const int x
                             const bool black) const {
   for (auto& element : elements) {
     element->render(renderer, fontId, xOffset, yOffset, black);
+  }
+}
+
+void Page::warmGlyphs(const GfxRenderer& renderer, const int fontId) const {
+  std::vector<uint32_t> bucket[4];
+  for (auto& v : bucket) v.reserve(64);
+
+  for (const auto& element : elements) {
+    if (element->getTag() != TAG_PageLine) continue;
+    const auto& tb = static_cast<const PageLine&>(*element).getTextBlock();
+    for (const auto& wd : tb.getWords()) {
+      const int idx = static_cast<int>(wd.style);
+      if (idx < 0 || idx >= 4) continue;
+      const unsigned char* ptr = reinterpret_cast<const unsigned char*>(wd.word.c_str());
+      uint32_t cp;
+      while ((cp = utf8NextCodepoint(&ptr))) {
+        bucket[idx].push_back(cp);
+      }
+    }
+  }
+
+  for (int s = 0; s < 4; s++) {
+    auto& b = bucket[s];
+    if (b.empty()) continue;
+    std::sort(b.begin(), b.end());
+    b.erase(std::unique(b.begin(), b.end()), b.end());
+    renderer.warmCodepointsBatch(fontId, b.data(), b.size(), static_cast<EpdFontFamily::Style>(s));
   }
 }
 

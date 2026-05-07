@@ -86,8 +86,8 @@ __attribute__((always_inline)) static inline void orientedWriteFB(uint8_t* fb, i
 }
 
 __attribute__((always_inline)) static inline bool extractFontPixel(const uint8_t* bitmap, int pixelPos, bool is2Bit,
-                                                                    GfxRenderer::RenderMode mode, bool pixelState,
-                                                                    bool& outState) {
+                                                                   GfxRenderer::RenderMode mode, bool pixelState,
+                                                                   bool& outState) {
   if (is2Bit) {
     const uint8_t byte = bitmap[pixelPos / 4];
     const uint8_t bitIdx = static_cast<uint8_t>((3 - pixelPos % 4) * 2);
@@ -1317,6 +1317,44 @@ int GfxRenderer::getExternalGlyphWidth(const uint32_t cp) const {
 
   // Fallback to full character width
   return _externalFont->getCharWidth();
+}
+
+// ============================================================================
+// Glyph Warming
+// ============================================================================
+
+void GfxRenderer::warmCodepointsBatch(const int fontId, const uint32_t* codepoints, const size_t count,
+                                      const EpdFontFamily::Style style) const {
+  if (!codepoints || count == 0) return;
+
+  StreamingEpdFont* streamingFont = getStreamingFont(fontId, style);
+  if (streamingFont) {
+    const size_t warmCount = std::min(count, static_cast<size_t>(StreamingEpdFont::getCacheSize()));
+    if (count > warmCount) {
+      LOG_DBG(TAG, "Streaming glyph warm capped: count=%zu cap=%zu style=%u", count, warmCount,
+              static_cast<unsigned>(style));
+    }
+    for (size_t i = 0; i < warmCount; i++) {
+      const EpdGlyph* glyph = streamingFont->getGlyph(codepoints[i]);
+      if (glyph) {
+        streamingFont->getGlyphBitmap(glyph);
+      }
+    }
+  }
+
+  std::vector<uint32_t> cjkCodepoints;
+  cjkCodepoints.reserve(count);
+  for (size_t i = 0; i < count; i++) {
+    if (ScriptDetector::isCjkCodepoint(codepoints[i])) {
+      cjkCodepoints.push_back(codepoints[i]);
+    }
+  }
+
+  const bool externalAvailable = !cjkCodepoints.empty() && isExternalFontAllowed(fontId) &&
+                                 ((_externalFont && _externalFont->isLoaded()) || tryResolveExternalFont());
+  if (externalAvailable) {
+    _externalFont->preloadGlyphs(cjkCodepoints.data(), cjkCodepoints.size());
+  }
 }
 
 // ============================================================================

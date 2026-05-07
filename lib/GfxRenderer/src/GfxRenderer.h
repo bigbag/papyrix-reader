@@ -220,6 +220,10 @@ class GfxRenderer {
                                                    EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   bool fontSupportsGrayscale(int fontId) const;
 
+  // Glyph warming
+  void warmCodepointsBatch(int fontId, const uint32_t* codepoints, size_t count,
+                           EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+
   // Thai text rendering
   int getThaiTextWidth(int fontId, const char* text, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   void drawThaiText(int fontId, int x, int y, const char* text, bool black = true,

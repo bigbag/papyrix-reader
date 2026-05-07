@@ -939,6 +939,8 @@ void ReaderState::renderCachedPage(Core& core) {
 
   const int fontId = core.settings.getReaderFontId(theme);
 
+  page->warmGlyphs(renderer_, fontId);
+
   renderPageContents(core, *page, vp.marginTop, vp.marginRight, vp.marginBottom, vp.marginLeft);
   renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
 
@@ -1153,8 +1155,7 @@ void ReaderState::renderStatusBar(Core& core, int marginRight, int marginBottom,
       // FB2 TOC maps to sections (spines) — title can't change within a spine
       needsUpdate = (currentSpineIndex_ != cachedChapterSpine_);
     } else {
-      needsUpdate = (currentSpineIndex_ != cachedChapterSpine_ ||
-                     currentSectionPage_ < cachedChapterStartPage_ ||
+      needsUpdate = (currentSpineIndex_ != cachedChapterSpine_ || currentSectionPage_ < cachedChapterStartPage_ ||
                      currentSectionPage_ >= cachedChapterEndPage_);
     }
     if (needsUpdate) {
