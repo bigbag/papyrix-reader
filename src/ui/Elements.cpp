@@ -164,25 +164,23 @@ void dialog(const GfxRenderer& r, const Theme& t, const char* titleText, const c
   const int btnTextY = btnY + (btnH - r.getLineHeight(t.uiFontId)) / 2;
   const int yesX = dialogX + (dialogW / 2) - btnW - 20;
   const int noX = dialogX + (dialogW / 2) + 20;
+  const char* yesLabel = "Yes";
+  const char* noLabel = "No";
 
-  // Yes button
-  if (selected == 0) {
-    r.fillRect(yesX, btnY, btnW, btnH, t.selectionFillBlack);
-    r.drawCenteredText(t.uiFontId, btnTextY, "Yes", t.selectionTextBlack);
-  } else {
-    r.drawRect(yesX, btnY, btnW, btnH, t.primaryTextBlack);
-  }
-  r.drawText(t.uiFontId, yesX + (btnW - r.getTextWidth(t.uiFontId, "Yes")) / 2, btnTextY, "Yes",
-             selected == 0 ? t.selectionTextBlack : t.primaryTextBlack);
+  auto drawButton = [&](int x, const char* label, bool isSelected) {
+    if (isSelected) {
+      r.fillRect(x, btnY, btnW, btnH, t.selectionFillBlack);
+    } else {
+      r.drawRect(x, btnY, btnW, btnH, t.primaryTextBlack);
+    }
 
-  // No button
-  if (selected == 1) {
-    r.fillRect(noX, btnY, btnW, btnH, t.selectionFillBlack);
-  } else {
-    r.drawRect(noX, btnY, btnW, btnH, t.primaryTextBlack);
-  }
-  r.drawText(t.uiFontId, noX + (btnW - r.getTextWidth(t.uiFontId, "No")) / 2, btnTextY, "No",
-             selected == 1 ? t.selectionTextBlack : t.primaryTextBlack);
+    const int textWidth = r.getTextWidth(t.uiFontId, label);
+    const int textX = x + (btnW - textWidth) / 2;
+    r.drawText(t.uiFontId, textX, btnTextY, label, isSelected ? t.selectionTextBlack : t.primaryTextBlack);
+  };
+
+  drawButton(yesX, yesLabel, selected == 0);
+  drawButton(noX, noLabel, selected == 1);
 }
 
 // Keyboard layout - 10x10 grid

@@ -169,7 +169,7 @@ void render(const GfxRenderer& r, const Theme& t, const ConfirmDialogView& v) {
     const bool textColor = isSelected ? t.selectionTextBlack : t.primaryTextBlack;
     const int textWidth = r.getTextWidth(t.uiFontId, buttonLabels[i]);
     const int textX = btnX + (buttonWidth - textWidth) / 2;
-    const int textY = buttonY + (buttonHeight - r.getFontAscenderSize(t.uiFontId)) / 2;
+    const int textY = buttonY + (buttonHeight - r.getLineHeight(t.uiFontId)) / 2;
     r.drawText(t.uiFontId, textX, textY, buttonLabels[i], textColor);
   }
 
