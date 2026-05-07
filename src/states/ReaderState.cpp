@@ -27,7 +27,6 @@
 #include "../core/BootMode.h"
 #include "../core/Core.h"
 #include "../drivers/Device.h"
-#include "../drivers/Input.h"
 #include "../ui/Elements.h"
 #include "ThemeManager.h"
 
@@ -543,7 +542,8 @@ void ReaderState::enter(Core& core) {
   needsRender_ = true;
   holdNavigated_ = false;
   powerPressStartedMs_ = 0;
-  centerPressStartedMs_ = 0;
+  centerClickPending_ = false;
+  centerClickStartedMs_ = 0;
   stopBackgroundCaching();  // Ensure any previous task is stopped
   invalidateGlobalPageMetrics();
   parser_.reset();  // Safe - task is stopped
@@ -716,7 +716,6 @@ StateTransition ReaderState::update(Core& core) {
       case EventType::ButtonPress:
         switch (e.button) {
           case Button::Center:
-            centerPressStartedMs_ = millis();
             break;
           case Button::Back:
             exitToUI(core);
@@ -729,14 +728,6 @@ StateTransition ReaderState::update(Core& core) {
             break;
           default:
             break;
-        }
-        break;
-
-      case EventType::ButtonLongPress:
-        if (e.button == Button::Center) {
-          centerPressStartedMs_ = 0;
-          core.pendingSettingsReturn = StateId::Reader;
-          return StateTransition::to(StateId::Settings);
         }
         break;
 
@@ -762,16 +753,14 @@ StateTransition ReaderState::update(Core& core) {
       case EventType::ButtonRelease:
         switch (e.button) {
           case Button::Center:
-            if (centerPressStartedMs_ != 0) {
-              const uint32_t heldMs = millis() - centerPressStartedMs_;
-              if (heldMs >= drivers::Input::LONG_PRESS_MS) {
-                centerPressStartedMs_ = 0;
-                core.pendingSettingsReturn = StateId::Reader;
-                return StateTransition::to(StateId::Settings);
-              }
-              toggleReaderOrientation(core);
+            if (centerClickPending_ && (millis() - centerClickStartedMs_) <= kCenterDoubleClickMs_) {
+              centerClickPending_ = false;
+              centerClickStartedMs_ = 0;
+              core.pendingSettingsReturn = StateId::Reader;
+              return StateTransition::to(StateId::Settings);
             }
-            centerPressStartedMs_ = 0;
+            centerClickPending_ = true;
+            centerClickStartedMs_ = millis();
             break;
           default:
             if (!holdNavigated_) {
@@ -807,6 +796,12 @@ StateTransition ReaderState::update(Core& core) {
       default:
         break;
     }
+  }
+
+  if (centerClickPending_ && (millis() - centerClickStartedMs_) > kCenterDoubleClickMs_) {
+    centerClickPending_ = false;
+    centerClickStartedMs_ = 0;
+    toggleReaderOrientation(core);
   }
 
   return StateTransition::stay(StateId::Reader);
