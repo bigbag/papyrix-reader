@@ -971,18 +971,19 @@ bool GfxRenderer::fontSupportsGrayscale(const int fontId) const {
 
 void GfxRenderer::drawButtonHints(const int fontId, const char* btn1, const char* btn2, const char* btn3,
                                   const char* btn4, const bool black) const {
+  const int screenWidth = getScreenWidth();
   const int pageHeight = getScreenHeight();
+  constexpr int numButtons = 4;
   constexpr int buttonWidth = 106;
   constexpr int buttonHeight = 46;
-  constexpr int buttonY = 50;      // Distance from bottom
-  constexpr int textYOffset = 10;  // Distance from top of button to text baseline
-  constexpr int buttonPositions[] = {25, 130, 245, 350};
+  constexpr int buttonY = 50;
+  constexpr int textYOffset = 10;
+  const int totalGap = std::max(0, screenWidth - numButtons * buttonWidth);
   const char* labels[] = {btn1, btn2, btn3, btn4};
 
-  for (int i = 0; i < 4; i++) {
-    // Only draw if the label is non-empty
+  for (int i = 0; i < numButtons; i++) {
     if (labels[i] != nullptr && labels[i][0] != '\0') {
-      const int x = buttonPositions[i];
+      const int x = totalGap * (i + 1) / (numButtons + 1) + i * buttonWidth;
       drawRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, black);
       const int textWidth = getTextWidth(fontId, labels[i]);
       const int textX = x + (buttonWidth - 1 - textWidth) / 2;
