@@ -188,6 +188,30 @@ const uint8_t lut_x3_bb_img[] PROGMEM = {0x00, 0x08, 0x0B, 0x02, 0x03, 0x01, 0x4
                                          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                                          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
+// X3 turbo LUTs: balanced shortened waveform for fast differential page turns.
+// Same VS patterns as lut_x3_*_full, reduced timing (19 vs 26 frame groups).
+// Phase 0: TP=(4,2,4,4) RP=1 = 14 groups.  Phase 1: TP=(4,1,0,0) RP=1 = 5 groups.
+const uint8_t lut_x3_vcom_turbo[] PROGMEM = {0x00, 0x04, 0x02, 0x04, 0x04, 0x01, 0x00, 0x04, 0x01, 0x00, 0x00,
+                                             0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+const uint8_t lut_x3_ww_turbo[] PROGMEM = {0x20, 0x04, 0x02, 0x04, 0x04, 0x01, 0x00, 0x04, 0x01, 0x00, 0x00,
+                                           0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                           0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                           0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+const uint8_t lut_x3_bw_turbo[] PROGMEM = {0xAA, 0x04, 0x02, 0x04, 0x04, 0x01, 0x80, 0x04, 0x01, 0x00, 0x00,
+                                           0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                           0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                           0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+const uint8_t lut_x3_wb_turbo[] PROGMEM = {0x55, 0x04, 0x02, 0x04, 0x04, 0x01, 0x40, 0x04, 0x01, 0x00, 0x00,
+                                           0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                           0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                           0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+const uint8_t lut_x3_bb_turbo[] PROGMEM = {0x10, 0x04, 0x02, 0x04, 0x04, 0x01, 0x00, 0x04, 0x01, 0x00, 0x00,
+                                           0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                           0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                           0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+
 // X3 AA LUTs: fast partial-style set tuned to preserve X3 polarity behavior.
 const uint8_t lut_x3_vcom_fast[] PROGMEM = {0x00, 0x18, 0x18, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
                                             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -263,6 +287,7 @@ void EInkDisplay::begin() {
   // Initialize to white
   memset(frameBuffer0, 0xFF, bufferSize);
   _x3RedRamSynced = false;
+  _x3LoadedLuts = X3LutSet::NONE;
   _x3InitialFullSyncsRemaining = _x3Mode ? 2 : 0;
   _x3ForceFullSyncNext = false;
   _x3ForcedConditionPassesNext = 0;
@@ -276,7 +301,7 @@ void EInkDisplay::begin() {
 
   LOG_INF(TAG, "Initializing e-ink display driver...");
 
-  // Initialize SPI with custom pins. X3 controller doesn't tolerate the X4's 40 MHz.
+  // Initialize SPI with custom pins. X3 controller doesn't tolerate faster SPI.
   SPI.begin(_sclk, -1, _mosi, _cs);
   const uint32_t spiHz = _x3Mode ? 10000000 : 40000000;
   spiSettings = SPISettings(spiHz, MSBFIRST, SPI_MODE0);
@@ -858,11 +883,14 @@ void EInkDisplay::displayBuffer(RefreshMode mode, const bool turnOffScreen) {
 
     if (doFullSync) {
       // Full sync: img LUTs, inverted data to both RAMs
-      sendCommandDataX3(0x20, lut_x3_vcom_img, 42);
-      sendCommandDataX3(0x21, lut_x3_ww_img, 42);
-      sendCommandDataX3(0x22, lut_x3_bw_img, 42);
-      sendCommandDataX3(0x23, lut_x3_wb_img, 42);
-      sendCommandDataX3(0x24, lut_x3_bb_img, 42);
+      if (_x3LoadedLuts != X3LutSet::IMG) {
+        sendCommandDataX3(0x20, lut_x3_vcom_img, 42);
+        sendCommandDataX3(0x21, lut_x3_ww_img, 42);
+        sendCommandDataX3(0x22, lut_x3_bw_img, 42);
+        sendCommandDataX3(0x23, lut_x3_wb_img, 42);
+        sendCommandDataX3(0x24, lut_x3_bb_img, 42);
+        _x3LoadedLuts = X3LutSet::IMG;
+      }
 
       sendCommand(0x13);
       sendMirroredPlane(frameBuffer, true);
@@ -871,12 +899,15 @@ void EInkDisplay::displayBuffer(RefreshMode mode, const bool turnOffScreen) {
 
       sendCommandDataByteX3(0x50, 0xA9, 0x07);
     } else {
-      // Fast differential: full LUTs, RED RAM (0x10) retains previous frame
-      sendCommandDataX3(0x20, lut_x3_vcom_full, 42);
-      sendCommandDataX3(0x21, lut_x3_ww_full, 42);
-      sendCommandDataX3(0x22, lut_x3_bw_full, 42);
-      sendCommandDataX3(0x23, lut_x3_wb_full, 42);
-      sendCommandDataX3(0x24, lut_x3_bb_full, 42);
+      // Fast differential: turbo LUTs (shortened waveform), RED RAM (0x10) retains previous frame
+      if (_x3LoadedLuts != X3LutSet::TURBO) {
+        sendCommandDataX3(0x20, lut_x3_vcom_turbo, 42);
+        sendCommandDataX3(0x21, lut_x3_ww_turbo, 42);
+        sendCommandDataX3(0x22, lut_x3_bw_turbo, 42);
+        sendCommandDataX3(0x23, lut_x3_wb_turbo, 42);
+        sendCommandDataX3(0x24, lut_x3_bb_turbo, 42);
+        _x3LoadedLuts = X3LutSet::TURBO;
+      }
 
       // Write only new data to 0x13; controller diffs against 0x10
       sendCommand(0x13);
@@ -902,6 +933,7 @@ void EInkDisplay::displayBuffer(RefreshMode mode, const bool turnOffScreen) {
       sendCommand(0x02);
       waitForRefresh(" X3_CMD02_POWEROFF");
       isScreenOn = false;
+      _x3LoadedLuts = X3LutSet::NONE;
     }
 
     if (!fastMode) delay(200);
@@ -926,11 +958,14 @@ void EInkDisplay::displayBuffer(RefreshMode mode, const bool turnOffScreen) {
           static_cast<uint8_t>(xEnd & 0xFF), static_cast<uint8_t>(yStart >> 8),   static_cast<uint8_t>(yStart & 0xFF),
           static_cast<uint8_t>(yEnd >> 8),   static_cast<uint8_t>(yEnd & 0xFF),   0x01};
 
-      sendCommandDataX3(0x20, lut_x3_vcom_full, 42);
-      sendCommandDataX3(0x21, lut_x3_ww_full, 42);
-      sendCommandDataX3(0x22, lut_x3_bw_full, 42);
-      sendCommandDataX3(0x23, lut_x3_wb_full, 42);
-      sendCommandDataX3(0x24, lut_x3_bb_full, 42);
+      if (_x3LoadedLuts != X3LutSet::FULL) {
+        sendCommandDataX3(0x20, lut_x3_vcom_full, 42);
+        sendCommandDataX3(0x21, lut_x3_ww_full, 42);
+        sendCommandDataX3(0x22, lut_x3_bw_full, 42);
+        sendCommandDataX3(0x23, lut_x3_wb_full, 42);
+        sendCommandDataX3(0x24, lut_x3_bb_full, 42);
+        _x3LoadedLuts = X3LutSet::FULL;
+      }
       sendCommandDataByteX3(0x50, 0x29, 0x07);
 
       for (uint8_t i = 0; i < postConditionPasses; i++) {
@@ -1130,6 +1165,7 @@ void EInkDisplay::displayGrayBuffer(const bool turnOffScreen) {
     // RAM baseline is re-established from restored BW buffer by
     // cleanupGrayscaleBuffers() after this function returns.
     _x3RedRamSynced = false;
+    _x3LoadedLuts = X3LutSet::NONE;
     _x3ForceFullSyncNext = false;
     _x3ForcedConditionPassesNext = 0;
 

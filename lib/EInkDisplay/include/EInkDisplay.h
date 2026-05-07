@@ -112,6 +112,8 @@ class EInkDisplay {
   // X3 state machine
   bool _x3Mode = false;
   bool _x3RedRamSynced = false;
+  enum class X3LutSet : uint8_t { NONE, FULL, TURBO, IMG, GRAY };
+  X3LutSet _x3LoadedLuts = X3LutSet::NONE;
   struct X3GrayState {
     bool lastBaseWasPartial = false;
     bool lsbValid = false;
