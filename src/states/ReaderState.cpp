@@ -764,9 +764,12 @@ StateTransition ReaderState::update(Core& core) {
           case Button::Center:
             if (centerPressStartedMs_ != 0) {
               const uint32_t heldMs = millis() - centerPressStartedMs_;
-              if (heldMs < drivers::Input::LONG_PRESS_MS) {
-                toggleReaderOrientation(core);
+              if (heldMs >= drivers::Input::LONG_PRESS_MS) {
+                centerPressStartedMs_ = 0;
+                core.pendingSettingsReturn = StateId::Reader;
+                return StateTransition::to(StateId::Settings);
               }
+              toggleReaderOrientation(core);
             }
             centerPressStartedMs_ = 0;
             break;
