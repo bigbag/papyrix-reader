@@ -17,6 +17,7 @@
 #include <Serialization.h>
 #include <esp_system.h>
 
+#include <algorithm>
 #include <climits>
 #include <cstring>
 
@@ -43,6 +44,13 @@ static constexpr int kCacheTaskStopTimeoutMs = 10000;  // 10s - generous for slo
 namespace {
 constexpr int horizontalPadding = 5;
 constexpr int statusBarMargin = 23;
+constexpr size_t kEstimatedBytesPerPage = 2048;
+
+uint16_t estimatePagesForBytes(const size_t bytes, const size_t bytesPerPage = kEstimatedBytesPerPage) {
+  const size_t safeBytesPerPage = std::max<size_t>(1, bytesPerPage);
+  const size_t pageCount = std::max<size_t>(1, (bytes + safeBytesPerPage - 1) / safeBytesPerPage);
+  return static_cast<uint16_t>(std::min<size_t>(pageCount, UINT16_MAX));
+}
 
 // Cache path helpers
 inline std::string epubSectionCachePath(const std::string& epubCachePath, int spineIndex) {
@@ -121,6 +129,293 @@ std::vector<std::pair<std::string, uint16_t>> ReaderState::loadAnchorMap(const s
   }
   file.close();
   return anchors;
+}
+
+// --- Global page metrics (whole-book page counting for EPUB/FB2) ---
+
+void ReaderState::invalidateGlobalPageMetrics() {
+  globalSectionPageMetrics_.clear();
+  globalSectionPageMetrics_.shrink_to_fit();
+  globalSectionPageMetricTotal_ = 0;
+  globalSectionPageMetricsInitialized_ = false;
+}
+
+void ReaderState::recomputeGlobalPageMetricTotal() {
+  uint32_t total = 0;
+  for (const auto& metric : globalSectionPageMetrics_) {
+    total += metric.pages;
+  }
+  globalSectionPageMetricTotal_ = total;
+}
+
+void ReaderState::initializeGlobalPageMetrics(Core& core) {
+  invalidateGlobalPageMetrics();
+
+  const ContentType type = core.content.metadata().type;
+  const Theme& theme = THEME_MANAGER.current();
+  const auto vp = getReaderViewport(core.settings.statusBar != 0);
+  const auto config = core.settings.getRenderConfig(theme, vp.width, vp.height);
+
+  int spineCount = 0;
+  std::vector<size_t> itemSizes;
+
+  if (type == ContentType::Epub) {
+    auto* provider = core.content.asEpub();
+    if (!provider || !provider->getEpub()) return;
+    const auto* epub = provider->getEpub();
+    spineCount = epub->getSpineItemsCount();
+    if (spineCount <= 0) return;
+
+    itemSizes.resize(static_cast<size_t>(spineCount), 0);
+    for (int i = 0; i < spineCount; ++i) {
+      const auto spineItem = epub->getSpineItem(i);
+      size_t itemSize = 0;
+      if (epub->getItemSize(spineItem.href, &itemSize)) {
+        itemSizes[static_cast<size_t>(i)] = itemSize;
+      }
+    }
+  } else if (type == ContentType::Fb2) {
+    auto* fb2Provider = core.content.asFb2();
+    if (!fb2Provider || !fb2Provider->getFb2()) return;
+    const auto* fb2 = fb2Provider->getFb2();
+    spineCount = fb2Provider->getSectionCount();
+    if (spineCount <= 0) return;
+
+    const auto& offsets = fb2->getSectionOffsets();
+    itemSizes.resize(static_cast<size_t>(spineCount), 0);
+    for (int i = 0; i < spineCount; ++i) {
+      const auto& off = offsets[static_cast<size_t>(i)];
+      if (off.endOffset > off.startOffset) {
+        itemSizes[static_cast<size_t>(i)] = off.endOffset - off.startOffset;
+      }
+    }
+    // Last section may have endOffset=0; estimate from median of preceding sections
+    if (spineCount > 1 && itemSizes[static_cast<size_t>(spineCount - 1)] == 0) {
+      std::vector<size_t> nonZeroSizes;
+      nonZeroSizes.reserve(static_cast<size_t>(spineCount));
+      for (int i = 0; i < spineCount - 1; ++i) {
+        if (itemSizes[static_cast<size_t>(i)] > 0) {
+          nonZeroSizes.push_back(itemSizes[static_cast<size_t>(i)]);
+        }
+      }
+      if (!nonZeroSizes.empty()) {
+        std::sort(nonZeroSizes.begin(), nonZeroSizes.end());
+        itemSizes[static_cast<size_t>(spineCount - 1)] = nonZeroSizes[nonZeroSizes.size() / 2];
+      }
+    }
+  } else {
+    return;
+  }
+
+  globalSectionPageMetrics_.resize(static_cast<size_t>(spineCount));
+
+  // Set byte sizes for all sections
+  for (int i = 0; i < spineCount; ++i) {
+    globalSectionPageMetrics_[static_cast<size_t>(i)].byteSize =
+        static_cast<uint32_t>(itemSizes[static_cast<size_t>(i)]);
+  }
+
+  // Scan sections directory once to find which caches exist on disk,
+  // instead of probing every spine index individually (avoids N file-open
+  // calls for non-existent files — ~4ms each on SD over SPI).
+  std::string sectionsDir;
+  const char* filePrefix = "";  // EPUB: "N.bin", FB2: "pages_N.bin"
+  if (type == ContentType::Epub) {
+    sectionsDir = std::string(core.content.cacheDir()) + "/sections";
+  } else {
+    sectionsDir = core.content.asFb2()->getFb2()->getCachePath();
+    filePrefix = "pages_";
+  }
+  const size_t prefixLen = strlen(filePrefix);
+
+  size_t calibrationBytes = 0;
+  uint32_t calibrationPages = 0;
+
+  FsFile dir;
+  if (dir.open(sectionsDir.c_str(), O_RDONLY)) {
+    FsFile entry;
+    char name[24];
+    while ((entry = dir.openNextFile(O_RDONLY))) {
+      entry.getName(name, sizeof(name));
+      entry.close();
+
+      // Parse section index from filename
+      if (prefixLen > 0 && strncmp(name, filePrefix, prefixLen) != 0) continue;
+      char* dot = strrchr(name + prefixLen, '.');
+      if (!dot || strcmp(dot, ".bin") != 0) continue;
+      *dot = '\0';
+      const int idx = atoi(name + prefixLen);
+      if (idx < 0 || idx >= spineCount) continue;
+      if (idx == currentSpineIndex_ && pageCache_) continue;
+
+      const std::string cachePath = (type == ContentType::Epub) ? epubSectionCachePath(core.content.cacheDir(), idx)
+                                                                : core.content.asFb2()->getSectionCachePath(idx);
+      const auto probe = PageCache::probe(cachePath, config);
+      if (probe.valid && probe.pageCount > 0) {
+        auto& metric = globalSectionPageMetrics_[static_cast<size_t>(idx)];
+        metric.pages = probe.pageCount;
+        metric.exact = !probe.partial;
+        if (metric.exact && metric.byteSize > 0) {
+          calibrationBytes += metric.byteSize;
+          calibrationPages += metric.pages;
+        }
+      }
+    }
+    dir.close();
+  }
+
+  // Apply live pageCache_ data for current spine (already in memory, no SD I/O)
+  if (currentSpineIndex_ >= 0 && currentSpineIndex_ < spineCount && pageCache_ && pageCache_->pageCount() > 0) {
+    auto& metric = globalSectionPageMetrics_[static_cast<size_t>(currentSpineIndex_)];
+    const auto currentPages = static_cast<uint16_t>(std::max<int>(1, pageCache_->pageCount()));
+    const bool currentIsPartial = pageCache_->isPartial();
+    if (currentPages > metric.pages || !metric.exact) {
+      metric.pages = std::max(metric.pages, currentPages);
+      if (!currentIsPartial) {
+        metric.exact = true;
+      }
+    }
+    if (metric.exact && metric.byteSize > 0) {
+      calibrationBytes += metric.byteSize;
+      calibrationPages += metric.pages;
+    }
+  }
+
+  const size_t bytesPerPage =
+      calibrationPages > 0 ? std::max<size_t>(256, calibrationBytes / calibrationPages) : kEstimatedBytesPerPage;
+
+  for (int i = 0; i < spineCount; ++i) {
+    auto& metric = globalSectionPageMetrics_[static_cast<size_t>(i)];
+    const size_t itemSize = itemSizes[static_cast<size_t>(i)];
+    const uint16_t estimated = estimatePagesForBytes(itemSize, bytesPerPage);
+    if (metric.pages == 0) {
+      metric.pages = estimated;
+    } else if (!metric.exact && estimated > metric.pages) {
+      metric.pages = estimated;
+    }
+  }
+
+  recomputeGlobalPageMetricTotal();
+  globalSectionPageMetricsInitialized_ = true;
+}
+
+void ReaderState::updateGlobalPageMetrics(Core& core) {
+  const ContentType type = core.content.metadata().type;
+  if (type != ContentType::Epub && type != ContentType::Fb2) return;
+
+  if (!globalSectionPageMetricsInitialized_) {
+    initializeGlobalPageMetrics(core);
+  }
+
+  if (!globalSectionPageMetricsInitialized_ || currentSpineIndex_ < 0 ||
+      currentSpineIndex_ >= static_cast<int>(globalSectionPageMetrics_.size()) || !pageCache_ ||
+      pageCache_->pageCount() == 0) {
+    return;
+  }
+
+  auto& metric = globalSectionPageMetrics_[static_cast<size_t>(currentSpineIndex_)];
+  const auto currentPages = static_cast<uint16_t>(std::max<int>(1, pageCache_->pageCount()));
+  const bool currentIsPartial = pageCache_->isPartial();
+  bool becameExact = false;
+  bool changed = false;
+
+  if (!currentIsPartial) {
+    if (!metric.exact || metric.pages != currentPages) {
+      metric.pages = currentPages;
+      if (!metric.exact) becameExact = true;
+      metric.exact = true;
+      changed = true;
+    }
+  } else if (!metric.exact && currentPages > metric.pages) {
+    metric.pages = currentPages;
+    changed = true;
+  }
+
+  if (becameExact) {
+    recalibrateGlobalPageEstimates();
+  } else if (changed) {
+    recomputeGlobalPageMetricTotal();
+  }
+}
+
+void ReaderState::recalibrateGlobalPageEstimates() {
+  if (!globalSectionPageMetricsInitialized_) return;
+
+  size_t calibBytes = 0;
+  uint32_t calibPages = 0;
+  for (const auto& m : globalSectionPageMetrics_) {
+    if (m.exact && m.byteSize > 0 && m.pages > 0) {
+      calibBytes += m.byteSize;
+      calibPages += m.pages;
+    }
+  }
+  if (calibPages == 0) {
+    recomputeGlobalPageMetricTotal();
+    return;
+  }
+
+  const size_t bytesPerPage = std::max<size_t>(256, calibBytes / calibPages);
+
+  for (auto& m : globalSectionPageMetrics_) {
+    if (m.exact || m.byteSize == 0) continue;
+    const uint16_t newEstimate = estimatePagesForBytes(m.byteSize, bytesPerPage);
+    if (newEstimate != m.pages && newEstimate > 0) {
+      m.pages = newEstimate;
+    }
+  }
+
+  recomputeGlobalPageMetricTotal();
+}
+
+ReaderState::GlobalPageMetrics ReaderState::resolveGlobalPageMetrics(Core& core) {
+  GlobalPageMetrics metrics;
+  const ContentType type = core.content.metadata().type;
+
+  if (type == ContentType::Xtc) {
+    metrics.currentPage = static_cast<int>(currentPage_) + 1;
+    metrics.totalPages = static_cast<int>(std::max<uint32_t>(core.content.pageCount(), metrics.currentPage));
+    return metrics;
+  }
+
+  if (type == ContentType::Epub || type == ContentType::Fb2) {
+    updateGlobalPageMetrics(core);
+    if (globalSectionPageMetricsInitialized_ && !globalSectionPageMetrics_.empty()) {
+      const int clampedSpine =
+          std::clamp(currentSpineIndex_, 0, static_cast<int>(globalSectionPageMetrics_.size()) - 1);
+      uint32_t pagesBefore = 0;
+      bool totalIsExact = true;
+      for (int i = 0; i < clampedSpine; ++i) {
+        const auto& sm = globalSectionPageMetrics_[static_cast<size_t>(i)];
+        pagesBefore += sm.pages;
+        totalIsExact = totalIsExact && sm.exact;
+      }
+      for (int i = clampedSpine; i < static_cast<int>(globalSectionPageMetrics_.size()); ++i) {
+        totalIsExact = totalIsExact && globalSectionPageMetrics_[static_cast<size_t>(i)].exact;
+      }
+      metrics.currentPage = static_cast<int>(pagesBefore) + std::max(currentSectionPage_, 0) + 1;
+      metrics.totalPages = static_cast<int>(std::max<uint32_t>(globalSectionPageMetricTotal_, metrics.currentPage));
+      metrics.totalIsExact = totalIsExact;
+      return metrics;
+    }
+  }
+
+  // Fallback: single-section formats (TXT, Markdown, HTML) or uninitialized metrics
+  if (pageCache_) {
+    metrics.currentPage = currentSectionPage_ + 1;
+    if (pageCache_->isPartial()) {
+      const uint32_t est = pageCache_->estimatedTotalPages();
+      metrics.totalPages = est > 0 ? static_cast<int>(est) : static_cast<int>(pageCache_->pageCount());
+      metrics.totalIsExact = false;
+    } else {
+      metrics.totalPages = pageCache_->pageCount();
+      metrics.totalIsExact = true;
+    }
+  } else {
+    metrics.currentPage = currentSectionPage_ + 1;
+    metrics.totalPages = static_cast<int>(core.content.pageCount());
+    metrics.totalIsExact = false;
+  }
+  return metrics;
 }
 
 int ReaderState::calcFirstContentSpine(bool hasCover, int textStartIndex, size_t spineCount) {
@@ -252,7 +547,8 @@ void ReaderState::enter(Core& core) {
   holdNavigated_ = false;
   powerPressStartedMs_ = 0;
   stopBackgroundCaching();  // Ensure any previous task is stopped
-  parser_.reset();          // Safe - task is stopped
+  invalidateGlobalPageMetrics();
+  parser_.reset();  // Safe - task is stopped
   parserSpineIndex_ = -1;
   pageCache_.reset();
   currentSpineIndex_ = 0;
@@ -394,6 +690,7 @@ void ReaderState::exit(Core& core) {
 
   // Stop background caching task first - BackgroundTask::stop() waits properly
   stopBackgroundCaching();
+  invalidateGlobalPageMetrics();
 
   if (contentLoaded_) {
     // Save progress at last rendered position (not current requested position)
@@ -1183,37 +1480,12 @@ void ReaderState::renderStatusBar(Core& core, int marginRight, int marginBottom,
   const uint16_t millivolts = batteryMonitor.readMillivolts();
   data.batteryPercent = (millivolts < 100) ? -1 : BatteryMonitor::percentageFromMillivolts(millivolts);
 
-  // Page info
+  // Page info (whole-book page number via GlobalPageMetrics)
   // Note: renderCachedPage() already stopped the task, so we own pageCache_
-  if (type == ContentType::Epub) {
-    auto* provider = core.content.asEpub();
-    if (provider && provider->getEpub()) {
-      data.currentPage = currentSectionPage_ + 1;
-      if (pageCache_) {
-        data.totalPages = pageCache_->pageCount();
-        data.isPartial = pageCache_->isPartial();
-      } else {
-        data.isPartial = true;
-      }
-    } else {
-      return;
-    }
-  } else {
-    data.currentPage = currentSectionPage_ + 1;
-    if (pageCache_) {
-      if (pageCache_->isPartial()) {
-        const uint32_t est = pageCache_->estimatedTotalPages();
-        data.totalPages = est > 0 ? static_cast<int>(est) : static_cast<int>(pageCache_->pageCount());
-        data.isPartial = true;
-      } else {
-        data.totalPages = pageCache_->pageCount();
-        data.isPartial = false;
-      }
-    } else {
-      data.totalPages = static_cast<int>(core.content.pageCount());
-      data.isPartial = true;
-    }
-  }
+  const GlobalPageMetrics metrics = resolveGlobalPageMetrics(core);
+  data.currentPage = metrics.currentPage;
+  data.totalPages = metrics.totalPages;
+  data.isPartial = data.totalPages <= 0 || !metrics.totalIsExact;
 
   ui::readerStatusBar(renderer_, theme, marginLeft, marginRight, marginBottom, data);
 }

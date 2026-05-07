@@ -96,6 +96,13 @@ class PageCache {
    */
   bool clear() const;
 
+  struct ProbeResult {
+    bool valid = false;
+    bool partial = false;
+    uint16_t pageCount = 0;
+  };
+  static ProbeResult probe(const std::string& cachePath, const RenderConfig& config);
+
   // Accessors
   uint16_t pageCount() const { return pageCount_; }
   bool isPartial() const { return isPartial_; }

@@ -429,6 +429,52 @@ std::unique_ptr<Page> PageCache::loadPage(uint16_t pageNum) {
   return nullptr;
 }
 
+PageCache::ProbeResult PageCache::probe(const std::string& cachePath, const RenderConfig& config) {
+  ProbeResult result;
+
+  FsFile file;
+  if (!SdMan.openFileForRead("PROBE", cachePath, file)) {
+    return result;
+  }
+
+  const size_t fileSize = file.size();
+  if (fileSize < kHeaderSize) {
+    file.close();
+    return result;
+  }
+
+  uint8_t version;
+  serialization::readPod(file, version);
+  if (version != CACHE_FILE_VERSION) {
+    file.close();
+    return result;
+  }
+
+  RenderConfig fileConfig;
+  serialization::readPod(file, fileConfig.fontId);
+  serialization::readPod(file, fileConfig.lineCompression);
+  serialization::readPod(file, fileConfig.indentLevel);
+  serialization::readPod(file, fileConfig.spacingLevel);
+  serialization::readPod(file, fileConfig.paragraphAlignment);
+  serialization::readPod(file, fileConfig.hyphenation);
+  serialization::readPod(file, fileConfig.showImages);
+  serialization::readPod(file, fileConfig.viewportWidth);
+  serialization::readPod(file, fileConfig.viewportHeight);
+  if (config != fileConfig) {
+    file.close();
+    return result;
+  }
+
+  serialization::readPod(file, result.pageCount);
+  uint8_t partial;
+  serialization::readPod(file, partial);
+  result.partial = (partial != 0);
+
+  file.close();
+  result.valid = true;
+  return result;
+}
+
 bool PageCache::clear() const {
   if (!SdMan.exists(cachePath_.c_str())) {
     return true;

@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 #include "../content/BookmarkManager.h"
 #include "../content/ReaderNavigation.h"
@@ -114,6 +115,28 @@ class ReaderState : public State {
   // Helpers
   void renderPageContents(Core& core, Page& page, int marginTop, int marginRight, int marginBottom, int marginLeft);
   void renderStatusBar(Core& core, int marginRight, int marginBottom, int marginLeft);
+
+  // Global page metrics — whole-book page counting for EPUB/FB2
+  struct GlobalPageMetrics {
+    int currentPage = 1;
+    int totalPages = 0;
+    bool totalIsExact = true;
+  };
+  struct SectionPageMetric {
+    uint16_t pages = 0;
+    bool exact = false;
+    uint32_t byteSize = 0;
+  };
+  void invalidateGlobalPageMetrics();
+  void initializeGlobalPageMetrics(Core& core);
+  void updateGlobalPageMetrics(Core& core);
+  void recalibrateGlobalPageEstimates();
+  void recomputeGlobalPageMetricTotal();
+  GlobalPageMetrics resolveGlobalPageMetrics(Core& core);
+
+  std::vector<SectionPageMetric> globalSectionPageMetrics_;
+  uint32_t globalSectionPageMetricTotal_ = 0;
+  bool globalSectionPageMetricsInitialized_ = false;
 
   // Cache management
   bool ensurePageCached(Core& core, uint16_t pageNum);
