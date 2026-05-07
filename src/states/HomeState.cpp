@@ -133,6 +133,7 @@ StateTransition HomeState::update(Core& core) {
 
           case Button::Right:
             // btn4: Settings
+            core.pendingSettingsReturn = StateId::Home;
             return StateTransition::to(StateId::Settings);
 
           case Button::Up:

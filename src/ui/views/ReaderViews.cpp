@@ -4,9 +4,6 @@
 
 namespace ui {
 
-// Static definitions
-constexpr const char* const ReaderMenuView::ITEMS[];
-
 void render(const GfxRenderer& r, const Theme& t, const CoverPageView& v) {
   r.clearScreen(t.backgroundColor);
 
@@ -58,13 +55,6 @@ void render(const GfxRenderer& r, const Theme& t, const CoverPageView& v) {
     r.drawCenteredText(t.uiFontId, authorY, v.author, t.secondaryTextBlack);
   }
 
-  r.displayBuffer();
-}
-
-void render(const GfxRenderer& r, const Theme& t, const ReaderMenuView& v) {
-  if (!v.visible) return;
-
-  ui::popupMenu(r, t, "Menu", ReaderMenuView::ITEMS, ReaderMenuView::ITEM_COUNT, v.selected);
   r.displayBuffer();
 }
 

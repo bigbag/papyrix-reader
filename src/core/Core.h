@@ -41,6 +41,7 @@ struct Core {
   // === Pending operations ===
   SyncMode pendingSync = SyncMode::None;
   int8_t pendingAppId = -1;
+  StateId pendingSettingsReturn = StateId::Home;
 
   // === Boot mode this session is running in (set in main.cpp::setup) ===
   BootMode bootMode = BootMode::UI;

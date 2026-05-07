@@ -25,9 +25,10 @@ SettingsState::SettingsState(GfxRenderer& renderer)
       currentScreen_(SettingsScreen::Menu),
       needsRender_(true),
       goHome_(false),
+      goReader_(false),
       goNetwork_(false),
       themeWasChanged_(false),
-      returnScreen_(SettingsScreen::Menu),
+      returnState_(StateId::Home),
       pendingAction_(0),
       menuView_{},
       readerView_{},
@@ -41,8 +42,9 @@ SettingsState::~SettingsState() = default;
 void SettingsState::enter(Core& core) {
   LOG_INF(TAG, "Entering");
   core_ = &core;  // Store for helper methods
-  currentScreen_ = returnScreen_;
-  returnScreen_ = SettingsScreen::Menu;  // Reset for next normal entry
+  currentScreen_ = SettingsScreen::Menu;
+  returnState_ = core.pendingSettingsReturn;
+  core.pendingSettingsReturn = StateId::Home;
 
   // Reset all views to ensure clean state
   menuView_.selected = 0;
@@ -59,6 +61,7 @@ void SettingsState::enter(Core& core) {
 
   needsRender_ = true;
   goHome_ = false;
+  goReader_ = false;
   goNetwork_ = false;
   themeWasChanged_ = false;
   pendingAction_ = 0;
@@ -162,7 +165,11 @@ StateTransition SettingsState::update(Core& core) {
           case Button::Back:
             if (currentScreen_ == SettingsScreen::Menu) {
               core.settings.save(core.storage);
-              goHome_ = true;
+              if (returnState_ == StateId::Reader) {
+                goReader_ = true;
+              } else {
+                goHome_ = true;
+              }
             } else if (currentScreen_ == SettingsScreen::ConfirmDialog) {
               // Cancel confirmation dialog
               pendingAction_ = 0;
@@ -193,6 +200,11 @@ StateTransition SettingsState::update(Core& core) {
   if (goHome_) {
     goHome_ = false;
     return StateTransition::to(StateId::Home);
+  }
+
+  if (goReader_) {
+    goReader_ = false;
+    return StateTransition::to(StateId::Reader);
   }
 
   return StateTransition::stay(StateId::Settings);
