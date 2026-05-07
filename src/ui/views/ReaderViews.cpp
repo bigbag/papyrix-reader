@@ -7,11 +7,6 @@ namespace ui {
 // Static definitions
 constexpr const char* const ReaderMenuView::ITEMS[];
 
-void renderStatusBar(const GfxRenderer& r, const Theme& t, const ReaderStatusView& v) {
-  // Draw status bar at bottom of screen
-  statusBar(r, t, v.currentPage, v.totalPages, v.progressPercent);
-}
-
 void render(const GfxRenderer& r, const Theme& t, const CoverPageView& v) {
   r.clearScreen(t.backgroundColor);
 

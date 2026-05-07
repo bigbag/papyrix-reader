@@ -443,11 +443,8 @@ void SettingsState::loadReaderSettings() {
   // Index 7: Show Images (toggle)
   readerView_.values[7] = settings.showImages;
 
-  // Index 8: Status Bar (0=None, 1=Title, 2=Chapter)
-  readerView_.values[8] = settings.statusBar;
-
-  // Index 9: Reading Orientation (0=Portrait, 1=Landscape CW, 2=Inverted, 3=Landscape CCW)
-  readerView_.values[9] = settings.orientation;
+  // Index 8: Reading Orientation (0=Portrait, 1=Landscape CW, 2=Inverted, 3=Landscape CCW)
+  readerView_.values[8] = settings.orientation;
 }
 
 void SettingsState::saveReaderSettings() {
@@ -486,11 +483,8 @@ void SettingsState::saveReaderSettings() {
   // Index 7: Show Images
   settings.showImages = readerView_.values[7];
 
-  // Index 8: Status Bar
-  settings.statusBar = readerView_.values[8];
-
-  // Index 9: Reading Orientation
-  settings.orientation = readerView_.values[9];
+  // Index 8: Reading Orientation
+  settings.orientation = readerView_.values[8];
 }
 
 void SettingsState::loadDeviceSettings() {

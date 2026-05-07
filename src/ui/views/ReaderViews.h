@@ -11,34 +11,6 @@
 namespace ui {
 
 // ============================================================================
-// ReaderStatusView - Status bar for reader screens
-// ============================================================================
-
-struct ReaderStatusView {
-  int16_t currentPage = 1;
-  int16_t totalPages = 1;
-  int8_t progressPercent = 0;
-  bool showProgress = true;
-  bool needsRender = true;
-
-  void setPage(int current, int total) {
-    currentPage = static_cast<int16_t>(current);
-    totalPages = static_cast<int16_t>(total);
-    if (totalPages > 0) {
-      progressPercent = static_cast<int8_t>((current * 100) / total);
-    }
-    needsRender = true;
-  }
-
-  void setShowProgress(bool show) {
-    showProgress = show;
-    needsRender = true;
-  }
-};
-
-void renderStatusBar(const GfxRenderer& r, const Theme& t, const ReaderStatusView& v);
-
-// ============================================================================
 // CoverPageView - Book cover display (for EPUB cover pages)
 // ============================================================================
 

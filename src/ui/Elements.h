@@ -90,9 +90,6 @@ char getKeyboardChar(const KeyboardState& state);
 // inside the body to show USB power.
 void battery(const GfxRenderer& r, const Theme& t, int x, int y, int percent, bool charging = false);
 
-// Status bar - Page numbers and progress percentage
-void statusBar(const GfxRenderer& r, const Theme& t, int page, int total, int percent);
-
 // Book card - Cover + title + author (for home screen)
 void bookCard(const GfxRenderer& r, const Theme& t, int y, const char* title, const char* author, const uint8_t* cover,
               int coverW, int coverH);
@@ -127,19 +124,5 @@ void popupMenu(const GfxRenderer& r, const Theme& t, const char* title, const ch
 
 // Two-column row - Label on left, value on right
 void twoColumnRow(const GfxRenderer& r, const Theme& t, int y, const char* label, const char* value);
-
-// Reader status bar data
-struct ReaderStatusBarData {
-  int currentPage;
-  int totalPages;
-  const char* title;
-  int batteryPercent;      // -1 if unavailable
-  uint8_t mode;            // Settings::StatusBarMode
-  bool isPartial = false;  // True when page cache is incomplete
-};
-
-// Reader status bar - Battery (left), title (center), page numbers (right)
-void readerStatusBar(const GfxRenderer& r, const Theme& t, int marginLeft, int marginRight, int marginBottom,
-                     const ReaderStatusBarData& data);
 
 }  // namespace ui

@@ -20,10 +20,12 @@ namespace {
 constexpr uint32_t SETTINGS_MAGIC = 0x53585050;
 // Minimum version we can read (allows backward compatibility)
 constexpr uint8_t MIN_SETTINGS_VERSION = 3;
-// Version 9: Moved frontButtonLayout from Theme to Settings
-constexpr uint8_t SETTINGS_FILE_VERSION = 9;
+// Version 10: Removed reader status bar setting
+constexpr uint8_t SETTINGS_FILE_VERSION = 10;
 // Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 25;
+constexpr uint8_t SETTINGS_COUNT = 24;
+// Legacy reader settings format included the status bar field.
+constexpr uint8_t LEGACY_SETTINGS_COUNT = 25;
 }  // namespace
 
 Result<void> Settings::save(drivers::Storage& storage) const {
@@ -46,7 +48,6 @@ Result<void> Settings::save(drivers::Storage& storage) const {
   serialization::writePod(outputFile, sleepScreen);
   serialization::writePod(outputFile, textLayout);
   serialization::writePod(outputFile, shortPwrBtn);
-  serialization::writePod(outputFile, statusBar);
   serialization::writePod(outputFile, orientation);
   serialization::writePod(outputFile, fontSize);
   serialization::writePod(outputFile, pagesPerRefresh);
@@ -104,9 +105,10 @@ Result<void> Settings::load(drivers::Storage& storage) {
   serialization::readPod(inputFile, fileSettingsCount);
 
   // Cap fileSettingsCount to prevent reading garbage from corrupted files
-  if (fileSettingsCount > SETTINGS_COUNT) {
-    LOG_ERR(TAG, "fileSettingsCount %u exceeds max %u, capping", fileSettingsCount, SETTINGS_COUNT);
-    fileSettingsCount = SETTINGS_COUNT;
+  const uint8_t maxSettingsCount = (version < SETTINGS_FILE_VERSION) ? LEGACY_SETTINGS_COUNT : SETTINGS_COUNT;
+  if (fileSettingsCount > maxSettingsCount) {
+    LOG_ERR(TAG, "fileSettingsCount %u exceeds max %u, capping", fileSettingsCount, maxSettingsCount);
+    fileSettingsCount = maxSettingsCount;
   }
 
   // Load settings that exist (support older files with fewer fields)
@@ -119,8 +121,11 @@ Result<void> Settings::load(drivers::Storage& storage) {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, shortPwrBtn, uint8_t(3));
     if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPodValidated(inputFile, statusBar, uint8_t(3));
-    if (++settingsRead >= fileSettingsCount) break;
+    if (version < SETTINGS_FILE_VERSION && settingsRead < fileSettingsCount) {
+      uint8_t ignoredLegacyReaderSetting = 0;
+      serialization::readPodValidated(inputFile, ignoredLegacyReaderSetting, uint8_t(3));
+      if (++settingsRead >= fileSettingsCount) break;
+    }
     serialization::readPodValidated(inputFile, orientation, uint8_t(4));
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, fontSize, uint8_t(4));
@@ -238,7 +243,6 @@ bool Settings::saveToFile() const {
   serialization::writePod(outputFile, sleepScreen);
   serialization::writePod(outputFile, textLayout);
   serialization::writePod(outputFile, shortPwrBtn);
-  serialization::writePod(outputFile, statusBar);
   serialization::writePod(outputFile, orientation);
   serialization::writePod(outputFile, fontSize);
   serialization::writePod(outputFile, pagesPerRefresh);
@@ -294,9 +298,10 @@ bool Settings::loadFromFile() {
   serialization::readPod(inputFile, fileSettingsCount);
 
   // Cap fileSettingsCount to prevent reading garbage from corrupted files
-  if (fileSettingsCount > SETTINGS_COUNT) {
-    LOG_ERR(TAG, "fileSettingsCount %u exceeds max %u, capping", fileSettingsCount, SETTINGS_COUNT);
-    fileSettingsCount = SETTINGS_COUNT;
+  const uint8_t maxSettingsCount = (version < SETTINGS_FILE_VERSION) ? LEGACY_SETTINGS_COUNT : SETTINGS_COUNT;
+  if (fileSettingsCount > maxSettingsCount) {
+    LOG_ERR(TAG, "fileSettingsCount %u exceeds max %u, capping", fileSettingsCount, maxSettingsCount);
+    fileSettingsCount = maxSettingsCount;
   }
 
   uint8_t settingsRead = 0;
@@ -307,8 +312,11 @@ bool Settings::loadFromFile() {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, shortPwrBtn, uint8_t(3));
     if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPodValidated(inputFile, statusBar, uint8_t(3));
-    if (++settingsRead >= fileSettingsCount) break;
+    if (version < SETTINGS_FILE_VERSION && settingsRead < fileSettingsCount) {
+      uint8_t ignoredLegacyReaderSetting = 0;
+      serialization::readPodValidated(inputFile, ignoredLegacyReaderSetting, uint8_t(3));
+      if (++settingsRead >= fileSettingsCount) break;
+    }
     serialization::readPodValidated(inputFile, orientation, uint8_t(4));
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, fontSize, uint8_t(4));

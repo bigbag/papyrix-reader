@@ -21,7 +21,6 @@
 #include <climits>
 #include <cstring>
 
-#include "../Battery.h"
 #include "../FontManager.h"
 #include "../config.h"
 #include "../content/BookmarkManager.h"
@@ -43,7 +42,6 @@ static constexpr int kCacheTaskStopTimeoutMs = 10000;  // 10s - generous for slo
 
 namespace {
 constexpr int horizontalPadding = 5;
-constexpr int statusBarMargin = 23;
 constexpr size_t kEstimatedBytesPerPage = 2048;
 
 uint16_t estimatePagesForBytes(const size_t bytes, const size_t bytesPerPage = kEstimatedBytesPerPage) {
@@ -153,7 +151,7 @@ void ReaderState::initializeGlobalPageMetrics(Core& core) {
 
   const ContentType type = core.content.metadata().type;
   const Theme& theme = THEME_MANAGER.current();
-  const auto vp = getReaderViewport(core.settings.statusBar != 0);
+  const auto vp = getReaderViewport();
   const auto config = core.settings.getRenderConfig(theme, vp.width, vp.height);
 
   int spineCount = 0;
@@ -1134,7 +1132,7 @@ void ReaderState::renderCurrentPage(Core& core) {
 void ReaderState::renderCachedPage(Core& core) {
   Theme& theme = THEME_MANAGER.mutableCurrent();
   ContentType type = core.content.metadata().type;
-  const auto vp = getReaderViewport(core.settings.statusBar != 0);
+  const auto vp = getReaderViewport();
 
   // Handle EPUB/FB2 bounds
   if (type == ContentType::Epub || type == ContentType::Fb2) {
@@ -1237,7 +1235,6 @@ void ReaderState::renderCachedPage(Core& core) {
   page->warmGlyphs(renderer_, fontId);
 
   renderPageContents(core, *page, vp.marginTop, vp.marginRight, vp.marginBottom, vp.marginLeft);
-  renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
 
   const bool aaEnabled = core.settings.textAntiAliasing && renderer_.fontSupportsGrayscale(fontId);
   const bool imagePageWithAA = aaEnabled && page->hasImages();
@@ -1256,7 +1253,6 @@ void ReaderState::renderCachedPage(Core& core) {
 
       // Step 2: Re-render with images and display again (images appear clean)
       renderPageContents(core, *page, vp.marginTop, vp.marginRight, vp.marginBottom, vp.marginLeft);
-      renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
       renderer_.displayBuffer(EInkDisplay::FAST_REFRESH, turnOffScreen);
     } else {
       renderer_.displayBuffer(EInkDisplay::HALF_REFRESH, turnOffScreen);
@@ -1271,13 +1267,11 @@ void ReaderState::renderCachedPage(Core& core) {
     renderer_.clearScreen(0x00);
     renderer_.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     page->render(renderer_, fontId, vp.marginLeft, vp.marginTop, theme.primaryTextBlack);
-    renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
     renderer_.copyGrayscaleLsbBuffers();
 
     renderer_.clearScreen(0x00);
     renderer_.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
     page->render(renderer_, fontId, vp.marginLeft, vp.marginTop, theme.primaryTextBlack);
-    renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
     renderer_.copyGrayscaleMsbBuffers();
 
     const bool turnOffScreen = core.settings.sunlightFadingFix != 0;
@@ -1287,7 +1281,6 @@ void ReaderState::renderCachedPage(Core& core) {
     // Re-render BW instead of restoring from backup (saves 48KB peak allocation)
     renderer_.clearScreen(theme.backgroundColor);
     renderPageContents(core, *page, vp.marginTop, vp.marginRight, vp.marginBottom, vp.marginLeft);
-    renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
     renderer_.cleanupGrayscaleWithFrameBuffer();
   }
 
@@ -1335,7 +1328,7 @@ void ReaderState::loadCacheFromDisk(Core& core) {
   const Theme& theme = THEME_MANAGER.current();
   ContentType type = core.content.metadata().type;
 
-  const auto vp = getReaderViewport(core.settings.statusBar != 0);
+  const auto vp = getReaderViewport();
   const auto config = core.settings.getRenderConfig(theme, vp.width, vp.height);
 
   std::string cachePath;
@@ -1373,7 +1366,7 @@ void ReaderState::createOrExtendCache(Core& core) {
   const Theme& theme = THEME_MANAGER.current();
   ContentType type = core.content.metadata().type;
 
-  const auto vp = getReaderViewport(core.settings.statusBar != 0);
+  const auto vp = getReaderViewport();
   const auto config = core.settings.getRenderConfig(theme, vp.width, vp.height);
 
   std::string cachePath;
@@ -1432,62 +1425,6 @@ void ReaderState::renderPageContents(Core& core, Page& page, int marginTop, int 
   page.render(renderer_, fontId, marginLeft, marginTop, theme.primaryTextBlack);
 }
 
-void ReaderState::renderStatusBar(Core& core, int marginRight, int marginBottom, int marginLeft) {
-  const Theme& theme = THEME_MANAGER.current();
-  ContentType type = core.content.metadata().type;
-
-  // Build status bar data
-  ui::ReaderStatusBarData data{};
-  data.mode = core.settings.statusBar;
-  data.title = core.content.metadata().title;
-
-  // Resolve chapter title if in Chapter mode (cached to avoid SD I/O on every render).
-  // EPUB resolution opens an .anchors file on SD, so we cache the page range over
-  // which the resolved title is valid and only re-resolve when crossing a boundary.
-  if (data.mode == Settings::StatusChapter && core.content.tocCount() > 0) {
-    bool needsUpdate;
-    if (type == ContentType::Fb2) {
-      // FB2 TOC maps to sections (spines) — title can't change within a spine
-      needsUpdate = (currentSpineIndex_ != cachedChapterSpine_);
-    } else {
-      needsUpdate = (currentSpineIndex_ != cachedChapterSpine_ || currentSectionPage_ < cachedChapterStartPage_ ||
-                     currentSectionPage_ >= cachedChapterEndPage_);
-    }
-    if (needsUpdate) {
-      cachedChapterTitle_[0] = '\0';
-      int rangeStart = INT_MIN;
-      int rangeEnd = INT_MAX;
-      int tocIndex = findCurrentTocEntry(core, &rangeStart, &rangeEnd);
-      if (tocIndex >= 0) {
-        auto result = core.content.getTocEntry(tocIndex);
-        if (result.ok()) {
-          strncpy(cachedChapterTitle_, result.value.title, sizeof(cachedChapterTitle_) - 1);
-          cachedChapterTitle_[sizeof(cachedChapterTitle_) - 1] = '\0';
-        }
-      }
-      cachedChapterSpine_ = currentSpineIndex_;
-      cachedChapterStartPage_ = rangeStart;
-      cachedChapterEndPage_ = rangeEnd;
-    }
-    if (cachedChapterTitle_[0] != '\0') {
-      data.title = cachedChapterTitle_;
-    }
-  }
-
-  // Battery
-  const uint16_t millivolts = batteryMonitor.readMillivolts();
-  data.batteryPercent = (millivolts < 100) ? -1 : BatteryMonitor::percentageFromMillivolts(millivolts);
-
-  // Page info (whole-book page number via GlobalPageMetrics)
-  // Note: renderCachedPage() already stopped the task, so we own pageCache_
-  const GlobalPageMetrics metrics = resolveGlobalPageMetrics(core);
-  data.currentPage = metrics.currentPage;
-  data.totalPages = metrics.totalPages;
-  data.isPartial = data.totalPages <= 0 || !metrics.totalIsExact;
-
-  ui::readerStatusBar(renderer_, theme, marginLeft, marginRight, marginBottom, data);
-}
-
 void ReaderState::renderXtcPage(Core& core) {
   auto* provider = core.content.asXtc();
   if (!provider) {
@@ -1533,14 +1470,11 @@ void ReaderState::displayWithRefresh(Core& core) {
   }
 }
 
-ReaderState::Viewport ReaderState::getReaderViewport(bool showStatusBar) const {
+ReaderState::Viewport ReaderState::getReaderViewport() const {
   Viewport vp{};
   renderer_.getOrientedViewableTRBL(&vp.marginTop, &vp.marginRight, &vp.marginBottom, &vp.marginLeft);
   vp.marginLeft += horizontalPadding;
   vp.marginRight += horizontalPadding;
-  if (showStatusBar) {
-    vp.marginBottom += statusBarMargin;
-  }
   vp.width = renderer_.getScreenWidth() - vp.marginLeft - vp.marginRight;
   vp.height = renderer_.getScreenHeight() - vp.marginTop - vp.marginBottom;
   return vp;
@@ -1555,7 +1489,7 @@ bool ReaderState::renderCoverPage(Core& core) {
   }
 
   LOG_DBG(TAG, "Rendering cover page from: %s", coverPath.c_str());
-  const auto vp = getReaderViewport(core.settings.statusBar != 0);
+  const auto vp = getReaderViewport();
   int pagesUntilRefresh = pagesUntilFullRefresh_;
   const bool turnOffScreen = core.settings.sunlightFadingFix != 0;
 
@@ -1617,7 +1551,7 @@ void ReaderState::startBackgroundCaching(Core& core) {
 
         // Build cache if it doesn't exist
         if (!pageCache_ && !cacheTask_.shouldStop()) {
-          const auto vp = getReaderViewport(coreRef.settings.statusBar != 0);
+          const auto vp = getReaderViewport();
           const auto config = coreRef.settings.getRenderConfig(theme, vp.width, vp.height);
           std::string cachePath;
 

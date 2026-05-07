@@ -114,7 +114,6 @@ class ReaderState : public State {
 
   // Helpers
   void renderPageContents(Core& core, Page& page, int marginTop, int marginRight, int marginBottom, int marginLeft);
-  void renderStatusBar(Core& core, int marginRight, int marginBottom, int marginLeft);
 
   // Global page metrics — whole-book page counting for EPUB/FB2
   struct GlobalPageMetrics {
@@ -158,7 +157,7 @@ class ReaderState : public State {
     int width;
     int height;
   };
-  Viewport getReaderViewport(bool showStatusBar) const;
+  Viewport getReaderViewport() const;
 
   // Get first content spine index (skips cover document when appropriate)
   static int calcFirstContentSpine(bool hasCover, int textStartIndex, size_t spineCount);
@@ -170,14 +169,6 @@ class ReaderState : public State {
 
   // Source state (where reader was opened from)
   StateId sourceState_ = StateId::Home;
-
-  // Cached chapter title for StatusChapter mode (avoids SD I/O on every render).
-  // Valid while currentSpineIndex_ == cachedChapterSpine_ and
-  // cachedChapterStartPage_ <= currentSectionPage_ < cachedChapterEndPage_.
-  char cachedChapterTitle_[64] = "";
-  int cachedChapterSpine_ = -1;
-  int cachedChapterStartPage_ = 0;
-  int cachedChapterEndPage_ = 0;
 
   // TOC overlay mode
   bool tocMode_ = false;

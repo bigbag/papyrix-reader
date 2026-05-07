@@ -11,7 +11,6 @@ constexpr const char* const ReaderSettingsView::FONT_SIZE_VALUES[];
 constexpr const char* const ReaderSettingsView::TEXT_LAYOUT_VALUES[];
 constexpr const char* const ReaderSettingsView::LINE_SPACING_VALUES[];
 constexpr const char* const ReaderSettingsView::ALIGNMENT_VALUES[];
-constexpr const char* const ReaderSettingsView::STATUS_BAR_VALUES[];
 constexpr const char* const ReaderSettingsView::ORIENTATION_VALUES[];
 
 const ReaderSettingsView::SettingDef ReaderSettingsView::DEFS[SETTING_COUNT] = {
@@ -23,7 +22,6 @@ const ReaderSettingsView::SettingDef ReaderSettingsView::DEFS[SETTING_COUNT] = {
     {"Paragraph Alignment", SettingType::Enum, ALIGNMENT_VALUES, 4},
     {"Hyphenation", SettingType::Toggle, nullptr, 0},
     {"Show Images", SettingType::Toggle, nullptr, 0},
-    {"Status Bar", SettingType::Enum, STATUS_BAR_VALUES, 3},
     {"Reading Orientation", SettingType::Enum, ORIENTATION_VALUES, 4},
 };
 

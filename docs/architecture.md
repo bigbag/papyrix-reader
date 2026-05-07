@@ -376,7 +376,7 @@ src/ui/
 ├── Views.h                 # Unified header for all views
 └── views/                  # Screen-specific views
     ├── HomeView.h/cpp      # Home screen with book card
-    ├── ReaderViews.h/cpp   # Reader UI (TOC, status bar)
+    ├── ReaderViews.h/cpp   # Reader UI (TOC, overlays)
     ├── SettingsViews.h/cpp # Settings screens
     ├── NetworkViews.h/cpp  # WiFi configuration
     ├── AppLauncherViews.h/cpp # App launcher menu
@@ -437,9 +437,9 @@ class HomeState : public State {
 ### Device Emulation
 
 - **Real font metrics**: Uses `reader_2b`, `reader_bold_2b`, `reader_italic_2b` built-in fonts with per-glyph `advanceX` lookup (not fixed-width approximation)
-- **Device viewport**: 464x765 pixels (480 - 2*(3+5) x 800 - 9 - (3+23)) with status bar, 464x788 without
+- **Device viewport**: 464x788 pixels (480 - 2*(3+5) x 800 - 9 - 3)
 - **Batched caching**: `--batch 5` emulates the device's batched page cache generation with suspend/resume cycles
-- **Status bar toggle**: `--no-statusbar` removes the 23px bottom margin, matching the device viewport when status bar is hidden
+- **Status bar**: removed from reader mode; the full viewport is always used
 - **Font ID**: `READER_FONT_ID = 1818981670`, same as device
 
 ### Architecture
@@ -463,8 +463,8 @@ The mock `GfxRenderer` provides real text measurement (`getTextWidth`, `getSpace
 # Parse book with device-matching batch mode
 reader-test --dump --batch 5 book.epub /tmp/cache
 
-# Parse with status bar hidden (larger viewport)
-reader-test --dump --no-statusbar book.epub /tmp/cache
+# Parse with reader viewport
+reader-test --dump book.epub /tmp/cache
 
 # Dump text from device cache (copied from SD card)
 reader-test --cache-dump /path/to/.papyrix/epub_<hash>/
@@ -519,7 +519,7 @@ The `--batch 5` flag is critical for reproducing suspend/resume bugs that only t
 - **`Elements.h`** — Reusable UI components (ButtonBar, keyboard, etc.)
 - **`Views.h`** — Unified header for all view types
 - **`views/HomeView.h`** — Home screen rendering
-- **`views/ReaderViews.h`** — Reader UI (TOC, status bar)
+- **`views/ReaderViews.h`** — Reader UI (TOC, overlays)
 - **`views/SettingsViews.h`** — Settings screen rendering
 
 ### Libraries (`/lib/`)

@@ -1,6 +1,6 @@
 # Rendering Pipeline Memory Usage (Reader Mode)
 
-This document describes RAM usage in **Reader mode** across all combinations of anti-aliasing (AA), font type, and status bar settings. Reader mode is the minimal-footprint mode optimized for reading — WiFi is off, freeing ~100KB compared to UI mode.
+This document describes RAM usage in **Reader mode** across anti-aliasing (AA) and font type combinations. Reader mode is the minimal-footprint mode optimized for reading, and it always uses the full page viewport.
 
 ## Display Framebuffer
 
@@ -21,16 +21,15 @@ Base margins from `GfxRenderer` (`lib/GfxRenderer/src/GfxRenderer.h:110-113`):
 - **Top:** base 9 → effective 9
 - **Left:** base 3 + 5 padding → effective 8
 - **Right:** base 3 + 5 padding → effective 8
-- **Bottom:** base 3 (+23 if status bar) → effective 3 or 26
+- **Bottom:** base 3 → effective 3
 
-Horizontal padding and status bar margin: `src/states/ReaderState.cpp:39-40`.
+Horizontal padding: `src/states/ReaderState.cpp:39`.
 
 Resulting text viewport:
 
-- **Status bar ON:** 464×765
-- **Status bar OFF:** 464×788
+- **Reader mode:** 464×788
 
-The status bar changes page layout (fewer lines per page) but allocates **no additional buffers**. The status bar is rendered into the same framebuffer.
+Reader mode changes page layout by using the full viewport, but it allocates no additional buffers.
 
 ## Font Memory
 
@@ -90,16 +89,14 @@ Simple BW render directly into the framebuffer. One render pass, no extra memory
 
 The AA pipeline reuses the **same 48KB framebuffer** for all passes — no backup buffer is allocated. From `src/states/ReaderState.cpp:776-809`:
 
-1. Render BW page + status bar → `displayBuffer` (normal page flip)
+1. Render BW page → `displayBuffer` (normal page flip)
 2. `clearScreen(0x00)`, render LSB mask → `copyGrayscaleLsbBuffers` (SPI to SSD1677 BW RAM)
 3. `clearScreen(0x00)`, render MSB mask → `copyGrayscaleMsbBuffers` (SPI to SSD1677 RED RAM)
 4. `displayGrayBuffer()` → SSD1677 combines BW+RED RAM for 4-level grayscale
 5. Re-render BW from scratch → `cleanupGrayscaleWithFrameBuffer` (restores RED RAM)
-6. If status bar: blank + redraw via `displayWindow` (status bar is 1-bit only)
-
 Line 791: *"Re-render BW instead of restoring from backup (saves 48KB peak allocation)"*
 
-**Extra RAM: 0 bytes.** The cost is CPU time — 3 additional full-page renders (LSB, MSB, BW restore) plus status bar refresh.
+**Extra RAM: 0 bytes.** The cost is CPU time, not memory.
 
 ## Page Caching
 
@@ -163,13 +160,13 @@ No simultaneous access → no mutex overhead on the hot path.
 
 ### When the total page count becomes exact
 
-`pageCache_->pageCount()` reflects only the pages currently cached. Until `parser.hasMoreContent()` returns false, `isPartial_` stays true and the page total is an estimate. The reader status bar reflects this with a `~` suffix on the total — see [User Guide § Reading Mode](user_guide.md#status-bar) for the user-visible semantics.
+`pageCache_->pageCount()` reflects only the pages currently cached. Until `parser.hasMoreContent()` returns false, `isPartial_` stays true and the page total is an estimate.
 
 ## Memory Summary
 
 ### Builtin fonts (~67KB total)
 
-All four combinations (AA on/off × status bar on/off) use the same RAM:
+Both AA states use the same RAM:
 
 - Framebuffer: 48KB
 - Fonts (3 glyph caches): ~1.5KB
@@ -179,7 +176,7 @@ All four combinations (AA on/off × status bar on/off) use the same RAM:
 
 ### External fonts (~90KB total)
 
-All four combinations (AA on/off × status bar on/off) use the same RAM:
+Both AA states use the same RAM:
 
 - Framebuffer: 48KB
 - Font (1 streaming regular): ~25KB
@@ -193,7 +190,7 @@ All four combinations (AA on/off × status bar on/off) use the same RAM:
 - Bold variant (external): +~25KB (lazy, loaded on first bold text)
 - Italic variant (external): +~25KB (lazy, loaded on first italic text)
 
-**Key insight:** AA and status bar settings do not affect peak RAM. The only variable that significantly changes memory usage is the font type (builtin vs external) and how many external font variants are loaded.
+**Key insight:** AA does not affect peak RAM. The only variable that significantly changes memory usage is the font type (builtin vs external) and how many external font variants are loaded.
 
 ## Key Source Files
 

@@ -2,7 +2,6 @@
 
 #include <cstdio>
 #include <cstring>
-#include <string>
 
 #include "core/PapyrixSettings.h"
 
@@ -404,23 +403,6 @@ void battery(const GfxRenderer& r, const Theme& t, int x, int y, int percent, bo
   r.drawText(t.smallFontId, x + battW + tipW + 5, y, buf, t.primaryTextBlack);
 }
 
-void statusBar(const GfxRenderer& r, const Theme& t, int page, int total, int percent) {
-  const int y = r.getScreenHeight() - 25;
-  const int x = t.screenMarginSide;
-  const int screenW = r.getScreenWidth();
-
-  // Page numbers on left
-  char pageStr[32];
-  snprintf(pageStr, sizeof(pageStr), "%d / %d", page, total);
-  r.drawText(t.smallFontId, x + 5, y, pageStr, t.primaryTextBlack);
-
-  // Percentage on right
-  char percentStr[8];
-  snprintf(percentStr, sizeof(percentStr), "%d%%", percent);
-  const int percentW = r.getTextWidth(t.smallFontId, percentStr);
-  r.drawText(t.smallFontId, screenW - x - percentW - 5, y, percentStr, t.primaryTextBlack);
-}
-
 void bookCard(const GfxRenderer& r, const Theme& t, int y, const char* titleText, const char* author,
               const uint8_t* cover, int coverW, int coverH) {
   const int x = t.screenMarginSide + 10;
@@ -597,86 +579,6 @@ void twoColumnRow(const GfxRenderer& r, const Theme& t, int y, const char* label
 
   r.drawText(t.uiFontId, labelX, y, label, t.primaryTextBlack);
   r.drawText(t.uiFontId, valueX, y, value, t.secondaryTextBlack);
-}
-
-void readerStatusBar(const GfxRenderer& r, const Theme& t, int marginLeft, int marginRight, int marginBottom,
-                     const ReaderStatusBarData& data) {
-  if (data.mode == 0) return;  // StatusNone
-
-  const auto screenHeight = r.getScreenHeight();
-  const auto screenWidth = r.getScreenWidth();
-  const int textY = screenHeight - marginBottom - 2;
-  int percentageTextWidth = 0;
-
-  // 1. Battery (left side)
-  char percentageText[8];
-  int percentage = data.batteryPercent;
-  if (percentage < 0) {
-    snprintf(percentageText, sizeof(percentageText), "--%%");
-    percentage = 0;
-  } else {
-    snprintf(percentageText, sizeof(percentageText), "%d%%", percentage);
-  }
-  percentageTextWidth = r.getTextWidth(t.smallFontId, percentageText);
-  r.drawText(t.smallFontId, 20 + marginLeft, textY, percentageText, t.primaryTextBlack);
-
-  // Battery icon (15x10 px)
-  constexpr int batteryWidth = 15;
-  constexpr int batteryHeight = 10;
-  const int x = marginLeft;
-  const int y = textY + 5;
-
-  // Draw battery outline
-  r.drawLine(x, y, x + batteryWidth - 4, y, t.primaryTextBlack);
-  r.drawLine(x, y + batteryHeight - 1, x + batteryWidth - 4, y + batteryHeight - 1, t.primaryTextBlack);
-  r.drawLine(x, y, x, y + batteryHeight - 1, t.primaryTextBlack);
-  r.drawLine(x + batteryWidth - 4, y, x + batteryWidth - 4, y + batteryHeight - 1, t.primaryTextBlack);
-  // Battery terminal
-  r.drawLine(x + batteryWidth - 3, y + 2, x + batteryWidth - 1, y + 2, t.primaryTextBlack);
-  r.drawLine(x + batteryWidth - 3, y + batteryHeight - 3, x + batteryWidth - 1, y + batteryHeight - 3,
-             t.primaryTextBlack);
-  r.drawLine(x + batteryWidth - 1, y + 2, x + batteryWidth - 1, y + batteryHeight - 3, t.primaryTextBlack);
-
-  // Fill level
-  int filledWidth = percentage * (batteryWidth - 5) / 100 + 1;
-  if (filledWidth > batteryWidth - 5) filledWidth = batteryWidth - 5;
-  if (filledWidth > 0) {
-    r.fillRect(x + 1, y + 1, filledWidth, batteryHeight - 2, t.primaryTextBlack);
-  }
-
-  // 2. Page numbers (right side)
-  char pageStr[16];
-  if (data.totalPages <= 0) {
-    snprintf(pageStr, sizeof(pageStr), "%d/-", data.currentPage);
-  } else if (data.isPartial) {
-    snprintf(pageStr, sizeof(pageStr), "%d/%d~", data.currentPage, data.totalPages);
-  } else {
-    snprintf(pageStr, sizeof(pageStr), "%d/%d", data.currentPage, data.totalPages);
-  }
-  int pageTextWidth = r.getTextWidth(t.smallFontId, pageStr);
-  r.drawText(t.smallFontId, screenWidth - marginRight - pageTextWidth, textY, pageStr, t.primaryTextBlack);
-
-  // 3. Title (center)
-  if (data.title && data.title[0] != '\0') {
-    const int batteryAreaWidth = 20 + percentageTextWidth;
-    const int titleMarginLeft = batteryAreaWidth + 30 + marginLeft;
-    const int titleMarginRight = marginRight + pageTextWidth + 10;
-    const int availableTextWidth = screenWidth - titleMarginLeft - titleMarginRight;
-
-    if (availableTextWidth <= 0) return;
-
-    std::string titleStr = data.title;
-    int titleWidth = r.getTextWidth(t.smallFontId, titleStr.c_str());
-
-    // Truncate title if too wide (using truncatedText for UTF-8 safety)
-    if (titleWidth > availableTextWidth) {
-      titleStr = r.truncatedText(t.smallFontId, titleStr.c_str(), availableTextWidth);
-      titleWidth = r.getTextWidth(t.smallFontId, titleStr.c_str());
-    }
-
-    r.drawText(t.smallFontId, titleMarginLeft + (availableTextWidth - titleWidth) / 2, textY, titleStr.c_str(),
-               t.primaryTextBlack);
-  }
 }
 
 void popupMenu(const GfxRenderer& r, const Theme& t, const char* titleText, const char* const* items, int itemCount,
