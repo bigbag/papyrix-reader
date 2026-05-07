@@ -542,8 +542,6 @@ void ReaderState::enter(Core& core) {
   needsRender_ = true;
   holdNavigated_ = false;
   powerPressStartedMs_ = 0;
-  centerClickPending_ = false;
-  centerClickStartedMs_ = 0;
   stopBackgroundCaching();  // Ensure any previous task is stopped
   invalidateGlobalPageMetrics();
   parser_.reset();  // Safe - task is stopped
@@ -753,14 +751,7 @@ StateTransition ReaderState::update(Core& core) {
       case EventType::ButtonRelease:
         switch (e.button) {
           case Button::Center:
-            if (centerClickPending_ && (millis() - centerClickStartedMs_) <= kCenterDoubleClickMs_) {
-              centerClickPending_ = false;
-              centerClickStartedMs_ = 0;
-              core.pendingSettingsReturn = StateId::Reader;
-              return StateTransition::to(StateId::Settings);
-            }
-            centerClickPending_ = true;
-            centerClickStartedMs_ = millis();
+            toggleReaderOrientation(core);
             break;
           default:
             if (!holdNavigated_) {
@@ -796,12 +787,6 @@ StateTransition ReaderState::update(Core& core) {
       default:
         break;
     }
-  }
-
-  if (centerClickPending_ && (millis() - centerClickStartedMs_) > kCenterDoubleClickMs_) {
-    centerClickPending_ = false;
-    centerClickStartedMs_ = 0;
-    toggleReaderOrientation(core);
   }
 
   return StateTransition::stay(StateId::Reader);

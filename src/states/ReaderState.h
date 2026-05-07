@@ -169,12 +169,6 @@ class ReaderState : public State {
 
   void toggleReaderOrientation(Core& core);
 
-  // Center button click handling:
-  // - single click toggles orientation after a short delay
-  // - double click opens Settings
-  bool centerClickPending_ = false;
-  uint32_t centerClickStartedMs_ = 0;
-  static constexpr uint32_t kCenterDoubleClickMs_ = 450;
 };
 
 }  // namespace papyrix
