@@ -342,7 +342,7 @@ void FileListState::render(Core& core) {
   } else {
     strcpy(title, "Books");
   }
-  renderer_.drawCenteredText(theme.readerFontId, 10, title, theme.primaryTextBlack, BOLD);
+  renderer_.drawCenteredText(theme.uiFontId, 10, title, theme.primaryTextBlack, BOLD);
 
   // Empty state
   if (files_.empty()) {

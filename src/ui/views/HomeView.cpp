@@ -16,11 +16,13 @@ void render(const GfxRenderer& r, const Theme& t, const HomeView& v) {
   const int pageWidth = r.getScreenWidth();
   const int pageHeight = r.getScreenHeight();
 
-  // "Papyrix" brand title - bold in top-left corner
-  brandTitle(r, t, 10, "Papyrix");
-
-  // Battery indicator - top right
-  battery(r, t, pageWidth - 90, 10, v.batteryPercent, v.batteryCharging);
+  // Battery percentage only when low; no icon on the home screen.
+  if (v.batteryPercent < 50) {
+    char batteryText[8];
+    snprintf(batteryText, sizeof(batteryText), "%d%%", v.batteryPercent);
+    const int batteryTextWidth = r.getTextWidth(t.smallFontId, batteryText);
+    r.drawText(t.smallFontId, pageWidth - batteryTextWidth - 10, 10, batteryText, t.primaryTextBlack);
+  }
 
   // Book card dimensions (70% width, centered)
   const auto card = CardDimensions::calculate(pageWidth, pageHeight);

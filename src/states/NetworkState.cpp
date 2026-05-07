@@ -18,7 +18,7 @@
 namespace papyrix {
 
 namespace {
-constexpr const char* AP_SSID = "Papyrix";
+constexpr const char* AP_SSID = "3pyrix";
 }  // namespace
 
 NetworkState::NetworkState(GfxRenderer& renderer)

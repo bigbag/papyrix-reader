@@ -1150,8 +1150,7 @@ void ReaderState::renderCachedPage(Core& core) {
     }
     if (currentSpineIndex_ < 0) currentSpineIndex_ = 0;
     if (currentSpineIndex_ >= static_cast<int>(spineCount)) {
-      renderer_.drawCenteredText(core.settings.getReaderFontId(theme), 300, "End of book", theme.primaryTextBlack,
-                                 BOLD);
+      renderer_.drawCenteredText(theme.uiFontId, 300, "End of book", theme.primaryTextBlack, BOLD);
       renderer_.displayBuffer();
       return;
     }
@@ -1177,7 +1176,7 @@ void ReaderState::renderCachedPage(Core& core) {
     if (!pageIsCached) {
       // Current page not cached - show "Indexing..." and create/extend
       renderer_.clearScreen(theme.backgroundColor);
-      ui::centeredMessage(renderer_, theme, core.settings.getReaderFontId(theme), "Indexing...");
+      ui::centeredMessage(renderer_, theme, theme.uiFontId, "Indexing...");
       renderer_.displayBuffer();
 
       createOrExtendCache(core);
@@ -1210,8 +1209,7 @@ void ReaderState::renderCachedPage(Core& core) {
 
   // Check if we need to extend cache
   if (!ensurePageCached(core, currentSectionPage_)) {
-    renderer_.drawCenteredText(core.settings.getReaderFontId(theme), 300, "Failed to load page", theme.primaryTextBlack,
-                               BOLD);
+    renderer_.drawCenteredText(theme.uiFontId, 300, "Failed to load page", theme.primaryTextBlack, BOLD);
     renderer_.displayBuffer();
     needsRender_ = false;  // Prevent infinite render loop on cache failure
     return;
@@ -1325,7 +1323,7 @@ bool ReaderState::ensurePageCached(Core& core, uint16_t pageNum) {
   LOG_DBG(TAG, "Extending cache for page %d", pageNum);
 
   const Theme& theme = THEME_MANAGER.current();
-  ui::centeredMessage(renderer_, theme, core.settings.getReaderFontId(theme), "Loading...");
+  ui::centeredMessage(renderer_, theme, theme.uiFontId, "Loading...");
 
   createOrExtendCache(core);
 
@@ -1962,7 +1960,7 @@ void ReaderState::jumpToTocEntry(Core& core, int tocIndex) {
       if (page < 0) {
         const Theme& theme = THEME_MANAGER.current();
         renderer_.clearScreen(theme.backgroundColor);
-        ui::centeredMessage(renderer_, theme, core.settings.getReaderFontId(theme), "Indexing...");
+        ui::centeredMessage(renderer_, theme, theme.uiFontId, "Indexing...");
         renderer_.displayBuffer();
 
         createOrExtendCache(core);
@@ -2131,8 +2129,7 @@ void ReaderState::handleMenuAction(Core& core, int action) {
       } else {
         const Theme& theme = THEME_MANAGER.current();
         renderer_.clearScreen(theme.backgroundColor);
-        ui::overlayBox(renderer_, theme, core.settings.getReaderFontId(theme), renderer_.getScreenHeight() / 2 - 20,
-                       "No chapters");
+        ui::overlayBox(renderer_, theme, theme.uiFontId, renderer_.getScreenHeight() / 2 - 20, "No chapters");
         renderer_.displayBuffer();
         core.display.markDirty();
         startBackgroundCaching(core);

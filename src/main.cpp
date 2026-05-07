@@ -45,7 +45,6 @@
 #include "core/BootMode.h"
 #include "core/Core.h"
 #include "core/StateMachine.h"
-#include "images/PapyrixLogo.h"
 #include "states/AppLauncherState.h"
 #include "states/CalibreSyncState.h"
 #include "states/ErrorState.h"
@@ -382,7 +381,7 @@ bool earlyInit() {
     verifyWakeupLongPress(wakeup.resetReason);
   }
 
-  LOG_INF(TAG, "Starting Papyrix version " PAPYRIX_VERSION);
+  LOG_INF(TAG, "Starting 3pyrix version " PAPYRIX_VERSION);
   papyrix::crashdebug::logBootInfo(wakeup.resetReason);
 
   // Initialize battery ADC pin with proper attenuation for 0-3.3V range
@@ -422,7 +421,6 @@ void initUIMode() {
   const auto& preInitTransition = papyrix::getTransition();
   if (!preInitTransition.isValid()) {
     ui::BootView bootView;
-    bootView.setLogo(PapyrixLogo, 128, 128);
     bootView.setVersion(PAPYRIX_VERSION);
     bootView.setStatus("BOOTING");
     ui::render(renderer, THEME, bootView);

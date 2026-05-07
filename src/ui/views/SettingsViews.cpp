@@ -139,7 +139,7 @@ void render(const GfxRenderer& r, const Theme& t, const ConfirmDialogView& v) {
   r.clearScreen(t.backgroundColor);
 
   // Title (bold, centered)
-  r.drawCenteredText(t.readerFontId, top - 40, v.title, t.primaryTextBlack, EpdFontFamily::BOLD);
+  r.drawCenteredText(t.uiFontId, top - 40, v.title, t.primaryTextBlack, EpdFontFamily::BOLD);
 
   // Description lines
   r.drawCenteredText(t.uiFontId, top, v.line1, t.primaryTextBlack);

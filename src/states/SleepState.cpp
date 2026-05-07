@@ -27,8 +27,6 @@
 #include "../config.h"
 #include "../core/Core.h"
 #include "../drivers/Device.h"
-#include "../images/PapyrixLogo.h"
-
 extern InputManager inputManager;
 extern uint16_t rtcPowerButtonDurationMs;
 
@@ -107,8 +105,7 @@ void SleepState::renderDefaultSleepScreen(const Core& core) const {
   // Fixed colors (white bg, black text) — independent of active theme.
   // invertScreen() below handles dark/light based on sleep setting only.
   renderer_.clearScreen(0xFF);
-  renderer_.drawImage(PapyrixLogo, (pageWidth + 128) / 2, (pageHeight - 128) / 2, 128, 128);
-  renderer_.drawCenteredText(THEME.uiFontId, pageHeight / 2 + 70, "Papyrix", true, BOLD);
+  renderer_.drawCenteredText(THEME.uiFontId, pageHeight / 2 + 70, "3pyrix", true, BOLD);
   renderer_.drawCenteredText(THEME.smallFontId, pageHeight / 2 + 110, "SLEEPING", true);
 
   // Make sleep screen dark unless light is selected in settings
