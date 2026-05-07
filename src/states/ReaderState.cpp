@@ -14,6 +14,7 @@
 #include <PageCache.h>
 #include <PlainTextParser.h>
 #include <SDCardManager.h>
+#include <Serialization.h>
 #include <esp_system.h>
 
 #include <algorithm>
@@ -76,6 +77,57 @@ void setRendererOrientation(GfxRenderer& renderer, uint8_t orientation) {
   }
 }
 }  // namespace
+
+void ReaderState::saveAnchorMap(const ContentParser& parser, const std::string& cachePath) {
+  const auto& anchors = parser.getAnchorMap();
+
+  const std::string anchorPath = cachePath + ".anchors";
+  FsFile file;
+  if (!SdMan.openFileForWrite("RDR", anchorPath, file)) return;
+
+  if (anchors.size() > UINT16_MAX) {
+    uint16_t zero = 0;
+    serialization::writePod(file, zero);
+    file.close();
+    return;
+  }
+
+  const uint16_t count = static_cast<uint16_t>(anchors.size());
+  serialization::writePod(file, count);
+  for (const auto& entry : anchors) {
+    serialization::writeString(file, entry.first);
+    serialization::writePod(file, entry.second);
+  }
+  file.close();
+}
+
+int ReaderState::loadAnchorPage(const std::string& cachePath, const std::string& anchor) {
+  const std::string anchorPath = cachePath + ".anchors";
+  FsFile file;
+  if (!SdMan.openFileForRead("RDR", anchorPath, file)) return -1;
+
+  uint16_t count;
+  if (!serialization::readPodChecked(file, count)) {
+    file.close();
+    return -1;
+  }
+
+  for (uint16_t i = 0; i < count; i++) {
+    std::string anchorId;
+    uint16_t page;
+    if (!serialization::readString(file, anchorId) || !serialization::readPodChecked(file, page)) {
+      file.close();
+      return -1;
+    }
+    if (anchorId == anchor) {
+      file.close();
+      return page;
+    }
+  }
+
+  file.close();
+  return -1;
+}
 
 // --- Global page metrics (whole-book page counting for EPUB/FB2) ---
 

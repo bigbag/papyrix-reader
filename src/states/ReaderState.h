@@ -141,6 +141,8 @@ class ReaderState : public State {
 
   void createOrExtendCacheImpl(ContentParser& parser, const std::string& cachePath, const RenderConfig& config);
   void backgroundCacheImpl(ContentParser& parser, const std::string& cachePath, const RenderConfig& config);
+  void saveAnchorMap(const ContentParser& parser, const std::string& cachePath);
+  int loadAnchorPage(const std::string& cachePath, const std::string& anchor);
 
   // Display helpers
   void displayWithRefresh(Core& core);
