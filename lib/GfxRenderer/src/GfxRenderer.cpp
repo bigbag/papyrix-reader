@@ -974,9 +974,9 @@ void GfxRenderer::drawButtonHints(const int fontId, const char* btn1, const char
   const int pageHeight = getScreenHeight();
   constexpr int buttonWidth = 106;
   constexpr int buttonHeight = 46;
-  constexpr int buttonY = 50;      // Distance from bottom
+  constexpr int buttonY = 46;      // Distance from bottom (= buttonHeight, flush with screen edge)
   constexpr int textYOffset = 10;  // Distance from top of button to text baseline
-  constexpr int buttonPositions[] = {25, 130, 245, 350};
+  constexpr int buttonPositions[] = {38, 154, 268, 384};  // X3 528px portrait width
   const char* labels[] = {btn1, btn2, btn3, btn4};
 
   for (int i = 0; i < 4; i++) {

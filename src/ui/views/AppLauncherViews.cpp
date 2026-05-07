@@ -11,7 +11,7 @@ void render(const GfxRenderer& r, const Theme& t, const AppMenuView& v, const pa
 
   title(r, t, t.screenMarginTop, "Apps");
 
-  const int startY = 60;
+  const int startY = contentStartY(r, t);
   for (int i = 0; i < v.itemCount; i++) {
     const int y = startY + i * (t.itemHeight + t.itemSpacing);
     const char* name =

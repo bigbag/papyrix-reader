@@ -12,11 +12,15 @@ static uint8_t frontButtonLayout_ = 0;
 void setFrontButtonLayout(uint8_t layout) { frontButtonLayout_ = layout; }
 
 void title(const GfxRenderer& r, const Theme& t, int y, const char* text) {
-  r.drawCenteredText(t.uiFontId, y, text, t.primaryTextBlack, EpdFontFamily::BOLD);
+  r.drawCenteredText(t.uiFontId, y, text, t.primaryTextBlack);
 }
 
+int titleBottomY(const GfxRenderer& r, const Theme& t) { return t.screenMarginTop + r.getLineHeight(t.uiFontId); }
+
+int contentStartY(const GfxRenderer& r, const Theme& t, int gap) { return titleBottomY(r, t) + gap; }
+
 void brandTitle(const GfxRenderer& r, const Theme& t, int y, const char* text) {
-  r.drawText(t.uiFontId, 10, y, text, t.primaryTextBlack, EpdFontFamily::BOLD);
+  r.drawText(t.uiFontId, t.screenMarginSide, y, text, t.primaryTextBlack);
 }
 
 void menuItem(const GfxRenderer& r, const Theme& t, int y, const char* text, bool selected) {
@@ -137,6 +141,27 @@ void image(const GfxRenderer& r, int x, int y, const uint8_t* data, int w, int h
   }
 }
 
+void drawTextCenteredInRect(const GfxRenderer& r, const int fontId, const int x, const int y, const int width,
+                            const int height, const char* text, const bool black, const EpdFontFamily::Style style) {
+  if (text == nullptr || *text == '\0') {
+    return;
+  }
+
+  int minX = 0;
+  int minY = 0;
+  int maxX = 0;
+  int maxY = 0;
+  r.getTextBounds(fontId, text, &minX, &minY, &maxX, &maxY, style);
+
+  const int textWidth = maxX - minX;
+  const int textHeight = maxY - minY;
+  const int textX = x + (width - textWidth) / 2 - minX;
+  const int ascender = r.getFontAscenderSize(fontId);
+  const int screenTop = 2 * ascender - maxY;
+  const int textY = y + (height - textHeight) / 2 - screenTop;
+  r.drawText(fontId, textX, textY, text, black, style);
+}
+
 void dialog(const GfxRenderer& r, const Theme& t, const char* titleText, const char* msg, int selected) {
   const int screenW = r.getScreenWidth();
   const int screenH = r.getScreenHeight();
@@ -161,7 +186,6 @@ void dialog(const GfxRenderer& r, const Theme& t, const char* titleText, const c
   const int btnW = 80;
   const int btnH = 30;
   const int btnY = dialogY + dialogH - 50;
-  const int btnTextY = btnY + (btnH - r.getLineHeight(t.uiFontId)) / 2;
   const int yesX = dialogX + (dialogW / 2) - btnW - 20;
   const int noX = dialogX + (dialogW / 2) + 20;
   const char* yesLabel = "Yes";
@@ -174,9 +198,8 @@ void dialog(const GfxRenderer& r, const Theme& t, const char* titleText, const c
       r.drawRect(x, btnY, btnW, btnH, t.primaryTextBlack);
     }
 
-    const int textWidth = r.getTextWidth(t.uiFontId, label);
-    const int textX = x + (btnW - textWidth) / 2;
-    r.drawText(t.uiFontId, textX, btnTextY, label, isSelected ? t.selectionTextBlack : t.primaryTextBlack);
+    drawTextCenteredInRect(r, t.uiFontId, x, btnY, btnW, btnH, label,
+                           isSelected ? t.selectionTextBlack : t.primaryTextBlack);
   };
 
   drawButton(yesX, yesLabel, selected == 0);
