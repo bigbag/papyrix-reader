@@ -983,7 +983,6 @@ void GfxRenderer::drawButtonHints(const int fontId, const char* btn1, const char
     // Only draw if the label is non-empty
     if (labels[i] != nullptr && labels[i][0] != '\0') {
       const int x = buttonPositions[i];
-      drawRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, black);
       const int textWidth = getTextWidth(fontId, labels[i]);
       const int textX = x + (buttonWidth - 1 - textWidth) / 2;
       drawText(fontId, textX, pageHeight - buttonY + textYOffset, labels[i], black);
