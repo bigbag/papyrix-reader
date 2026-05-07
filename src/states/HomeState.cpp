@@ -127,8 +127,9 @@ StateTransition HomeState::update(Core& core) {
             return StateTransition::to(StateId::FileList);
 
           case Button::Left:
-            // btn3: Apps
-            return StateTransition::to(StateId::AppLauncher);
+            // btn3: Sync
+            core.pendingSync = SyncMode::DirectHotspot;
+            return StateTransition::to(StateId::Network);
 
           case Button::Right:
             // btn4: Settings

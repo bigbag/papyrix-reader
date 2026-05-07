@@ -40,7 +40,7 @@ struct HomeView {
   static constexpr int MAX_AUTHOR_LEN = 96;
   static constexpr int MAX_PATH_LEN = 128;
 
-  ButtonBar buttons{"", "File", "Apps", "Settings"};
+  ButtonBar buttons{"", "File", "Sync", "Settings"};
 
   // Current book info
   char bookTitle[MAX_TITLE_LEN] = {0};

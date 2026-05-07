@@ -281,7 +281,8 @@ StateTransition FileListState::update(Core& core) {
               navigateDown(core);
               break;
             case Button::Left:
-              break;
+              core.pendingSync = SyncMode::DirectHotspot;
+              return StateTransition::to(StateId::Network);
             case Button::Right:
               promptDelete(core);
               break;
@@ -338,15 +339,15 @@ void FileListState::render(Core& core) {
   // Title with page indicator
   char title[32];
   if (getTotalPages() > 1) {
-    snprintf(title, sizeof(title), "Books (%d/%d)", getCurrentPage(), getTotalPages());
+    snprintf(title, sizeof(title), "Files (%d/%d)", getCurrentPage(), getTotalPages());
   } else {
-    strcpy(title, "Books");
+    strcpy(title, "Files");
   }
   renderer_.drawCenteredText(theme.uiFontId, 10, title, theme.primaryTextBlack, BOLD);
 
   // Empty state
   if (files_.empty()) {
-    renderer_.drawText(theme.uiFontId, 20, 60, "No books found", theme.primaryTextBlack);
+    renderer_.drawText(theme.uiFontId, 20, 60, "No files found", theme.primaryTextBlack);
     renderer_.displayBuffer();
     needsRender_ = false;
     core.display.markDirty();
@@ -368,7 +369,7 @@ void FileListState::render(Core& core) {
 
   // Button hints - "Home" if at root, "Back" if in subfolder
   const char* backLabel = isAtRoot() ? "Home" : "Back";
-  ui::buttonBar(renderer_, theme, backLabel, "Open", "", "Delete");
+  ui::buttonBar(renderer_, theme, backLabel, "Open", "Sync", "Delete");
 
   if (firstRender_) {
     renderer_.displayBuffer(EInkDisplay::HALF_REFRESH);

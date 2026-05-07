@@ -38,6 +38,7 @@ class NetworkState : public State {
   NetworkScreen currentScreen_;
   bool needsRender_;
   bool goBack_;
+  bool goHome_;
 
   // Views (all stack-allocated)
   ui::NetworkModeView modeView_ = {};
@@ -55,6 +56,7 @@ class NetworkState : public State {
   bool passwordJustEntered_;
   bool goCalibreSync_;
   bool goApp_;
+  bool directHotspotFlow_;
   uint8_t scanRetryCount_ = 0;
   uint32_t scanRetryAt_ = 0;
   static constexpr uint8_t MAX_SCAN_RETRIES = 2;
