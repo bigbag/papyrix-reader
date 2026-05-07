@@ -577,6 +577,7 @@ void loop() {
   }
   if (autoSleepTimeout > 0 && papyrix::core.input.idleTimeMs() >= autoSleepTimeout) {
     LOG_INF(TAG, "Auto-sleep after %lu ms idle", autoSleepTimeout);
+    papyrix::core.preserveReaderPageOnSleep = stateMachine.isInState(papyrix::StateId::Reader);
     stateMachine.init(papyrix::core, papyrix::StateId::Sleep);
     return;
   }
@@ -594,6 +595,7 @@ void loop() {
         powerHeldSinceMs = loopStartTime;
       }
       if (loopStartTime - powerHeldSinceMs > papyrix::core.settings.getPowerButtonDuration()) {
+        papyrix::core.preserveReaderPageOnSleep = stateMachine.isInState(papyrix::StateId::Reader);
         stateMachine.init(papyrix::core, papyrix::StateId::Sleep);
         return;
       }

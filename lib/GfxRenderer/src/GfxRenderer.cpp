@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdlib>
 #include <cstring>
 
 #define TAG "GFX"
@@ -443,6 +444,71 @@ void GfxRenderer::fillRect(const int x, const int y, const int width, const int 
         rowPtr[byteEnd] |= rightMask;
     }
   }
+}
+
+void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoints, const bool state) const {
+  if (numPoints < 3) return;
+
+  // Find bounding box.
+  int minY = yPoints[0];
+  int maxY = yPoints[0];
+  for (int i = 1; i < numPoints; i++) {
+    if (yPoints[i] < minY) minY = yPoints[i];
+    if (yPoints[i] > maxY) maxY = yPoints[i];
+  }
+
+  // Clip to screen.
+  if (minY < 0) minY = 0;
+  if (maxY >= getScreenHeight()) maxY = getScreenHeight() - 1;
+
+  // Allocate node buffer for scanline algorithm.
+  auto* nodeX = static_cast<int*>(malloc(static_cast<size_t>(numPoints) * sizeof(int)));
+  if (!nodeX) {
+    LOG_ERR(TAG, "!! Failed to allocate polygon node buffer");
+    return;
+  }
+
+  // Scanline fill algorithm.
+  for (int scanY = minY; scanY <= maxY; scanY++) {
+    int nodes = 0;
+
+    int j = numPoints - 1;
+    for (int i = 0; i < numPoints; i++) {
+      if ((yPoints[i] < scanY && yPoints[j] >= scanY) || (yPoints[j] < scanY && yPoints[i] >= scanY)) {
+        const int dy = yPoints[j] - yPoints[i];
+        if (dy != 0) {
+          nodeX[nodes++] = xPoints[i] + (scanY - yPoints[i]) * (xPoints[j] - xPoints[i]) / dy;
+        }
+      }
+      j = i;
+    }
+
+    // Sort nodes by X.
+    for (int i = 0; i < nodes - 1; i++) {
+      for (int k = i + 1; k < nodes; k++) {
+        if (nodeX[i] > nodeX[k]) {
+          const int temp = nodeX[i];
+          nodeX[i] = nodeX[k];
+          nodeX[k] = temp;
+        }
+      }
+    }
+
+    // Fill between pairs of nodes.
+    for (int i = 0; i < nodes - 1; i += 2) {
+      int startX = nodeX[i];
+      int endX = nodeX[i + 1];
+
+      if (startX < 0) startX = 0;
+      if (endX >= getScreenWidth()) endX = getScreenWidth() - 1;
+
+      for (int x = startX; x <= endX; x++) {
+        drawPixel(x, scanY, state);
+      }
+    }
+  }
+
+  free(nodeX);
 }
 
 void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {

@@ -679,11 +679,26 @@ void ReaderState::exit(Core& core) {
     progress.flatPage = currentPage_;
     ProgressManager::save(core, core.content.cacheDir(), core.content.metadata().type, progress);
 
+    if (core.preserveReaderPageOnSleep) {
+      ReturnTo returnTo = ReturnTo::HOME;
+      const auto& transition = getTransition();
+      if (transition.isValid()) {
+        returnTo = transition.returnTo;
+      } else if (sourceState_ == StateId::FileList) {
+        returnTo = ReturnTo::FILE_MANAGER;
+      }
+      saveTransition(BootMode::READER, contentPath_, returnTo);
+    } else {
+      clearTransition();
+    }
+
     // Safe to reset - task is stopped, we own pageCache_/parser_
     parser_.reset();
     parserSpineIndex_ = -1;
     pageCache_.reset();
     core.content.close();
+  } else if (!core.preserveReaderPageOnSleep) {
+    clearTransition();
   }
 
   // Unload custom reader fonts to free memory
@@ -694,8 +709,11 @@ void ReaderState::exit(Core& core) {
   contentLoaded_ = false;
   contentPath_[0] = '\0';
 
-  // Reset orientation to Portrait for UI
-  renderer_.setOrientation(GfxRenderer::Orientation::Portrait);
+  // Preserve the reader orientation when we are entering sleep from Reader
+  // so SleepState can draw the bookmark on top of the current page buffer.
+  if (!core.preserveReaderPageOnSleep) {
+    renderer_.setOrientation(GfxRenderer::Orientation::Portrait);
+  }
 }
 
 StateTransition ReaderState::update(Core& core) {
