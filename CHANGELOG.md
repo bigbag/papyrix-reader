@@ -1,5 +1,43 @@
 
 
+## v1.22.0 (2026-05-08)
+
+*  Update changelog [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add I18n localization system with SD card locale overrides, Issue #111 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.21.0 (2026-05-07)
+
+*  PageCache: Estimate total pages while partial via parser byte progress. Issue #106 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  FB2: Add per-section caching with EPUB-style navigation, progress, and bookmarks [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Fix memory leaks, optimize font map lookups, and add ISO 639-2 hyphenation mapping [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  ZipFile: early exit in fillUncompressedSizes after all targets matched [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  ZipFile: add poison-trailing-entry test to prove fillUncompressedSizes early exit [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Epub: null-guard currentPage in addLineToPage to prevent crash on 750-word split [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Reader hardening: CSS/hyphenation memory, battery UI, EPUB3 cover [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Reader: EPUB guide cover, image upscaling support, USB cold-boot sleep [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add support for Xteink X3. Issue #100 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Fb2: Anchor section copy on tag bytes and paginate per section in reader-test [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  HomeView: Fit longer UTF-8 titles, wrap up to 4 lines [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Epub: Eliminate ~0.5s dead sleep per chapter on first open [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  GfxRenderer: Optimize fillRect with direct framebuffer writes and byte-level memset [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Increase I/O buffer sizes across Epub parser, HTML normalizer, and SD card reads [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  GfxRenderer: Replace per-pixel drawPixel with direct framebuffer writes [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  EInkDisplay: Batch SPI transactions for per-row plane transfers [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add IRAM_ATTR to render-path hot functions, switch to -O2/80MHz flash, and add Off pages-per-refresh option [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add crash debug, optimize text layout, and harden ZIP streaming [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add drive-all refresh mode and NFC-normalize uploaded filenames [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Optimize for size (-Oz), fix WiFi scan and GfxRenderer edge cases, and reduce heap allocations [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Reader: Cache chapter title by page range and re-resolve on unresolved anchors [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add per-page glyph warming to pre-load streaming and CJK font caches before render [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Reader: Show whole-book page numbers for EPUB and FB2 via section cache probing [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  EInkDisplay: Add turbo LUTs and LUT caching for faster X3 page turns [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  GfxRenderer: Compute button bar positions dynamically from screen width [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Update docs [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
 ## v1.20.3 (2026-04-29)
 
 *  Skip RTL detection on non-UTF-8 files to fix false Arabic in CP1251/KOI8-R. Issue #107 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
