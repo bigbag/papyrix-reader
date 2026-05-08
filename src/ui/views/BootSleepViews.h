@@ -1,6 +1,7 @@
 #pragma once
 
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <Theme.h>
 
 #include <cstdint>

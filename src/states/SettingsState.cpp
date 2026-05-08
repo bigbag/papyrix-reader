@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <LittleFS.h>  // Must be before SdFat includes to avoid FILE_READ/FILE_WRITE redefinition
 #include <Logging.h>
 #include <SDCardManager.h>
@@ -43,6 +44,9 @@ void SettingsState::enter(Core& core) {
   core_ = &core;  // Store for helper methods
   currentScreen_ = returnScreen_;
   returnScreen_ = SettingsScreen::Menu;  // Reset for next normal entry
+
+  ui::ReaderSettingsView::initDefs();
+  ui::DeviceSettingsView::initDefs();
 
   // Reset all views to ensure clean state
   menuView_.selected = 0;
@@ -348,11 +352,11 @@ void SettingsState::handleConfirm(Core& core) {
       if (confirmView_.isYesSelected()) {
         if (pendingAction_ == 10) {
           // Clear Book Cache
-          ui::centeredMessage(renderer_, THEME, THEME.uiFontId, "Clearing cache...");
+          ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(CLEARING_CACHE));
 
           auto result = core.storage.rmdir(PAPYRIX_CACHE_DIR);
 
-          const char* msg = result.ok() ? "Cache cleared" : "No cache to clear";
+          const char* msg = result.ok() ? tr(CACHE_CLEARED) : tr(NO_CACHE_TO_CLEAR);
           ui::centeredMessage(renderer_, THEME, THEME.uiFontId, msg);
           vTaskDelay(1500 / portTICK_PERIOD_MS);
 
@@ -363,22 +367,22 @@ void SettingsState::handleConfirm(Core& core) {
 
         } else if (pendingAction_ == 11) {
           // Clear Device Storage
-          ui::centeredMessage(renderer_, THEME, THEME.uiFontId, "Clearing device storage...");
+          ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(CLEARING_STORAGE));
 
           LittleFS.format();
 
-          ui::centeredMessage(renderer_, THEME, THEME.uiFontId, "Done. Restarting...");
+          ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(DONE_RESTARTING));
           vTaskDelay(1000 / portTICK_PERIOD_MS);
           ESP.restart();
 
         } else if (pendingAction_ == 12) {
           // Factory Reset
-          ui::centeredMessage(renderer_, THEME, THEME.uiFontId, "Resetting device...");
+          ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(RESETTING_DEVICE));
 
           LittleFS.format();
           core.storage.rmdir(PAPYRIX_DIR);
 
-          ui::centeredMessage(renderer_, THEME, THEME.uiFontId, "Done. Restarting...");
+          ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(DONE_RESTARTING));
           vTaskDelay(1000 / portTICK_PERIOD_MS);
           ESP.restart();
         }
@@ -554,7 +558,7 @@ void SettingsState::populateSystemInfo() {
   infoView_.clear();
 
   // Firmware version
-  infoView_.addField("Version", PAPYRIX_VERSION);
+  infoView_.addField(tr(VERSION), PAPYRIX_VERSION);
 
   // Uptime
   const unsigned long uptimeSeconds = millis() / 1000;
@@ -563,7 +567,7 @@ void SettingsState::populateSystemInfo() {
   const unsigned long seconds = uptimeSeconds % 60;
   char uptimeStr[24];
   snprintf(uptimeStr, sizeof(uptimeStr), "%luh %lum %lus", hours, minutes, seconds);
-  infoView_.addField("Uptime", uptimeStr);
+  infoView_.addField(tr(UPTIME), uptimeStr);
 
   // Battery
   const uint16_t millivolts = batteryMonitor.readMillivolts();
@@ -574,20 +578,20 @@ void SettingsState::populateSystemInfo() {
     const uint8_t percentage = BatteryMonitor::percentageFromMillivolts(millivolts);
     snprintf(batteryStr, sizeof(batteryStr), "%u%% (%umV)", percentage, millivolts);
   }
-  infoView_.addField("Battery", batteryStr);
+  infoView_.addField(tr(BATTERY), batteryStr);
 
   // Chip model
-  infoView_.addField("Chip", ESP.getChipModel());
+  infoView_.addField(tr(CHIP), ESP.getChipModel());
 
   // CPU frequency
   char freqStr[16];
   snprintf(freqStr, sizeof(freqStr), "%d MHz", ESP.getCpuFreqMHz());
-  infoView_.addField("CPU", freqStr);
+  infoView_.addField(tr(CPU), freqStr);
 
   // Free heap memory
   char heapStr[24];
   snprintf(heapStr, sizeof(heapStr), "%lu KB", ESP.getFreeHeap() / 1024);
-  infoView_.addField("Free Memory", heapStr);
+  infoView_.addField(tr(FREE_MEMORY), heapStr);
 
   // Internal flash storage (LittleFS)
   const size_t totalBytes = LittleFS.totalBytes();
@@ -595,31 +599,31 @@ void SettingsState::populateSystemInfo() {
   char internalStr[32];
   snprintf(internalStr, sizeof(internalStr), "%lu / %lu KB", (unsigned long)(usedBytes / 1024),
            (unsigned long)(totalBytes / 1024));
-  infoView_.addField("Internal Disk", internalStr);
+  infoView_.addField(tr(INTERNAL_DISK), internalStr);
 
   // SD Card status
-  infoView_.addField("SD Card", SdMan.ready() ? "Ready" : "Not available");
+  infoView_.addField(tr(SD_CARD), SdMan.ready() ? tr(READY) : tr(NOT_AVAILABLE));
 }
 
 void SettingsState::clearCache(int type, Core& core) {
   // Set up confirmation dialog messages based on action type
   if (type == 0) {
     // Clear Book Cache - show confirmation
-    confirmView_.setup("Clear Caches?", "This will delete all book caches", "and reading progress.");
+    confirmView_.setup(tr(CLEAR_CACHES_Q), tr(CLEAR_CACHES_MSG1), tr(CLEAR_CACHES_MSG2));
     pendingAction_ = 10;
     currentScreen_ = SettingsScreen::ConfirmDialog;
     needsRender_ = true;
     return;
   } else if (type == 1) {
     // Clear Device Storage
-    confirmView_.setup("Clear Device?", "This will erase internal flash", "storage. Device will restart.");
+    confirmView_.setup(tr(CLEAR_DEVICE_Q), tr(CLEAR_DEVICE_MSG1), tr(CLEAR_DEVICE_MSG2));
     pendingAction_ = 11;
     currentScreen_ = SettingsScreen::ConfirmDialog;
     needsRender_ = true;
     return;
   } else if (type == 2) {
     // Factory Reset
-    confirmView_.setup("Factory Reset?", "This will erase ALL data including", "settings and WiFi credentials!");
+    confirmView_.setup(tr(FACTORY_RESET_Q), tr(FACTORY_RESET_MSG1), tr(FACTORY_RESET_MSG2));
     pendingAction_ = 12;
     currentScreen_ = SettingsScreen::ConfirmDialog;
     needsRender_ = true;

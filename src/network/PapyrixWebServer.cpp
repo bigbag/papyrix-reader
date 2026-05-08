@@ -11,6 +11,7 @@
 
 #include <vector>
 
+#include "../IniParser.h"
 #include "../config.h"
 #include "html/AppPageHtml.generated.h"
 
@@ -74,6 +75,9 @@ void PapyrixWebServer::begin() {
   server_->on("/mkdir", HTTP_POST, [this] { handleCreateFolder(); });
   server_->on("/delete", HTTP_POST, [this] { handleDelete(); });
   server_->on("/rename", HTTP_POST, [this] { handleRename(); });
+  server_->on("/api/locale", HTTP_GET, [this] { handleLocaleStatus(); });
+  server_->on("/api/locale", HTTP_POST, [this] { handleLocaleUploadPost(); }, [this] { handleLocaleUpload(); });
+  server_->on("/api/locale-delete", HTTP_POST, [this] { handleLocaleDelete(); });
   server_->onNotFound([this] { handleNotFound(); });
 
   server_->begin();
@@ -520,6 +524,151 @@ void PapyrixWebServer::handleRename() {
     server_->send(200, "text/plain", "Renamed");
   } else {
     server_->send(500, "text/plain", "Failed to rename");
+  }
+}
+
+// --- Locale file management ---
+
+static constexpr const char* LOCALE_PATH = PAPYRIX_DIR "/locale.txt";
+
+void PapyrixWebServer::handleLocaleStatus() {
+  JsonDocument doc;
+  bool exists = SdMan.exists(LOCALE_PATH);
+  doc["exists"] = exists;
+
+  if (exists) {
+    FsFile file = SdMan.open(LOCALE_PATH);
+    if (file) {
+      doc["size"] = file.size();
+      file.close();
+    }
+
+    char langName[64] = "";
+    IniParser::parseFile(LOCALE_PATH, [&langName](const char*, const char* key, const char* value) -> bool {
+      if (strcmp(key, "_language_name") == 0) {
+        strncpy(langName, value, sizeof(langName) - 1);
+        langName[sizeof(langName) - 1] = '\0';
+        return false;
+      }
+      return true;
+    });
+    if (langName[0] != '\0') {
+      doc["language"] = langName;
+    }
+  }
+
+  char json[256];
+  serializeJson(doc, json, sizeof(json));
+  server_->send(200, "application/json", json);
+}
+
+void PapyrixWebServer::handleLocaleUpload() {
+  if (!running_ || !server_) return;
+
+  HTTPUpload& upload = server_->upload();
+
+  if (upload.status == UPLOAD_FILE_START) {
+    upload_.fileName = "locale.txt";
+    upload_.path = PAPYRIX_DIR;
+    upload_.size = 0;
+    upload_.success = false;
+    upload_.error = "";
+    upload_.bufferPos = 0;
+
+    if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < UploadState::BUFFER_SIZE * 2) {
+      upload_.error = "Insufficient memory for upload";
+      return;
+    }
+    upload_.buffer.resize(UploadState::BUFFER_SIZE);
+
+    if (!FsHelpers::hasExtension(upload.filename.c_str(), ".txt")) {
+      upload_.error = "Only .txt files accepted";
+      return;
+    }
+
+    LOG_INF(TAG, "Locale upload start: %s", upload.filename.c_str());
+
+    if (SdMan.exists(LOCALE_PATH)) {
+      SdMan.remove(LOCALE_PATH);
+    }
+
+    if (!SdMan.openFileForWrite("WEB", LOCALE_PATH, upload_.file)) {
+      upload_.error = "Failed to create locale file";
+      return;
+    }
+
+  } else if (upload.status == UPLOAD_FILE_WRITE) {
+    if (upload_.file && upload_.error.isEmpty()) {
+      const uint8_t* data = upload.buf;
+      size_t remaining = upload.currentSize;
+
+      while (remaining > 0) {
+        size_t space = UploadState::BUFFER_SIZE - upload_.bufferPos;
+        size_t toCopy = remaining < space ? remaining : space;
+        memcpy(upload_.buffer.data() + upload_.bufferPos, data, toCopy);
+        upload_.bufferPos += toCopy;
+        data += toCopy;
+        remaining -= toCopy;
+
+        if (upload_.bufferPos >= UploadState::BUFFER_SIZE) {
+          if (!flushUploadBuffer()) {
+            upload_.error = "Write failed - disk full?";
+            upload_.file.close();
+            return;
+          }
+        }
+      }
+
+      upload_.size += upload.currentSize;
+    }
+
+  } else if (upload.status == UPLOAD_FILE_END) {
+    if (upload_.file) {
+      if (upload_.error.isEmpty() && !flushUploadBuffer()) {
+        upload_.error = "Write failed - disk full?";
+      }
+      upload_.file.close();
+      if (upload_.error.isEmpty()) {
+        upload_.success = true;
+        LOG_INF(TAG, "Locale upload complete: %zu bytes", upload_.size);
+      }
+    }
+    upload_.buffer.clear();
+    upload_.buffer.shrink_to_fit();
+
+  } else if (upload.status == UPLOAD_FILE_ABORTED) {
+    upload_.bufferPos = 0;
+    upload_.buffer.clear();
+    upload_.buffer.shrink_to_fit();
+    if (upload_.file) {
+      upload_.file.close();
+      SdMan.remove(LOCALE_PATH);
+    }
+    upload_.error = "Upload aborted";
+    LOG_ERR(TAG, "Locale upload aborted");
+  }
+}
+
+void PapyrixWebServer::handleLocaleUploadPost() {
+  if (upload_.success) {
+    server_->send(200, "text/plain", "Locale file uploaded");
+  } else {
+    String error = upload_.error.isEmpty() ? "Unknown error" : upload_.error;
+    server_->send(400, "text/plain", error);
+  }
+}
+
+void PapyrixWebServer::handleLocaleDelete() {
+  if (!SdMan.exists(LOCALE_PATH)) {
+    server_->send(404, "text/plain", "No locale file found");
+    return;
+  }
+
+  if (SdMan.remove(LOCALE_PATH)) {
+    LOG_INF(TAG, "Locale file deleted");
+    server_->send(200, "text/plain", "Locale file deleted");
+  } else {
+    server_->send(500, "text/plain", "Failed to delete locale file");
   }
 }
 

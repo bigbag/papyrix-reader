@@ -9,6 +9,7 @@
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <Html.h>
+#include <I18n.h>
 #include <InputManager.h>
 #include <LittleFS.h>
 #include <Logging.h>
@@ -43,7 +44,7 @@ void SleepState::enter(Core& core) {
 
   // Show immediate feedback before rendering sleep screen
   renderer_.clearScreen(0xFF);
-  renderer_.drawCenteredText(THEME.uiFontId, renderer_.getScreenHeight() / 2, "Sleeping...", true);
+  renderer_.drawCenteredText(THEME.uiFontId, renderer_.getScreenHeight() / 2, tr(SLEEPING), true);
   renderer_.displayBuffer(EInkDisplay::FAST_REFRESH);
 
   // Render the appropriate sleep screen based on settings
@@ -108,8 +109,8 @@ void SleepState::renderDefaultSleepScreen(const Core& core) const {
   // invertScreen() below handles dark/light based on sleep setting only.
   renderer_.clearScreen(0xFF);
   renderer_.drawImage(PapyrixLogo, (pageWidth + 128) / 2, (pageHeight - 128) / 2, 128, 128);
-  renderer_.drawCenteredText(THEME.uiFontId, pageHeight / 2 + 70, "Papyrix", true, BOLD);
-  renderer_.drawCenteredText(THEME.smallFontId, pageHeight / 2 + 110, "SLEEPING", true);
+  renderer_.drawCenteredText(THEME.uiFontId, pageHeight / 2 + 70, tr(PAPYRIX), true, BOLD);
+  renderer_.drawCenteredText(THEME.smallFontId, pageHeight / 2 + 110, tr(SLEEPING), true);
 
   // Make sleep screen dark unless light is selected in settings
   if (core.settings.sleepScreen != Settings::SleepLight) {

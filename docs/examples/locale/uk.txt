@@ -1,0 +1,213 @@
+# Українська - повна довідка для перекладів Papyrix
+# Скопіюйте цей файл у /.papyrix/locale.txt на SD-картку
+# і перекладіть значення (права частина від =)
+_language_name=Українська
+
+# Button labels
+BACK=Назад
+OPEN=Відкр.
+SELECT=Обрати
+CANCEL=Скасув.
+CONFIRM=Підтв.
+DONE=Готово
+RETRY=Повтор.
+STOP=Стоп
+SCAN=Пошук
+RUN=Запуск
+GO=Перейти
+RESTART=Рестарт
+CONNECT=Приєдн.
+READ=Читати
+DELETE_BTN=Видал.
+FILE=Файл
+APPS=Додат.
+HOME=Головна
+YES=Так
+NO=Ні
+
+# Menu items
+SETTINGS=Налашт.
+READER=Читалка
+DEVICE=Пристрій
+CLEANUP=Очищення
+SYSTEM_INFO=Про систему
+CHAPTERS=Розділи
+BOOKMARKS=Закладки
+JOIN_NETWORK=Приєднатися до мережі
+CREATE_HOTSPOT=Створити точку доступу
+WIFI_TRANSFER=Передача через WiFi
+CALIBRE_SYNC=Синхро. Calibre
+LANGUAGE=Мова
+
+# Screen titles
+READER_SETTINGS=Налаштування читалки
+DEVICE_SETTINGS=Налаштування пристрою
+FILES=Файли
+NETWORK_MODE=Режим мережі
+SELECT_NETWORK=Обрати мережу
+CONNECTING_TITLE=З'єднання
+WEB_SERVER=Веб-сервер
+GO_TO_PAGE=Перейти до сторінки
+MENU=Меню
+
+# Settings labels
+THEME=Тема
+FONT_SIZE=Розмір шрифту
+TEXT_LAYOUT=Розмітка тексту
+LINE_SPACING=Міжрядковий інтервал
+TEXT_ANTI_ALIASING=Згладжування тексту
+PARAGRAPH_ALIGNMENT=Вирівнювання
+HYPHENATION=Перенесення слів
+SHOW_IMAGES=Показ зображень
+STATUS_BAR=Рядок стану
+READING_ORIENTATION=Орієнтація
+AUTO_SLEEP_TIMEOUT=Автосон
+SLEEP_SCREEN=Екран сну
+STARTUP_BEHAVIOR=При запуску
+SHORT_POWER_BUTTON=Короткий натиск кн.
+PAGES_PER_REFRESH=Сторінок/оновлення
+SUNLIGHT_FADING_FIX=Антивицвітання
+FRONT_BUTTONS=Передні кнопки
+SIDE_BUTTONS=Бічні кнопки
+
+# Settings enum values
+ON=УВІМК
+OFF=ВИМК
+XSMALL=Дуже малий
+SMALL=Малий
+NORMAL=Звичайний
+LARGE=Великий
+COMPACT=Щільний
+STANDARD=Стандартний
+RELAXED=Вільний
+JUSTIFIED=По ширині
+LEFT=Ліворуч
+CENTER=По центру
+RIGHT=Праворуч
+NONE_VAL=Немає
+TITLE_VAL=Назва
+CHAPTER_VAL=Розділ
+PORTRAIT=Книжкова
+LANDSCAPE_CW=Альбом. за год.
+INVERTED=Перевернута
+LANDSCAPE_CCW=Альбом. проти год.
+DARK=Темна
+LIGHT=Світла
+CUSTOM=Власна
+COVER=Обкладинка
+LAST_DOCUMENT=Остання книга
+IGNORE=Ігнорувати
+SLEEP_VAL=Сон
+PAGE_TURN=Наст. сторінка
+NEVER=Ніколи
+MIN_5=5 хв
+MIN_10=10 хв
+MIN_15=15 хв
+MIN_30=30 хв
+PREV_NEXT=Попер/Наст
+NEXT_PREV=Наст/Попер
+FRONT_BCLR=B/C/L/R
+FRONT_LRBC=L/R/B/C
+
+# Cleanup
+CLEAR_BOOK_CACHE=Очистити кеш книг
+CLEAR_DEVICE_STORAGE=Очистити сховище
+FACTORY_RESET=Скидання
+CLEAR_CACHES_Q=Очистити кеші?
+CLEAR_CACHES_MSG1=Усі кеші книг та прогрес
+CLEAR_CACHES_MSG2=читання буде видалено.
+CLEAR_DEVICE_Q=Очистити пристрій?
+CLEAR_DEVICE_MSG1=Внутрішню пам'ять буде
+CLEAR_DEVICE_MSG2=стерто. Пристрій перезапуститься.
+FACTORY_RESET_Q=Скидання до заводських?
+FACTORY_RESET_MSG1=ВСІ дані буде стерто,
+FACTORY_RESET_MSG2=включно з паролями WiFi!
+CLEARING_CACHE=Очищення кешу...
+CACHE_CLEARED=Кеш очищено
+NO_CACHE_TO_CLEAR=Немає кешу для очищення
+CLEARING_STORAGE=Очищення сховища...
+RESETTING_DEVICE=Скидання пристрою...
+DONE_RESTARTING=Готово. Перезапуск...
+
+# Status messages
+SCANNING=Пошук...
+CONNECTING=З'єднання...
+GETTING_IP=Отримання IP-адреси...
+CONNECTED=З'єднано!
+STARTING=Запуск...
+LOADING=Завантаження...
+INDEXING=Індексація...
+OPENING_BOOK=Відкриття книги...
+DELETING=Видалення...
+NO_BOOK_OPEN=Жодна книга не відкрита
+PRESS_FILE_TO_EXPLORE=Натисніть "Файл" для перегляду
+NO_BOOKS_FOUND=Книг не знайдено
+END_OF_BOOK=Кінець книги
+FAILED_TO_LOAD_PAGE=Помилка завантаження
+CANNOT_DELETE_ACTIVE=Активну книгу не видалити
+DELETED=Видалено
+DELETE_FAILED=Помилка видалення
+SERVER_STOPPED=Сервер зупинено
+RETURNING_TO_LIBRARY=Повернення до бібліотеки...
+SLEEPING=СОН
+
+# Network
+CONNECT_WIFI=Підключитися до WiFi
+CREATE_WIFI_HOTSPOT=Створити точку доступу
+NO_NETWORKS_FOUND=Мереж не знайдено
+PRESS_CONFIRM_SCAN=Натисніть Підтвердити
+DISCONNECTED_RESTART=Від'єднано. Перезапустити?
+
+# Calibre
+WAITING_FOR_CALIBRE=Очікування Calibre...
+CONNECTING_TO_CALIBRE=З'єднання з Calibre...
+CALIBRE_HELP=У Calibre: Підключити/поділитися > Бездротовий пристрій
+
+# Format strings
+FMT_IP=IP: %s
+FMT_RECEIVED_BOOKS=Отримано %d книг(и)
+FMT_PAGE_OF=з %d
+
+# System info
+VERSION=Версія
+UPTIME=Час роботи
+BATTERY=Батарея
+CHIP=Чіп
+CPU=ЦП
+FREE_MEMORY=Вільна RAM
+INTERNAL_DISK=Вн. диск
+SD_CARD=SD-картка
+READY=Готово
+NOT_AVAILABLE=Недоступно
+
+# Keyboard
+BACKSPACE=Видалити
+SPACE=Пробіл
+
+# Error
+ERROR=Помилка
+PRESS_ANY_BUTTON=Натисніть будь-яку кнопку для продовження
+
+# Confirm dialog
+CONFIRM_DELETE=Підтвердити видалення
+
+# Misc
+ENTER_TEXT=Введіть текст
+NO_COVER=Без обкладинки
+PAPYRIX=Papyrix
+ADD=Додати
+NO_BOOKMARKS=Закладок ще немає
+BOOKS=Книги
+DELETE_FILE_Q=Видалити цей файл?
+DELETE_FOLDER_Q=Видалити цю теку?
+ENTER_PASSWORD=Введіть пароль
+SAVE_PASSWORD_Q=Зберегти пароль?
+SAVE_PASSWORD_MSG=Зберегти пароль для цієї мережі?
+CONNECTION_FAILED=Помилка з'єднання
+HOTSPOT_FAILED=Не вдалося створити точку доступу
+INITIALIZING_WIFI=Ініціалізація WiFi...
+INVALID_FILE=Невірний файл
+MEMORY_ERROR=Помилка пам'яті
+PAGE_LOAD_ERROR=Помилка завантаження сторінки
+RECEIVING=Отримання...
+BOOTING=ЗАПУСК

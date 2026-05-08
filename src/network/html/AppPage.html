@@ -102,6 +102,7 @@
   <button data-tab="sleep">Sleep</button>
   <button data-tab="fonts">Fonts</button>
   <button data-tab="themes">Themes</button>
+  <button data-tab="locale">Locale</button>
 </nav>
 
 <div class="container">
@@ -149,6 +150,17 @@
       </div>
     </div>
     <div class="card"><div id="themes-table"><div class="loader-wrap"><div class="loader"></div></div></div></div>
+  </div>
+
+  <!-- Locale Panel -->
+  <div class="panel" id="panel-locale">
+    <div class="toolbar">
+      <div class="toolbar-left"><span class="info-text">Language locale file (.txt). Restart device after changes.</span></div>
+      <div class="toolbar-right">
+        <button class="btn btn-accent" onclick="openLocaleUpload()">Upload</button>
+      </div>
+    </div>
+    <div class="card"><div id="locale-card" style="padding:20px"><div class="loader-wrap"><div class="loader"></div></div></div></div>
   </div>
 </div>
 
@@ -204,6 +216,21 @@
   </div>
 </div>
 
+<!-- Locale Upload Modal -->
+<div class="overlay" id="localeUploadModal">
+  <div class="modal">
+    <button class="modal-x" onclick="closeModal('localeUploadModal')">&times;</button>
+    <h3>Upload Locale File</h3>
+    <label>Select a .txt locale file</label>
+    <input type="file" id="localeFileInput" accept=".txt" onchange="onLocaleFileSelected()">
+    <button class="btn btn-accent" id="localeUploadBtn" onclick="doLocaleUpload()" disabled>Upload</button>
+    <div class="progress-wrap" id="localeProgress">
+      <div class="progress-bar"><div class="progress-fill" id="localeFill"></div></div>
+      <div class="progress-text" id="localeText"></div>
+    </div>
+  </div>
+</div>
+
 <footer><a href="https://github.com/bigbag/papyrix-reader">Papyrix Reader</a></footer>
 
 <script>
@@ -234,7 +261,7 @@ function switchTab(tab){
   fontsPath='/config/fonts';
   document.querySelectorAll('#tabs button').forEach(function(b){b.classList.toggle('active',b.dataset.tab===tab)});
   document.querySelectorAll('.panel').forEach(function(p){p.classList.toggle('active',p.id==='panel-'+tab)});
-  loadTabData(tab);
+  if(tab==='locale'){loadLocale()}else{loadTabData(tab)}
 }
 
 // --- Data Loading ---
@@ -513,6 +540,82 @@ function doDelete(){
   post('/delete',{path:path,type:type}).then(function(){
     closeModal('deleteModal');loadTabData(activeTab);
   }).catch(function(err){alert('Error: '+err)});
+}
+
+// --- Locale ---
+function loadLocale(){
+  var el=document.getElementById('locale-card');
+  el.textContent='';
+  var lw=document.createElement('div');lw.className='loader-wrap';
+  var ld=document.createElement('div');ld.className='loader';
+  lw.appendChild(ld);el.appendChild(lw);
+  fetch('/api/locale').then(function(r){return r.json()}).then(function(d){
+    el.textContent='';
+    if(d.exists){
+      var lbl=document.createElement('span');lbl.style.cssText='color:#9ca3af;font-size:.85em';lbl.textContent='Current language:';
+      var name=document.createElement('div');name.style.cssText='color:#f3f4f6;font-size:1.1em;font-weight:600;margin:4px 0 12px';name.textContent=d.language||'Unknown';
+      var info=document.createElement('div');info.style.cssText='color:#9ca3af;font-size:.85em;margin-bottom:16px';info.textContent='File: locale.txt ('+fmtSize(d.size)+')';
+      var del=document.createElement('button');del.className='btn btn-danger';del.textContent='Delete';del.onclick=doLocaleDelete;
+      var hint=document.createElement('div');hint.style.cssText='color:#6b7280;font-size:.8em;margin-top:12px;font-style:italic';hint.textContent='Restart device after changes to apply new language.';
+      el.appendChild(lbl);el.appendChild(name);el.appendChild(info);el.appendChild(del);el.appendChild(hint);
+    } else {
+      var w=document.createElement('div');w.style.cssText='color:#9ca3af;text-align:center;padding:20px';
+      var t1=document.createElement('div');t1.style.cssText='font-size:1.1em;margin-bottom:8px';t1.textContent='No locale file installed';
+      var t2=document.createElement('div');t2.style.fontSize='.85em';t2.textContent='Using default language: English';
+      var t3=document.createElement('div');t3.style.cssText='font-size:.8em;margin-top:8px';t3.textContent='Upload a .txt locale file to change the device language.';
+      w.appendChild(t1);w.appendChild(t2);w.appendChild(t3);el.appendChild(w);
+    }
+  }).catch(function(){
+    el.textContent='';
+    var em=document.createElement('div');em.className='empty';em.textContent='Failed to load locale status';
+    el.appendChild(em);
+  });
+}
+
+function openLocaleUpload(){
+  document.getElementById('localeFileInput').value='';
+  document.getElementById('localeUploadBtn').disabled=true;
+  document.getElementById('localeProgress').style.display='none';
+  document.getElementById('localeFill').style.width='0%';
+  document.getElementById('localeFill').style.background='#7c3aed';
+  document.getElementById('localeText').textContent='';
+  document.getElementById('localeUploadModal').classList.add('open');
+}
+
+function onLocaleFileSelected(){
+  var f=document.getElementById('localeFileInput').files[0];
+  document.getElementById('localeUploadBtn').disabled=!f;
+}
+
+function doLocaleUpload(){
+  var inp=document.getElementById('localeFileInput');
+  var file=inp.files[0];
+  if(!file)return;
+  var btn=document.getElementById('localeUploadBtn');
+  var pw=document.getElementById('localeProgress');
+  var pf=document.getElementById('localeFill');
+  var pt=document.getElementById('localeText');
+  btn.disabled=true;
+  pw.style.display='block';
+  pt.textContent='Uploading...';
+  var fd=new FormData();
+  fd.append('file',file);
+  var xhr=new XMLHttpRequest();
+  xhr.open('POST','/api/locale',true);
+  xhr.upload.onprogress=function(e){
+    if(e.lengthComputable){var pct=Math.round(e.loaded/e.total*100);pf.style.width=pct+'%';pt.textContent='Uploading: '+pct+'%'}
+  };
+  xhr.onload=function(){
+    if(xhr.status===200){pt.textContent='Done! Restart device to apply.';setTimeout(function(){closeModal('localeUploadModal');loadLocale()},1500)}
+    else{pt.textContent='Error: '+xhr.responseText;pf.style.background='#991b1b';btn.disabled=false}
+  };
+  xhr.onerror=function(){pt.textContent='Network error';pf.style.background='#991b1b';btn.disabled=false};
+  xhr.send(fd);
+}
+
+function doLocaleDelete(){
+  if(!confirm('Delete locale file and revert to English?'))return;
+  fetch('/api/locale-delete',{method:'POST'}).then(function(r){if(r.ok){loadLocale()}else{r.text().then(function(t){alert('Error: '+t)})}}).catch(function(err){alert('Error: '+err)});
 }
 
 // --- Init ---

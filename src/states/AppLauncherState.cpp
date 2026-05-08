@@ -1,6 +1,7 @@
 #include "AppLauncherState.h"
 
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <Logging.h>
 
 #include "../apps/MiniApp.h"
@@ -188,7 +189,7 @@ void AppLauncherState::render(Core& core) {
         }
         const int btnY = renderer_.getScreenHeight() - 50;
         renderer_.clearArea(0, btnY, renderer_.getScreenWidth(), 50, THEME.backgroundColor);
-        ui::ButtonBar buttons("Back", "Confirm", "<", ">");
+        ui::ButtonBar buttons(tr(BACK), tr(CONFIRM), "<", ">");
         ui::buttonBar(renderer_, THEME, buttons);
         renderer_.displayBuffer();
       }

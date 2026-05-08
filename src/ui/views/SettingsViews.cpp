@@ -1,63 +1,121 @@
 #include "SettingsViews.h"
 
+#include <I18n.h>
+
 namespace ui {
 
-// Static definitions for constexpr arrays
-constexpr const char* const SettingsMenuView::ITEMS[];
-constexpr const char* const CleanupMenuView::ITEMS[];
+// ReaderSettingsView runtime initialization
+ReaderSettingsView::SettingDef ReaderSettingsView::DEFS[SETTING_COUNT] = {};
 
-// ReaderSettingsView static definitions
-constexpr const char* const ReaderSettingsView::FONT_SIZE_VALUES[];
-constexpr const char* const ReaderSettingsView::TEXT_LAYOUT_VALUES[];
-constexpr const char* const ReaderSettingsView::LINE_SPACING_VALUES[];
-constexpr const char* const ReaderSettingsView::ALIGNMENT_VALUES[];
-constexpr const char* const ReaderSettingsView::STATUS_BAR_VALUES[];
-constexpr const char* const ReaderSettingsView::ORIENTATION_VALUES[];
+void ReaderSettingsView::initDefs() {
+  static const char* fontSizeValues[4];
+  static const char* textLayoutValues[3];
+  static const char* lineSpacingValues[4];
+  static const char* alignmentValues[4];
+  static const char* statusBarValues[3];
+  static const char* orientationValues[4];
 
-const ReaderSettingsView::SettingDef ReaderSettingsView::DEFS[SETTING_COUNT] = {
-    {"Theme", SettingType::ThemeSelect, nullptr, 0},
-    {"Font Size", SettingType::Enum, FONT_SIZE_VALUES, 4},
-    {"Text Layout", SettingType::Enum, TEXT_LAYOUT_VALUES, 3},
-    {"Line Spacing", SettingType::Enum, LINE_SPACING_VALUES, 4},
-    {"Text Anti-Aliasing", SettingType::Toggle, nullptr, 0},
-    {"Paragraph Alignment", SettingType::Enum, ALIGNMENT_VALUES, 4},
-    {"Hyphenation", SettingType::Toggle, nullptr, 0},
-    {"Show Images", SettingType::Toggle, nullptr, 0},
-    {"Status Bar", SettingType::Enum, STATUS_BAR_VALUES, 3},
-    {"Reading Orientation", SettingType::Enum, ORIENTATION_VALUES, 4},
-};
+  fontSizeValues[0] = tr(XSMALL);
+  fontSizeValues[1] = tr(SMALL);
+  fontSizeValues[2] = tr(NORMAL);
+  fontSizeValues[3] = tr(LARGE);
+  textLayoutValues[0] = tr(COMPACT);
+  textLayoutValues[1] = tr(STANDARD);
+  textLayoutValues[2] = tr(LARGE);
+  lineSpacingValues[0] = tr(COMPACT);
+  lineSpacingValues[1] = tr(NORMAL);
+  lineSpacingValues[2] = tr(RELAXED);
+  lineSpacingValues[3] = tr(LARGE);
+  alignmentValues[0] = tr(JUSTIFIED);
+  alignmentValues[1] = tr(LEFT);
+  alignmentValues[2] = tr(CENTER);
+  alignmentValues[3] = tr(RIGHT);
+  statusBarValues[0] = tr(NONE_VAL);
+  statusBarValues[1] = tr(TITLE_VAL);
+  statusBarValues[2] = tr(CHAPTER_VAL);
+  orientationValues[0] = tr(PORTRAIT);
+  orientationValues[1] = tr(LANDSCAPE_CW);
+  orientationValues[2] = tr(INVERTED);
+  orientationValues[3] = tr(LANDSCAPE_CCW);
 
-// DeviceSettingsView static definitions
-constexpr const char* const DeviceSettingsView::SLEEP_TIMEOUT_VALUES[];
-constexpr const char* const DeviceSettingsView::SLEEP_SCREEN_VALUES[];
-constexpr const char* const DeviceSettingsView::STARTUP_VALUES[];
-constexpr const char* const DeviceSettingsView::SHORT_PWR_VALUES[];
-constexpr const char* const DeviceSettingsView::PAGES_REFRESH_VALUES[];
-constexpr const char* const DeviceSettingsView::TOGGLE_VALUES[];
-constexpr const char* const DeviceSettingsView::FRONT_BUTTON_VALUES[];
-constexpr const char* const DeviceSettingsView::SIDE_BUTTON_VALUES[];
+  DEFS[0] = {tr(THEME), SettingType::ThemeSelect, nullptr, 0};
+  DEFS[1] = {tr(FONT_SIZE), SettingType::Enum, fontSizeValues, 4};
+  DEFS[2] = {tr(TEXT_LAYOUT), SettingType::Enum, textLayoutValues, 3};
+  DEFS[3] = {tr(LINE_SPACING), SettingType::Enum, lineSpacingValues, 4};
+  DEFS[4] = {tr(TEXT_ANTI_ALIASING), SettingType::Toggle, nullptr, 0};
+  DEFS[5] = {tr(PARAGRAPH_ALIGNMENT), SettingType::Enum, alignmentValues, 4};
+  DEFS[6] = {tr(HYPHENATION), SettingType::Toggle, nullptr, 0};
+  DEFS[7] = {tr(SHOW_IMAGES), SettingType::Toggle, nullptr, 0};
+  DEFS[8] = {tr(STATUS_BAR), SettingType::Enum, statusBarValues, 3};
+  DEFS[9] = {tr(READING_ORIENTATION), SettingType::Enum, orientationValues, 4};
+}
 
-const DeviceSettingsView::SettingDef DeviceSettingsView::DEFS[SETTING_COUNT] = {
-    {"Auto Sleep Timeout", SLEEP_TIMEOUT_VALUES, 5}, {"Sleep Screen", SLEEP_SCREEN_VALUES, 4},
-    {"Startup Behavior", STARTUP_VALUES, 2},         {"Short Power Button", SHORT_PWR_VALUES, 3},
-    {"Pages Per Refresh", PAGES_REFRESH_VALUES, 6},  {"Sunlight Fading Fix", TOGGLE_VALUES, 2},
-    {"Front Buttons", FRONT_BUTTON_VALUES, 2},       {"Side Buttons", SIDE_BUTTON_VALUES, 2},
-};
+// DeviceSettingsView runtime initialization
+DeviceSettingsView::SettingDef DeviceSettingsView::DEFS[SETTING_COUNT] = {};
+
+void DeviceSettingsView::initDefs() {
+  static const char* sleepTimeoutValues[5];
+  static const char* sleepScreenValues[4];
+  static const char* startupValues[2];
+  static const char* shortPwrValues[3];
+  static const char* pagesRefreshValues[6];
+  static const char* toggleValues[2];
+  static const char* frontButtonValues[2];
+  static const char* sideButtonValues[2];
+
+  sleepTimeoutValues[0] = tr(MIN_5);
+  sleepTimeoutValues[1] = tr(MIN_10);
+  sleepTimeoutValues[2] = tr(MIN_15);
+  sleepTimeoutValues[3] = tr(MIN_30);
+  sleepTimeoutValues[4] = tr(NEVER);
+  sleepScreenValues[0] = tr(DARK);
+  sleepScreenValues[1] = tr(LIGHT);
+  sleepScreenValues[2] = tr(CUSTOM);
+  sleepScreenValues[3] = tr(COVER);
+  startupValues[0] = tr(LAST_DOCUMENT);
+  startupValues[1] = tr(HOME);
+  shortPwrValues[0] = tr(IGNORE);
+  shortPwrValues[1] = tr(SLEEP_VAL);
+  shortPwrValues[2] = tr(PAGE_TURN);
+  pagesRefreshValues[0] = "1";
+  pagesRefreshValues[1] = "5";
+  pagesRefreshValues[2] = "10";
+  pagesRefreshValues[3] = "15";
+  pagesRefreshValues[4] = "30";
+  pagesRefreshValues[5] = tr(OFF);
+  toggleValues[0] = tr(OFF);
+  toggleValues[1] = tr(ON);
+  frontButtonValues[0] = tr(FRONT_BCLR);
+  frontButtonValues[1] = tr(FRONT_LRBC);
+  sideButtonValues[0] = tr(PREV_NEXT);
+  sideButtonValues[1] = tr(NEXT_PREV);
+
+  DEFS[0] = {tr(AUTO_SLEEP_TIMEOUT), sleepTimeoutValues, 5};
+  DEFS[1] = {tr(SLEEP_SCREEN), sleepScreenValues, 4};
+  DEFS[2] = {tr(STARTUP_BEHAVIOR), startupValues, 2};
+  DEFS[3] = {tr(SHORT_POWER_BUTTON), shortPwrValues, 3};
+  DEFS[4] = {tr(PAGES_PER_REFRESH), pagesRefreshValues, 6};
+  DEFS[5] = {tr(SUNLIGHT_FADING_FIX), toggleValues, 2};
+  DEFS[6] = {tr(FRONT_BUTTONS), frontButtonValues, 2};
+  DEFS[7] = {tr(SIDE_BUTTONS), sideButtonValues, 2};
+}
 
 // Render functions
 
 void render(const GfxRenderer& r, const Theme& t, const SettingsMenuView& v) {
   r.clearScreen(t.backgroundColor);
 
-  title(r, t, t.screenMarginTop, "Settings");
+  title(r, t, t.screenMarginTop, tr(SETTINGS));
 
+  const char* items[] = {tr(READER), tr(DEVICE), tr(CLEANUP), tr(SYSTEM_INFO)};
   const int startY = 60;
   for (int i = 0; i < SettingsMenuView::ITEM_COUNT; i++) {
     const int y = startY + i * (t.itemHeight + t.itemSpacing);
-    menuItem(r, t, y, SettingsMenuView::ITEMS[i], i == v.selected);
+    menuItem(r, t, y, items[i], i == v.selected);
   }
 
-  buttonBar(r, t, v.buttons);
+  ButtonBar btns{tr(BACK), tr(OPEN), "", ""};
+  buttonBar(r, t, btns);
 
   r.displayBuffer();
 }
@@ -65,15 +123,17 @@ void render(const GfxRenderer& r, const Theme& t, const SettingsMenuView& v) {
 void render(const GfxRenderer& r, const Theme& t, const CleanupMenuView& v) {
   r.clearScreen(t.backgroundColor);
 
-  title(r, t, t.screenMarginTop, "Cleanup");
+  title(r, t, t.screenMarginTop, tr(CLEANUP));
 
+  const char* items[] = {tr(CLEAR_BOOK_CACHE), tr(CLEAR_DEVICE_STORAGE), tr(FACTORY_RESET)};
   const int startY = 60;
   for (int i = 0; i < CleanupMenuView::ITEM_COUNT; i++) {
     const int y = startY + i * (t.itemHeight + t.itemSpacing);
-    menuItem(r, t, y, CleanupMenuView::ITEMS[i], i == v.selected);
+    menuItem(r, t, y, items[i], i == v.selected);
   }
 
-  buttonBar(r, t, v.buttons);
+  ButtonBar btns{tr(BACK), tr(RUN), "", ""};
+  buttonBar(r, t, btns);
 
   r.displayBuffer();
 }
@@ -81,7 +141,7 @@ void render(const GfxRenderer& r, const Theme& t, const CleanupMenuView& v) {
 void render(const GfxRenderer& r, const Theme& t, const SystemInfoView& v) {
   r.clearScreen(t.backgroundColor);
 
-  title(r, t, t.screenMarginTop, "System Info");
+  title(r, t, t.screenMarginTop, tr(SYSTEM_INFO));
 
   const int lineHeight = r.getLineHeight(t.uiFontId) + 5;
   const int startY = 60;
@@ -91,7 +151,8 @@ void render(const GfxRenderer& r, const Theme& t, const SystemInfoView& v) {
     twoColumnRow(r, t, y, v.fields[i].label, v.fields[i].value);
   }
 
-  buttonBar(r, t, v.buttons);
+  ButtonBar btns{tr(BACK), "", "", ""};
+  buttonBar(r, t, btns);
 
   r.displayBuffer();
 }
@@ -99,7 +160,7 @@ void render(const GfxRenderer& r, const Theme& t, const SystemInfoView& v) {
 void render(const GfxRenderer& r, const Theme& t, const ReaderSettingsView& v) {
   r.clearScreen(t.backgroundColor);
 
-  title(r, t, t.screenMarginTop, "Reader Settings");
+  title(r, t, t.screenMarginTop, tr(READER_SETTINGS));
 
   const int startY = 60;
   for (int i = 0; i < ReaderSettingsView::SETTING_COUNT; i++) {
@@ -109,7 +170,8 @@ void render(const GfxRenderer& r, const Theme& t, const ReaderSettingsView& v) {
     enumValue(r, t, y, def.label, v.getCurrentValueStr(i), i == v.selected);
   }
 
-  buttonBar(r, t, v.buttons);
+  ButtonBar btns{tr(BACK), "", "<", ">"};
+  buttonBar(r, t, btns);
 
   r.displayBuffer();
 }
@@ -117,7 +179,7 @@ void render(const GfxRenderer& r, const Theme& t, const ReaderSettingsView& v) {
 void render(const GfxRenderer& r, const Theme& t, const DeviceSettingsView& v) {
   r.clearScreen(t.backgroundColor);
 
-  title(r, t, t.screenMarginTop, "Device Settings");
+  title(r, t, t.screenMarginTop, tr(DEVICE_SETTINGS));
 
   const int startY = 60;
   for (int i = 0; i < DeviceSettingsView::SETTING_COUNT; i++) {
@@ -125,7 +187,8 @@ void render(const GfxRenderer& r, const Theme& t, const DeviceSettingsView& v) {
     enumValue(r, t, y, DeviceSettingsView::DEFS[i].label, v.getCurrentValueStr(i), i == v.selected);
   }
 
-  buttonBar(r, t, v.buttons);
+  ButtonBar btns{tr(BACK), "", "<", ">"};
+  buttonBar(r, t, btns);
 
   r.displayBuffer();
 }
@@ -138,16 +201,13 @@ void render(const GfxRenderer& r, const Theme& t, const ConfirmDialogView& v) {
 
   r.clearScreen(t.backgroundColor);
 
-  // Title (bold, centered)
   r.drawCenteredText(t.readerFontId, top - 40, v.title, t.primaryTextBlack, EpdFontFamily::BOLD);
 
-  // Description lines
   r.drawCenteredText(t.uiFontId, top, v.line1, t.primaryTextBlack);
   if (v.line2[0] != '\0') {
     r.drawCenteredText(t.uiFontId, top + lineHeight, v.line2, t.primaryTextBlack);
   }
 
-  // Yes/No buttons
   const int buttonY = top + lineHeight * 3;
   constexpr int buttonWidth = 80;
   constexpr int buttonHeight = 36;
@@ -155,7 +215,7 @@ void render(const GfxRenderer& r, const Theme& t, const ConfirmDialogView& v) {
   constexpr int totalWidth = buttonWidth * 2 + buttonSpacing;
   const int startX = (pageWidth - totalWidth) / 2;
 
-  const char* buttonLabels[] = {"Yes", "No"};
+  const char* buttonLabels[] = {tr(YES), tr(NO)};
   const int buttonPositions[] = {startX, startX + buttonWidth + buttonSpacing};
 
   for (int i = 0; i < 2; i++) {
@@ -175,8 +235,8 @@ void render(const GfxRenderer& r, const Theme& t, const ConfirmDialogView& v) {
     r.drawText(t.uiFontId, textX, textY, buttonLabels[i], textColor);
   }
 
-  // Button hints
-  buttonBar(r, t, v.buttons);
+  ButtonBar btns{tr(BACK), tr(CONFIRM), "<<", ">>"};
+  buttonBar(r, t, btns);
 
   r.displayBuffer();
 }

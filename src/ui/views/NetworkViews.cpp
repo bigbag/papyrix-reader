@@ -1,5 +1,6 @@
 #include "NetworkViews.h"
 
+#include <I18n.h>
 #include <qrcode.h>
 
 #include <cstdio>
@@ -36,29 +37,27 @@ void drawQRCode(const GfxRenderer& r, int x, int y, const char* data, bool fgBla
 
 }  // namespace
 
-// Static definitions
-constexpr const char* const NetworkModeView::ITEMS[];
-
 void render(const GfxRenderer& r, const Theme& t, const NetworkModeView& v) {
   r.clearScreen(t.backgroundColor);
 
-  title(r, t, t.screenMarginTop, "Network Mode");
+  title(r, t, t.screenMarginTop, tr(NETWORK_MODE));
 
+  const char* items[] = {tr(JOIN_NETWORK), tr(CREATE_HOTSPOT)};
   const int startY = 100;
   for (int i = 0; i < NetworkModeView::ITEM_COUNT; i++) {
     const int y = startY + i * (t.itemHeight + 20);
-    menuItem(r, t, y, NetworkModeView::ITEMS[i], i == v.selected);
+    menuItem(r, t, y, items[i], i == v.selected);
   }
 
-  // Description below options
   const int descY = startY + 2 * (t.itemHeight + 20) + 40;
   if (v.selected == 0) {
-    centeredText(r, t, descY, "Connect to existing WiFi");
+    centeredText(r, t, descY, tr(CONNECT_WIFI));
   } else {
-    centeredText(r, t, descY, "Create WiFi hotspot");
+    centeredText(r, t, descY, tr(CREATE_WIFI_HOTSPOT));
   }
 
-  buttonBar(r, t, v.buttons);
+  ButtonBar btns{tr(BACK), tr(SELECT), "", ""};
+  buttonBar(r, t, btns);
 
   r.displayBuffer();
 }
@@ -66,15 +65,15 @@ void render(const GfxRenderer& r, const Theme& t, const NetworkModeView& v) {
 void render(const GfxRenderer& r, const Theme& t, const WifiListView& v) {
   r.clearScreen(t.backgroundColor);
 
-  title(r, t, t.screenMarginTop, "Select Network");
+  title(r, t, t.screenMarginTop, tr(SELECT_NETWORK));
 
   if (v.scanning) {
     const int centerY = r.getScreenHeight() / 2;
     centeredText(r, t, centerY, v.statusText);
   } else if (v.networkCount == 0) {
     const int centerY = r.getScreenHeight() / 2;
-    centeredText(r, t, centerY, "No networks found");
-    centeredText(r, t, centerY + 30, "Press Confirm to scan again");
+    centeredText(r, t, centerY, tr(NO_NETWORKS_FOUND));
+    centeredText(r, t, centerY + 30, tr(PRESS_CONFIRM_SCAN));
   } else {
     const int listStartY = 60;
     const int pageStart = v.getPageStart();
@@ -86,7 +85,8 @@ void render(const GfxRenderer& r, const Theme& t, const WifiListView& v) {
     }
   }
 
-  buttonBar(r, t, v.buttons);
+  ButtonBar btns{tr(BACK), tr(CONNECT), "", tr(SCAN)};
+  buttonBar(r, t, btns);
 
   r.displayBuffer();
 }
@@ -94,20 +94,16 @@ void render(const GfxRenderer& r, const Theme& t, const WifiListView& v) {
 void render(const GfxRenderer& r, const Theme& t, const WifiConnectingView& v) {
   r.clearScreen(t.backgroundColor);
 
-  title(r, t, t.screenMarginTop, "Connecting");
+  title(r, t, t.screenMarginTop, tr(CONNECTING_TITLE));
 
   const int centerY = r.getScreenHeight() / 2 - 60;
 
-  // SSID
   centeredText(r, t, centerY, v.ssid);
-
-  // Status message
   centeredText(r, t, centerY + 40, v.statusMsg);
 
-  // IP address if connected
   if (v.status == WifiConnectingView::Status::Connected) {
     char ipLine[32];
-    snprintf(ipLine, sizeof(ipLine), "IP: %s", v.ipAddress);
+    snprintf(ipLine, sizeof(ipLine), tr(FMT_IP), v.ipAddress);
     centeredText(r, t, centerY + 80, ipLine);
   }
 
@@ -119,7 +115,7 @@ void render(const GfxRenderer& r, const Theme& t, const WifiConnectingView& v) {
 void render(const GfxRenderer& r, const Theme& t, const WebServerView& v) {
   r.clearScreen(t.backgroundColor);
 
-  title(r, t, t.screenMarginTop, "Web Server");
+  title(r, t, t.screenMarginTop, tr(WEB_SERVER));
 
   if (v.serverRunning) {
     // Build URL string
@@ -155,10 +151,11 @@ void render(const GfxRenderer& r, const Theme& t, const WebServerView& v) {
       centeredText(r, t, labelY + 30, v.ssid);
     }
   } else {
-    centeredText(r, t, 180, "Server stopped");
+    centeredText(r, t, 180, tr(SERVER_STOPPED));
   }
 
-  buttonBar(r, t, v.buttons);
+  ButtonBar btns{tr(STOP)};
+  buttonBar(r, t, btns);
 
   r.displayBuffer();
 }

@@ -1,0 +1,11 @@
+{
+  "name": "I18n",
+  "version": "1.0.0",
+  "description": "Internationalization with SD card locale override",
+  "frameworks": ["arduino", "espidf"],
+  "platforms": ["espressif32"],
+  "build": {
+    "srcDir": "src",
+    "includeDir": "src"
+  }
+}

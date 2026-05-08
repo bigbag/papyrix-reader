@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <Logging.h>
 
 #include <new>
@@ -89,7 +90,7 @@ StateTransition NetworkState::update(Core& core) {
     if (currentScreen_ != NetworkScreen::WifiList) {
       scanRetryCount_ = 0;
     } else if (core.network.startScan().ok()) {
-      wifiListView_.setScanning(true, "Scanning...");
+      wifiListView_.setScanning(true, tr(SCANNING));
       needsRender_ = true;
     } else {
       wifiListView_.setScanning(false);
@@ -106,7 +107,7 @@ StateTransition NetworkState::update(Core& core) {
       if (count == 0 && scanRetryCount_ < MAX_SCAN_RETRIES) {
         scanRetryCount_++;
         LOG_DBG(TAG, "Scan returned 0 results, retry %d/%d", scanRetryCount_, MAX_SCAN_RETRIES);
-        wifiListView_.setScanning(true, "Initializing WiFi...");
+        wifiListView_.setScanning(true, tr(INITIALIZING_WIFI));
         scanRetryAt_ = millis() + 500;
         needsRender_ = true;
         return StateTransition::stay(StateId::Network);
@@ -246,21 +247,17 @@ void NetworkState::handleModeSelect(Core& core, Button button) {
       break;
 
     case Button::Center:
-      if (modeView_.buttons.isActive(1)) {
-        if (modeView_.selected == 0) {
-          startWifiScan(core);
-          currentScreen_ = NetworkScreen::WifiList;
-          needsRender_ = true;
-        } else {
-          startHotspot(core);
-        }
+      if (modeView_.selected == 0) {
+        startWifiScan(core);
+        currentScreen_ = NetworkScreen::WifiList;
+        needsRender_ = true;
+      } else {
+        startHotspot(core);
       }
       break;
 
     case Button::Back:
-      if (modeView_.buttons.isActive(0)) {
-        goBack_ = true;
-      }
+      goBack_ = true;
       break;
 
     default:
@@ -281,7 +278,7 @@ void NetworkState::handleWifiList(Core& core, Button button) {
       break;
 
     case Button::Center:
-      if (wifiListView_.buttons.isActive(1) && wifiListView_.networkCount > 0 && !wifiListView_.scanning &&
+      if (wifiListView_.networkCount > 0 && !wifiListView_.scanning &&
           wifiListView_.selected < wifiListView_.networkCount) {
         strncpy(selectedSSID_, wifiListView_.networks[wifiListView_.selected].ssid, sizeof(selectedSSID_) - 1);
         selectedSSID_[sizeof(selectedSSID_) - 1] = '\0';
@@ -291,7 +288,7 @@ void NetworkState::handleWifiList(Core& core, Button button) {
           passwordJustEntered_ = false;
           connectToNetwork(core, cred->ssid, cred->password);
         } else if (wifiListView_.networks[wifiListView_.selected].secured) {
-          keyboardView_.setTitle("Enter Password");
+          keyboardView_.setTitle(tr(ENTER_PASSWORD));
           keyboardView_.setPassword(false);
           keyboardView_.clear();
           keyboardView_.needsRender = true;
@@ -305,21 +302,17 @@ void NetworkState::handleWifiList(Core& core, Button button) {
       break;
 
     case Button::Right:
-      if (wifiListView_.buttons.isActive(3)) {
-        startWifiScan(core);
-        needsRender_ = true;
-      }
+      startWifiScan(core);
+      needsRender_ = true;
       break;
 
     case Button::Back:
-      if (wifiListView_.buttons.isActive(0)) {
-        if (core.pendingSync == SyncMode::NtpSync) {
-          goBack_ = true;
-        } else {
-          currentScreen_ = NetworkScreen::ModeSelect;
-          modeView_.needsRender = true;
-          needsRender_ = true;
-        }
+      if (core.pendingSync == SyncMode::NtpSync) {
+        goBack_ = true;
+      } else {
+        currentScreen_ = NetworkScreen::ModeSelect;
+        modeView_.needsRender = true;
+        needsRender_ = true;
       }
       break;
 
@@ -360,11 +353,9 @@ void NetworkState::handlePasswordEntry(Core& core, Button button) {
       break;
 
     case Button::Back:
-      if (keyboardView_.buttons.isActive(0)) {
-        currentScreen_ = NetworkScreen::WifiList;
-        wifiListView_.needsRender = true;
-        needsRender_ = true;
-      }
+      currentScreen_ = NetworkScreen::WifiList;
+      wifiListView_.needsRender = true;
+      needsRender_ = true;
       break;
 
     default:
@@ -414,8 +405,8 @@ void NetworkState::handleConnecting(Core& core, Button button) {
         }
 
         if (!WIFI_STORE.hasSavedCredential(selectedSSID_) && passwordJustEntered_) {
-          confirmView_.setTitle("Save Password?");
-          confirmView_.setMessage("Save password for this network?");
+          confirmView_.setTitle(tr(SAVE_PASSWORD_Q));
+          confirmView_.setMessage(tr(SAVE_PASSWORD_MSG));
           confirmView_.selectYes();
           confirmView_.needsRender = true;
           currentScreen_ = NetworkScreen::SavePrompt;
@@ -436,43 +427,35 @@ void NetworkState::handleConnecting(Core& core, Button button) {
 void NetworkState::handleSavePrompt(Core& core, Button button) {
   switch (button) {
     case Button::Left:
-      if (confirmView_.buttons.isActive(2)) {
-        confirmView_.selectYes();
-        needsRender_ = true;
-      }
+      confirmView_.selectYes();
+      needsRender_ = true;
       break;
 
     case Button::Right:
-      if (confirmView_.buttons.isActive(3)) {
-        confirmView_.selectNo();
-        needsRender_ = true;
-      }
+      confirmView_.selectNo();
+      needsRender_ = true;
       break;
 
     case Button::Center:
-      if (confirmView_.buttons.isActive(1)) {
-        if (confirmView_.isYesSelected()) {
-          WIFI_STORE.addCredential(selectedSSID_, keyboardView_.input);
-        }
-        if (core.pendingSync == SyncMode::WifiSetup) {
-          goBack_ = true;
-        } else if (core.pendingSync == SyncMode::NtpSync) {
-          goApp_ = true;
-        } else {
-          startWebServer(core);
-        }
+      if (confirmView_.isYesSelected()) {
+        WIFI_STORE.addCredential(selectedSSID_, keyboardView_.input);
+      }
+      if (core.pendingSync == SyncMode::WifiSetup) {
+        goBack_ = true;
+      } else if (core.pendingSync == SyncMode::NtpSync) {
+        goApp_ = true;
+      } else {
+        startWebServer(core);
       }
       break;
 
     case Button::Back:
-      if (confirmView_.buttons.isActive(0)) {
-        if (core.pendingSync == SyncMode::WifiSetup) {
-          goBack_ = true;
-        } else if (core.pendingSync == SyncMode::NtpSync) {
-          goApp_ = true;
-        } else {
-          startWebServer(core);
-        }
+      if (core.pendingSync == SyncMode::WifiSetup) {
+        goBack_ = true;
+      } else if (core.pendingSync == SyncMode::NtpSync) {
+        goApp_ = true;
+      } else {
+        startWebServer(core);
       }
       break;
 
@@ -483,10 +466,8 @@ void NetworkState::handleSavePrompt(Core& core, Button button) {
 
 void NetworkState::handleServerRunning(Core& core, Button button) {
   if (button == Button::Back) {
-    if (serverView_.buttons.isActive(0)) {
-      stopWebServer(core);
-      goBack_ = true;
-    }
+    stopWebServer(core);
+    goBack_ = true;
   }
 }
 
@@ -496,7 +477,7 @@ void NetworkState::startWifiScan(Core& core) {
   scanRetryCount_ = 0;
   scanRetryAt_ = 0;
   wifiListView_.clear();
-  wifiListView_.setScanning(true, "Scanning...");
+  wifiListView_.setScanning(true, tr(SCANNING));
 
   auto result = core.network.startScan();
   if (!result.ok()) {
@@ -525,7 +506,7 @@ void NetworkState::connectToNetwork(Core& core, const char* ssid, const char* pa
     connectingView_.setConnected(ip);
     LOG_INF(TAG, "Connected, IP: %s", ip);
   } else {
-    connectingView_.setFailed("Connection failed");
+    connectingView_.setFailed(tr(CONNECTION_FAILED));
     LOG_ERR(TAG, "Connection failed");
   }
 
@@ -557,7 +538,7 @@ void NetworkState::startHotspot(Core& core) {
     delay(500);
     startWebServer(core);
   } else {
-    connectingView_.setFailed("Failed to start hotspot");
+    connectingView_.setFailed(tr(HOTSPOT_FAILED));
     LOG_ERR(TAG, "Failed to start AP");
     needsRender_ = true;
   }

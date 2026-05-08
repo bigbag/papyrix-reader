@@ -5,6 +5,7 @@
 #include <CoverHelpers.h>
 #include <GfxRenderer.h>
 #include <Group5.h>
+#include <I18n.h>
 #include <Logging.h>
 #include <SDCardManager.h>
 #include <esp_system.h>
@@ -115,8 +116,8 @@ StateTransition HomeState::update(Core& core) {
         switch (e.button) {
           case Button::Back:
             // btn1: Read - Continue reading if book is open
-            if (view_.buttons.isActive(0) && view_.hasBook) {
-              showTransitionNotification("Opening book...");
+            if (view_.hasBook) {
+              showTransitionNotification(tr(OPENING_BOOK));
               saveTransition(BootMode::READER, core.buf.path, ReturnTo::HOME);
               vTaskDelay(50 / portTICK_PERIOD_MS);
               ESP.restart();

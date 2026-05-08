@@ -1,6 +1,7 @@
 #pragma once
 
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <Theme.h>
 
 #include <cstdint>
@@ -38,8 +39,8 @@ struct ConfirmView {
   static constexpr int MAX_TITLE_LEN = 48;
   static constexpr int MAX_MSG_LEN = 128;
 
-  ButtonBar buttons{"Back", "Select", "<", ">"};
-  char title[MAX_TITLE_LEN] = "Confirm";
+  ButtonBar buttons;
+  char title[MAX_TITLE_LEN] = "";
   char message[MAX_MSG_LEN] = {0};
   int8_t selected = 0;  // 0 = Yes, 1 = No
   bool needsRender = true;
@@ -80,14 +81,14 @@ void render(const GfxRenderer& r, const Theme& t, const ConfirmView& v);
 
 struct KeyboardView {
   static constexpr int MAX_INPUT_LEN = 64;
-  static constexpr int MAX_TITLE_LEN = 32;
+  static constexpr int MAX_TITLE_LEN = 48;
 
   // Special control characters from keyboard
   static constexpr char CTRL_BACKSPACE = '\x02';
   static constexpr char CTRL_CONFIRM = '\x03';
 
-  ButtonBar buttons{"Back", "Select", "<", ">"};
-  char title[MAX_TITLE_LEN] = "Enter Text";
+  ButtonBar buttons;
+  char title[MAX_TITLE_LEN] = "";
   char input[MAX_INPUT_LEN] = {0};
   uint8_t inputLen = 0;
   KeyboardState keyboard;

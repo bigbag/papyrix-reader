@@ -1,6 +1,7 @@
 #include "HomeView.h"
 
 #include <CoverHelpers.h>
+#include <I18n.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -17,7 +18,7 @@ void render(const GfxRenderer& r, const Theme& t, const HomeView& v) {
   const int pageHeight = r.getScreenHeight();
 
   // "Papyrix" brand title - bold in top-left corner
-  brandTitle(r, t, 10, "Papyrix");
+  brandTitle(r, t, 10, tr(PAPYRIX));
 
   // Battery indicator - top right
   battery(r, t, pageWidth - 90, 10, v.batteryPercent, v.batteryCharging);
@@ -83,19 +84,19 @@ void render(const GfxRenderer& r, const Theme& t, const HomeView& v) {
     const int lineHeight = r.getLineHeight(t.uiFontId);
     const int centerY = cardY + cardHeight / 2;
 
-    const char* noBookText = "No book open";
+    const char* noBookText = tr(NO_BOOK_OPEN);
     const int noBookWidth = r.getTextWidth(t.uiFontId, noBookText);
     const int noBookX = cardX + (cardWidth - noBookWidth) / 2;
     r.drawText(t.uiFontId, noBookX, centerY - lineHeight, noBookText, t.primaryTextBlack);
 
-    const char* hintText = "Press \"File\" to explore";
+    const char* hintText = tr(PRESS_FILE_TO_EXPLORE);
     const int hintWidth = r.getTextWidth(t.uiFontId, hintText);
     const int hintX = cardX + (cardWidth - hintWidth) / 2;
     r.drawText(t.uiFontId, hintX, centerY + lineHeight / 2, hintText, t.secondaryTextBlack);
   }
 
-  // Button hints - direct shortcuts (no menu navigation)
-  buttonBar(r, t, v.buttons);
+  ButtonBar btns{v.hasBook ? tr(READ) : "", tr(FILE), tr(APPS), tr(SETTINGS)};
+  buttonBar(r, t, btns);
 
   // Note: displayBuffer() is NOT called here; HomeState will call it
   // after rendering the cover image on top of the card area
@@ -105,7 +106,7 @@ void render(const GfxRenderer& r, const Theme& t, const FileListView& v) {
   r.clearScreen(t.backgroundColor);
 
   // Title with path
-  title(r, t, t.screenMarginTop, "Files");
+  title(r, t, t.screenMarginTop, tr(FILES));
 
   // Current path (truncated if needed)
   const int pathY = 40;
@@ -131,7 +132,8 @@ void render(const GfxRenderer& r, const Theme& t, const FileListView& v) {
     centeredText(r, t, pageY, pageStr);
   }
 
-  buttonBar(r, t, v.buttons);
+  ButtonBar fileBtns{tr(BACK), tr(OPEN), "", ""};
+  buttonBar(r, t, fileBtns);
 
   r.displayBuffer();
 }
@@ -139,7 +141,7 @@ void render(const GfxRenderer& r, const Theme& t, const FileListView& v) {
 void render(const GfxRenderer& r, const Theme& t, ChapterListView& v) {
   r.clearScreen(t.backgroundColor);
 
-  title(r, t, t.screenMarginTop, "Chapters");
+  title(r, t, t.screenMarginTop, tr(CHAPTERS));
 
   constexpr int listStartY = 60;
   const int availableHeight = r.getScreenHeight() - listStartY - 50;
@@ -154,7 +156,8 @@ void render(const GfxRenderer& r, const Theme& t, ChapterListView& v) {
     chapterItem(r, t, t.uiFontId, y, v.chapters[i].title, v.chapters[i].depth, i == v.selected, i == v.currentChapter);
   }
 
-  buttonBar(r, t, v.buttons);
+  ButtonBar chapBtns{tr(BACK), tr(GO), "", ""};
+  buttonBar(r, t, chapBtns);
 
   r.displayBuffer();
 }

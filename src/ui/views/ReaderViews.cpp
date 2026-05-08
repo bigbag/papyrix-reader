@@ -1,11 +1,10 @@
 #include "ReaderViews.h"
 
+#include <I18n.h>
+
 #include <cstdio>
 
 namespace ui {
-
-// Static definitions
-constexpr const char* const ReaderMenuView::ITEMS[];
 
 void renderStatusBar(const GfxRenderer& r, const Theme& t, const ReaderStatusView& v) {
   // Draw status bar at bottom of screen
@@ -69,28 +68,28 @@ void render(const GfxRenderer& r, const Theme& t, const CoverPageView& v) {
 void render(const GfxRenderer& r, const Theme& t, const ReaderMenuView& v) {
   if (!v.visible) return;
 
-  ui::popupMenu(r, t, "Menu", ReaderMenuView::ITEMS, ReaderMenuView::ITEM_COUNT, v.selected);
+  const char* items[] = {tr(CHAPTERS), tr(BOOKMARKS)};
+  ui::popupMenu(r, t, tr(MENU), items, ReaderMenuView::ITEM_COUNT, v.selected);
   r.displayBuffer();
 }
 
 void render(const GfxRenderer& r, const Theme& t, const JumpToPageView& v) {
   r.clearScreen(t.backgroundColor);
 
-  title(r, t, t.screenMarginTop, "Go to Page");
+  title(r, t, t.screenMarginTop, tr(GO_TO_PAGE));
 
   const int centerY = r.getScreenHeight() / 2 - 40;
 
-  // Current page number (large)
   char pageStr[16];
   snprintf(pageStr, sizeof(pageStr), "%d", v.targetPage);
   r.drawCenteredText(t.readerFontIdLarge, centerY, pageStr, t.primaryTextBlack, EpdFontFamily::BOLD);
 
-  // Range info
   char rangeStr[32];
-  snprintf(rangeStr, sizeof(rangeStr), "of %d", v.maxPage);
+  snprintf(rangeStr, sizeof(rangeStr), tr(FMT_PAGE_OF), v.maxPage);
   centeredText(r, t, centerY + 50, rangeStr);
 
-  buttonBar(r, t, v.buttons);
+  ButtonBar btns{tr(CANCEL), tr(GO), "-10", "+10"};
+  buttonBar(r, t, btns);
 
   r.displayBuffer();
 }

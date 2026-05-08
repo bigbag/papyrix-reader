@@ -1,0 +1,213 @@
+# Español - referencia completa para traducciones de Papyrix
+# Copia este archivo a /.papyrix/locale.txt en tu tarjeta SD
+# y traduce los valores (parte derecha del =)
+_language_name=Español
+
+# Button labels
+BACK=Atrás
+OPEN=Abrir
+SELECT=Selecc.
+CANCEL=Cancelar
+CONFIRM=Confirmar
+DONE=Listo
+RETRY=Reint.
+STOP=Detener
+SCAN=Buscar
+RUN=Ejecutar
+GO=Ir
+RESTART=Reiniciar
+CONNECT=Conectar
+READ=Leer
+DELETE_BTN=Borrar
+FILE=Archivo
+APPS=Aplic.
+HOME=Inicio
+YES=Sí
+NO=No
+
+# Menu items
+SETTINGS=Ajustes
+READER=Lector
+DEVICE=Dispositivo
+CLEANUP=Limpieza
+SYSTEM_INFO=Info del sistema
+CHAPTERS=Capítulos
+BOOKMARKS=Marcadores
+JOIN_NETWORK=Unirse a red
+CREATE_HOTSPOT=Crear hotspot
+WIFI_TRANSFER=Transferencia WiFi
+CALIBRE_SYNC=Sincro. Calibre
+LANGUAGE=Idioma
+
+# Screen titles
+READER_SETTINGS=Ajustes del lector
+DEVICE_SETTINGS=Ajustes del dispositivo
+FILES=Archivos
+NETWORK_MODE=Modo de red
+SELECT_NETWORK=Seleccionar red
+CONNECTING_TITLE=Conectando
+WEB_SERVER=Servidor web
+GO_TO_PAGE=Ir a página
+MENU=Menú
+
+# Settings labels
+THEME=Tema
+FONT_SIZE=Tamaño
+TEXT_LAYOUT=Diseño texto
+LINE_SPACING=Interlineado
+TEXT_ANTI_ALIASING=Suavizado de texto
+PARAGRAPH_ALIGNMENT=Alineación
+HYPHENATION=División palabras
+SHOW_IMAGES=Imágenes
+STATUS_BAR=Barra de estado
+READING_ORIENTATION=Orientación
+AUTO_SLEEP_TIMEOUT=Auto suspensión
+SLEEP_SCREEN=Pantalla de reposo
+STARTUP_BEHAVIOR=Inicio
+SHORT_POWER_BUTTON=Puls. corta encend.
+PAGES_PER_REFRESH=Págs./actualización
+SUNLIGHT_FADING_FIX=Corrección luz solar
+FRONT_BUTTONS=Botones frontales
+SIDE_BUTTONS=Botones laterales
+
+# Settings enum values
+ON=SÍ
+OFF=NO
+XSMALL=Extra peq.
+SMALL=Pequeño
+NORMAL=Normal
+LARGE=Grande
+COMPACT=Compacto
+STANDARD=Estándar
+RELAXED=Amplio
+JUSTIFIED=Justificado
+LEFT=Izquierda
+CENTER=Centro
+RIGHT=Derecha
+NONE_VAL=Ninguno
+TITLE_VAL=Título
+CHAPTER_VAL=Capítulo
+PORTRAIT=Vertical
+LANDSCAPE_CW=Horizontal der.
+INVERTED=Invertido
+LANDSCAPE_CCW=Horizontal izq.
+DARK=Oscuro
+LIGHT=Claro
+CUSTOM=Personal.
+COVER=Portada
+LAST_DOCUMENT=Último libro
+IGNORE=Ignorar
+SLEEP_VAL=Suspender
+PAGE_TURN=Pasar página
+NEVER=Nunca
+MIN_5=5 min
+MIN_10=10 min
+MIN_15=15 min
+MIN_30=30 min
+PREV_NEXT=Ant/Sig
+NEXT_PREV=Sig/Ant
+FRONT_BCLR=B/C/L/R
+FRONT_LRBC=L/R/B/C
+
+# Cleanup
+CLEAR_BOOK_CACHE=Borrar caché de libros
+CLEAR_DEVICE_STORAGE=Borrar almacenamiento
+FACTORY_RESET=Restaurar de fábrica
+CLEAR_CACHES_Q=¿Borrar cachés?
+CLEAR_CACHES_MSG1=Se eliminarán todos los cachés
+CLEAR_CACHES_MSG2=de libros y el progreso de lectura.
+CLEAR_DEVICE_Q=¿Borrar dispositivo?
+CLEAR_DEVICE_MSG1=Se borrará la memoria flash
+CLEAR_DEVICE_MSG2=interna. El dispositivo se reiniciará.
+FACTORY_RESET_Q=¿Restaurar de fábrica?
+FACTORY_RESET_MSG1=Se borrarán TODOS los datos, incl.
+FACTORY_RESET_MSG2=ajustes y credenciales WiFi.
+CLEARING_CACHE=Borrando caché...
+CACHE_CLEARED=Caché borrada
+NO_CACHE_TO_CLEAR=No hay caché que borrar
+CLEARING_STORAGE=Borrando almacenamiento...
+RESETTING_DEVICE=Restaurando dispositivo...
+DONE_RESTARTING=Listo. Reiniciando...
+
+# Status messages
+SCANNING=Buscando...
+CONNECTING=Conectando...
+GETTING_IP=Obteniendo dirección IP...
+CONNECTED=¡Conectado!
+STARTING=Iniciando...
+LOADING=Cargando...
+INDEXING=Indexando...
+OPENING_BOOK=Abriendo libro...
+DELETING=Eliminando...
+NO_BOOK_OPEN=Ningún libro abierto
+PRESS_FILE_TO_EXPLORE=Pulsa "Archivo" para explorar
+NO_BOOKS_FOUND=No se encontraron libros
+END_OF_BOOK=Fin del libro
+FAILED_TO_LOAD_PAGE=Error al cargar la página
+CANNOT_DELETE_ACTIVE=No se puede eliminar el libro activo
+DELETED=Eliminado
+DELETE_FAILED=Error al eliminar
+SERVER_STOPPED=Servidor detenido
+RETURNING_TO_LIBRARY=Volviendo a la biblioteca...
+SLEEPING=EN REPOSO
+
+# Network
+CONNECT_WIFI=Conectar a WiFi existente
+CREATE_WIFI_HOTSPOT=Crear hotspot WiFi
+NO_NETWORKS_FOUND=No se encontraron redes
+PRESS_CONFIRM_SCAN=Pulsa Confirmar para buscar de nuevo
+DISCONNECTED_RESTART=Desconectado. ¿Reiniciar?
+
+# Calibre
+WAITING_FOR_CALIBRE=Esperando a Calibre...
+CONNECTING_TO_CALIBRE=Conectando a Calibre...
+CALIBRE_HELP=En Calibre: Conectar/compartir > Dispositivo inalámbrico
+
+# Format strings
+FMT_IP=IP: %s
+FMT_RECEIVED_BOOKS=%d libro(s) recibido(s)
+FMT_PAGE_OF=de %d
+
+# System info
+VERSION=Versión
+UPTIME=Tiempo activo
+BATTERY=Batería
+CHIP=Chip
+CPU=CPU
+FREE_MEMORY=Memoria libre
+INTERNAL_DISK=Disco interno
+SD_CARD=Tarjeta SD
+READY=Listo
+NOT_AVAILABLE=No disponible
+
+# Keyboard
+BACKSPACE=Borrar
+SPACE=Espacio
+
+# Error
+ERROR=Error
+PRESS_ANY_BUTTON=Pulsa cualquier botón para continuar
+
+# Confirm dialog
+CONFIRM_DELETE=Confirmar eliminación
+
+# Misc
+ENTER_TEXT=Introducir texto
+NO_COVER=Sin portada
+PAPYRIX=Papyrix
+ADD=Añadir
+NO_BOOKMARKS=Aún no hay marcadores
+BOOKS=Libros
+DELETE_FILE_Q=¿Eliminar este archivo?
+DELETE_FOLDER_Q=¿Eliminar esta carpeta?
+ENTER_PASSWORD=Introducir contraseña
+SAVE_PASSWORD_Q=¿Guardar contraseña?
+SAVE_PASSWORD_MSG=¿Guardar contraseña de esta red?
+CONNECTION_FAILED=Conexión fallida
+HOTSPOT_FAILED=Error al iniciar hotspot
+INITIALIZING_WIFI=Iniciando WiFi...
+INVALID_FILE=Archivo inválido
+MEMORY_ERROR=Error de memoria
+PAGE_LOAD_ERROR=Error al cargar página
+RECEIVING=Recibiendo...
+BOOTING=INICIANDO

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <Theme.h>
 
 #include <cstdint>
@@ -14,10 +15,9 @@ struct MiniApp;
 namespace ui {
 
 struct AppMenuView {
-  static constexpr const char* const EXTRA_ITEMS[] = {"WiFi Transfer", "Calibre Sync"};
   static constexpr int EXTRA_COUNT = 2;
 
-  ButtonBar buttons{"Back", "Open", "", ""};
+  ButtonBar buttons;
   int8_t selected = 0;
   int8_t appCount = 0;
   int8_t itemCount = 0;

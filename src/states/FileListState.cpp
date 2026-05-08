@@ -4,6 +4,7 @@
 #include <EInkDisplay.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <Logging.h>
 #include <SDCardManager.h>
 #include <Utf8.h>
@@ -239,14 +240,14 @@ StateTransition FileListState::update(Core& core) {
                 // Check if trying to delete the currently active book
                 const char* activeBook = core.settings.lastBookPath;
                 if (activeBook[0] != '\0' && strcmp(pathBuf, activeBook) == 0) {
-                  ui::centeredMessage(renderer_, THEME, THEME.uiFontId, "Cannot delete active book");
+                  ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(CANNOT_DELETE_ACTIVE));
                   vTaskDelay(1500 / portTICK_PERIOD_MS);
                 } else {
-                  ui::centeredMessage(renderer_, THEME, THEME.uiFontId, "Deleting...");
+                  ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(DELETING));
 
                   Result<void> result = entry.isDir ? core.storage.rmdir(pathBuf) : core.storage.remove(pathBuf);
 
-                  const char* msg = result.ok() ? "Deleted" : "Delete failed";
+                  const char* msg = result.ok() ? tr(DELETED) : tr(DELETE_FAILED);
                   ui::centeredMessage(renderer_, THEME, THEME.uiFontId, msg);
                   vTaskDelay(1000 / portTICK_PERIOD_MS);
 
@@ -336,17 +337,18 @@ void FileListState::render(Core& core) {
   renderer_.clearScreen(theme.backgroundColor);
 
   // Title with page indicator
-  char title[32];
+  char title[48];
   if (getTotalPages() > 1) {
-    snprintf(title, sizeof(title), "Books (%d/%d)", getCurrentPage(), getTotalPages());
+    snprintf(title, sizeof(title), "%s (%d/%d)", tr(BOOKS), getCurrentPage(), getTotalPages());
   } else {
-    strcpy(title, "Books");
+    strncpy(title, tr(BOOKS), sizeof(title) - 1);
+    title[sizeof(title) - 1] = '\0';
   }
   renderer_.drawCenteredText(theme.readerFontId, 10, title, theme.primaryTextBlack, BOLD);
 
   // Empty state
   if (files_.empty()) {
-    renderer_.drawText(theme.uiFontId, 20, 60, "No books found", theme.primaryTextBlack);
+    renderer_.drawText(theme.uiFontId, 20, 60, tr(NO_BOOKS_FOUND), theme.primaryTextBlack);
     renderer_.displayBuffer();
     needsRender_ = false;
     core.display.markDirty();
@@ -366,9 +368,8 @@ void FileListState::render(Core& core) {
                   static_cast<size_t>(i) == selectedIndex_);
   }
 
-  // Button hints - "Home" if at root, "Back" if in subfolder
-  const char* backLabel = isAtRoot() ? "Home" : "Back";
-  ui::buttonBar(renderer_, theme, backLabel, "Open", "", "Delete");
+  const char* backLabel = isAtRoot() ? tr(HOME) : tr(BACK);
+  ui::buttonBar(renderer_, theme, backLabel, tr(OPEN), "", tr(DELETE_BTN));
 
   if (firstRender_) {
     renderer_.displayBuffer(EInkDisplay::HALF_REFRESH);
@@ -440,7 +441,7 @@ void FileListState::openSelected(Core& core) {
 
     // Select file - transition to Reader mode via restart
     LOG_INF(TAG, "Selected: %s", selectedPath_);
-    showTransitionNotification("Opening book...");
+    showTransitionNotification(tr(OPENING_BOOK));
     saveTransition(BootMode::READER, selectedPath_, ReturnTo::FILE_MANAGER);
     vTaskDelay(50 / portTICK_PERIOD_MS);
     ESP.restart();
@@ -472,10 +473,7 @@ void FileListState::promptDelete(Core& core) {
   if (files_.empty()) return;
 
   const FileEntry& entry = files_[selectedIndex_];
-  const char* typeStr = entry.isDir ? "folder" : "file";
-
-  char line1[48];
-  snprintf(line1, sizeof(line1), "Delete this %s?", typeStr);
+  const char* line1 = entry.isDir ? tr(DELETE_FOLDER_Q) : tr(DELETE_FILE_Q);
 
   char line2[48];
   if (entry.name.length() > 40) {
@@ -485,7 +483,7 @@ void FileListState::promptDelete(Core& core) {
     line2[sizeof(line2) - 1] = '\0';
   }
 
-  confirmView_.setup("Confirm Delete", line1, line2);
+  confirmView_.setup(tr(CONFIRM_DELETE), line1, line2);
   currentScreen_ = Screen::ConfirmDelete;
   needsRender_ = true;
 }

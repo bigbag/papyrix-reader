@@ -1,6 +1,7 @@
 #pragma once
 
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <Theme.h>
 
 #include <cstdint>
@@ -16,10 +17,9 @@ namespace ui {
 // ============================================================================
 
 struct NetworkModeView {
-  static constexpr const char* const ITEMS[] = {"Join Network", "Create Hotspot"};
   static constexpr int ITEM_COUNT = 2;
 
-  ButtonBar buttons{"Back", "Select", "", ""};
+  ButtonBar buttons;
   int8_t selected = 0;
   bool needsRender = true;
 
@@ -55,13 +55,13 @@ struct WifiListView {
     bool secured;
   };
 
-  ButtonBar buttons{"Back", "Connect", "", "Scan"};
+  ButtonBar buttons;
   Network networks[MAX_NETWORKS];
   uint8_t networkCount = 0;
   uint8_t selected = 0;
   uint8_t page = 0;
   bool scanning = false;
-  char statusText[32] = "Scanning...";
+  char statusText[32] = "";
   bool needsRender = true;
 
   void clear() {
@@ -83,10 +83,12 @@ struct WifiListView {
     return false;
   }
 
-  void setScanning(bool s, const char* text = "Scanning...") {
+  void setScanning(bool s, const char* text = nullptr) {
     scanning = s;
-    strncpy(statusText, text, sizeof(statusText) - 1);
-    statusText[sizeof(statusText) - 1] = '\0';
+    if (text) {
+      strncpy(statusText, text, sizeof(statusText) - 1);
+      statusText[sizeof(statusText) - 1] = '\0';
+    }
     needsRender = true;
   }
 
@@ -130,9 +132,9 @@ struct WifiConnectingView {
 
   enum class Status : uint8_t { Connecting, Connected, Failed, GettingIP };
 
-  ButtonBar buttons{"Cancel", "", "", ""};
+  ButtonBar buttons;
   char ssid[SSID_MAX_LEN] = {0};
-  char statusMsg[MAX_STATUS_LEN] = "Connecting...";
+  char statusMsg[MAX_STATUS_LEN] = "";
   char ipAddress[16] = {0};
   Status status = Status::Connecting;
   bool needsRender = true;
@@ -145,24 +147,24 @@ struct WifiConnectingView {
 
   void setConnecting() {
     status = Status::Connecting;
-    strncpy(statusMsg, "Connecting...", MAX_STATUS_LEN);
-    buttons = ButtonBar{"Cancel", "", "", ""};
+    strncpy(statusMsg, tr(CONNECTING), MAX_STATUS_LEN);
+    buttons = ButtonBar{tr(CANCEL)};
     needsRender = true;
   }
 
   void setGettingIP() {
     status = Status::GettingIP;
-    strncpy(statusMsg, "Getting IP address...", MAX_STATUS_LEN);
-    buttons = ButtonBar{"Cancel", "", "", ""};
+    strncpy(statusMsg, tr(GETTING_IP), MAX_STATUS_LEN);
+    buttons = ButtonBar{tr(CANCEL)};
     needsRender = true;
   }
 
   void setConnected(const char* ip) {
     status = Status::Connected;
-    strncpy(statusMsg, "Connected!", MAX_STATUS_LEN);
+    strncpy(statusMsg, tr(CONNECTED), MAX_STATUS_LEN);
     strncpy(ipAddress, ip, sizeof(ipAddress) - 1);
     ipAddress[sizeof(ipAddress) - 1] = '\0';
-    buttons = ButtonBar{"Back", "Done", "", ""};
+    buttons = ButtonBar{tr(BACK), tr(DONE)};
     needsRender = true;
   }
 
@@ -170,7 +172,7 @@ struct WifiConnectingView {
     status = Status::Failed;
     strncpy(statusMsg, reason, MAX_STATUS_LEN - 1);
     statusMsg[MAX_STATUS_LEN - 1] = '\0';
-    buttons = ButtonBar{"Back", "Retry", "", ""};
+    buttons = ButtonBar{tr(BACK), tr(RETRY)};
     needsRender = true;
   }
 };
@@ -185,7 +187,7 @@ struct WebServerView {
   static constexpr int SSID_MAX_LEN = 33;
   static constexpr int MAX_IP_LEN = 16;
 
-  ButtonBar buttons{"Stop", "", "", ""};
+  ButtonBar buttons;
   char ssid[SSID_MAX_LEN] = {0};
   char ipAddress[MAX_IP_LEN] = {0};
   uint8_t clientCount = 0;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <Theme.h>
 
 #include <cstdint>
@@ -15,10 +16,9 @@ namespace ui {
 // ============================================================================
 
 struct SettingsMenuView {
-  static constexpr const char* const ITEMS[] = {"Reader", "Device", "Cleanup", "System Info"};
   static constexpr int ITEM_COUNT = 4;
 
-  ButtonBar buttons{"Back", "Open", "", ""};
+  ButtonBar buttons;
   int8_t selected = 0;
   bool needsRender = true;
 
@@ -40,10 +40,9 @@ void render(const GfxRenderer& r, const Theme& t, const SettingsMenuView& v);
 // ============================================================================
 
 struct CleanupMenuView {
-  static constexpr const char* const ITEMS[] = {"Clear Book Cache", "Clear Device Storage", "Factory Reset"};
   static constexpr int ITEM_COUNT = 3;
 
-  ButtonBar buttons{"Back", "Run", "", ""};
+  ButtonBar buttons;
   int8_t selected = 0;
   bool needsRender = true;
 
@@ -68,12 +67,12 @@ struct SystemInfoView {
   static constexpr int MAX_VALUE_LEN = 32;
 
   struct InfoField {
-    char label[24];
+    char label[40];
     char value[MAX_VALUE_LEN];
   };
 
   static constexpr int MAX_FIELDS = 8;
-  ButtonBar buttons{"Back", "", "", ""};
+  ButtonBar buttons;
   InfoField fields[MAX_FIELDS] = {};
   uint8_t fieldCount = 0;
   bool needsRender = true;
@@ -102,7 +101,6 @@ void render(const GfxRenderer& r, const Theme& t, const SystemInfoView& v);
 // ============================================================================
 
 struct ReaderSettingsView {
-  // Setting types
   enum class SettingType : uint8_t { Toggle, Enum, ThemeSelect };
 
   struct SettingDef {
@@ -112,26 +110,17 @@ struct ReaderSettingsView {
     uint8_t enumCount;
   };
 
-  // Static setting definitions
-  static constexpr const char* const FONT_SIZE_VALUES[] = {"XSmall", "Small", "Normal", "Large"};
-  static constexpr const char* const TEXT_LAYOUT_VALUES[] = {"Compact", "Standard", "Large"};
-  static constexpr const char* const LINE_SPACING_VALUES[] = {"Compact", "Normal", "Relaxed", "Large"};
-  static constexpr const char* const ALIGNMENT_VALUES[] = {"Justified", "Left", "Center", "Right"};
-  static constexpr const char* const STATUS_BAR_VALUES[] = {"None", "Title", "Chapter"};
-  static constexpr const char* const ORIENTATION_VALUES[] = {"Portrait", "Landscape CW", "Inverted", "Landscape CCW"};
-
   static constexpr int SETTING_COUNT = 10;
   static constexpr int MAX_THEMES = 16;
-  static const SettingDef DEFS[SETTING_COUNT];
+  static SettingDef DEFS[SETTING_COUNT];
+  static void initDefs();
 
-  ButtonBar buttons{"Back", "", "<", ">"};
+  ButtonBar buttons{"", "", "<", ">"};
 
-  // Theme selection state (loaded from ThemeManager)
   char themeNames[MAX_THEMES][32] = {};
   int themeCount = 0;
   int currentThemeIndex = 0;
 
-  // Current values (indices for enums, bool for toggles)
   uint8_t values[SETTING_COUNT] = {0};
   int8_t selected = 0;
   bool needsRender = true;
@@ -163,7 +152,7 @@ struct ReaderSettingsView {
   const char* getCurrentValueStr(int index) const {
     const auto& def = DEFS[index];
     if (def.type == SettingType::Toggle) {
-      return values[index] ? "ON" : "OFF";
+      return values[index] ? tr(ON) : tr(OFF);
     }
     if (def.type == SettingType::ThemeSelect) {
       if (themeCount > 0 && currentThemeIndex < themeCount) {
@@ -171,7 +160,6 @@ struct ReaderSettingsView {
       }
       return "light";
     }
-    // Bounds check to prevent array out-of-bounds access from corrupted settings
     if (def.enumCount == 0 || values[index] >= def.enumCount) {
       return def.enumCount > 0 ? def.enumValues[0] : "???";
     }
@@ -193,15 +181,6 @@ void render(const GfxRenderer& r, const Theme& t, const ReaderSettingsView& v);
 // ============================================================================
 
 struct DeviceSettingsView {
-  static constexpr const char* const SLEEP_TIMEOUT_VALUES[] = {"5 min", "10 min", "15 min", "30 min", "Never"};
-  static constexpr const char* const SLEEP_SCREEN_VALUES[] = {"Dark", "Light", "Custom", "Cover"};
-  static constexpr const char* const STARTUP_VALUES[] = {"Last Document", "Home"};
-  static constexpr const char* const SHORT_PWR_VALUES[] = {"Ignore", "Sleep", "Page Turn"};
-  static constexpr const char* const PAGES_REFRESH_VALUES[] = {"1", "5", "10", "15", "30", "Off"};
-  static constexpr const char* const TOGGLE_VALUES[] = {"OFF", "ON"};
-  static constexpr const char* const FRONT_BUTTON_VALUES[] = {"B/C/L/R", "L/R/B/C"};
-  static constexpr const char* const SIDE_BUTTON_VALUES[] = {"Prev/Next", "Next/Prev"};
-
   struct SettingDef {
     const char* label;
     const char* const* values;
@@ -209,9 +188,10 @@ struct DeviceSettingsView {
   };
 
   static constexpr int SETTING_COUNT = 8;
-  static const SettingDef DEFS[SETTING_COUNT];
+  static SettingDef DEFS[SETTING_COUNT];
+  static void initDefs();
 
-  ButtonBar buttons{"Back", "", "<", ">"};
+  ButtonBar buttons{"", "", "<", ">"};
   uint8_t values[SETTING_COUNT] = {0};
   int8_t selected = 0;
   bool needsRender = true;
@@ -234,7 +214,6 @@ struct DeviceSettingsView {
 
   const char* getCurrentValueStr(int index) const {
     const auto& def = DEFS[index];
-    // Bounds check to prevent array out-of-bounds access from corrupted settings
     if (def.valueCount == 0 || values[index] >= def.valueCount) {
       return def.valueCount > 0 ? def.values[0] : "???";
     }
@@ -249,11 +228,11 @@ void render(const GfxRenderer& r, const Theme& t, const DeviceSettingsView& v);
 // ============================================================================
 
 struct ConfirmDialogView {
-  static constexpr int MAX_TITLE_LEN = 32;
-  static constexpr int MAX_LINE_LEN = 48;
+  static constexpr int MAX_TITLE_LEN = 48;
+  static constexpr int MAX_LINE_LEN = 80;
 
-  ButtonBar buttons{"Back", "Confirm", "<<", ">>"};
-  char title[MAX_TITLE_LEN] = "Confirm?";
+  ButtonBar buttons;
+  char title[MAX_TITLE_LEN] = "";
   char line1[MAX_LINE_LEN] = "";
   char line2[MAX_LINE_LEN] = "";
   int8_t selection = 1;  // 0 = Yes, 1 = No (default No for safety)

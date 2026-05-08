@@ -1,0 +1,213 @@
+# English - complete reference for Papyrix translations
+# Copy this file to /.papyrix/locale.txt on your SD card
+# and translate the values (right side of =)
+_language_name=English
+
+# Button labels
+BACK=Back
+OPEN=Open
+SELECT=Select
+CANCEL=Cancel
+CONFIRM=Confirm
+DONE=Done
+RETRY=Retry
+STOP=Stop
+SCAN=Scan
+RUN=Run
+GO=Go
+RESTART=Restart
+CONNECT=Connect
+READ=Read
+DELETE_BTN=Delete
+FILE=File
+APPS=Apps
+HOME=Home
+YES=Yes
+NO=No
+
+# Menu items
+SETTINGS=Settings
+READER=Reader
+DEVICE=Device
+CLEANUP=Cleanup
+SYSTEM_INFO=System Info
+CHAPTERS=Chapters
+BOOKMARKS=Bookmarks
+JOIN_NETWORK=Join Network
+CREATE_HOTSPOT=Create Hotspot
+WIFI_TRANSFER=WiFi Transfer
+CALIBRE_SYNC=Calibre Sync
+LANGUAGE=Language
+
+# Screen titles
+READER_SETTINGS=Reader Settings
+DEVICE_SETTINGS=Device Settings
+FILES=Files
+NETWORK_MODE=Network Mode
+SELECT_NETWORK=Select Network
+CONNECTING_TITLE=Connecting
+WEB_SERVER=Web Server
+GO_TO_PAGE=Go to Page
+MENU=Menu
+
+# Settings labels
+THEME=Theme
+FONT_SIZE=Font Size
+TEXT_LAYOUT=Text Layout
+LINE_SPACING=Line Spacing
+TEXT_ANTI_ALIASING=Text Anti-Aliasing
+PARAGRAPH_ALIGNMENT=Paragraph Alignment
+HYPHENATION=Hyphenation
+SHOW_IMAGES=Show Images
+STATUS_BAR=Status Bar
+READING_ORIENTATION=Reading Orientation
+AUTO_SLEEP_TIMEOUT=Auto Sleep Timeout
+SLEEP_SCREEN=Sleep Screen
+STARTUP_BEHAVIOR=Startup Behavior
+SHORT_POWER_BUTTON=Short Power Button
+PAGES_PER_REFRESH=Pages Per Refresh
+SUNLIGHT_FADING_FIX=Sunlight Fading Fix
+FRONT_BUTTONS=Front Buttons
+SIDE_BUTTONS=Side Buttons
+
+# Settings enum values
+ON=ON
+OFF=OFF
+XSMALL=XSmall
+SMALL=Small
+NORMAL=Normal
+LARGE=Large
+COMPACT=Compact
+STANDARD=Standard
+RELAXED=Relaxed
+JUSTIFIED=Justified
+LEFT=Left
+CENTER=Center
+RIGHT=Right
+NONE_VAL=None
+TITLE_VAL=Title
+CHAPTER_VAL=Chapter
+PORTRAIT=Portrait
+LANDSCAPE_CW=Landscape CW
+INVERTED=Inverted
+LANDSCAPE_CCW=Landscape CCW
+DARK=Dark
+LIGHT=Light
+CUSTOM=Custom
+COVER=Cover
+LAST_DOCUMENT=Last Document
+IGNORE=Ignore
+SLEEP_VAL=Sleep
+PAGE_TURN=Page Turn
+NEVER=Never
+MIN_5=5 min
+MIN_10=10 min
+MIN_15=15 min
+MIN_30=30 min
+PREV_NEXT=Prev/Next
+NEXT_PREV=Next/Prev
+FRONT_BCLR=B/C/L/R
+FRONT_LRBC=L/R/B/C
+
+# Cleanup
+CLEAR_BOOK_CACHE=Clear Book Cache
+CLEAR_DEVICE_STORAGE=Clear Device Storage
+FACTORY_RESET=Factory Reset
+CLEAR_CACHES_Q=Clear Caches?
+CLEAR_CACHES_MSG1=This will delete all book caches
+CLEAR_CACHES_MSG2=and reading progress.
+CLEAR_DEVICE_Q=Clear Device?
+CLEAR_DEVICE_MSG1=This will erase internal flash
+CLEAR_DEVICE_MSG2=storage. Device will restart.
+FACTORY_RESET_Q=Factory Reset?
+FACTORY_RESET_MSG1=This will erase ALL data including
+FACTORY_RESET_MSG2=settings and WiFi credentials!
+CLEARING_CACHE=Clearing cache...
+CACHE_CLEARED=Cache cleared
+NO_CACHE_TO_CLEAR=No cache to clear
+CLEARING_STORAGE=Clearing device storage...
+RESETTING_DEVICE=Resetting device...
+DONE_RESTARTING=Done. Restarting...
+
+# Status messages
+SCANNING=Scanning...
+CONNECTING=Connecting...
+GETTING_IP=Getting IP address...
+CONNECTED=Connected!
+STARTING=Starting...
+LOADING=Loading...
+INDEXING=Indexing...
+OPENING_BOOK=Opening book...
+DELETING=Deleting...
+NO_BOOK_OPEN=No book open
+PRESS_FILE_TO_EXPLORE=Press "File" to explore
+NO_BOOKS_FOUND=No books found
+END_OF_BOOK=End of book
+FAILED_TO_LOAD_PAGE=Failed to load page
+CANNOT_DELETE_ACTIVE=Cannot delete active book
+DELETED=Deleted
+DELETE_FAILED=Delete failed
+SERVER_STOPPED=Server stopped
+RETURNING_TO_LIBRARY=Returning to library...
+SLEEPING=SLEEPING
+
+# Network
+CONNECT_WIFI=Connect to existing WiFi
+CREATE_WIFI_HOTSPOT=Create WiFi hotspot
+NO_NETWORKS_FOUND=No networks found
+PRESS_CONFIRM_SCAN=Press Confirm to scan again
+DISCONNECTED_RESTART=Disconnected. Restart?
+
+# Calibre
+WAITING_FOR_CALIBRE=Waiting for Calibre...
+CONNECTING_TO_CALIBRE=Connecting to Calibre...
+CALIBRE_HELP=In Calibre: Connect/share > Wireless device
+
+# Format strings
+FMT_IP=IP: %s
+FMT_RECEIVED_BOOKS=Received %d book(s)
+FMT_PAGE_OF=of %d
+
+# System info
+VERSION=Version
+UPTIME=Uptime
+BATTERY=Battery
+CHIP=Chip
+CPU=CPU
+FREE_MEMORY=Free Memory
+INTERNAL_DISK=Internal Disk
+SD_CARD=SD Card
+READY=Ready
+NOT_AVAILABLE=Not available
+
+# Keyboard
+BACKSPACE=Backspace
+SPACE=Space
+
+# Error
+ERROR=Error
+PRESS_ANY_BUTTON=Press any button to continue
+
+# Confirm dialog
+CONFIRM_DELETE=Confirm Delete
+
+# Misc
+ENTER_TEXT=Enter Text
+NO_COVER=No Cover
+PAPYRIX=Papyrix
+ADD=Add
+NO_BOOKMARKS=No bookmarks yet
+BOOKS=Books
+DELETE_FILE_Q=Delete this file?
+DELETE_FOLDER_Q=Delete this folder?
+ENTER_PASSWORD=Enter Password
+SAVE_PASSWORD_Q=Save Password?
+SAVE_PASSWORD_MSG=Save password for this network?
+CONNECTION_FAILED=Connection failed
+HOTSPOT_FAILED=Failed to start hotspot
+INITIALIZING_WIFI=Initializing WiFi...
+INVALID_FILE=Invalid file
+MEMORY_ERROR=Memory error
+PAGE_LOAD_ERROR=Page load error
+RECEIVING=Receiving...
+BOOTING=BOOTING

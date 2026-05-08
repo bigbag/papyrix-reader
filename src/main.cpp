@@ -42,6 +42,9 @@
 #define TAG "MAIN"
 
 // New refactored core system
+#include <I18n.h>
+
+#include "I18nLoader.h"
 #include "core/BootMode.h"
 #include "core/Core.h"
 #include "core/StateMachine.h"
@@ -376,6 +379,7 @@ bool earlyInit() {
   // Load settings before wakeup verification - without this, a full power cycle
   // (no USB) resets RTC memory and the short power button setting is ignored
   papyrix::core.settings.loadFromFile();
+  i18n::loadLocaleFromSD();
   rtcPowerButtonDurationMs = papyrix::core.settings.getPowerButtonDuration();
 
   if (wakeup.isPowerButton) {
@@ -424,7 +428,7 @@ void initUIMode() {
     ui::BootView bootView;
     bootView.setLogo(PapyrixLogo, 128, 128);
     bootView.setVersion(PAPYRIX_VERSION);
-    bootView.setStatus("BOOTING");
+    bootView.setStatus(tr(BOOTING));
     ui::render(renderer, THEME, bootView);
   }
 

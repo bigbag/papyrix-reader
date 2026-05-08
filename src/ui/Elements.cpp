@@ -1,5 +1,7 @@
 #include "Elements.h"
 
+#include <I18n.h>
+
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -44,10 +46,10 @@ void toggle(const GfxRenderer& r, const Theme& t, int y, const char* label, bool
   if (selected) {
     r.fillRect(x, y, w, h, t.selectionFillBlack);
     r.drawText(t.uiFontId, x + t.itemPaddingX, textY, label, t.selectionTextBlack);
-    r.drawText(t.uiFontId, valueX, textY, value ? "ON" : "OFF", t.selectionTextBlack);
+    r.drawText(t.uiFontId, valueX, textY, value ? tr(ON) : tr(OFF), t.selectionTextBlack);
   } else {
     r.drawText(t.uiFontId, x + t.itemPaddingX, textY, label, t.primaryTextBlack);
-    r.drawText(t.uiFontId, valueX, textY, value ? "ON" : "OFF", t.secondaryTextBlack);
+    r.drawText(t.uiFontId, valueX, textY, value ? tr(ON) : tr(OFF), t.secondaryTextBlack);
   }
 }
 
@@ -169,11 +171,11 @@ void dialog(const GfxRenderer& r, const Theme& t, const char* titleText, const c
   // Yes button
   if (selected == 0) {
     r.fillRect(yesX, btnY, btnW, btnH, t.selectionFillBlack);
-    r.drawCenteredText(t.uiFontId, btnTextY, "Yes", t.selectionTextBlack);
+    r.drawCenteredText(t.uiFontId, btnTextY, tr(YES), t.selectionTextBlack);
   } else {
     r.drawRect(yesX, btnY, btnW, btnH, t.primaryTextBlack);
   }
-  r.drawText(t.uiFontId, yesX + (btnW - r.getTextWidth(t.uiFontId, "Yes")) / 2, btnTextY, "Yes",
+  r.drawText(t.uiFontId, yesX + (btnW - r.getTextWidth(t.uiFontId, tr(YES))) / 2, btnTextY, tr(YES),
              selected == 0 ? t.selectionTextBlack : t.primaryTextBlack);
 
   // No button
@@ -182,7 +184,7 @@ void dialog(const GfxRenderer& r, const Theme& t, const char* titleText, const c
   } else {
     r.drawRect(noX, btnY, btnW, btnH, t.primaryTextBlack);
   }
-  r.drawText(t.uiFontId, noX + (btnW - r.getTextWidth(t.uiFontId, "No")) / 2, btnTextY, "No",
+  r.drawText(t.uiFontId, noX + (btnW - r.getTextWidth(t.uiFontId, tr(NO))) / 2, btnTextY, tr(NO),
              selected == 1 ? t.selectionTextBlack : t.primaryTextBlack);
 }
 
@@ -647,7 +649,7 @@ void bookPlaceholder(const GfxRenderer& r, const Theme& t, int x, int y, int wid
   // 5. Draw "No Cover" text centered on front cover
   const int coverCenterX = sx(35) + sw(295) / 2;
   const int coverCenterY = sy(35) + sw(430) / 2;
-  const char* noCoverText = "No Cover";
+  const char* noCoverText = tr(NO_COVER);
   const int textWidth = r.getTextWidth(t.uiFontId, noCoverText);
   const int textX = coverCenterX - textWidth / 2;
   const int textY = coverCenterY - r.getLineHeight(t.uiFontId) / 2;

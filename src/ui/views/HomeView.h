@@ -1,6 +1,7 @@
 #pragma once
 
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <Theme.h>
 
 #include <cstdint>
@@ -40,7 +41,7 @@ struct HomeView {
   static constexpr int MAX_AUTHOR_LEN = 96;
   static constexpr int MAX_PATH_LEN = 128;
 
-  ButtonBar buttons{"", "File", "Apps", "Settings"};
+  ButtonBar buttons;
 
   // Current book info
   char bookTitle[MAX_TITLE_LEN] = {0};
@@ -70,7 +71,6 @@ struct HomeView {
     strncpy(bookPath, path, MAX_PATH_LEN - 1);
     bookPath[MAX_PATH_LEN - 1] = '\0';
     hasBook = true;
-    buttons.labels[0] = "Read";
     needsRender = true;
   }
 
@@ -161,7 +161,7 @@ struct FileListView {
     bool isDirectory;
   };
 
-  ButtonBar buttons{"Back", "Open", "", ""};
+  ButtonBar buttons;
 
   // Path and file list
   char currentPath[PATH_LEN] = "/";
@@ -266,7 +266,7 @@ struct ChapterListView {
     uint8_t depth;  // Nesting level (0 = root)
   };
 
-  ButtonBar buttons{"Back", "Go", "", ""};
+  ButtonBar buttons;
   Chapter chapters[MAX_CHAPTERS];
   uint16_t chapterCount = 0;
   uint16_t currentChapter = 0;  // The chapter user is currently reading

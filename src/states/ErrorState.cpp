@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <Logging.h>
 
 #include <cstring>
@@ -50,7 +51,7 @@ StateTransition ErrorState::update(Core& core) {
       // back is to reboot into UI mode. Mirrors ReaderState's exit pattern.
       if (core.bootMode == BootMode::READER) {
         LOG_INF(TAG, "Reader-mode error dismissed — rebooting to UI");
-        showTransitionNotification("Returning to library...");
+        showTransitionNotification(tr(RETURNING_TO_LIBRARY));
         saveTransition(BootMode::UI, nullptr, ReturnTo::FILE_MANAGER);
         vTaskDelay(50 / portTICK_PERIOD_MS);
         ESP.restart();
@@ -72,13 +73,13 @@ void ErrorState::render(Core& core) {
   renderer_.clearScreen(theme.backgroundColor);
 
   // Error title
-  renderer_.drawCenteredText(theme.readerFontId, 100, "Error", theme.primaryTextBlack, BOLD);
+  renderer_.drawCenteredText(theme.readerFontId, 100, tr(ERROR), theme.primaryTextBlack, BOLD);
 
   // Error message
   renderer_.drawCenteredText(theme.uiFontId, 200, message_, theme.primaryTextBlack, REGULAR);
 
   // Instructions
-  renderer_.drawCenteredText(theme.uiFontId, 350, "Press any button to continue", theme.primaryTextBlack, REGULAR);
+  renderer_.drawCenteredText(theme.uiFontId, 350, tr(PRESS_ANY_BUTTON), theme.primaryTextBlack, REGULAR);
 
   renderer_.displayBuffer();
   needsRender_ = false;

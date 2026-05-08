@@ -53,6 +53,12 @@ class PapyrixWebServer {
   void handleDelete();
   void handleDownload();
   void handleRename();
+
+  // Locale file management
+  void handleLocaleStatus();
+  void handleLocaleUpload();
+  void handleLocaleUploadPost();
+  void handleLocaleDelete();
 };
 
 }  // namespace papyrix

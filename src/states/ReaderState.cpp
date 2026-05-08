@@ -8,6 +8,7 @@
 #include <Fb2Parser.h>
 #include <GfxRenderer.h>
 #include <HtmlParser.h>
+#include <I18n.h>
 #include <Logging.h>
 #include <MarkdownParser.h>
 #include <Page.h>
@@ -1150,7 +1151,7 @@ void ReaderState::renderCachedPage(Core& core) {
     }
     if (currentSpineIndex_ < 0) currentSpineIndex_ = 0;
     if (currentSpineIndex_ >= static_cast<int>(spineCount)) {
-      renderer_.drawCenteredText(core.settings.getReaderFontId(theme), 300, "End of book", theme.primaryTextBlack,
+      renderer_.drawCenteredText(core.settings.getReaderFontId(theme), 300, tr(END_OF_BOOK), theme.primaryTextBlack,
                                  BOLD);
       renderer_.displayBuffer();
       return;
@@ -1177,7 +1178,7 @@ void ReaderState::renderCachedPage(Core& core) {
     if (!pageIsCached) {
       // Current page not cached - show "Indexing..." and create/extend
       renderer_.clearScreen(theme.backgroundColor);
-      ui::centeredMessage(renderer_, theme, core.settings.getReaderFontId(theme), "Indexing...");
+      ui::centeredMessage(renderer_, theme, core.settings.getReaderFontId(theme), tr(INDEXING));
       renderer_.displayBuffer();
 
       createOrExtendCache(core);
@@ -1210,8 +1211,8 @@ void ReaderState::renderCachedPage(Core& core) {
 
   // Check if we need to extend cache
   if (!ensurePageCached(core, currentSectionPage_)) {
-    renderer_.drawCenteredText(core.settings.getReaderFontId(theme), 300, "Failed to load page", theme.primaryTextBlack,
-                               BOLD);
+    renderer_.drawCenteredText(core.settings.getReaderFontId(theme), 300, tr(FAILED_TO_LOAD_PAGE),
+                               theme.primaryTextBlack, BOLD);
     renderer_.displayBuffer();
     needsRender_ = false;  // Prevent infinite render loop on cache failure
     return;
@@ -1325,7 +1326,7 @@ bool ReaderState::ensurePageCached(Core& core, uint16_t pageNum) {
   LOG_DBG(TAG, "Extending cache for page %d", pageNum);
 
   const Theme& theme = THEME_MANAGER.current();
-  ui::centeredMessage(renderer_, theme, core.settings.getReaderFontId(theme), "Loading...");
+  ui::centeredMessage(renderer_, theme, core.settings.getReaderFontId(theme), tr(LOADING));
 
   createOrExtendCache(core);
 
@@ -1507,16 +1508,16 @@ void ReaderState::renderXtcPage(Core& core) {
       }
       break;
     case XtcPageRenderer::RenderResult::EndOfBook:
-      ui::centeredMessage(renderer_, theme, theme.uiFontId, "End of book");
+      ui::centeredMessage(renderer_, theme, theme.uiFontId, tr(END_OF_BOOK));
       break;
     case XtcPageRenderer::RenderResult::InvalidDimensions:
-      ui::centeredMessage(renderer_, theme, theme.uiFontId, "Invalid file");
+      ui::centeredMessage(renderer_, theme, theme.uiFontId, tr(INVALID_FILE));
       break;
     case XtcPageRenderer::RenderResult::AllocationFailed:
-      ui::centeredMessage(renderer_, theme, theme.uiFontId, "Memory error");
+      ui::centeredMessage(renderer_, theme, theme.uiFontId, tr(MEMORY_ERROR));
       break;
     case XtcPageRenderer::RenderResult::PageLoadFailed:
-      ui::centeredMessage(renderer_, theme, theme.uiFontId, "Page load error");
+      ui::centeredMessage(renderer_, theme, theme.uiFontId, tr(PAGE_LOAD_ERROR));
       break;
   }
 }
@@ -1733,7 +1734,7 @@ void ReaderState::enterTocMode(Core& core) {
     tocView_.setCurrentChapter(static_cast<uint16_t>(currentIdx));
   }
 
-  tocView_.buttons = ui::ButtonBar("Back", "Go", "<<", ">>");
+  tocView_.buttons = ui::ButtonBar(tr(BACK), tr(GO), "<<", ">>");
   tocMode_ = true;
   needsRender_ = true;
   LOG_DBG(TAG, "Entered TOC mode");
@@ -1962,7 +1963,7 @@ void ReaderState::jumpToTocEntry(Core& core, int tocIndex) {
       if (page < 0) {
         const Theme& theme = THEME_MANAGER.current();
         renderer_.clearScreen(theme.backgroundColor);
-        ui::centeredMessage(renderer_, theme, core.settings.getReaderFontId(theme), "Indexing...");
+        ui::centeredMessage(renderer_, theme, core.settings.getReaderFontId(theme), tr(INDEXING));
         renderer_.displayBuffer();
 
         createOrExtendCache(core);
@@ -2021,7 +2022,7 @@ void ReaderState::renderTocOverlay(Core& core) {
   tocView_.ensureVisible(visibleCount);
 
   renderer_.clearScreen(theme.backgroundColor);
-  renderer_.drawCenteredText(theme.uiFontId, 15, "Chapters", theme.primaryTextBlack, BOLD);
+  renderer_.drawCenteredText(theme.uiFontId, 15, tr(CHAPTERS), theme.primaryTextBlack, BOLD);
 
   // Use reader font only when external font is selected (for VN/Thai/CJK support),
   // otherwise use smaller UI font for better chapter list readability
@@ -2071,7 +2072,7 @@ void ReaderState::exitToUI(Core& core) {
   }
 
   // Show notification and restart
-  showTransitionNotification("Returning to library...");
+  showTransitionNotification(tr(RETURNING_TO_LIBRARY));
   saveTransition(BootMode::UI, nullptr, returnTo);
 
   // Brief delay to ensure SD writes complete before restart
@@ -2151,7 +2152,7 @@ void ReaderState::handleMenuAction(Core& core, int action) {
 void ReaderState::enterBookmarkMode(Core& core) {
   stopBackgroundCaching();
   populateBookmarkView();
-  bookmarkView_.buttons = ui::ButtonBar("Back", "Go", "Add", "Del");
+  bookmarkView_.buttons = ui::ButtonBar(tr(BACK), tr(GO), tr(ADD), tr(DELETE_BTN));
   bookmarkMode_ = true;
   needsRender_ = true;
   LOG_DBG(TAG, "Entered bookmark mode (%d bookmarks)", bookmarkCount_);
@@ -2207,11 +2208,11 @@ void ReaderState::renderBookmarkOverlay(Core& core) {
   bookmarkView_.ensureVisible(visibleCount);
 
   renderer_.clearScreen(theme.backgroundColor);
-  renderer_.drawCenteredText(theme.uiFontId, 15, "Bookmarks", theme.primaryTextBlack, BOLD);
+  renderer_.drawCenteredText(theme.uiFontId, 15, tr(BOOKMARKS), theme.primaryTextBlack, BOLD);
 
   if (bookmarkCount_ == 0) {
     const int y = renderer_.getScreenHeight() / 2 - renderer_.getLineHeight(theme.uiFontId) / 2;
-    renderer_.drawCenteredText(theme.uiFontId, y, "No bookmarks yet", theme.primaryTextBlack, BOLD);
+    renderer_.drawCenteredText(theme.uiFontId, y, tr(NO_BOOKMARKS), theme.primaryTextBlack, BOLD);
   } else {
     const int itemHeight = theme.itemHeight + theme.itemSpacing;
     const int end = std::min(bookmarkView_.scrollOffset + visibleCount, static_cast<int>(bookmarkView_.itemCount));

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <Theme.h>
 
 #include <cstdint>
@@ -82,7 +83,6 @@ void render(const GfxRenderer& r, const Theme& t, const CoverPageView& v);
 // ============================================================================
 
 struct ReaderMenuView {
-  static constexpr const char* const ITEMS[] = {"Chapters", "Bookmarks"};
   static constexpr int ITEM_COUNT = 2;
 
   int8_t selected = 0;
@@ -130,7 +130,7 @@ struct BookmarkListView {
     uint8_t depth;
   };
 
-  ButtonBar buttons{"Back", "Go", "", ""};
+  ButtonBar buttons;
   Item items[MAX_ITEMS];
   int16_t itemCount = 0;
   int16_t selected = 0;
@@ -176,7 +176,7 @@ struct BookmarkListView {
 // ============================================================================
 
 struct JumpToPageView {
-  ButtonBar buttons{"Cancel", "Go", "-10", "+10"};
+  ButtonBar buttons;
   int16_t targetPage = 1;
   int16_t maxPage = 1;
   bool needsRender = true;

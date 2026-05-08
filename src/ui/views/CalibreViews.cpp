@@ -1,5 +1,7 @@
 #include "CalibreViews.h"
 
+#include <I18n.h>
+
 #include "../Elements.h"
 
 namespace ui {
@@ -7,7 +9,7 @@ namespace ui {
 void render(const GfxRenderer& r, const Theme& t, const CalibreView& v) {
   r.clearScreen(t.backgroundColor);
 
-  title(r, t, t.screenMarginTop, "Calibre Sync");
+  title(r, t, t.screenMarginTop, tr(CALIBRE_SYNC));
 
   const int centerY = r.getScreenHeight() / 2 - 60;
 

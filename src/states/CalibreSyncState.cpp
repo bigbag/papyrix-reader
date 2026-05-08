@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <Logging.h>
 #include <errno.h>
 #include <unistd.h>
@@ -250,7 +251,7 @@ bool CalibreSyncState::onProgress(void* ctx, uint64_t current, uint64_t total) {
   // Use current statusMsg if it contains a book title, otherwise show generic message
   const char* title = self->calibreView_.statusMsg;
   if (!title[0] || strncmp(title, "IP:", 3) == 0) {
-    title = "Receiving...";
+    title = tr(RECEIVING);
   }
   self->calibreView_.setReceiving(title, saturateToInt32(current), saturateToInt32(total));
 
