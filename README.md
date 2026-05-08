@@ -6,6 +6,8 @@
 [![Fonts](https://img.shields.io/badge/docs-Fonts-green)](docs/fonts.md)
 [![Architecture](https://img.shields.io/badge/docs-Architecture-green)](docs/architecture.md)
 [![Device Specs](https://img.shields.io/badge/docs-Device_Specs-green)](docs/device-specifications.md)
+[![X4 Specs](https://img.shields.io/badge/docs-X4_Specs-green)](docs/x4-specifications.md)
+[![X3 Specs](https://img.shields.io/badge/docs-X3_Specs-green)](docs/x3-specifications.md)
 [![File Formats](https://img.shields.io/badge/docs-File_Formats-green)](docs/file-formats.md)
 [![Images](https://img.shields.io/badge/docs-Images-green)](docs/images.md)
 [![SSD1677 Driver](https://img.shields.io/badge/docs-SSD1677_Driver-green)](docs/ssd1677-driver.md)
@@ -73,6 +75,7 @@ on each panel.
 - [x] Text anti-aliasing toggle (grayscale text rendering for builtin and custom fonts)
 - [x] Pages per refresh setting (1/5/10/15/30)
 - [x] Sunlight fading fix (powers down display after refresh to prevent UV fading)
+- [x] Turbo LUTs with LUT caching for faster X3 page turns
 - [x] 4 screen orientations
 
 ### Customization

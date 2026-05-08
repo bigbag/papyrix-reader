@@ -17,7 +17,7 @@ Papyrix is organized around a **state machine** architecture with **singleton ma
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  GfxRenderer  │  EpdFont  │  ThaiShaper  │  ArabicShaper  │  ScriptDetector │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  EInkDisplay  │  Storage  │  Input  │  Network                              │
+│  EInkDisplay  │  Storage  │  Input  │  Network  │  Device                    │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                    ESP32-C3 Hardware                                        │
 └─────────────────────────────────────────────────────────────────────────────┘

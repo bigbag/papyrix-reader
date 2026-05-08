@@ -1,10 +1,8 @@
 # SSD1677 E-Ink Display Driver Guide
 
-## GDEQ0426T82 (4.26" 800x480) on Xteink X4
+Complete reference for programming the SSD1677 e-paper display controller, including initialization, image updates, custom LUT creation, and low-level protocol details. Covers the GDEQ0426T82 (4.26" 800×480) on **Xteink X4** and the 3.68" 792×528 panel on **Xteink X3**.
 
-Complete reference for programming the SSD1677 e-paper display controller, including initialization, image updates, custom LUT creation, and low-level protocol details.
-
-Based on the GxEPD2_426_GDEQ0426T82 driver implementation.
+Based on the GxEPD2_426_GDEQ0426T82 driver implementation. For X3-specific LUT waveforms and timing, see [X3 LUT Waveforms](x3-lut-waveforms.md).
 
 ---
 
@@ -25,10 +23,11 @@ Based on the GxEPD2_426_GDEQ0426T82 driver implementation.
 
 ## Hardware Configuration
 
-- **Controller**: SSD1677
-- **Display**: 800x480 pixels (100x60 bytes = 48,000 bytes)
-- **SPI Pins**: SCLK=8, MOSI=10, CS=21, DC=4, RST=5, BUSY=6
-- **SPI Settings**: 40MHz (spec: 20MHz, but 40MHz works), MSB First, SPI Mode 0
+- **Controller** — SSD1677
+- **X4 panel** — 800×480 (100×480 = 48,000 bytes), SPI 40 MHz (spec: 20 MHz)
+- **X3 panel** — 792×528 (99×528 = 52,272 bytes), SPI 10 MHz (controller does not tolerate faster)
+- **SPI Pins** — SCLK=8, MOSI=10, CS=21, DC=4, RST=5, BUSY=6
+- **SPI Settings** — MSB First, SPI Mode 0
 
 ---
 
@@ -69,10 +68,10 @@ void ssd1677_init() {
     epd_cmd(0x12);        // SWRESET
     epd_wait_busy();      // Wait for busy to clear
 
-    // 2. Driver Output Control
+    // 2. Driver Output Control (X4: 680 rows; X3: 528 rows)
     epd_cmd(0x01);
-    epd_data(0xA7);       // 680 rows -> 0x2A7, low byte
-    epd_data(0x02);       // high byte
+    epd_data(0xA7);       // X4: 680 rows -> 0x2A7, low byte (X3: 0x20F for 528)
+    epd_data(0x02);       // X4: high byte (X3: 0x02)
     epd_data(0x00);       // GD=0, SM=0, TB=0
 
     // 3. Data Entry Mode
@@ -305,12 +304,12 @@ A LUT controls:
 - Phase repetitions
 - Additional red-pixel handling
 
-### LUT Structure (111 bytes)
+### LUT Structure
 
-Used in the driver implementation for grayscale support:
+#### X4: Single 111-byte LUT (command 0x32)
 
-- **Bytes 0-49** (50 bytes) — VS waveforms (5 groups x 10 bytes)
-- **Bytes 50-99** (50 bytes) — TP/RP timing groups (10 groups x 5 bytes)
+- **Bytes 0-49** (50 bytes) — VS waveforms (5 groups × 10 bytes)
+- **Bytes 50-99** (50 bytes) — TP/RP timing groups (10 groups × 5 bytes)
 - **Bytes 100-104** (5 bytes) — Frame rate control
 - **Byte 105** — VGH (Gate voltage) - sent via 0x03
 - **Byte 106** — VSH1 (Source voltage 1) - sent via 0x04
@@ -320,6 +319,18 @@ Used in the driver implementation for grayscale support:
 - **Byte 110** — Reserved
 
 **Note:** Bytes 105-109 are sent using separate voltage control commands after loading the main LUT.
+
+#### X3: Five separate 42-byte LUT registers
+
+The X3 uses a different LUT architecture with five registers of 42 bytes each (7 phases):
+
+- **VCOM** (0x20) — Common voltage waveform
+- **WW** (0x21) — White → White transition
+- **BW** (0x22) — Black → White transition
+- **WB** (0x23) — White → Black transition
+- **BB** (0x24) — Black → Black transition
+
+Five LUT families are defined: full, turbo, image, grayscale, and fast. See [X3 LUT Waveforms](x3-lut-waveforms.md) for register-level details, voltage encoding, and frame timing.
 
 ### How to Build a Custom LUT
 
@@ -641,7 +652,7 @@ For permanent protection, apply UV-blocking tape over the driver IC area on the 
 - All X coordinates and widths must be multiples of 8 (byte boundaries)
 - Y coordinates are reversed in hardware (gates bottom-to-top)
 - RAM auto-increments after each byte transfer
-- Total RAM size: 48,000 bytes (800x480 / 8)
+- Total RAM size: 48,000 bytes on X4 (800×480/8), 52,272 bytes on X3 (792×528/8)
 - Dual-buffer system enables differential partial updates
 - First write after init should be full refresh to clear ghost images
 - In sunlight: enable "Sunlight Fading Fix" setting to prevent UV-induced screen fading

@@ -6,17 +6,16 @@ This document describes RAM usage in **Reader mode** across anti-aliasing (AA) a
 
 The device uses single-buffer mode (`-DEINK_DISPLAY_SINGLE_BUFFER_MODE=1` in `platformio.ini`).
 
-One statically-allocated framebuffer:
+One statically-allocated framebuffer, sized for the larger panel:
 
-```
-800 × 480 / 8 = 48,000 bytes (48KB)
-```
+- **X4:** 800 × 480 — 100 bytes/row × 480 = 48,000 bytes
+- **X3:** 792 × 528 — 99 bytes/row × 528 = 52,272 bytes
 
-Defined as `frameBuffer0[BUFFER_SIZE]` in `lib/EInkDisplay/include/EInkDisplay.h:75`. This is always present — it cannot be freed.
+The static buffer is allocated at `MAX_BUFFER_SIZE = 52,272` bytes to support both panels (`lib/EInkDisplay/include/EInkDisplay.h`). This is always present — it cannot be freed.
 
 ## Viewport Dimensions
 
-Base margins from `GfxRenderer` (`lib/GfxRenderer/src/GfxRenderer.h:110-113`):
+Base margins from `GfxRenderer` (`lib/GfxRenderer/src/GfxRenderer.h`):
 
 - **Top:** base 9 → effective 9
 - **Left:** base 3 + 5 padding → effective 8
@@ -25,7 +24,10 @@ Base margins from `GfxRenderer` (`lib/GfxRenderer/src/GfxRenderer.h:110-113`):
 
 Horizontal padding: `src/states/ReaderState.cpp:39`.
 
-Resulting text viewport:
+Resulting text viewport (portrait orientation):
+
+- **X4** (480×800 portrait): 464×765 with status bar, 464×788 without
+- **X3** (528×792 portrait): 512×757 with status bar, 512×780 without
 
 - **Reader mode:** 464×788
 

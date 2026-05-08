@@ -1037,7 +1037,9 @@ bool GfxRenderer::fontSupportsGrayscale(const int fontId) const {
 
 void GfxRenderer::drawButtonHints(const int fontId, const char* btn1, const char* btn2, const char* btn3,
                                   const char* btn4, const bool black) const {
+  const int screenWidth = getScreenWidth();
   const int pageHeight = getScreenHeight();
+  constexpr int numButtons = 4;
   constexpr int buttonWidth = 106;
   constexpr int buttonHeight = 46;
   constexpr int buttonY = 46;      // Distance from bottom (= buttonHeight, flush with screen edge)
@@ -1045,8 +1047,7 @@ void GfxRenderer::drawButtonHints(const int fontId, const char* btn1, const char
   constexpr int buttonPositions[] = {38, 154, 268, 384};  // X3 528px portrait width
   const char* labels[] = {btn1, btn2, btn3, btn4};
 
-  for (int i = 0; i < 4; i++) {
-    // Only draw if the label is non-empty
+  for (int i = 0; i < numButtons; i++) {
     if (labels[i] != nullptr && labels[i][0] != '\0') {
       const int x = buttonPositions[i];
       const int textWidth = getTextWidth(fontId, labels[i]);

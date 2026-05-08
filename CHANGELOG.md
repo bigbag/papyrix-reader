@@ -1,5 +1,68 @@
 
 
+## v1.20.3 (2026-04-29)
+
+*  Skip RTL detection on non-UTF-8 files to fix false Arabic in CP1251/KOI8-R. Issue #107 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Use PageCache for non-EPUB status bar total pages instead of file-size heuristic. Issue #106 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.20.2 (2026-04-27)
+
+*  FontManager: Log diagnostics when custom font load fail [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Fb2Parser: Support poem, stanza, verse, cite, epigraph, and annotation tags. Issue #104 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  EpdFont: Add Letterlike Symbols, Number Forms, Latin Ligatures, and Cyrillic Supplement to font ranges. Issue #105 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.20.1 (2026-04-21)
+
+*  ScriptDetector: Exclude U+FEFF (BOM) from Arabic codepoint range. Issue #99 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  ArabicShaper: Mirror bracket/guillemet glyphs in RTL context and keep Arabic-Indic digits LTR. Issue #103 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.20.0 (2026-04-20)
+
+*  Fb2: Add Windows-1251 and KOI8-R encoding support for Russian FB2 files. Issue #99 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Extract encoding handling into shared lib and add auto-detection to all parsers [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Fb2: Auto-detect UTF-8 to override stale encoding declarations and reboot to UI on reader-mode errors. Issue #99 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  EPUB/FB2: Render code/tt/kbd/samp as italic and preserve <pre> whitespace. Issue #94 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.19.1 (2026-04-08)
+
+*  Add IBM Plex Sans Arabic font theme for Arabic readers [[Fouad](mailto:Fouad@hey.com)]
+*  fix: prevent text loss at page boundaries during incremental parsing [[Fouad](mailto:Fouad@hey.com)]
+*  Add ParsedText abort/resume tests and fix Markdown paragraph spacing on page overflow [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Fb2: Add embedded cover extraction, language parsing, and hyphenation support. Issue #93 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.19.0 (2026-03-23)
+
+*  Add mini-apps framework with Clock and Image Viewer apps [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add CPU driver and use it in reader mode and Clock app [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  ImageViewer: Add JPEG/PNG support with auto-conversion to BMP [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.18.0 (2026-03-13)
+
+*  Fix power button page turn on long-press sleep (#88) [[Niklas Arnitz](mailto:niklas.arnitz@icloud.com)]
+*  Add tests for power button timing guard (PR #88) [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  feat: render HTML list items with bullet/number prefixes [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Fix batch suspend during post-XML content flush in EPUB parser. Issue #87 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  TOC: Always reset power button timestamp on release [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.17.1 (2026-03-11)
+
+*  Update CHANGELOG [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Input: Prevent auto-sleep while WiFi is active. Issue 86 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
 ## v1.17.0 (2026-03-08)
 
 *  SDCardManager: Fix file descriptor leaks in listFiles and removeDir [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
