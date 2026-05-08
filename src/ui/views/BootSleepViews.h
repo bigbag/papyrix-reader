@@ -11,14 +11,14 @@
 namespace ui {
 
 // ============================================================================
-// BootView - Boot splash screen with logo and version
+// BootView - Boot splash screen with branding text and version
 // ============================================================================
 
 struct BootView {
   static constexpr int MAX_VERSION_LEN = 16;
   static constexpr int MAX_STATUS_LEN = 32;
 
-  // External logo pointer (not owned)
+  // Legacy logo fields retained for compatibility; renderers ignore them.
   const uint8_t* logoData = nullptr;
   int16_t logoWidth = 0;
   int16_t logoHeight = 0;
@@ -55,13 +55,13 @@ void render(const GfxRenderer& r, const Theme& t, const BootView& v);
 
 struct SleepView {
   enum class Mode : uint8_t {
-    Logo,       // Show Papyrix logo
+    Logo,       // Show branding text
     BookCover,  // Show current book cover
     Black,      // Black screen
     Custom      // Custom image
   };
 
-  // External logo pointer (not owned) - for Logo mode
+  // Legacy logo fields retained for compatibility; renderers ignore them.
   const uint8_t* logoData = nullptr;
   int16_t logoWidth = 0;
   int16_t logoHeight = 0;

@@ -85,22 +85,9 @@ bool ThemeManager::loadFromFileToTheme(const char* path, Theme& theme) {
         theme.secondaryTextBlack = (IniParser::parseColor(value, 0x00) == 0x00);
       }
     }
-    // [layout] section
-    else if (strcmp(section, "layout") == 0) {
-      if (strcmp(key, "margin_top") == 0) {
-        theme.screenMarginTop = static_cast<uint8_t>(IniParser::parseInt(value, 9));
-      } else if (strcmp(key, "margin_side") == 0) {
-        theme.screenMarginSide = static_cast<uint8_t>(IniParser::parseInt(value, 3));
-      } else if (strcmp(key, "item_height") == 0) {
-        theme.itemHeight = static_cast<uint8_t>(IniParser::parseInt(value, 30));
-      } else if (strcmp(key, "item_spacing") == 0) {
-        theme.itemSpacing = static_cast<uint8_t>(IniParser::parseInt(value, 0));
-      } else if (strcmp(key, "item_padding_x") == 0) {
-        theme.itemPaddingX = static_cast<uint8_t>(IniParser::parseInt(value, 8));
-      } else if (strcmp(key, "item_value_padding") == 0) {
-        theme.itemValuePadding = static_cast<uint8_t>(IniParser::parseInt(value, 20));
-      }
-    }
+    // [layout] section is intentionally ignored here.
+    // The firmware layout is now hardcoded to match crosspoint-reader and must
+    // not be overridden by SD theme files.
     // [fonts] section
     else if (strcmp(section, "fonts") == 0) {
       if (strcmp(key, "reader_font_xsmall") == 0) {

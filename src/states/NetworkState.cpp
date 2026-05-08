@@ -18,7 +18,7 @@
 namespace papyrix {
 
 namespace {
-constexpr const char* AP_SSID = "Papyrix";
+constexpr const char* AP_SSID = "3pyrix";
 }  // namespace
 
 NetworkState::NetworkState(GfxRenderer& renderer)
@@ -26,10 +26,12 @@ NetworkState::NetworkState(GfxRenderer& renderer)
       currentScreen_(NetworkScreen::ModeSelect),
       needsRender_(true),
       goBack_(false),
+      goHome_(false),
       server_(nullptr),
       passwordJustEntered_(false),
       goCalibreSync_(false),
-      goApp_(false) {
+      goApp_(false),
+      directHotspotFlow_(false) {
   selectedSSID_[0] = '\0';
 }
 
@@ -48,9 +50,11 @@ void NetworkState::enter(Core& core) {
   modeView_.needsRender = true;
   needsRender_ = true;
   goBack_ = false;
+  goHome_ = false;
   passwordJustEntered_ = false;
   goCalibreSync_ = false;
   goApp_ = false;
+  directHotspotFlow_ = false;
   scanRetryCount_ = 0;
   scanRetryAt_ = 0;
   selectedSSID_[0] = '\0';
@@ -62,6 +66,11 @@ void NetworkState::enter(Core& core) {
   if (core.pendingSync == SyncMode::NtpSync) {
     startWifiScan(core);
     currentScreen_ = NetworkScreen::WifiList;
+    core.pendingSync = SyncMode::None;
+  } else if (core.pendingSync == SyncMode::DirectHotspot) {
+    directHotspotFlow_ = true;
+    startHotspot(core);
+    core.pendingSync = SyncMode::None;
   }
 }
 
@@ -161,6 +170,11 @@ StateTransition NetworkState::update(Core& core) {
   if (goBack_) {
     goBack_ = false;
     return StateTransition::to(StateId::AppLauncher);
+  }
+
+  if (goHome_) {
+    goHome_ = false;
+    return StateTransition::to(StateId::Home);
   }
 
   if (goCalibreSync_) {
@@ -375,6 +389,10 @@ void NetworkState::handlePasswordEntry(Core& core, Button button) {
 void NetworkState::handleConnecting(Core& core, Button button) {
   if (button == Button::Back) {
     if (connectingView_.buttons.isActive(0)) {
+      if (directHotspotFlow_) {
+        goHome_ = true;
+        return;
+      }
       if (connectingView_.status == ui::WifiConnectingView::Status::Failed ||
           connectingView_.status == ui::WifiConnectingView::Status::Connected) {
         currentScreen_ = NetworkScreen::WifiList;
@@ -485,7 +503,11 @@ void NetworkState::handleServerRunning(Core& core, Button button) {
   if (button == Button::Back) {
     if (serverView_.buttons.isActive(0)) {
       stopWebServer(core);
-      goBack_ = true;
+      if (directHotspotFlow_) {
+        goHome_ = true;
+      } else {
+        goBack_ = true;
+      }
     }
   }
 }

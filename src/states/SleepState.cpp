@@ -27,8 +27,6 @@
 #include "../config.h"
 #include "../core/Core.h"
 #include "../drivers/Device.h"
-#include "../images/PapyrixLogo.h"
-
 extern InputManager inputManager;
 extern uint16_t rtcPowerButtonDurationMs;
 
@@ -41,23 +39,30 @@ SleepState::SleepState(GfxRenderer& renderer) : renderer_(renderer) {}
 void SleepState::enter(Core& core) {
   LOG_INF(TAG, "SleepState::enter - rendering sleep screen");
 
-  // Show immediate feedback before rendering sleep screen
-  renderer_.clearScreen(0xFF);
-  renderer_.drawCenteredText(THEME.uiFontId, renderer_.getScreenHeight() / 2, "Sleeping...", true);
-  renderer_.displayBuffer(EInkDisplay::FAST_REFRESH);
+  if (core.preserveReaderPageOnSleep) {
+    LOG_INF(TAG, "Preserving current reader page for sleep");
+    renderReaderPageSleepScreen();
+  } else {
+    // Show immediate feedback before rendering sleep screen
+    renderer_.clearScreen(0xFF);
+    renderer_.drawCenteredText(THEME.uiFontId, renderer_.getScreenHeight() / 2, "Sleeping...", true);
+    renderer_.displayBuffer(EInkDisplay::FAST_REFRESH);
 
-  // Render the appropriate sleep screen based on settings
-  switch (core.settings.sleepScreen) {
-    case Settings::SleepCustom:
-      renderCustomSleepScreen(core);
-      break;
-    case Settings::SleepCover:
-      renderCoverSleepScreen(core);
-      break;
-    default:
-      renderDefaultSleepScreen(core);
-      break;
+    // Render the appropriate sleep screen based on settings
+    switch (core.settings.sleepScreen) {
+      case Settings::SleepCustom:
+        renderCustomSleepScreen(core);
+        break;
+      case Settings::SleepCover:
+        renderCoverSleepScreen(core);
+        break;
+      default:
+        renderDefaultSleepScreen(core);
+        break;
+    }
   }
+
+  core.preserveReaderPageOnSleep = false;
 
   // Save power button duration to RTC memory for wake-up verification
   rtcPowerButtonDurationMs = core.settings.getPowerButtonDuration();
@@ -107,8 +112,7 @@ void SleepState::renderDefaultSleepScreen(const Core& core) const {
   // Fixed colors (white bg, black text) — independent of active theme.
   // invertScreen() below handles dark/light based on sleep setting only.
   renderer_.clearScreen(0xFF);
-  renderer_.drawImage(PapyrixLogo, (pageWidth + 128) / 2, (pageHeight - 128) / 2, 128, 128);
-  renderer_.drawCenteredText(THEME.uiFontId, pageHeight / 2 + 70, "Papyrix", true, BOLD);
+  renderer_.drawCenteredText(THEME.uiFontId, pageHeight / 2 + 70, "3pyrix", true, BOLD);
   renderer_.drawCenteredText(THEME.smallFontId, pageHeight / 2 + 110, "SLEEPING", true);
 
   // Make sleep screen dark unless light is selected in settings
@@ -279,6 +283,41 @@ void SleepState::renderBitmapSleepScreen(const Bitmap& bitmap) const {
     renderer_.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height);
     renderer_.cleanupGrayscaleWithFrameBuffer();
   }
+}
+
+void SleepState::renderReaderPageSleepScreen() const {
+  drawSleepBookmark();
+  renderer_.displayBuffer(EInkDisplay::FAST_REFRESH);
+}
+
+void SleepState::drawSleepBookmark() const {
+  constexpr int kBookmarkWidth = 36;
+  constexpr int kBookmarkHeight = 50;
+  constexpr int kNotchDepth = 18;
+  constexpr int kRightMargin = 20;
+  constexpr int kTopMargin = 0;
+
+  constexpr int kWhiteOffset = 3;
+  const Theme& theme = THEME_MANAGER.current();
+  const bool bookmarkFillBlack = theme.primaryTextBlack;
+  const bool bookmarkBorderBlack = !bookmarkFillBlack;
+
+  const int x = renderer_.getScreenWidth() - kRightMargin - kBookmarkWidth;
+  const int y = kTopMargin;
+  const int bottomY = y + kBookmarkHeight - 1;
+  const int centerX = x + kBookmarkWidth / 2;
+  const int notchTipY = y + kBookmarkHeight - kNotchDepth;
+
+  // Border polygon uses the opposite ink color so the bookmark stays visible on both themes.
+  const int wxPts[] = {x - kWhiteOffset, x + kBookmarkWidth - 1 + kWhiteOffset,
+                       x + kBookmarkWidth - 1 + kWhiteOffset, centerX, x - kWhiteOffset};
+  const int wyPts[] = {y, y, bottomY + kWhiteOffset, notchTipY + kWhiteOffset, bottomY + kWhiteOffset};
+  renderer_.fillPolygon(wxPts, wyPts, 5, bookmarkBorderBlack);
+
+  // Fill the bookmark using the theme's main ink color so it flips with light/dark themes.
+  const int xPts[] = {x, x + kBookmarkWidth - 1, x + kBookmarkWidth - 1, centerX, x};
+  const int yPts[] = {y, y, bottomY, notchTipY, bottomY};
+  renderer_.fillPolygon(xPts, yPts, 5, bookmarkFillBlack);
 }
 
 void SleepState::waitForPowerRelease() const {

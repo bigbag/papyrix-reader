@@ -17,10 +17,14 @@ struct ButtonBar {
   bool isActive(int idx) const { return idx >= 0 && idx < 4 && labels[idx] && labels[idx][0] != '\0'; }
 };
 
-// Title - Centered bold heading
+// Title - Centered heading
 void title(const GfxRenderer& r, const Theme& t, int y, const char* text);
 
-// Brand title - Left-aligned bold heading with margin
+// Shared vertical anchors derived from theme margins
+int titleBottomY(const GfxRenderer& r, const Theme& t);
+int contentStartY(const GfxRenderer& r, const Theme& t, int gap = 14);
+
+// Brand title - Left-aligned heading with margin
 void brandTitle(const GfxRenderer& r, const Theme& t, int y, const char* text);
 
 // Menu item - Selectable entry with optional highlight
@@ -50,6 +54,10 @@ int textWrapped(const GfxRenderer& r, const Theme& t, int y, const char* str, in
 
 // Image - Bitmap display at position
 void image(const GfxRenderer& r, int x, int y, const uint8_t* data, int w, int h);
+
+// Draw text centered within a rectangle using the text's own glyph bounds
+void drawTextCenteredInRect(const GfxRenderer& r, int fontId, int x, int y, int width, int height, const char* text,
+                            bool black = true, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
 
 // Dialog - Yes/No confirmation dialog
 void dialog(const GfxRenderer& r, const Theme& t, const char* title, const char* msg, int selected);
@@ -90,9 +98,6 @@ char getKeyboardChar(const KeyboardState& state);
 // inside the body to show USB power.
 void battery(const GfxRenderer& r, const Theme& t, int x, int y, int percent, bool charging = false);
 
-// Status bar - Page numbers and progress percentage
-void statusBar(const GfxRenderer& r, const Theme& t, int page, int total, int percent);
-
 // Book card - Cover + title + author (for home screen)
 void bookCard(const GfxRenderer& r, const Theme& t, int y, const char* title, const char* author, const uint8_t* cover,
               int coverW, int coverH);
@@ -115,7 +120,7 @@ void centeredText(const GfxRenderer& r, const Theme& t, int y, const char* str);
 // Centered message - Bold centered message (for loading/error screens)
 void centeredMessage(const GfxRenderer& r, const Theme& t, int fontId, const char* message);
 
-// Book placeholder - Stylized book icon with "No Cover" label for missing covers
+// Book placeholder - Solid fallback block for missing covers
 void bookPlaceholder(const GfxRenderer& r, const Theme& t, int x, int y, int width, int height);
 
 // Overlay box - Centered notification box with text (for Indexing/Loading messages)
@@ -127,19 +132,5 @@ void popupMenu(const GfxRenderer& r, const Theme& t, const char* title, const ch
 
 // Two-column row - Label on left, value on right
 void twoColumnRow(const GfxRenderer& r, const Theme& t, int y, const char* label, const char* value);
-
-// Reader status bar data
-struct ReaderStatusBarData {
-  int currentPage;
-  int totalPages;
-  const char* title;
-  int batteryPercent;      // -1 if unavailable
-  uint8_t mode;            // Settings::StatusBarMode
-  bool isPartial = false;  // True when page cache is incomplete
-};
-
-// Reader status bar - Battery (left), title (center), page numbers (right)
-void readerStatusBar(const GfxRenderer& r, const Theme& t, int marginLeft, int marginRight, int marginBottom,
-                     const ReaderStatusBarData& data);
 
 }  // namespace ui

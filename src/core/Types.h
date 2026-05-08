@@ -46,6 +46,7 @@ enum class SyncMode : uint8_t {
   None,
   FileTransfer,
   CalibreWireless,
+  DirectHotspot,
   WifiSetup,
   NtpSync,
 };

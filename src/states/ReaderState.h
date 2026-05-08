@@ -6,12 +6,9 @@
 #include <memory>
 #include <vector>
 
-#include "../content/BookmarkManager.h"
 #include "../content/ReaderNavigation.h"
 #include "../core/Types.h"
 #include "../rendering/XtcPageRenderer.h"
-#include "../ui/views/HomeView.h"
-#include "../ui/views/ReaderViews.h"
 #include "State.h"
 
 class ContentParser;
@@ -114,7 +111,6 @@ class ReaderState : public State {
 
   // Helpers
   void renderPageContents(Core& core, Page& page, int marginTop, int marginRight, int marginBottom, int marginLeft);
-  void renderStatusBar(Core& core, int marginRight, int marginBottom, int marginLeft);
 
   // Global page metrics — whole-book page counting for EPUB/FB2
   struct GlobalPageMetrics {
@@ -145,6 +141,8 @@ class ReaderState : public State {
 
   void createOrExtendCacheImpl(ContentParser& parser, const std::string& cachePath, const RenderConfig& config);
   void backgroundCacheImpl(ContentParser& parser, const std::string& cachePath, const RenderConfig& config);
+  void saveAnchorMap(const ContentParser& parser, const std::string& cachePath);
+  int loadAnchorPage(const std::string& cachePath, const std::string& anchor);
 
   // Display helpers
   void displayWithRefresh(Core& core);
@@ -158,66 +156,19 @@ class ReaderState : public State {
     int width;
     int height;
   };
-  Viewport getReaderViewport(bool showStatusBar) const;
+  Viewport getReaderViewport() const;
 
   // Get first content spine index (skips cover document when appropriate)
   static int calcFirstContentSpine(bool hasCover, int textStartIndex, size_t spineCount);
 
-  // Anchor-to-page persistence for intra-spine TOC navigation
-  static void saveAnchorMap(const ContentParser& parser, const std::string& cachePath);
-  static int loadAnchorPage(const std::string& cachePath, const std::string& anchor);
-  static std::vector<std::pair<std::string, uint16_t>> loadAnchorMap(const std::string& cachePath);
-
   // Source state (where reader was opened from)
   StateId sourceState_ = StateId::Home;
 
-  // Cached chapter title for StatusChapter mode (avoids SD I/O on every render).
-  // Valid while currentSpineIndex_ == cachedChapterSpine_ and
-  // cachedChapterStartPage_ <= currentSectionPage_ < cachedChapterEndPage_.
-  char cachedChapterTitle_[64] = "";
-  int cachedChapterSpine_ = -1;
-  int cachedChapterStartPage_ = 0;
-  int cachedChapterEndPage_ = 0;
-
-  // TOC overlay mode
-  bool tocMode_ = false;
-  ui::ChapterListView tocView_;
-
-  void enterTocMode(Core& core);
-  void exitTocMode();
-  void handleTocInput(Core& core, const Event& e);
-  void renderTocOverlay(Core& core);
-  int tocVisibleCount() const;
-  void populateTocView(Core& core);
-  int findCurrentTocEntry(Core& core, int* outRangeStart = nullptr, int* outRangeEnd = nullptr);
-  void jumpToTocEntry(Core& core, int tocIndex);
-
-  // Menu overlay mode
-  bool menuMode_ = false;
-  ui::ReaderMenuView menuView_;
-  void enterMenuMode(Core& core);
-  void exitMenuMode();
-  void handleMenuInput(Core& core, const Event& e);
-  void handleMenuAction(Core& core, int action);
-
-  // Bookmark overlay mode
-  Bookmark bookmarks_[BookmarkManager::MAX_BOOKMARKS];
-  int bookmarkCount_ = 0;
-  bool bookmarkMode_ = false;
-  ui::BookmarkListView bookmarkView_;
-  void enterBookmarkMode(Core& core);
-  void exitBookmarkMode();
-  void handleBookmarkInput(Core& core, const Event& e);
-  void renderBookmarkOverlay(Core& core);
-  void addBookmark(Core& core);
-  void deleteBookmark(Core& core, int index);
-  void jumpToBookmark(Core& core, int index);
-  void saveBookmarks(Core& core);
-  void populateBookmarkView();
-  int bookmarkVisibleCount() const;
-
   // Boot mode transition - exit to UI via restart
   void exitToUI(Core& core);
+
+  void toggleReaderOrientation(Core& core);
+
 };
 
 }  // namespace papyrix

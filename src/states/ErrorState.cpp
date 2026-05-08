@@ -72,7 +72,7 @@ void ErrorState::render(Core& core) {
   renderer_.clearScreen(theme.backgroundColor);
 
   // Error title
-  renderer_.drawCenteredText(theme.readerFontId, 100, "Error", theme.primaryTextBlack, BOLD);
+  renderer_.drawCenteredText(theme.uiFontId, 100, "Error", theme.primaryTextBlack, BOLD);
 
   // Error message
   renderer_.drawCenteredText(theme.uiFontId, 200, message_, theme.primaryTextBlack, REGULAR);

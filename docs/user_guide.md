@@ -177,17 +177,11 @@ Reading and display settings:
   - Display inline images within EPUB content and book covers
   - Disable for faster page rendering (images show "[Image]" placeholder)
 
-- **Status Bar** (default: Full)
-  - Options: None, No Progress, Full
-  - Controls the reading screen status bar display
-  - **Full:** Shows battery, book title, and page number (e.g., "5 / 12")
-  - **No Progress:** Shows battery and book title only
-  - **None:** Hides the status bar entirely for maximum reading area
-  - **Note:** The total page count for a chapter appears only after the chapter is fully cached. While reading through a chapter for the first time, only the current page number is shown until all pages have been rendered. Overall book completion percentage is not available due to memory constraints on the device.
-
 - **Reading Orientation** (default: Portrait)
   - Options: Portrait, Landscape CW, Inverted, Landscape CCW
   - Screen orientation for reading
+
+- Reading mode always uses the full page area; there is no separate status bar setting.
 
 #### Device
 
@@ -350,15 +344,9 @@ Once you have opened a book, the button layout changes to facilitate reading.
 * **Return to Home:** Press **Back** to close the book and return to the Book Selection screen.
 * **Reader Menu:** Press **Confirm** to open the Reader Menu (access chapters and bookmarks).
 
-### Status Bar
+### Reading Layout
 
-When **Settings → Reader → Status Bar** is enabled, the bottom of the reading screen shows battery, current chapter or book title, and the page indicator on the right. The page indicator has three forms:
-
-- **`123/456`** — exact total. The whole book has been laid out and cached.
-- **`123/456~`** — the total is an estimate. Either the cache is still being built incrementally (the number grows as you read) or — for non-EPUB formats with no cache yet (e.g. just after **Clear Book Cache**) — it is a file-size heuristic. The number snaps to the exact total once caching finishes.
-- **`123/-`** — unknown. Content is still loading. Transient.
-
-EPUB chapters cache one chapter at a time, so `~` typically clears as soon as the current chapter finishes caching. TXT / Markdown / FB2 / HTML cache the whole book in chunks, so `~` may persist until you've read through (or paged past) the entire book.
+Reading mode always uses the full page area. There is no status bar setting in Reader Settings, and the page flow fills the available viewport directly.
 
 ### 4.1 Reader Menu
 

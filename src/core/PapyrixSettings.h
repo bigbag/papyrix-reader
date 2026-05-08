@@ -18,9 +18,6 @@ struct Settings {
   // Sleep screen display modes
   enum SleepScreenMode : uint8_t { SleepDark = 0, SleepLight = 1, SleepCustom = 2, SleepCover = 3 };
 
-  // Status bar display modes
-  enum StatusBarMode : uint8_t { StatusNone = 0, StatusShow = 1, StatusChapter = 2 };
-
   // Screen orientation
   enum Orientation : uint8_t {
     Portrait = 0,      // 480x800 logical coordinates (current default)
@@ -59,9 +56,8 @@ struct Settings {
   // Startup behavior
   enum StartupBehavior : uint8_t { StartupLastDocument = 0, StartupHome = 1 };
 
-  // Settings fields (same order as CrossPointSettings for binary compatibility)
+  // Persisted settings fields
   uint8_t sleepScreen = SleepDark;
-  uint8_t statusBar = StatusShow;
   uint8_t textLayout = LayoutStandard;
   uint8_t shortPwrBtn = PowerIgnore;
   uint8_t orientation = Portrait;

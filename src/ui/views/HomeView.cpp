@@ -7,6 +7,16 @@
 
 namespace ui {
 
+namespace {
+
+int fileListPathY(const GfxRenderer& r, const Theme& t) { return titleBottomY(r, t) + 6; }
+
+int fileListStartY(const GfxRenderer& r, const Theme& t) {
+  return fileListPathY(r, t) + r.getLineHeight(t.smallFontId) + 10;
+}
+
+}  // namespace
+
 void render(const GfxRenderer& r, const Theme& t, const HomeView& v) {
   // Only clear if no cover (HomeState handles clear when cover present)
   if (!v.hasCoverBmp) {
@@ -16,11 +26,13 @@ void render(const GfxRenderer& r, const Theme& t, const HomeView& v) {
   const int pageWidth = r.getScreenWidth();
   const int pageHeight = r.getScreenHeight();
 
-  // "Papyrix" brand title - bold in top-left corner
-  brandTitle(r, t, 10, "Papyrix");
-
-  // Battery indicator - top right
-  battery(r, t, pageWidth - 90, 10, v.batteryPercent, v.batteryCharging);
+  // Battery percentage only when low; no icon on the home screen.
+  if (v.batteryPercent < 50) {
+    char batteryText[8];
+    snprintf(batteryText, sizeof(batteryText), "%d%%", v.batteryPercent);
+    const int batteryTextWidth = r.getTextWidth(t.smallFontId, batteryText);
+    r.drawText(t.smallFontId, pageWidth - batteryTextWidth - 10, 10, batteryText, t.primaryTextBlack);
+  }
 
   // Book card dimensions (70% width, centered)
   const auto card = CardDimensions::calculate(pageWidth, pageHeight);
@@ -108,13 +120,13 @@ void render(const GfxRenderer& r, const Theme& t, const FileListView& v) {
   title(r, t, t.screenMarginTop, "Files");
 
   // Current path (truncated if needed)
-  const int pathY = 40;
-  const int maxPathW = r.getScreenWidth() - 2 * t.screenMarginSide - 16;
+  const int pathY = fileListPathY(r, t);
+  const int maxPathW = r.getScreenWidth() - 2 * (t.screenMarginSide + t.itemPaddingX);
   const auto truncPath = r.truncatedText(t.smallFontId, v.currentPath, maxPathW);
-  r.drawText(t.smallFontId, t.screenMarginSide + 8, pathY, truncPath.c_str(), t.secondaryTextBlack);
+  r.drawText(t.smallFontId, t.screenMarginSide + t.itemPaddingX, pathY, truncPath.c_str(), t.secondaryTextBlack);
 
   // File list
-  const int listStartY = 65;
+  const int listStartY = fileListStartY(r, t);
   const int pageStart = v.getPageStart();
   const int pageEnd = v.getPageEnd();
 
@@ -141,7 +153,7 @@ void render(const GfxRenderer& r, const Theme& t, ChapterListView& v) {
 
   title(r, t, t.screenMarginTop, "Chapters");
 
-  constexpr int listStartY = 60;
+  const int listStartY = contentStartY(r, t);
   const int availableHeight = r.getScreenHeight() - listStartY - 50;
   const int itemHeight = t.itemHeight + t.itemSpacing;
   const int visibleCount = availableHeight / itemHeight;

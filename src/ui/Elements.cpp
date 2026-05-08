@@ -2,7 +2,6 @@
 
 #include <cstdio>
 #include <cstring>
-#include <string>
 
 #include "core/PapyrixSettings.h"
 
@@ -13,11 +12,15 @@ static uint8_t frontButtonLayout_ = 0;
 void setFrontButtonLayout(uint8_t layout) { frontButtonLayout_ = layout; }
 
 void title(const GfxRenderer& r, const Theme& t, int y, const char* text) {
-  r.drawCenteredText(t.readerFontId, y, text, t.primaryTextBlack, EpdFontFamily::BOLD);
+  r.drawCenteredText(t.uiFontId, y, text, t.primaryTextBlack);
 }
 
+int titleBottomY(const GfxRenderer& r, const Theme& t) { return t.screenMarginTop + r.getLineHeight(t.uiFontId); }
+
+int contentStartY(const GfxRenderer& r, const Theme& t, int gap) { return titleBottomY(r, t) + gap; }
+
 void brandTitle(const GfxRenderer& r, const Theme& t, int y, const char* text) {
-  r.drawText(t.readerFontId, 10, y, text, t.primaryTextBlack, EpdFontFamily::BOLD);
+  r.drawText(t.uiFontId, t.screenMarginSide, y, text, t.primaryTextBlack);
 }
 
 void menuItem(const GfxRenderer& r, const Theme& t, int y, const char* text, bool selected) {
@@ -138,6 +141,27 @@ void image(const GfxRenderer& r, int x, int y, const uint8_t* data, int w, int h
   }
 }
 
+void drawTextCenteredInRect(const GfxRenderer& r, const int fontId, const int x, const int y, const int width,
+                            const int height, const char* text, const bool black, const EpdFontFamily::Style style) {
+  if (text == nullptr || *text == '\0') {
+    return;
+  }
+
+  int minX = 0;
+  int minY = 0;
+  int maxX = 0;
+  int maxY = 0;
+  r.getTextBounds(fontId, text, &minX, &minY, &maxX, &maxY, style);
+
+  const int textWidth = maxX - minX;
+  const int textHeight = maxY - minY;
+  const int textX = x + (width - textWidth) / 2 - minX;
+  const int ascender = r.getFontAscenderSize(fontId);
+  const int screenTop = 2 * ascender - maxY;
+  const int textY = y + (height - textHeight) / 2 - screenTop;
+  r.drawText(fontId, textX, textY, text, black, style);
+}
+
 void dialog(const GfxRenderer& r, const Theme& t, const char* titleText, const char* msg, int selected) {
   const int screenW = r.getScreenWidth();
   const int screenH = r.getScreenHeight();
@@ -153,7 +177,7 @@ void dialog(const GfxRenderer& r, const Theme& t, const char* titleText, const c
   r.drawRect(dialogX, dialogY, dialogW, dialogH, t.primaryTextBlack);
 
   // Draw title
-  r.drawCenteredText(t.readerFontId, dialogY + 20, titleText, t.primaryTextBlack, EpdFontFamily::BOLD);
+  r.drawCenteredText(t.uiFontId, dialogY + 20, titleText, t.primaryTextBlack, EpdFontFamily::BOLD);
 
   // Draw message
   r.drawCenteredText(t.uiFontId, dialogY + 60, msg, t.primaryTextBlack);
@@ -162,28 +186,24 @@ void dialog(const GfxRenderer& r, const Theme& t, const char* titleText, const c
   const int btnW = 80;
   const int btnH = 30;
   const int btnY = dialogY + dialogH - 50;
-  const int btnTextY = btnY + (btnH - r.getLineHeight(t.uiFontId)) / 2;
   const int yesX = dialogX + (dialogW / 2) - btnW - 20;
   const int noX = dialogX + (dialogW / 2) + 20;
+  const char* yesLabel = "Yes";
+  const char* noLabel = "No";
 
-  // Yes button
-  if (selected == 0) {
-    r.fillRect(yesX, btnY, btnW, btnH, t.selectionFillBlack);
-    r.drawCenteredText(t.uiFontId, btnTextY, "Yes", t.selectionTextBlack);
-  } else {
-    r.drawRect(yesX, btnY, btnW, btnH, t.primaryTextBlack);
-  }
-  r.drawText(t.uiFontId, yesX + (btnW - r.getTextWidth(t.uiFontId, "Yes")) / 2, btnTextY, "Yes",
-             selected == 0 ? t.selectionTextBlack : t.primaryTextBlack);
+  auto drawButton = [&](int x, const char* label, bool isSelected) {
+    if (isSelected) {
+      r.fillRect(x, btnY, btnW, btnH, t.selectionFillBlack);
+    } else {
+      r.drawRect(x, btnY, btnW, btnH, t.primaryTextBlack);
+    }
 
-  // No button
-  if (selected == 1) {
-    r.fillRect(noX, btnY, btnW, btnH, t.selectionFillBlack);
-  } else {
-    r.drawRect(noX, btnY, btnW, btnH, t.primaryTextBlack);
-  }
-  r.drawText(t.uiFontId, noX + (btnW - r.getTextWidth(t.uiFontId, "No")) / 2, btnTextY, "No",
-             selected == 1 ? t.selectionTextBlack : t.primaryTextBlack);
+    drawTextCenteredInRect(r, t.uiFontId, x, btnY, btnW, btnH, label,
+                           isSelected ? t.selectionTextBlack : t.primaryTextBlack);
+  };
+
+  drawButton(yesX, yesLabel, selected == 0);
+  drawButton(noX, noLabel, selected == 1);
 }
 
 // Keyboard layout - 10x10 grid
@@ -404,23 +424,6 @@ void battery(const GfxRenderer& r, const Theme& t, int x, int y, int percent, bo
   r.drawText(t.smallFontId, x + battW + tipW + 5, y, buf, t.primaryTextBlack);
 }
 
-void statusBar(const GfxRenderer& r, const Theme& t, int page, int total, int percent) {
-  const int y = r.getScreenHeight() - 25;
-  const int x = t.screenMarginSide;
-  const int screenW = r.getScreenWidth();
-
-  // Page numbers on left
-  char pageStr[32];
-  snprintf(pageStr, sizeof(pageStr), "%d / %d", page, total);
-  r.drawText(t.smallFontId, x + 5, y, pageStr, t.primaryTextBlack);
-
-  // Percentage on right
-  char percentStr[8];
-  snprintf(percentStr, sizeof(percentStr), "%d%%", percent);
-  const int percentW = r.getTextWidth(t.smallFontId, percentStr);
-  r.drawText(t.smallFontId, screenW - x - percentW - 5, y, percentStr, t.primaryTextBlack);
-}
-
 void bookCard(const GfxRenderer& r, const Theme& t, int y, const char* titleText, const char* author,
               const uint8_t* cover, int coverW, int coverH) {
   const int x = t.screenMarginSide + 10;
@@ -449,12 +452,12 @@ void bookCard(const GfxRenderer& r, const Theme& t, int y, const char* titleText
 
   // Draw title (may wrap)
   const int maxTextW = screenW - textX - t.screenMarginSide - 10;
-  const auto titleLines = r.wrapTextWithHyphenation(t.readerFontId, titleText, maxTextW, 2, EpdFontFamily::BOLD);
+  const auto titleLines = r.wrapTextWithHyphenation(t.uiFontId, titleText, maxTextW, 2, EpdFontFamily::BOLD);
   int textY = y + 10;
-  const int lineHeight = r.getLineHeight(t.readerFontId);
+  const int lineHeight = r.getLineHeight(t.uiFontId);
 
   for (const auto& line : titleLines) {
-    r.drawText(t.readerFontId, textX, textY, line.c_str(), t.primaryTextBlack, EpdFontFamily::BOLD);
+    r.drawText(t.uiFontId, textX, textY, line.c_str(), t.primaryTextBlack, EpdFontFamily::BOLD);
     textY += lineHeight;
   }
 
@@ -572,86 +575,11 @@ void centeredMessage(const GfxRenderer& r, const Theme& t, int fontId, const cha
 }
 
 void bookPlaceholder(const GfxRenderer& r, const Theme& t, int x, int y, int width, int height) {
+  (void)t;
   if (width <= 0 || height <= 0) {
     return;
   }
-
-  const bool bgColor = !t.primaryTextBlack;
-  const bool fgColor = t.primaryTextBlack;
-
-  r.fillRect(x, y, width, height, bgColor);
-
-  constexpr int minSize = 50;
-  if (width < minSize || height < minSize) {
-    return;
-  }
-
-  // Scale factors from base design (400x500)
-  const float scaleX = static_cast<float>(width) / 400.0f;
-  const float scaleY = static_cast<float>(height) / 500.0f;
-  const float scale = std::min(scaleX, scaleY);
-
-  // Center the design within the area
-  const int designW = static_cast<int>(400 * scale);
-  const int designH = static_cast<int>(500 * scale);
-  const int offsetX = x + (width - designW) / 2;
-  const int offsetY = y + (height - designH) / 2;
-
-  // Helper lambdas for scaled coordinates
-  auto sx = [&](int v) { return offsetX + static_cast<int>(v * scale); };
-  auto sy = [&](int v) { return offsetY + static_cast<int>(v * scale); };
-  auto sw = [&](int v) { return std::max(1, static_cast<int>(v * scale)); };
-
-  // Line thickness for outlines
-  const int lineThick = std::max(2, sw(4));
-
-  // Helper to draw thick rectangle outline
-  auto drawThickRect = [&](int rx, int ry, int rw, int rh) {
-    r.fillRect(rx, ry, rw, lineThick, fgColor);                   // top
-    r.fillRect(rx, ry + rh - lineThick, rw, lineThick, fgColor);  // bottom
-    r.fillRect(rx, ry, lineThick, rh, fgColor);                   // left
-    r.fillRect(rx + rw - lineThick, ry, lineThick, rh, fgColor);  // right
-  };
-
-  // 1. Draw spine (left side, filled)
-  r.fillRect(sx(20), sy(35), sw(20), sw(430), fgColor);
-
-  // 2. Draw page block outline (right side)
-  drawThickRect(sx(330), sy(35), sw(50), sw(430));
-  // Page lines (5 horizontal lines, drawn as thin rectangles for thickness)
-  const int pageLineYs[] = {65, 110, 155, 200, 245};
-  for (int py : pageLineYs) {
-    r.fillRect(sx(340), sy(py), sw(35), lineThick, fgColor);
-  }
-
-  // 3. Draw main cover outline (front)
-  drawThickRect(sx(35), sy(35), sw(295), sw(430));
-
-  // 4. Draw bookmark ribbon (filled rectangle + triangle)
-  const int bmX = sx(280);
-  const int bmY = sy(35);
-  const int bmW = sw(40);
-  const int bmH = sw(45);
-  r.fillRect(bmX, bmY, bmW, bmH, fgColor);
-  // Triangle point (draw as filled lines)
-  const int triangleTop = bmY + bmH;
-  const int triangleTip = sy(100);
-  const int bmCenterX = bmX + bmW / 2;
-  for (int ty = triangleTop; ty <= triangleTip; ty++) {
-    int halfWidth = bmW / 2 * (triangleTip - ty) / (triangleTip - triangleTop);
-    if (halfWidth > 0) {
-      r.drawLine(bmCenterX - halfWidth, ty, bmCenterX + halfWidth, ty, fgColor);
-    }
-  }
-
-  // 5. Draw "No Cover" text centered on front cover
-  const int coverCenterX = sx(35) + sw(295) / 2;
-  const int coverCenterY = sy(35) + sw(430) / 2;
-  const char* noCoverText = "No Cover";
-  const int textWidth = r.getTextWidth(t.uiFontId, noCoverText);
-  const int textX = coverCenterX - textWidth / 2;
-  const int textY = coverCenterY - r.getLineHeight(t.uiFontId) / 2;
-  r.drawText(t.uiFontId, textX, textY, noCoverText, fgColor);
+  r.fillRect(x, y, width, height, true);
 }
 
 void overlayBox(const GfxRenderer& r, const Theme& t, int fontId, int y, const char* message) {
@@ -672,86 +600,6 @@ void twoColumnRow(const GfxRenderer& r, const Theme& t, int y, const char* label
 
   r.drawText(t.uiFontId, labelX, y, label, t.primaryTextBlack);
   r.drawText(t.uiFontId, valueX, y, value, t.secondaryTextBlack);
-}
-
-void readerStatusBar(const GfxRenderer& r, const Theme& t, int marginLeft, int marginRight, int marginBottom,
-                     const ReaderStatusBarData& data) {
-  if (data.mode == 0) return;  // StatusNone
-
-  const auto screenHeight = r.getScreenHeight();
-  const auto screenWidth = r.getScreenWidth();
-  const int textY = screenHeight - marginBottom - 2;
-  int percentageTextWidth = 0;
-
-  // 1. Battery (left side)
-  char percentageText[8];
-  int percentage = data.batteryPercent;
-  if (percentage < 0) {
-    snprintf(percentageText, sizeof(percentageText), "--%%");
-    percentage = 0;
-  } else {
-    snprintf(percentageText, sizeof(percentageText), "%d%%", percentage);
-  }
-  percentageTextWidth = r.getTextWidth(t.smallFontId, percentageText);
-  r.drawText(t.smallFontId, 20 + marginLeft, textY, percentageText, t.primaryTextBlack);
-
-  // Battery icon (15x10 px)
-  constexpr int batteryWidth = 15;
-  constexpr int batteryHeight = 10;
-  const int x = marginLeft;
-  const int y = textY + 5;
-
-  // Draw battery outline
-  r.drawLine(x, y, x + batteryWidth - 4, y, t.primaryTextBlack);
-  r.drawLine(x, y + batteryHeight - 1, x + batteryWidth - 4, y + batteryHeight - 1, t.primaryTextBlack);
-  r.drawLine(x, y, x, y + batteryHeight - 1, t.primaryTextBlack);
-  r.drawLine(x + batteryWidth - 4, y, x + batteryWidth - 4, y + batteryHeight - 1, t.primaryTextBlack);
-  // Battery terminal
-  r.drawLine(x + batteryWidth - 3, y + 2, x + batteryWidth - 1, y + 2, t.primaryTextBlack);
-  r.drawLine(x + batteryWidth - 3, y + batteryHeight - 3, x + batteryWidth - 1, y + batteryHeight - 3,
-             t.primaryTextBlack);
-  r.drawLine(x + batteryWidth - 1, y + 2, x + batteryWidth - 1, y + batteryHeight - 3, t.primaryTextBlack);
-
-  // Fill level
-  int filledWidth = percentage * (batteryWidth - 5) / 100 + 1;
-  if (filledWidth > batteryWidth - 5) filledWidth = batteryWidth - 5;
-  if (filledWidth > 0) {
-    r.fillRect(x + 1, y + 1, filledWidth, batteryHeight - 2, t.primaryTextBlack);
-  }
-
-  // 2. Page numbers (right side)
-  char pageStr[16];
-  if (data.totalPages <= 0) {
-    snprintf(pageStr, sizeof(pageStr), "%d/-", data.currentPage);
-  } else if (data.isPartial) {
-    snprintf(pageStr, sizeof(pageStr), "%d/%d~", data.currentPage, data.totalPages);
-  } else {
-    snprintf(pageStr, sizeof(pageStr), "%d/%d", data.currentPage, data.totalPages);
-  }
-  int pageTextWidth = r.getTextWidth(t.smallFontId, pageStr);
-  r.drawText(t.smallFontId, screenWidth - marginRight - pageTextWidth, textY, pageStr, t.primaryTextBlack);
-
-  // 3. Title (center)
-  if (data.title && data.title[0] != '\0') {
-    const int batteryAreaWidth = 20 + percentageTextWidth;
-    const int titleMarginLeft = batteryAreaWidth + 30 + marginLeft;
-    const int titleMarginRight = marginRight + pageTextWidth + 10;
-    const int availableTextWidth = screenWidth - titleMarginLeft - titleMarginRight;
-
-    if (availableTextWidth <= 0) return;
-
-    std::string titleStr = data.title;
-    int titleWidth = r.getTextWidth(t.smallFontId, titleStr.c_str());
-
-    // Truncate title if too wide (using truncatedText for UTF-8 safety)
-    if (titleWidth > availableTextWidth) {
-      titleStr = r.truncatedText(t.smallFontId, titleStr.c_str(), availableTextWidth);
-      titleWidth = r.getTextWidth(t.smallFontId, titleStr.c_str());
-    }
-
-    r.drawText(t.smallFontId, titleMarginLeft + (availableTextWidth - titleWidth) / 2, textY, titleStr.c_str(),
-               t.primaryTextBlack);
-  }
 }
 
 void popupMenu(const GfxRenderer& r, const Theme& t, const char* titleText, const char* const* items, int itemCount,

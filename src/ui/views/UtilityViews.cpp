@@ -29,7 +29,7 @@ void render(const GfxRenderer& r, const Theme& t, const KeyboardView& v) {
 
   // Input field with border
   const int inputY = 50;
-  const int inputX = t.screenMarginSide + 10;
+  const int inputX = t.screenMarginSide + t.itemPaddingX;
   const int inputW = r.getScreenWidth() - 2 * inputX;
   const int inputH = 40;
 

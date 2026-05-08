@@ -18,20 +18,16 @@
 #include <esp_system.h>
 
 #include <algorithm>
-#include <climits>
 #include <cstring>
 
-#include "../Battery.h"
 #include "../FontManager.h"
 #include "../config.h"
-#include "../content/BookmarkManager.h"
 #include "../content/ProgressManager.h"
 #include "../content/ReaderNavigation.h"
 #include "../core/BootMode.h"
 #include "../core/Core.h"
 #include "../drivers/Device.h"
 #include "../ui/Elements.h"
-#include "../ui/views/ReaderViews.h"
 #include "ThemeManager.h"
 
 #define TAG "READER"
@@ -43,7 +39,6 @@ static constexpr int kCacheTaskStopTimeoutMs = 10000;  // 10s - generous for slo
 
 namespace {
 constexpr int horizontalPadding = 5;
-constexpr int statusBarMargin = 23;
 constexpr size_t kEstimatedBytesPerPage = 2048;
 
 uint16_t estimatePagesForBytes(const size_t bytes, const size_t bytesPerPage = kEstimatedBytesPerPage) {
@@ -60,12 +55,32 @@ inline std::string epubSectionCachePath(const std::string& epubCachePath, int sp
 inline std::string contentCachePath(const char* cacheDir, int fontId) {
   return std::string(cacheDir) + "/pages_" + std::to_string(fontId) + ".bin";
 }
+
+void setRendererOrientation(GfxRenderer& renderer, uint8_t orientation) {
+  switch (static_cast<Settings::Orientation>(orientation)) {
+    case Settings::Portrait:
+      renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+      break;
+    case Settings::LandscapeCW:
+      renderer.setOrientation(GfxRenderer::Orientation::LandscapeClockwise);
+      break;
+    case Settings::Inverted:
+      renderer.setOrientation(GfxRenderer::Orientation::PortraitInverted);
+      break;
+    case Settings::LandscapeCCW:
+      renderer.setOrientation(GfxRenderer::Orientation::LandscapeCounterClockwise);
+      break;
+    default:
+      renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+      break;
+  }
+}
 }  // namespace
 
 void ReaderState::saveAnchorMap(const ContentParser& parser, const std::string& cachePath) {
   const auto& anchors = parser.getAnchorMap();
 
-  std::string anchorPath = cachePath + ".anchors";
+  const std::string anchorPath = cachePath + ".anchors";
   FsFile file;
   if (!SdMan.openFileForWrite("RDR", anchorPath, file)) return;
 
@@ -75,7 +90,8 @@ void ReaderState::saveAnchorMap(const ContentParser& parser, const std::string& 
     file.close();
     return;
   }
-  uint16_t count = static_cast<uint16_t>(anchors.size());
+
+  const uint16_t count = static_cast<uint16_t>(anchors.size());
   serialization::writePod(file, count);
   for (const auto& entry : anchors) {
     serialization::writeString(file, entry.first);
@@ -85,7 +101,7 @@ void ReaderState::saveAnchorMap(const ContentParser& parser, const std::string& 
 }
 
 int ReaderState::loadAnchorPage(const std::string& cachePath, const std::string& anchor) {
-  std::string anchorPath = cachePath + ".anchors";
+  const std::string anchorPath = cachePath + ".anchors";
   FsFile file;
   if (!SdMan.openFileForRead("RDR", anchorPath, file)) return -1;
 
@@ -112,25 +128,6 @@ int ReaderState::loadAnchorPage(const std::string& cachePath, const std::string&
   return -1;
 }
 
-std::vector<std::pair<std::string, uint16_t>> ReaderState::loadAnchorMap(const std::string& cachePath) {
-  std::vector<std::pair<std::string, uint16_t>> anchors;
-  std::string anchorPath = cachePath + ".anchors";
-  FsFile file;
-  if (!SdMan.openFileForRead("RDR", anchorPath, file)) return anchors;
-
-  uint16_t count;
-  if (serialization::readPodChecked(file, count)) {
-    for (uint16_t i = 0; i < count; i++) {
-      std::string anchorId;
-      uint16_t page;
-      if (!serialization::readString(file, anchorId) || !serialization::readPodChecked(file, page)) break;
-      anchors.emplace_back(std::move(anchorId), page);
-    }
-  }
-  file.close();
-  return anchors;
-}
-
 // --- Global page metrics (whole-book page counting for EPUB/FB2) ---
 
 void ReaderState::invalidateGlobalPageMetrics() {
@@ -153,7 +150,7 @@ void ReaderState::initializeGlobalPageMetrics(Core& core) {
 
   const ContentType type = core.content.metadata().type;
   const Theme& theme = THEME_MANAGER.current();
-  const auto vp = getReaderViewport(core.settings.statusBar != 0);
+  const auto vp = getReaderViewport();
   const auto config = core.settings.getRenderConfig(theme, vp.width, vp.height);
 
   int spineCount = 0;
@@ -520,8 +517,7 @@ ReaderState::ReaderState(GfxRenderer& renderer)
       contentLoaded_(false),
       currentSpineIndex_(0),
       currentSectionPage_(0),
-      pagesUntilFullRefresh_(1),
-      tocView_{} {
+      pagesUntilFullRefresh_(1) {
   contentPath_[0] = '\0';
 }
 
@@ -574,23 +570,7 @@ void ReaderState::enter(Core& core) {
   }
 
   // Apply orientation setting to renderer
-  switch (core.settings.orientation) {
-    case Settings::Portrait:
-      renderer_.setOrientation(GfxRenderer::Orientation::Portrait);
-      break;
-    case Settings::LandscapeCW:
-      renderer_.setOrientation(GfxRenderer::Orientation::LandscapeClockwise);
-      break;
-    case Settings::Inverted:
-      renderer_.setOrientation(GfxRenderer::Orientation::PortraitInverted);
-      break;
-    case Settings::LandscapeCCW:
-      renderer_.setOrientation(GfxRenderer::Orientation::LandscapeCounterClockwise);
-      break;
-    default:
-      renderer_.setOrientation(GfxRenderer::Orientation::Portrait);
-      break;
-  }
+  setRendererOrientation(renderer_, core.settings.orientation);
 
   // Open content using ContentHandle
   auto result = core.content.open(contentPath_, papyrix::drivers::Device::instance().cacheDir());
@@ -666,8 +646,6 @@ void ReaderState::enter(Core& core) {
   currentSectionPage_ = progress.sectionPage;
   currentPage_ = progress.flatPage;
 
-  bookmarkCount_ = BookmarkManager::load(core, core.content.cacheDir(), bookmarks_, BookmarkManager::MAX_BOOKMARKS);
-
   // If at start of book and showImages enabled, begin at cover
   // Skip for XTC — uses flat page indexing, no cover page concept in reader
   if (type != ContentType::Xtc && currentSpineIndex_ == 0 && currentSectionPage_ == 0 && core.settings.showImages) {
@@ -700,13 +678,27 @@ void ReaderState::exit(Core& core) {
     progress.sectionPage = (lastRenderedSectionPage_ == -1) ? 0 : lastRenderedSectionPage_;
     progress.flatPage = currentPage_;
     ProgressManager::save(core, core.content.cacheDir(), core.content.metadata().type, progress);
-    saveBookmarks(core);
+
+    if (core.preserveReaderPageOnSleep) {
+      ReturnTo returnTo = ReturnTo::HOME;
+      const auto& transition = getTransition();
+      if (transition.isValid()) {
+        returnTo = transition.returnTo;
+      } else if (sourceState_ == StateId::FileList) {
+        returnTo = ReturnTo::FILE_MANAGER;
+      }
+      saveTransition(BootMode::READER, contentPath_, returnTo);
+    } else {
+      clearTransition();
+    }
 
     // Safe to reset - task is stopped, we own pageCache_/parser_
     parser_.reset();
     parserSpineIndex_ = -1;
     pageCache_.reset();
     core.content.close();
+  } else if (!core.preserveReaderPageOnSleep) {
+    clearTransition();
   }
 
   // Unload custom reader fonts to free memory
@@ -717,8 +709,11 @@ void ReaderState::exit(Core& core) {
   contentLoaded_ = false;
   contentPath_[0] = '\0';
 
-  // Reset orientation to Portrait for UI
-  renderer_.setOrientation(GfxRenderer::Orientation::Portrait);
+  // Preserve the reader orientation when we are entering sleep from Reader
+  // so SleepState can draw the bookmark on top of the current page buffer.
+  if (!core.preserveReaderPageOnSleep) {
+    renderer_.setOrientation(GfxRenderer::Orientation::Portrait);
+  }
 }
 
 StateTransition ReaderState::update(Core& core) {
@@ -733,24 +728,10 @@ StateTransition ReaderState::update(Core& core) {
 
   Event e;
   while (core.events.pop(e)) {
-    if (menuMode_) {
-      handleMenuInput(core, e);
-      continue;
-    }
-    if (bookmarkMode_) {
-      handleBookmarkInput(core, e);
-      continue;
-    }
-    if (tocMode_) {
-      handleTocInput(core, e);
-      continue;
-    }
-
     switch (e.type) {
       case EventType::ButtonPress:
         switch (e.button) {
           case Button::Center:
-            enterMenuMode(core);
             break;
           case Button::Back:
             exitToUI(core);
@@ -786,27 +767,34 @@ StateTransition ReaderState::update(Core& core) {
         break;
 
       case EventType::ButtonRelease:
-        if (!holdNavigated_) {
-          switch (e.button) {
-            case Button::Right:
-            case Button::Down:
-              navigateNext(core);
-              break;
-            case Button::Left:
-            case Button::Up:
-              navigatePrev(core);
-              break;
-            case Button::Power:
-              if (core.settings.shortPwrBtn == Settings::PowerPageTurn && powerPressStartedMs_ != 0) {
-                const uint32_t heldMs = millis() - powerPressStartedMs_;
-                if (heldMs < core.settings.getPowerButtonDuration()) {
+        switch (e.button) {
+          case Button::Center:
+            toggleReaderOrientation(core);
+            break;
+          default:
+            if (!holdNavigated_) {
+              switch (e.button) {
+                case Button::Right:
+                case Button::Down:
                   navigateNext(core);
-                }
+                  break;
+                case Button::Left:
+                case Button::Up:
+                  navigatePrev(core);
+                  break;
+                case Button::Power:
+                  if (core.settings.shortPwrBtn == Settings::PowerPageTurn && powerPressStartedMs_ != 0) {
+                    const uint32_t heldMs = millis() - powerPressStartedMs_;
+                    if (heldMs < core.settings.getPowerButtonDuration()) {
+                      navigateNext(core);
+                    }
+                  }
+                  break;
+                default:
+                  break;
               }
-              break;
-            default:
-              break;
-          }
+            }
+            break;
         }
         if (e.button == Button::Power) {
           powerPressStartedMs_ = 0;
@@ -827,19 +815,9 @@ void ReaderState::render(Core& core) {
     return;
   }
 
-  if (menuMode_) {
-    const Theme& theme = THEME_MANAGER.current();
-    ui::render(renderer_, theme, menuView_);
-    core.display.markDirty();
-  } else if (bookmarkMode_) {
-    renderBookmarkOverlay(core);
-  } else if (tocMode_) {
-    renderTocOverlay(core);
-  } else {
-    renderCurrentPage(core);
-    lastRenderedSpineIndex_ = currentSpineIndex_;
-    lastRenderedSectionPage_ = currentSectionPage_;
-  }
+  renderCurrentPage(core);
+  lastRenderedSpineIndex_ = currentSpineIndex_;
+  lastRenderedSectionPage_ = currentSectionPage_;
 
   needsRender_ = false;
 }
@@ -1134,7 +1112,7 @@ void ReaderState::renderCurrentPage(Core& core) {
 void ReaderState::renderCachedPage(Core& core) {
   Theme& theme = THEME_MANAGER.mutableCurrent();
   ContentType type = core.content.metadata().type;
-  const auto vp = getReaderViewport(core.settings.statusBar != 0);
+  const auto vp = getReaderViewport();
 
   // Handle EPUB/FB2 bounds
   if (type == ContentType::Epub || type == ContentType::Fb2) {
@@ -1150,8 +1128,7 @@ void ReaderState::renderCachedPage(Core& core) {
     }
     if (currentSpineIndex_ < 0) currentSpineIndex_ = 0;
     if (currentSpineIndex_ >= static_cast<int>(spineCount)) {
-      renderer_.drawCenteredText(core.settings.getReaderFontId(theme), 300, "End of book", theme.primaryTextBlack,
-                                 BOLD);
+      renderer_.drawCenteredText(theme.uiFontId, 300, "End of book", theme.primaryTextBlack, BOLD);
       renderer_.displayBuffer();
       return;
     }
@@ -1177,7 +1154,7 @@ void ReaderState::renderCachedPage(Core& core) {
     if (!pageIsCached) {
       // Current page not cached - show "Indexing..." and create/extend
       renderer_.clearScreen(theme.backgroundColor);
-      ui::centeredMessage(renderer_, theme, core.settings.getReaderFontId(theme), "Indexing...");
+      ui::centeredMessage(renderer_, theme, theme.uiFontId, "Indexing...");
       renderer_.displayBuffer();
 
       createOrExtendCache(core);
@@ -1210,8 +1187,7 @@ void ReaderState::renderCachedPage(Core& core) {
 
   // Check if we need to extend cache
   if (!ensurePageCached(core, currentSectionPage_)) {
-    renderer_.drawCenteredText(core.settings.getReaderFontId(theme), 300, "Failed to load page", theme.primaryTextBlack,
-                               BOLD);
+    renderer_.drawCenteredText(theme.uiFontId, 300, "Failed to load page", theme.primaryTextBlack, BOLD);
     renderer_.displayBuffer();
     needsRender_ = false;  // Prevent infinite render loop on cache failure
     return;
@@ -1239,7 +1215,6 @@ void ReaderState::renderCachedPage(Core& core) {
   page->warmGlyphs(renderer_, fontId);
 
   renderPageContents(core, *page, vp.marginTop, vp.marginRight, vp.marginBottom, vp.marginLeft);
-  renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
 
   const bool aaEnabled = core.settings.textAntiAliasing && renderer_.fontSupportsGrayscale(fontId);
   const bool imagePageWithAA = aaEnabled && page->hasImages();
@@ -1258,7 +1233,6 @@ void ReaderState::renderCachedPage(Core& core) {
 
       // Step 2: Re-render with images and display again (images appear clean)
       renderPageContents(core, *page, vp.marginTop, vp.marginRight, vp.marginBottom, vp.marginLeft);
-      renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
       renderer_.displayBuffer(EInkDisplay::FAST_REFRESH, turnOffScreen);
     } else {
       renderer_.displayBuffer(EInkDisplay::HALF_REFRESH, turnOffScreen);
@@ -1273,13 +1247,11 @@ void ReaderState::renderCachedPage(Core& core) {
     renderer_.clearScreen(0x00);
     renderer_.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     page->render(renderer_, fontId, vp.marginLeft, vp.marginTop, theme.primaryTextBlack);
-    renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
     renderer_.copyGrayscaleLsbBuffers();
 
     renderer_.clearScreen(0x00);
     renderer_.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
     page->render(renderer_, fontId, vp.marginLeft, vp.marginTop, theme.primaryTextBlack);
-    renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
     renderer_.copyGrayscaleMsbBuffers();
 
     const bool turnOffScreen = core.settings.sunlightFadingFix != 0;
@@ -1289,7 +1261,6 @@ void ReaderState::renderCachedPage(Core& core) {
     // Re-render BW instead of restoring from backup (saves 48KB peak allocation)
     renderer_.clearScreen(theme.backgroundColor);
     renderPageContents(core, *page, vp.marginTop, vp.marginRight, vp.marginBottom, vp.marginLeft);
-    renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
     renderer_.cleanupGrayscaleWithFrameBuffer();
   }
 
@@ -1325,7 +1296,7 @@ bool ReaderState::ensurePageCached(Core& core, uint16_t pageNum) {
   LOG_DBG(TAG, "Extending cache for page %d", pageNum);
 
   const Theme& theme = THEME_MANAGER.current();
-  ui::centeredMessage(renderer_, theme, core.settings.getReaderFontId(theme), "Loading...");
+  ui::centeredMessage(renderer_, theme, theme.uiFontId, "Loading...");
 
   createOrExtendCache(core);
 
@@ -1337,7 +1308,7 @@ void ReaderState::loadCacheFromDisk(Core& core) {
   const Theme& theme = THEME_MANAGER.current();
   ContentType type = core.content.metadata().type;
 
-  const auto vp = getReaderViewport(core.settings.statusBar != 0);
+  const auto vp = getReaderViewport();
   const auto config = core.settings.getRenderConfig(theme, vp.width, vp.height);
 
   std::string cachePath;
@@ -1375,7 +1346,7 @@ void ReaderState::createOrExtendCache(Core& core) {
   const Theme& theme = THEME_MANAGER.current();
   ContentType type = core.content.metadata().type;
 
-  const auto vp = getReaderViewport(core.settings.statusBar != 0);
+  const auto vp = getReaderViewport();
   const auto config = core.settings.getRenderConfig(theme, vp.width, vp.height);
 
   std::string cachePath;
@@ -1434,62 +1405,6 @@ void ReaderState::renderPageContents(Core& core, Page& page, int marginTop, int 
   page.render(renderer_, fontId, marginLeft, marginTop, theme.primaryTextBlack);
 }
 
-void ReaderState::renderStatusBar(Core& core, int marginRight, int marginBottom, int marginLeft) {
-  const Theme& theme = THEME_MANAGER.current();
-  ContentType type = core.content.metadata().type;
-
-  // Build status bar data
-  ui::ReaderStatusBarData data{};
-  data.mode = core.settings.statusBar;
-  data.title = core.content.metadata().title;
-
-  // Resolve chapter title if in Chapter mode (cached to avoid SD I/O on every render).
-  // EPUB resolution opens an .anchors file on SD, so we cache the page range over
-  // which the resolved title is valid and only re-resolve when crossing a boundary.
-  if (data.mode == Settings::StatusChapter && core.content.tocCount() > 0) {
-    bool needsUpdate;
-    if (type == ContentType::Fb2) {
-      // FB2 TOC maps to sections (spines) — title can't change within a spine
-      needsUpdate = (currentSpineIndex_ != cachedChapterSpine_);
-    } else {
-      needsUpdate = (currentSpineIndex_ != cachedChapterSpine_ || currentSectionPage_ < cachedChapterStartPage_ ||
-                     currentSectionPage_ >= cachedChapterEndPage_);
-    }
-    if (needsUpdate) {
-      cachedChapterTitle_[0] = '\0';
-      int rangeStart = INT_MIN;
-      int rangeEnd = INT_MAX;
-      int tocIndex = findCurrentTocEntry(core, &rangeStart, &rangeEnd);
-      if (tocIndex >= 0) {
-        auto result = core.content.getTocEntry(tocIndex);
-        if (result.ok()) {
-          strncpy(cachedChapterTitle_, result.value.title, sizeof(cachedChapterTitle_) - 1);
-          cachedChapterTitle_[sizeof(cachedChapterTitle_) - 1] = '\0';
-        }
-      }
-      cachedChapterSpine_ = currentSpineIndex_;
-      cachedChapterStartPage_ = rangeStart;
-      cachedChapterEndPage_ = rangeEnd;
-    }
-    if (cachedChapterTitle_[0] != '\0') {
-      data.title = cachedChapterTitle_;
-    }
-  }
-
-  // Battery
-  const uint16_t millivolts = batteryMonitor.readMillivolts();
-  data.batteryPercent = (millivolts < 100) ? -1 : BatteryMonitor::percentageFromMillivolts(millivolts);
-
-  // Page info (whole-book page number via GlobalPageMetrics)
-  // Note: renderCachedPage() already stopped the task, so we own pageCache_
-  const GlobalPageMetrics metrics = resolveGlobalPageMetrics(core);
-  data.currentPage = metrics.currentPage;
-  data.totalPages = metrics.totalPages;
-  data.isPartial = data.totalPages <= 0 || !metrics.totalIsExact;
-
-  ui::readerStatusBar(renderer_, theme, marginLeft, marginRight, marginBottom, data);
-}
-
 void ReaderState::renderXtcPage(Core& core) {
   auto* provider = core.content.asXtc();
   if (!provider) {
@@ -1535,14 +1450,11 @@ void ReaderState::displayWithRefresh(Core& core) {
   }
 }
 
-ReaderState::Viewport ReaderState::getReaderViewport(bool showStatusBar) const {
+ReaderState::Viewport ReaderState::getReaderViewport() const {
   Viewport vp{};
   renderer_.getOrientedViewableTRBL(&vp.marginTop, &vp.marginRight, &vp.marginBottom, &vp.marginLeft);
   vp.marginLeft += horizontalPadding;
   vp.marginRight += horizontalPadding;
-  if (showStatusBar) {
-    vp.marginBottom += statusBarMargin;
-  }
   vp.width = renderer_.getScreenWidth() - vp.marginLeft - vp.marginRight;
   vp.height = renderer_.getScreenHeight() - vp.marginTop - vp.marginBottom;
   return vp;
@@ -1557,7 +1469,7 @@ bool ReaderState::renderCoverPage(Core& core) {
   }
 
   LOG_DBG(TAG, "Rendering cover page from: %s", coverPath.c_str());
-  const auto vp = getReaderViewport(core.settings.statusBar != 0);
+  const auto vp = getReaderViewport();
   int pagesUntilRefresh = pagesUntilFullRefresh_;
   const bool turnOffScreen = core.settings.sunlightFadingFix != 0;
 
@@ -1619,7 +1531,7 @@ void ReaderState::startBackgroundCaching(Core& core) {
 
         // Build cache if it doesn't exist
         if (!pageCache_ && !cacheTask_.shouldStop()) {
-          const auto vp = getReaderViewport(coreRef.settings.statusBar != 0);
+          const auto vp = getReaderViewport();
           const auto config = coreRef.settings.getRenderConfig(theme, vp.width, vp.height);
           std::string cachePath;
 
@@ -1714,333 +1626,25 @@ void ReaderState::stopBackgroundCaching() {
   vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
-// ============================================================================
-// TOC Overlay Mode
-// ============================================================================
+void ReaderState::toggleReaderOrientation(Core& core) {
+  const uint8_t nextOrientation =
+      (core.settings.orientation == Settings::LandscapeCCW) ? Settings::Portrait : Settings::LandscapeCCW;
 
-void ReaderState::enterTocMode(Core& core) {
-  if (core.content.tocCount() == 0) {
-    return;
-  }
-
-  // Stop background task before TOC overlay — both SD card I/O (thumbnail)
-  // and e-ink display update share the same SPI bus
   stopBackgroundCaching();
+  invalidateGlobalPageMetrics();
 
-  populateTocView(core);
-  int currentIdx = findCurrentTocEntry(core);
-  if (currentIdx >= 0) {
-    tocView_.setCurrentChapter(static_cast<uint16_t>(currentIdx));
-  }
+  core.settings.orientation = nextOrientation;
+  core.settings.save(core.storage);
+  setRendererOrientation(renderer_, core.settings.orientation);
+  renderer_.clearWidthCache();
 
-  tocView_.buttons = ui::ButtonBar("Back", "Go", "<<", ">>");
-  tocMode_ = true;
-  needsRender_ = true;
-  LOG_DBG(TAG, "Entered TOC mode");
-}
-
-void ReaderState::exitTocMode() {
-  tocMode_ = false;
-  needsRender_ = true;
-  LOG_DBG(TAG, "Exited TOC mode");
-}
-
-void ReaderState::handleTocInput(Core& core, const Event& e) {
-  if (e.button == Button::Power && e.type == EventType::ButtonRelease) {
-    if (core.settings.shortPwrBtn == Settings::PowerPageTurn && powerPressStartedMs_ != 0) {
-      const uint32_t heldMs = millis() - powerPressStartedMs_;
-      if (heldMs < core.settings.getPowerButtonDuration()) {
-        tocView_.moveDown();
-        needsRender_ = true;
-      }
-    }
-    powerPressStartedMs_ = 0;
-    return;
-  }
-
-  if (e.type != EventType::ButtonPress && e.type != EventType::ButtonRepeat) return;
-
-  switch (e.button) {
-    case Button::Up:
-      tocView_.moveUp();
-      needsRender_ = true;
-      break;
-
-    case Button::Down:
-      tocView_.moveDown();
-      needsRender_ = true;
-      break;
-
-    case Button::Left:
-      tocView_.movePageUp(tocVisibleCount());
-      needsRender_ = true;
-      break;
-
-    case Button::Right:
-      tocView_.movePageDown(tocVisibleCount());
-      needsRender_ = true;
-      break;
-
-    case Button::Center:
-      jumpToTocEntry(core, tocView_.selected);
-      exitTocMode();
-      startBackgroundCaching(core);
-      break;
-
-    case Button::Back:
-      exitTocMode();
-      startBackgroundCaching(core);
-      break;
-
-    case Button::Power:
-      if (e.type == EventType::ButtonPress && core.settings.shortPwrBtn == Settings::PowerPageTurn) {
-        powerPressStartedMs_ = millis();
-      }
-      break;
-  }
-}
-
-void ReaderState::populateTocView(Core& core) {
-  tocView_.clear();
-  const uint16_t count = core.content.tocCount();
-
-  for (uint16_t i = 0; i < count && i < ui::ChapterListView::MAX_CHAPTERS; i++) {
-    auto result = core.content.getTocEntry(i);
-    if (result.ok()) {
-      const TocEntry& entry = result.value;
-      tocView_.addChapter(entry.title, static_cast<uint16_t>(entry.pageIndex), entry.depth);
-    }
-  }
-}
-
-int ReaderState::findCurrentTocEntry(Core& core, int* outRangeStart, int* outRangeEnd) {
-  ContentType type = core.content.metadata().type;
-
-  if (type == ContentType::Epub) {
-    auto* provider = core.content.asEpub();
-    if (!provider || !provider->getEpub()) return -1;
-    auto epub = provider->getEpubShared();
-
-    // Start with spine-level match as fallback
-    int bestMatch = epub->getTocIndexForSpineIndex(currentSpineIndex_);
-    int bestMatchPage = -1;
-    int nextEntryPage = INT_MAX;  // smallest entryPage > currentSectionPage_ in this spine
-    bool hasUnresolvedAnchor = false;
-
-    // Load anchor map once from disk (avoids reopening file per TOC entry)
-    std::string cachePath = epubSectionCachePath(epub->getCachePath(), currentSpineIndex_);
-    auto anchors = loadAnchorMap(cachePath);
-
-    // Refine: find the latest TOC entry whose anchor page <= current page
-    const int tocCount = epub->getTocItemsCount();
-
-    for (int i = 0; i < tocCount; i++) {
-      auto tocItem = epub->getTocItem(i);
-      if (tocItem.spineIndex != currentSpineIndex_) continue;
-
-      int entryPage = 0;  // No anchor = start of spine
-      if (!tocItem.anchor.empty()) {
-        int anchorPage = -1;
-        for (const auto& a : anchors) {
-          if (a.first == tocItem.anchor) {
-            anchorPage = a.second;
-            break;
-          }
-        }
-        if (anchorPage < 0) {
-          hasUnresolvedAnchor = true;
-          continue;
-        }
-        entryPage = anchorPage;
-      }
-
-      if (entryPage <= currentSectionPage_ && entryPage >= bestMatchPage) {
-        bestMatch = i;
-        bestMatchPage = entryPage;
-      } else if (entryPage > currentSectionPage_ && entryPage < nextEntryPage) {
-        nextEntryPage = entryPage;
-      }
-    }
-
-    if (outRangeStart) *outRangeStart = (bestMatchPage >= 0) ? bestMatchPage : INT_MIN;
-    // Unresolved anchors mean an unknown chapter boundary may exist above currentSectionPage_;
-    // narrow the cache to the current page so we re-check once pre-render fills the anchor in.
-    if (outRangeEnd) *outRangeEnd = hasUnresolvedAnchor ? (currentSectionPage_ + 1) : nextEntryPage;
-    return bestMatch;
-  } else if (type == ContentType::Xtc) {
-    // For XTC, find chapter containing current page
-    const uint16_t count = core.content.tocCount();
-    int lastMatch = -1;
-    int lastStart = INT_MIN;
-    int nextStart = INT_MAX;
-    for (uint16_t i = 0; i < count; i++) {
-      auto result = core.content.getTocEntry(i);
-      if (!result.ok()) continue;
-      const uint32_t p = result.value.pageIndex;
-      if (p <= currentPage_) {
-        lastMatch = i;
-        lastStart = static_cast<int>(p);
-      } else if (p < static_cast<uint32_t>(nextStart)) {
-        nextStart = static_cast<int>(p);
-      }
-    }
-    if (outRangeStart) *outRangeStart = lastStart;
-    if (outRangeEnd) *outRangeEnd = nextStart;
-    return lastMatch;
-  } else if (type == ContentType::Fb2) {
-    // For FB2 with per-section caching, TOC entries store section indices.
-    // Cache invalidates on spine change, so the page range is unbounded.
-    const uint16_t count = core.content.tocCount();
-    int lastMatch = -1;
-    for (uint16_t i = 0; i < count; i++) {
-      auto result = core.content.getTocEntry(i);
-      if (result.ok() && result.value.pageIndex <= static_cast<uint32_t>(currentSpineIndex_)) {
-        lastMatch = i;
-      }
-    }
-    if (outRangeStart) *outRangeStart = INT_MIN;
-    if (outRangeEnd) *outRangeEnd = INT_MAX;
-    return lastMatch;
-  } else if (type == ContentType::Markdown || type == ContentType::Txt || type == ContentType::Html) {
-    // For flat-page formats, find chapter whose pageIndex <= current section page
-    const uint16_t count = core.content.tocCount();
-    int lastMatch = -1;
-    int lastStart = INT_MIN;
-    int nextStart = INT_MAX;
-    for (uint16_t i = 0; i < count; i++) {
-      auto result = core.content.getTocEntry(i);
-      if (!result.ok()) continue;
-      const int p = static_cast<int>(result.value.pageIndex);
-      if (p <= currentSectionPage_) {
-        lastMatch = i;
-        lastStart = p;
-      } else if (p < nextStart) {
-        nextStart = p;
-      }
-    }
-    if (outRangeStart) *outRangeStart = lastStart;
-    if (outRangeEnd) *outRangeEnd = nextStart;
-    return lastMatch;
-  }
-
-  return -1;
-}
-
-void ReaderState::jumpToTocEntry(Core& core, int tocIndex) {
-  if (tocIndex < 0 || tocIndex >= tocView_.chapterCount) {
-    return;
-  }
-
-  const auto& chapter = tocView_.chapters[tocIndex];
-  ContentType type = core.content.metadata().type;
-
-  if (type == ContentType::Epub) {
-    auto* provider = core.content.asEpub();
-    if (!provider || !provider->getEpub()) return;
-    auto epub = provider->getEpubShared();
-
-    if (static_cast<int>(chapter.pageNum) != currentSpineIndex_) {
-      // Different spine — full reset
-      // Task already stopped by enterTocMode(); caller restarts after exitTocMode()
-      currentSpineIndex_ = chapter.pageNum;
-      parser_.reset();
-      parserSpineIndex_ = -1;
-      pageCache_.reset();
-      currentSectionPage_ = 0;
-    } else {
-      // Same spine — navigate using anchor (default to page 0)
-      currentSectionPage_ = 0;
-    }
-
-    // Try anchor-based navigation for precise positioning
-    auto tocItem = epub->getTocItem(tocIndex);
-    if (!tocItem.anchor.empty()) {
-      std::string cachePath = epubSectionCachePath(epub->getCachePath(), chapter.pageNum);
-      int page = loadAnchorPage(cachePath, tocItem.anchor);
-
-      // Anchor not resolved — build cache until found or chapter fully parsed
-      if (page < 0) {
-        const Theme& theme = THEME_MANAGER.current();
-        renderer_.clearScreen(theme.backgroundColor);
-        ui::centeredMessage(renderer_, theme, core.settings.getReaderFontId(theme), "Indexing...");
-        renderer_.displayBuffer();
-
-        createOrExtendCache(core);
-        page = loadAnchorPage(cachePath, tocItem.anchor);
-
-        while (page < 0 && pageCache_ && pageCache_->isPartial()) {
-          const size_t pagesBefore = pageCache_->pageCount();
-          createOrExtendCache(core);
-          if (!pageCache_ || pageCache_->pageCount() <= pagesBefore) break;
-          page = loadAnchorPage(cachePath, tocItem.anchor);
-        }
-      }
-
-      if (page >= 0) {
-        currentSectionPage_ = page;
-      }
-    }
-  } else if (type == ContentType::Xtc) {
-    // For XTC, pageNum is page index
-    currentPage_ = chapter.pageNum;
-  } else if (type == ContentType::Fb2) {
-    // For FB2, pageNum is the section index — treat like EPUB spine switch
-    auto* fb2Provider = core.content.asFb2();
-    if (!fb2Provider || !fb2Provider->getFb2()) return;
-
-    if (static_cast<int>(chapter.pageNum) != currentSpineIndex_) {
-      currentSpineIndex_ = chapter.pageNum;
-      parser_.reset();
-      parserSpineIndex_ = -1;
-      pageCache_.reset();
-    }
-    currentSectionPage_ = 0;
-  } else if (type == ContentType::Markdown || type == ContentType::Txt || type == ContentType::Html) {
-    // For flat-page formats, pageNum is the section page index
-    currentSectionPage_ = chapter.pageNum;
-  }
+  parser_.reset();
+  parserSpineIndex_ = -1;
+  pageCache_.reset();
 
   needsRender_ = true;
-  LOG_DBG(TAG, "Jumped to TOC entry %d (spine/page %d)", tocIndex, chapter.pageNum);
-}
-
-int ReaderState::tocVisibleCount() const {
-  constexpr int startY = 60;
-  constexpr int bottomMargin = 70;
-  const Theme& theme = THEME_MANAGER.current();
-  const int itemHeight = theme.itemHeight + theme.itemSpacing;
-  return (renderer_.getScreenHeight() - startY - bottomMargin) / itemHeight;
-}
-
-void ReaderState::renderTocOverlay(Core& core) {
-  const Theme& theme = THEME_MANAGER.current();
-  constexpr int startY = 60;
-  const int visibleCount = tocVisibleCount();
-
-  // Adjust scroll to keep selection visible
-  tocView_.ensureVisible(visibleCount);
-
-  renderer_.clearScreen(theme.backgroundColor);
-  renderer_.drawCenteredText(theme.uiFontId, 15, "Chapters", theme.primaryTextBlack, BOLD);
-
-  // Use reader font only when external font is selected (for VN/Thai/CJK support),
-  // otherwise use smaller UI font for better chapter list readability
-  const ContentType type = core.content.metadata().type;
-  const bool hasExternalFont = core.settings.hasExternalReaderFont(theme);
-  const int tocFontId =
-      (type == ContentType::Xtc || !hasExternalFont) ? theme.uiFontId : core.settings.getReaderFontId(theme);
-
-  const int itemHeight = theme.itemHeight + theme.itemSpacing;
-  const int end = std::min(tocView_.scrollOffset + visibleCount, static_cast<int>(tocView_.chapterCount));
-  for (int i = tocView_.scrollOffset; i < end; i++) {
-    const int y = startY + (i - tocView_.scrollOffset) * itemHeight;
-    ui::chapterItem(renderer_, theme, tocFontId, y, tocView_.chapters[i].title, tocView_.chapters[i].depth,
-                    i == tocView_.selected, i == tocView_.currentChapter);
-  }
-
-  ui::buttonBar(renderer_, theme, tocView_.buttons);
-  renderer_.displayBuffer();
-  core.display.markDirty();
+  startBackgroundCaching(core);
+  LOG_DBG(TAG, "Toggled reader orientation to %u", static_cast<unsigned>(core.settings.orientation));
 }
 
 void ReaderState::exitToUI(Core& core) {
@@ -2056,7 +1660,6 @@ void ReaderState::exitToUI(Core& core) {
     progress.sectionPage = (lastRenderedSectionPage_ == -1) ? 0 : lastRenderedSectionPage_;
     progress.flatPage = currentPage_;
     ProgressManager::save(core, core.content.cacheDir(), core.content.metadata().type, progress);
-    saveBookmarks(core);
     // Skip pageCache_.reset() and content.close() — ESP.restart() follows,
     // and if stopBackgroundCaching() timed out the task still uses them.
   }
@@ -2077,283 +1680,6 @@ void ReaderState::exitToUI(Core& core) {
   // Brief delay to ensure SD writes complete before restart
   vTaskDelay(50 / portTICK_PERIOD_MS);
   ESP.restart();
-}
-
-// ============================================================================
-// Menu Overlay Mode
-// ============================================================================
-
-void ReaderState::enterMenuMode(Core& core) {
-  stopBackgroundCaching();
-  menuView_.show();
-  menuMode_ = true;
-  needsRender_ = true;
-  LOG_DBG(TAG, "Entered menu mode");
-}
-
-void ReaderState::exitMenuMode() {
-  menuView_.hide();
-  menuMode_ = false;
-  needsRender_ = true;
-  LOG_DBG(TAG, "Exited menu mode");
-}
-
-void ReaderState::handleMenuInput(Core& core, const Event& e) {
-  if (e.type != EventType::ButtonPress) return;
-
-  switch (e.button) {
-    case Button::Up:
-      menuView_.moveUp();
-      needsRender_ = true;
-      break;
-    case Button::Down:
-      menuView_.moveDown();
-      needsRender_ = true;
-      break;
-    case Button::Center:
-      handleMenuAction(core, menuView_.selected);
-      break;
-    case Button::Back:
-      exitMenuMode();
-      startBackgroundCaching(core);
-      break;
-    default:
-      break;
-  }
-}
-
-void ReaderState::handleMenuAction(Core& core, int action) {
-  exitMenuMode();
-  switch (action) {
-    case 0:  // Chapters
-      if (core.content.tocCount() > 0) {
-        enterTocMode(core);
-      } else {
-        const Theme& theme = THEME_MANAGER.current();
-        renderer_.clearScreen(theme.backgroundColor);
-        ui::overlayBox(renderer_, theme, core.settings.getReaderFontId(theme), renderer_.getScreenHeight() / 2 - 20,
-                       "No chapters");
-        renderer_.displayBuffer();
-        core.display.markDirty();
-        startBackgroundCaching(core);
-      }
-      break;
-    case 1:  // Bookmarks
-      enterBookmarkMode(core);
-      break;
-  }
-}
-
-// ============================================================================
-// Bookmark Overlay Mode
-// ============================================================================
-
-void ReaderState::enterBookmarkMode(Core& core) {
-  stopBackgroundCaching();
-  populateBookmarkView();
-  bookmarkView_.buttons = ui::ButtonBar("Back", "Go", "Add", "Del");
-  bookmarkMode_ = true;
-  needsRender_ = true;
-  LOG_DBG(TAG, "Entered bookmark mode (%d bookmarks)", bookmarkCount_);
-}
-
-void ReaderState::exitBookmarkMode() {
-  bookmarkMode_ = false;
-  needsRender_ = true;
-  LOG_DBG(TAG, "Exited bookmark mode");
-}
-
-void ReaderState::handleBookmarkInput(Core& core, const Event& e) {
-  if (e.type != EventType::ButtonPress && e.type != EventType::ButtonRepeat) return;
-
-  switch (e.button) {
-    case Button::Up:
-      bookmarkView_.moveUp();
-      needsRender_ = true;
-      break;
-    case Button::Down:
-      bookmarkView_.moveDown();
-      needsRender_ = true;
-      break;
-    case Button::Center:
-      if (bookmarkCount_ > 0) {
-        jumpToBookmark(core, bookmarkView_.selected);
-        exitBookmarkMode();
-        startBackgroundCaching(core);
-      }
-      break;
-    case Button::Left:
-      addBookmark(core);
-      break;
-    case Button::Right:
-      if (bookmarkCount_ > 0) {
-        deleteBookmark(core, bookmarkView_.selected);
-      }
-      break;
-    case Button::Back:
-      exitBookmarkMode();
-      startBackgroundCaching(core);
-      break;
-    default:
-      break;
-  }
-}
-
-void ReaderState::renderBookmarkOverlay(Core& core) {
-  const Theme& theme = THEME_MANAGER.current();
-  constexpr int startY = 60;
-  const int visibleCount = bookmarkVisibleCount();
-
-  bookmarkView_.ensureVisible(visibleCount);
-
-  renderer_.clearScreen(theme.backgroundColor);
-  renderer_.drawCenteredText(theme.uiFontId, 15, "Bookmarks", theme.primaryTextBlack, BOLD);
-
-  if (bookmarkCount_ == 0) {
-    const int y = renderer_.getScreenHeight() / 2 - renderer_.getLineHeight(theme.uiFontId) / 2;
-    renderer_.drawCenteredText(theme.uiFontId, y, "No bookmarks yet", theme.primaryTextBlack, BOLD);
-  } else {
-    const int itemHeight = theme.itemHeight + theme.itemSpacing;
-    const int end = std::min(bookmarkView_.scrollOffset + visibleCount, static_cast<int>(bookmarkView_.itemCount));
-    for (int i = bookmarkView_.scrollOffset; i < end; i++) {
-      const int y = startY + (i - bookmarkView_.scrollOffset) * itemHeight;
-      ui::chapterItem(renderer_, theme, theme.uiFontId, y, bookmarkView_.items[i].title, bookmarkView_.items[i].depth,
-                      i == bookmarkView_.selected, false);
-    }
-  }
-
-  ui::buttonBar(renderer_, theme, bookmarkView_.buttons);
-  renderer_.displayBuffer();
-  core.display.markDirty();
-}
-
-void ReaderState::addBookmark(Core& core) {
-  if (bookmarkCount_ >= BookmarkManager::MAX_BOOKMARKS) {
-    LOG_DBG(TAG, "Max bookmarks reached");
-    return;
-  }
-
-  ContentType type = core.content.metadata().type;
-
-  int existing = BookmarkManager::findAt(bookmarks_, bookmarkCount_, type, lastRenderedSpineIndex_,
-                                         lastRenderedSectionPage_, currentPage_);
-  if (existing >= 0) {
-    LOG_DBG(TAG, "Bookmark already exists at index %d", existing);
-    return;
-  }
-
-  Bookmark bm;
-  memset(&bm, 0, sizeof(bm));
-  bm.spineIndex = static_cast<int16_t>(lastRenderedSpineIndex_);
-  bm.sectionPage = static_cast<int16_t>(lastRenderedSectionPage_);
-  bm.flatPage = currentPage_;
-
-  if (cachedChapterTitle_[0] != '\0') {
-    strncpy(bm.label, cachedChapterTitle_, sizeof(bm.label) - 1);
-    bm.label[sizeof(bm.label) - 1] = '\0';
-  } else {
-    if (type == ContentType::Xtc) {
-      snprintf(bm.label, sizeof(bm.label), "Page %u", static_cast<unsigned>(currentPage_ + 1));
-    } else {
-      snprintf(bm.label, sizeof(bm.label), "Page %d", lastRenderedSectionPage_ + 1);
-    }
-  }
-
-  int insertPos = bookmarkCount_;
-  for (int i = 0; i < bookmarkCount_; i++) {
-    bool insertHere = false;
-    if (type == ContentType::Epub) {
-      if (bm.spineIndex < bookmarks_[i].spineIndex ||
-          (bm.spineIndex == bookmarks_[i].spineIndex && bm.sectionPage < bookmarks_[i].sectionPage)) {
-        insertHere = true;
-      }
-    } else if (type == ContentType::Xtc) {
-      if (bm.flatPage < bookmarks_[i].flatPage) {
-        insertHere = true;
-      }
-    } else {
-      if (bm.sectionPage < bookmarks_[i].sectionPage) {
-        insertHere = true;
-      }
-    }
-    if (insertHere) {
-      insertPos = i;
-      break;
-    }
-  }
-
-  for (int i = bookmarkCount_; i > insertPos; i--) {
-    bookmarks_[i] = bookmarks_[i - 1];
-  }
-  bookmarks_[insertPos] = bm;
-  bookmarkCount_++;
-
-  saveBookmarks(core);
-  populateBookmarkView();
-  needsRender_ = true;
-  LOG_DBG(TAG, "Added bookmark at position %d", insertPos);
-}
-
-void ReaderState::deleteBookmark(Core& core, int index) {
-  if (index < 0 || index >= bookmarkCount_) return;
-
-  for (int i = index; i < bookmarkCount_ - 1; i++) {
-    bookmarks_[i] = bookmarks_[i + 1];
-  }
-  bookmarkCount_--;
-
-  saveBookmarks(core);
-  populateBookmarkView();
-
-  if (bookmarkView_.selected >= bookmarkView_.itemCount && bookmarkView_.itemCount > 0) {
-    bookmarkView_.selected = bookmarkView_.itemCount - 1;
-  }
-
-  needsRender_ = true;
-  LOG_DBG(TAG, "Deleted bookmark at index %d, %d remaining", index, bookmarkCount_);
-}
-
-void ReaderState::jumpToBookmark(Core& core, int index) {
-  if (index < 0 || index >= bookmarkCount_) return;
-
-  const Bookmark& bm = bookmarks_[index];
-  ContentType type = core.content.metadata().type;
-
-  if (type == ContentType::Epub) {
-    if (bm.spineIndex != currentSpineIndex_) {
-      currentSpineIndex_ = bm.spineIndex;
-      parser_.reset();
-      parserSpineIndex_ = -1;
-      pageCache_.reset();
-    }
-    currentSectionPage_ = bm.sectionPage;
-  } else if (type == ContentType::Xtc) {
-    currentPage_ = bm.flatPage;
-  } else {
-    currentSectionPage_ = bm.sectionPage;
-  }
-
-  needsRender_ = true;
-  LOG_DBG(TAG, "Jumped to bookmark %d", index);
-}
-
-void ReaderState::saveBookmarks(Core& core) {
-  BookmarkManager::save(core, core.content.cacheDir(), core.content.metadata().type, bookmarks_, bookmarkCount_);
-}
-
-void ReaderState::populateBookmarkView() {
-  bookmarkView_.clear();
-  for (int i = 0; i < bookmarkCount_ && i < ui::BookmarkListView::MAX_ITEMS; i++) {
-    bookmarkView_.addItem(bookmarks_[i].label, 0);
-  }
-}
-
-int ReaderState::bookmarkVisibleCount() const {
-  constexpr int startY = 60;
-  constexpr int bottomMargin = 70;
-  const Theme& theme = THEME_MANAGER.current();
-  const int itemHeight = theme.itemHeight + theme.itemSpacing;
-  return (renderer_.getScreenHeight() - startY - bottomMargin) / itemHeight;
 }
 
 }  // namespace papyrix

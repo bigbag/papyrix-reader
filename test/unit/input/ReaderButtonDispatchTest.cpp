@@ -40,7 +40,7 @@ enum class Action {
   Prev,
   NextChapter,
   PrevChapter,
-  Menu,
+  ToggleOrientation,
   Exit,
 };
 
@@ -72,9 +72,6 @@ struct ReaderButtonDispatcher {
     switch (e.type) {
       case EventType::ButtonPress:
         switch (e.button) {
-          case Button::Center:
-            lastAction = Action::Menu;
-            break;
           case Button::Back:
             lastAction = Action::Exit;
             break;
@@ -108,27 +105,34 @@ struct ReaderButtonDispatcher {
         break;
 
       case EventType::ButtonRelease:
-        if (!holdNavigated_) {
-          switch (e.button) {
-            case Button::Right:
-            case Button::Down:
-              lastAction = Action::Next;
-              break;
-            case Button::Left:
-            case Button::Up:
-              lastAction = Action::Prev;
-              break;
-            case Button::Power:
-              if (shortPwrBtn == PowerPageTurn && powerPressStartedMs_ != 0) {
-                const uint32_t heldMs = millis() - powerPressStartedMs_;
-                if (heldMs < powerButtonDuration) {
+        switch (e.button) {
+          case Button::Center:
+            lastAction = Action::ToggleOrientation;
+            break;
+          default:
+            if (!holdNavigated_) {
+              switch (e.button) {
+                case Button::Right:
+                case Button::Down:
                   lastAction = Action::Next;
-                }
+                  break;
+                case Button::Left:
+                case Button::Up:
+                  lastAction = Action::Prev;
+                  break;
+                case Button::Power:
+                  if (shortPwrBtn == PowerPageTurn && powerPressStartedMs_ != 0) {
+                    const uint32_t heldMs = millis() - powerPressStartedMs_;
+                    if (heldMs < powerButtonDuration) {
+                      lastAction = Action::Next;
+                    }
+                  }
+                  break;
+                default:
+                  break;
               }
-              break;
-            default:
-              break;
-          }
+            }
+            break;
         }
         if (e.button == Button::Power) {
           powerPressStartedMs_ = 0;
@@ -308,15 +312,15 @@ int main() {
   {
     ReaderButtonDispatcher d;
     d.processEvent(Event::press(Button::Center));
-    runner.expectEq(static_cast<int>(Action::Menu), static_cast<int>(d.lastAction),
-                    "Center Press -> Menu");
+    runner.expectEq(static_cast<int>(Action::None), static_cast<int>(d.lastAction),
+                    "Center Press -> None");
   }
 
   {
     ReaderButtonDispatcher d;
     d.processEvent(Event::release(Button::Center));
-    runner.expectEq(static_cast<int>(Action::None), static_cast<int>(d.lastAction),
-                    "Center Release -> None");
+    runner.expectEq(static_cast<int>(Action::ToggleOrientation), static_cast<int>(d.lastAction),
+                    "Center Release -> ToggleOrientation");
   }
 
   {

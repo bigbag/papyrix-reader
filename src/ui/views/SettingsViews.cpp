@@ -11,7 +11,6 @@ constexpr const char* const ReaderSettingsView::FONT_SIZE_VALUES[];
 constexpr const char* const ReaderSettingsView::TEXT_LAYOUT_VALUES[];
 constexpr const char* const ReaderSettingsView::LINE_SPACING_VALUES[];
 constexpr const char* const ReaderSettingsView::ALIGNMENT_VALUES[];
-constexpr const char* const ReaderSettingsView::STATUS_BAR_VALUES[];
 constexpr const char* const ReaderSettingsView::ORIENTATION_VALUES[];
 
 const ReaderSettingsView::SettingDef ReaderSettingsView::DEFS[SETTING_COUNT] = {
@@ -23,7 +22,6 @@ const ReaderSettingsView::SettingDef ReaderSettingsView::DEFS[SETTING_COUNT] = {
     {"Paragraph Alignment", SettingType::Enum, ALIGNMENT_VALUES, 4},
     {"Hyphenation", SettingType::Toggle, nullptr, 0},
     {"Show Images", SettingType::Toggle, nullptr, 0},
-    {"Status Bar", SettingType::Enum, STATUS_BAR_VALUES, 3},
     {"Reading Orientation", SettingType::Enum, ORIENTATION_VALUES, 4},
 };
 
@@ -51,7 +49,7 @@ void render(const GfxRenderer& r, const Theme& t, const SettingsMenuView& v) {
 
   title(r, t, t.screenMarginTop, "Settings");
 
-  const int startY = 60;
+  const int startY = contentStartY(r, t);
   for (int i = 0; i < SettingsMenuView::ITEM_COUNT; i++) {
     const int y = startY + i * (t.itemHeight + t.itemSpacing);
     menuItem(r, t, y, SettingsMenuView::ITEMS[i], i == v.selected);
@@ -67,7 +65,7 @@ void render(const GfxRenderer& r, const Theme& t, const CleanupMenuView& v) {
 
   title(r, t, t.screenMarginTop, "Cleanup");
 
-  const int startY = 60;
+  const int startY = contentStartY(r, t);
   for (int i = 0; i < CleanupMenuView::ITEM_COUNT; i++) {
     const int y = startY + i * (t.itemHeight + t.itemSpacing);
     menuItem(r, t, y, CleanupMenuView::ITEMS[i], i == v.selected);
@@ -84,7 +82,7 @@ void render(const GfxRenderer& r, const Theme& t, const SystemInfoView& v) {
   title(r, t, t.screenMarginTop, "System Info");
 
   const int lineHeight = r.getLineHeight(t.uiFontId) + 5;
-  const int startY = 60;
+  const int startY = contentStartY(r, t);
 
   for (int i = 0; i < v.fieldCount; i++) {
     const int y = startY + i * lineHeight;
@@ -101,7 +99,7 @@ void render(const GfxRenderer& r, const Theme& t, const ReaderSettingsView& v) {
 
   title(r, t, t.screenMarginTop, "Reader Settings");
 
-  const int startY = 60;
+  const int startY = contentStartY(r, t);
   for (int i = 0; i < ReaderSettingsView::SETTING_COUNT; i++) {
     const int y = startY + i * (t.itemHeight + t.itemSpacing);
     const auto& def = ReaderSettingsView::DEFS[i];
@@ -119,7 +117,7 @@ void render(const GfxRenderer& r, const Theme& t, const DeviceSettingsView& v) {
 
   title(r, t, t.screenMarginTop, "Device Settings");
 
-  const int startY = 60;
+  const int startY = contentStartY(r, t);
   for (int i = 0; i < DeviceSettingsView::SETTING_COUNT; i++) {
     const int y = startY + i * (t.itemHeight + t.itemSpacing);
     enumValue(r, t, y, DeviceSettingsView::DEFS[i].label, v.getCurrentValueStr(i), i == v.selected);
@@ -138,8 +136,8 @@ void render(const GfxRenderer& r, const Theme& t, const ConfirmDialogView& v) {
 
   r.clearScreen(t.backgroundColor);
 
-  // Title (bold, centered)
-  r.drawCenteredText(t.readerFontId, top - 40, v.title, t.primaryTextBlack, EpdFontFamily::BOLD);
+  // Title
+  r.drawCenteredText(t.uiFontId, top - 40, v.title, t.primaryTextBlack);
 
   // Description lines
   r.drawCenteredText(t.uiFontId, top, v.line1, t.primaryTextBlack);
@@ -150,7 +148,7 @@ void render(const GfxRenderer& r, const Theme& t, const ConfirmDialogView& v) {
   // Yes/No buttons
   const int buttonY = top + lineHeight * 3;
   constexpr int buttonWidth = 80;
-  constexpr int buttonHeight = 36;
+  constexpr int buttonHeight = 30;
   constexpr int buttonSpacing = 20;
   constexpr int totalWidth = buttonWidth * 2 + buttonSpacing;
   const int startX = (pageWidth - totalWidth) / 2;
@@ -168,11 +166,8 @@ void render(const GfxRenderer& r, const Theme& t, const ConfirmDialogView& v) {
       r.drawRect(btnX, buttonY, buttonWidth, buttonHeight, t.primaryTextBlack);
     }
 
-    const bool textColor = isSelected ? t.selectionTextBlack : t.primaryTextBlack;
-    const int textWidth = r.getTextWidth(t.uiFontId, buttonLabels[i]);
-    const int textX = btnX + (buttonWidth - textWidth) / 2;
-    const int textY = buttonY + (buttonHeight - r.getFontAscenderSize(t.uiFontId)) / 2;
-    r.drawText(t.uiFontId, textX, textY, buttonLabels[i], textColor);
+    drawTextCenteredInRect(r, t.uiFontId, btnX, buttonY, buttonWidth, buttonHeight, buttonLabels[i],
+                           isSelected ? t.selectionTextBlack : t.primaryTextBlack);
   }
 
   // Button hints

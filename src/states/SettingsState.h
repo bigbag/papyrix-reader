@@ -35,9 +35,10 @@ class SettingsState : public State {
   SettingsScreen currentScreen_;
   bool needsRender_;
   bool goHome_;
+  bool goReader_;
   bool goNetwork_;
   bool themeWasChanged_;
-  SettingsScreen returnScreen_;  // Screen to return to after Network mode
+  StateId returnState_;  // State to return to when backing out of Settings menu
 
   // Pending action for confirmation dialog
   // 0=none, 10=Clear Book Cache, 11=Clear Device Storage, 12=Factory Reset
