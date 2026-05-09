@@ -571,11 +571,11 @@ void SettingsState::populateSystemInfo() {
 
   // Battery
   const uint16_t millivolts = batteryMonitor.readMillivolts();
+  const uint16_t percentage = batteryMonitor.readPercentage();
   char batteryStr[24];
-  if (millivolts < 3000 || millivolts > 4500) {
-    snprintf(batteryStr, sizeof(batteryStr), "-- (%umV)", millivolts);
+  if (millivolts < 100) {
+    snprintf(batteryStr, sizeof(batteryStr), "-- (--mV)");
   } else {
-    const uint8_t percentage = BatteryMonitor::percentageFromMillivolts(millivolts);
     snprintf(batteryStr, sizeof(batteryStr), "%u%% (%umV)", percentage, millivolts);
   }
   infoView_.addField(tr(BATTERY), batteryStr);
