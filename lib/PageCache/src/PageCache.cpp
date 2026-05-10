@@ -291,10 +291,22 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
 
   if (!writeLut(lut)) {
     file_.close();
+    // Roll back in-memory state to match what's actually on disk.  pageCount_
+    // was already incremented during parsing; leaving it past the on-disk
+    // LUT makes loadPage() read garbage positions from the file.
+    if (skipPages == 0) {
+      pageCount_ = 0;
+      isPartial_ = false;
+      bytesConsumed_ = 0;
+      totalBytes_ = 0;
+    } else {
+      pageCount_ = skipPages;
+    }
     SdMan.remove(cachePath_.c_str());
     return false;
   }
 
+  file_.sync();
   file_.close();
   LOG_INF(TAG, "Created in %lu ms: %d pages, partial=%d", millis() - startMs, pageCount_, isPartial_);
   return true;
@@ -353,10 +365,16 @@ bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const Ab
 
     if (!writeLut(lut)) {
       file_.close();
+      // writeLut failed before updating the on-disk header; the file still
+      // references the pre-extend LUT.  Restore pageCount_ so the in-memory
+      // view matches what's actually on disk — otherwise loadPage(N) reads
+      // past the end of the old LUT.
+      pageCount_ = pagesBefore;
       SdMan.remove(cachePath_.c_str());
       return false;
     }
 
+    file_.sync();
     file_.close();
     LOG_INF(TAG, "Hot extend done: %d pages, partial=%d", pageCount_, isPartial_);
     return true;

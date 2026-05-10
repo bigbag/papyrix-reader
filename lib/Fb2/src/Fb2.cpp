@@ -1105,6 +1105,7 @@ bool Fb2::saveMetaCache() const {
     serialization::writePod(file, off.endOffset);
   }
 
+  file.sync();
   file.close();
   LOG_INF(TAG, "Saved meta cache (%u TOC items, %u sections)", tocItemCount, sectionOffsetCount);
   return true;

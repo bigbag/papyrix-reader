@@ -16,6 +16,7 @@
 #include <PlainTextParser.h>
 #include <SDCardManager.h>
 #include <Serialization.h>
+#include <esp_heap_caps.h>
 #include <esp_system.h>
 
 #include <algorithm>
@@ -82,6 +83,7 @@ void ReaderState::saveAnchorMap(const ContentParser& parser, const std::string& 
     serialization::writeString(file, entry.first);
     serialization::writePod(file, entry.second);
   }
+  file.sync();
   file.close();
 }
 
@@ -466,11 +468,9 @@ void ReaderState::createOrExtendCacheImpl(ContentParser& parser, const std::stri
 }
 
 // Background caching implementation (handles stop request checks)
-// Called from background task - uses BackgroundTask's shouldStop() and getAbortCallback()
+// Called from background task - uses BackgroundTask's shouldStop()
 // Ownership: background task owns pageCache_/parser_ while running
 void ReaderState::backgroundCacheImpl(ContentParser& parser, const std::string& cachePath, const RenderConfig& config) {
-  auto shouldAbort = cacheTask_.getAbortCallback();
-
   // Check for early abort before doing anything
   if (cacheTask_.shouldStop()) {
     LOG_DBG(TAG, "Background cache aborted before start");
@@ -494,10 +494,36 @@ void ReaderState::backgroundCacheImpl(ContentParser& parser, const std::string& 
   }
 
   if (!loaded || needsExtend) {
+    // Heap-aware abort callback: stop if user cancels OR heap drops so low
+    // that even a minimal Page allocation would fail.
+    auto shouldAbort = [this]() {
+      if (cacheTask_.shouldStop()) return true;
+      if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < 4 * 1024) return true;
+      return false;
+    };
+
     bool success;
     if (needsExtend) {
+      // Hot extend's transient working set is small (~5-10 KB).  A gentler
+      // gate prevents false-positive aborts on a fragmented-but-workable heap.
+      size_t freeHeap = heap_caps_get_free_size(MALLOC_CAP_8BIT);
+      size_t largestBlock = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+      if (freeHeap < 15 * 1024 || largestBlock < 6 * 1024) {
+        LOG_WRN(TAG, "Skip hot extend: heap tight (free=%zu largest=%zu)", freeHeap, largestBlock);
+        pageCache_.reset();
+        return;
+      }
       success = pageCache_->extend(parser, PageCache::DEFAULT_CACHE_CHUNK, shouldAbort);
     } else {
+      // Cold rebuild needs more headroom for full parser + allocations.
+      size_t freeHeap = heap_caps_get_free_size(MALLOC_CAP_8BIT);
+      size_t largestBlock = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+      if (freeHeap < 28 * 1024 || largestBlock < 10 * 1024) {
+        LOG_WRN(TAG, "Skip cold create: heap critical (free=%zu largest=%zu)", freeHeap, largestBlock);
+        pageCache_.reset();
+        parser.reset();
+        return;
+      }
       parser.reset();  // Ensure clean state for fresh cache creation
       success = pageCache_->create(parser, config, PageCache::DEFAULT_CACHE_CHUNK, 0, shouldAbort);
     }

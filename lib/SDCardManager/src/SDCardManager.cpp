@@ -202,28 +202,45 @@ bool SDCardManager::ensureDirectoryExists(const char* path) {
     dir.close();
   }
 
-  // Create the directory
-  if (sd.mkdir(path)) {
-    LOG_INF(TAG, "Created directory: %s", path);
-    return true;
-  } else {
-    LOG_ERR(TAG, "Failed to create directory: %s", path);
-    return false;
+  // Retry mkdir on transient failures (FAT directory cluster cache eviction
+  // races with the directory walk under memory pressure).
+  for (int attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) {
+      delay(50);
+      // Short-circuit: a previous attempt may have succeeded but returned false
+      if (sd.exists(path)) {
+        FsFile dir = sd.open(path);
+        if (dir && dir.isDirectory()) {
+          dir.close();
+          return true;
+        }
+        dir.close();
+      }
+    }
+    if (sd.mkdir(path)) {
+      LOG_INF(TAG, "Created directory: %s", path);
+      return true;
+    }
   }
+
+  LOG_ERR(TAG, "Failed to create directory: %s", path);
+  return false;
 }
 
 bool SDCardManager::openFileForRead(const char* moduleName, const char* path, FsFile& file) {
-  if (!sd.exists(path)) {
-    LOG_ERR(moduleName, "File does not exist: %s", path);
-    return false;
+  // SdFat's directory cache occasionally returns false-negatives under memory
+  // pressure — observed moments after a successful write. Drop the redundant
+  // sd.exists() precheck (sd.open() does its own lookup) and retry with a
+  // brief delay to let the FAT cache settle.
+  for (int attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) delay(50);
+    file = sd.open(path, O_RDONLY);
+    if (file) {
+      return true;
+    }
   }
-
-  file = sd.open(path, O_RDONLY);
-  if (!file) {
-    LOG_ERR(moduleName, "Failed to open file for reading: %s", path);
-    return false;
-  }
-  return true;
+  LOG_DBG(moduleName, "File does not exist: %s", path);
+  return false;
 }
 
 bool SDCardManager::openFileForRead(const char* moduleName, const std::string& path, FsFile& file) {
@@ -235,12 +252,17 @@ bool SDCardManager::openFileForRead(const char* moduleName, const String& path, 
 }
 
 bool SDCardManager::openFileForWrite(const char* moduleName, const char* path, FsFile& file) {
-  file = sd.open(path, O_RDWR | O_CREAT | O_TRUNC);
-  if (!file) {
-    LOG_ERR(moduleName, "Failed to open file for writing: %s", path);
-    return false;
+  // Same defensive retry as openFileForRead — under memory pressure SdFat
+  // occasionally fails to allocate a directory entry slot on the first try.
+  for (int attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) delay(50);
+    file = sd.open(path, O_RDWR | O_CREAT | O_TRUNC);
+    if (file) {
+      return true;
+    }
   }
-  return true;
+  LOG_ERR(moduleName, "Failed to open file for writing: %s", path);
+  return false;
 }
 
 bool SDCardManager::openFileForWrite(const char* moduleName, const std::string& path, FsFile& file) {

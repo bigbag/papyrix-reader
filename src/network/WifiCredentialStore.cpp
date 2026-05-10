@@ -60,6 +60,7 @@ bool WifiCredentialStore::saveToFile() const {
     file.write(reinterpret_cast<const uint8_t*>(obfuscated), pwdLen);
   }
 
+  file.sync();
   file.close();
   LOG_INF(TAG, "Saved %d credentials", count_);
   return true;

@@ -70,6 +70,7 @@ Result<void> Settings::save(drivers::Storage& storage) const {
   serialization::writePod(outputFile, fileListSelectedIndex);
   serialization::writePod(outputFile, frontButtonLayout);
   serialization::writePod(outputFile, fullBookProcess);
+  outputFile.sync();
   outputFile.close();
 
   LOG_INF(TAG, "Settings saved to file");
@@ -264,6 +265,7 @@ bool Settings::saveToFile() const {
   serialization::writePod(outputFile, fileListSelectedIndex);
   serialization::writePod(outputFile, frontButtonLayout);
   serialization::writePod(outputFile, fullBookProcess);
+  outputFile.sync();
   outputFile.close();
 
   LOG_INF(TAG, "Settings saved to file");
