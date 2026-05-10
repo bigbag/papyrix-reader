@@ -252,7 +252,6 @@ bool SDCardManager::openFileForWrite(const char* moduleName, const String& path,
 }
 
 bool SDCardManager::removeDir(const char* path) {
-  // 1. Open the directory
   auto dir = sd.open(path);
   if (!dir) {
     return false;
@@ -262,32 +261,44 @@ bool SDCardManager::removeDir(const char* path) {
     return false;
   }
 
+  bool allOk = true;
   auto file = dir.openNextFile();
   char name[128];
-  while (file) {
+  int iterations = 0;
+  constexpr int kMaxEntries = 4096;
+
+  while (file && iterations++ < kMaxEntries) {
+    file.getName(name, sizeof(name));
+
+    if (name[0] == '\0' || (name[0] == '.' && (name[1] == '\0' || (name[1] == '.' && name[2] == '\0')))) {
+      file.close();
+      file = dir.openNextFile();
+      continue;
+    }
+
     String filePath = path;
     if (!filePath.endsWith("/")) {
       filePath += "/";
     }
-    file.getName(name, sizeof(name));
     filePath += name;
 
     if (file.isDirectory()) {
       file.close();
       if (!removeDir(filePath.c_str())) {
-        dir.close();
-        return false;
+        allOk = false;
       }
     } else {
       file.close();
       if (!sd.remove(filePath.c_str())) {
-        dir.close();
-        return false;
+        allOk = false;
       }
     }
     file = dir.openNextFile();
   }
 
   dir.close();
+  if (!allOk) {
+    return false;
+  }
   return sd.rmdir(path);
 }

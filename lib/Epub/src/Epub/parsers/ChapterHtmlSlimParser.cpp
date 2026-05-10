@@ -297,6 +297,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   }
 
   // Apply CSS font-weight and font-style
+  if ((cssStyle.hasFontWeight && cssStyle.fontWeight == CssFontWeight::Bold) ||
+      (cssStyle.hasFontStyle && cssStyle.fontStyle == CssFontStyle::Italic)) {
+    self->flushPartWordBuffer();
+  }
   if (cssStyle.hasFontWeight && cssStyle.fontWeight == CssFontWeight::Bold) {
     self->cssBoldUntilDepth = min(self->cssBoldUntilDepth, self->depth);
   }
@@ -505,9 +509,12 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     // We don't want to flush out content when closing inline tags like <span>.
     // Currently this also flushes out on closing <b> and <i> tags, but they are line tags so that shouldn't happen,
     // text styling needs to be overhauled to fix it.
-    const bool shouldBreakText =
-        matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS) || matches(name, HEADER_TAGS, NUM_HEADER_TAGS) ||
-        matches(name, BOLD_TAGS, NUM_BOLD_TAGS) || matches(name, ITALIC_TAGS, NUM_ITALIC_TAGS) || self->depth == 1;
+    const bool closingCssStyle =
+        self->cssBoldUntilDepth == self->depth - 1 || self->cssItalicUntilDepth == self->depth - 1;
+    const bool shouldBreakText = matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS) ||
+                                 matches(name, HEADER_TAGS, NUM_HEADER_TAGS) ||
+                                 matches(name, BOLD_TAGS, NUM_BOLD_TAGS) ||
+                                 matches(name, ITALIC_TAGS, NUM_ITALIC_TAGS) || closingCssStyle || self->depth == 1;
 
     if (shouldBreakText) {
       self->flushPartWordBuffer();

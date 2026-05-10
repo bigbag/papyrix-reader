@@ -139,9 +139,13 @@ void XMLCALL TocNavParser::characterData(void* userData, const XML_Char* s, cons
     if (self->currentLabel.size() + static_cast<size_t>(len) <= MAX_NAV_LABEL_LENGTH) {
       self->currentLabel.append(s, len);
     } else if (self->currentLabel.size() < MAX_NAV_LABEL_LENGTH) {
-      const size_t remaining = MAX_NAV_LABEL_LENGTH - self->currentLabel.size();
-      self->currentLabel.append(s, remaining);
-      LOG_DBG(TAG, "Label truncated at %zu bytes", MAX_NAV_LABEL_LENGTH);
+      size_t remaining = MAX_NAV_LABEL_LENGTH - self->currentLabel.size();
+      while (remaining > 0 && (static_cast<unsigned char>(s[remaining]) & 0xC0) == 0x80) {
+        remaining--;
+      }
+      if (remaining > 0) {
+        self->currentLabel.append(s, remaining);
+      }
     }
   }
 }
@@ -180,11 +184,13 @@ void XMLCALL TocNavParser::endElement(void* userData, const XML_Char* name) {
   }
 
   if (strcmp(name, "ol") == 0 && self->state >= IN_NAV_TOC) {
-    self->olDepth--;
+    if (self->olDepth > 0) {
+      self->olDepth--;
+    }
     if (self->olDepth == 0) {
       self->state = IN_NAV_TOC;
     } else {
-      self->state = IN_LI;  // Back to parent li
+      self->state = IN_LI;
     }
     return;
   }

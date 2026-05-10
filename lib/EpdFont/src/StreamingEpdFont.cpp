@@ -176,6 +176,27 @@ int StreamingEpdFont::getLruSlot() {
   return lruIndex;
 }
 
+uint32_t StreamingEpdFont::advanceAccessCounter() {
+  if (++_accessCounter == 0) {
+    // Renumber live entries preserving relative order
+    uint32_t order = 1;
+    for (int pass = 0; pass < CACHE_SIZE; pass++) {
+      uint32_t minVal = UINT32_MAX;
+      int minIdx = -1;
+      for (int i = 0; i < CACHE_SIZE; i++) {
+        if (_cache[i].glyphIndex != INVALID_CODEPOINT && _cache[i].lastUsed >= order && _cache[i].lastUsed < minVal) {
+          minVal = _cache[i].lastUsed;
+          minIdx = i;
+        }
+      }
+      if (minIdx < 0) break;
+      _cache[minIdx].lastUsed = order++;
+    }
+    _accessCounter = order;
+  }
+  return _accessCounter;
+}
+
 bool StreamingEpdFont::loadGlyphBitmap(uint32_t glyphIndex, CachedBitmap& entry) {
   if (!_fontFile || glyphIndex >= _glyphCount) {
     return false;
@@ -230,7 +251,7 @@ const uint8_t* StreamingEpdFont::getGlyphBitmap(const EpdGlyph* glyph) {
   // Check bitmap cache
   int cacheIndex = findInBitmapCache(glyphIndex);
   if (cacheIndex >= 0) {
-    _cache[cacheIndex].lastUsed = ++_accessCounter;
+    _cache[cacheIndex].lastUsed = advanceAccessCounter();
     _cacheHits++;
     return _cache[cacheIndex].bitmap;
   }
@@ -266,7 +287,7 @@ const uint8_t* StreamingEpdFont::getGlyphBitmap(const EpdGlyph* glyph) {
   }
 
   _cache[slot].glyphIndex = glyphIndex;
-  _cache[slot].lastUsed = ++_accessCounter;
+  _cache[slot].lastUsed = advanceAccessCounter();
 
   // Add to hash table
   int hash = hashIndex(glyphIndex);

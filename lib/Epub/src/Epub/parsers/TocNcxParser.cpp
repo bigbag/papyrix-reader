@@ -144,10 +144,13 @@ void XMLCALL TocNcxParser::characterData(void* userData, const XML_Char* s, cons
     if (self->currentLabel.size() + static_cast<size_t>(len) <= MAX_LABEL_LENGTH) {
       self->currentLabel.append(s, len);
     } else if (self->currentLabel.size() < MAX_LABEL_LENGTH) {
-      // Truncate at limit
-      const size_t remaining = MAX_LABEL_LENGTH - self->currentLabel.size();
-      self->currentLabel.append(s, remaining);
-      LOG_DBG(TAG, "Label truncated at %zu bytes", MAX_LABEL_LENGTH);
+      size_t remaining = MAX_LABEL_LENGTH - self->currentLabel.size();
+      while (remaining > 0 && (static_cast<unsigned char>(s[remaining]) & 0xC0) == 0x80) {
+        remaining--;
+      }
+      if (remaining > 0) {
+        self->currentLabel.append(s, remaining);
+      }
     }
   }
 }

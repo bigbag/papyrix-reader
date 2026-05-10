@@ -158,6 +158,7 @@ class StreamingEpdFont {
   static int hashIndex(uint32_t index) { return index % CACHE_SIZE; }
   int findInBitmapCache(uint32_t glyphIndex);
   int getLruSlot();
+  uint32_t advanceAccessCounter();
   bool loadGlyphBitmap(uint32_t glyphIndex, CachedBitmap& entry);
   const EpdGlyph* lookupGlyph(uint32_t cp) const;
   void rehashTable();  // Rebuild hash table to clear tombstones

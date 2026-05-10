@@ -13,8 +13,10 @@
 #include "Utf8.cpp"
 #include "EpdFontLoader.cpp"
 
-// Include the library under test
+// Include the library under test (private→public for counter overflow testing)
+#define private public
 #include "StreamingEpdFont.cpp"
+#undef private
 
 int main() {
   TestUtils::TestRunner runner("StreamingEpdFont");
@@ -579,6 +581,110 @@ int main() {
     if (bitmap2 && glyphA->dataLength > 0) {
       runner.expectEq(static_cast<uint8_t>('A'), bitmap2[0], "cache_eviction: data correct after reload");
     }
+
+    font.unload();
+  }
+
+  // ============================================
+  // Access Counter Overflow Tests
+  // ============================================
+
+  // Test 26: advanceAccessCounter renumbers on overflow
+  {
+    SdMan.clearFiles();
+    std::string fontData = TestFontData::generateBasicAsciiFont(20);
+    SdMan.registerFile("/fonts/test.epdfont", fontData);
+
+    StreamingEpdFont font;
+    font.load("/fonts/test.epdfont");
+
+    // Access three glyphs to populate cache with known lastUsed order
+    const EpdGlyph* gA = font.getGlyph('A');
+    font.getGlyphBitmap(gA);  // lastUsed = 1
+    const EpdGlyph* gB = font.getGlyph('B');
+    font.getGlyphBitmap(gB);  // lastUsed = 2
+    const EpdGlyph* gC = font.getGlyph('C');
+    font.getGlyphBitmap(gC);  // lastUsed = 3
+
+    // Compute actual glyphIndex values from glyph pointers
+    uint32_t idxA = static_cast<uint32_t>(gA - font._glyphs);
+    uint32_t idxB = static_cast<uint32_t>(gB - font._glyphs);
+    uint32_t idxC = static_cast<uint32_t>(gC - font._glyphs);
+
+    // Force counter to UINT32_MAX - next call will overflow and renumber
+    font._accessCounter = UINT32_MAX;
+
+    // This call triggers overflow → renumber
+    const EpdGlyph* gD = font.getGlyph('D');
+    font.getGlyphBitmap(gD);
+    uint32_t idxD = static_cast<uint32_t>(gD - font._glyphs);
+
+    // Counter should have been reset to a small value after renumbering
+    runner.expectTrue(font._accessCounter < 100, "counter_overflow: counter renumbered to small value");
+
+    // LRU order should be preserved: A was oldest, D is newest
+    uint32_t lastUsedA = 0, lastUsedB = 0, lastUsedC = 0, lastUsedD = 0;
+    for (int i = 0; i < StreamingEpdFont::CACHE_SIZE; i++) {
+      if (font._cache[i].glyphIndex == idxA) lastUsedA = font._cache[i].lastUsed;
+      if (font._cache[i].glyphIndex == idxB) lastUsedB = font._cache[i].lastUsed;
+      if (font._cache[i].glyphIndex == idxC) lastUsedC = font._cache[i].lastUsed;
+      if (font._cache[i].glyphIndex == idxD) lastUsedD = font._cache[i].lastUsed;
+    }
+
+    runner.expectTrue(lastUsedA < lastUsedB, "counter_overflow: A older than B after renumber");
+    runner.expectTrue(lastUsedB < lastUsedC, "counter_overflow: B older than C after renumber");
+    runner.expectTrue(lastUsedC < lastUsedD, "counter_overflow: C older than D (newest)");
+
+    // Verify cache still works after overflow
+    const uint8_t* bitmap = font.getGlyphBitmap(gA);
+    runner.expectTrue(bitmap != nullptr, "counter_overflow: cache functional after renumber");
+
+    font.unload();
+  }
+
+  // Test 27: advanceAccessCounter preserves LRU eviction correctness
+  {
+    SdMan.clearFiles();
+    std::string fontData = TestFontData::generateBasicAsciiFont(20);
+    SdMan.registerFile("/fonts/test.epdfont", fontData);
+
+    StreamingEpdFont font;
+    font.load("/fonts/test.epdfont");
+
+    // Compute glyphIndex for 'A'
+    const EpdGlyph* gA = font.getGlyph('A');
+    uint32_t idxA = static_cast<uint32_t>(gA - font._glyphs);
+
+    // Fill cache and re-access 'A' to make it recent
+    font.getGlyphBitmap(gA);
+    for (uint32_t cp = 'B'; cp <= 'Z'; cp++) {
+      const EpdGlyph* g = font.getGlyph(cp);
+      if (g) font.getGlyphBitmap(g);
+    }
+    // Re-access A so it's the most recent
+    font.getGlyphBitmap(gA);
+
+    // Force overflow
+    font._accessCounter = UINT32_MAX;
+    const EpdGlyph* gExtra = font.getGlyph('a');
+    font.getGlyphBitmap(gExtra);
+
+    // Find A's lastUsed after renumbering
+    uint32_t lastUsedA = 0;
+    for (int i = 0; i < StreamingEpdFont::CACHE_SIZE; i++) {
+      if (font._cache[i].glyphIndex == idxA) {
+        lastUsedA = font._cache[i].lastUsed;
+        break;
+      }
+    }
+    // A should NOT be the LRU victim (it was recently used)
+    uint32_t minLastUsed = UINT32_MAX;
+    for (int i = 0; i < StreamingEpdFont::CACHE_SIZE; i++) {
+      if (font._cache[i].glyphIndex != UINT32_MAX && font._cache[i].lastUsed < minLastUsed) {
+        minLastUsed = font._cache[i].lastUsed;
+      }
+    }
+    runner.expectTrue(lastUsedA > minLastUsed, "counter_overflow_lru: recently used entry not oldest");
 
     font.unload();
   }
