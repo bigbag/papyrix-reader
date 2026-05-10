@@ -278,9 +278,10 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
 
   if ((!success && pageCount_ == 0) || aborted) {
     file_.close();
-    // Remove file to prevent corrupt/incomplete cache
-    SdMan.remove(cachePath_.c_str());
-    LOG_ERR(TAG, "Parsing failed or aborted with %d pages", pageCount_);
+    if (skipPages == 0) {
+      SdMan.remove(cachePath_.c_str());
+    }
+    LOG_ERR(TAG, "Parsing failed or aborted with %d pages (extend=%d)", pageCount_, skipPages > 0);
     return false;
   }
 

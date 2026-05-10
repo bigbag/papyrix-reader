@@ -507,8 +507,14 @@ void ReaderState::backgroundCacheImpl(ContentParser& parser, const std::string& 
     }
 
     if (!success || cacheTask_.shouldStop()) {
-      LOG_ERR(TAG, "Cache creation failed or aborted, clearing pageCache");
-      pageCache_.reset();
+      if (needsExtend) {
+        pageCache_.reset(new PageCache(cachePath));
+        if (!pageCache_->load(config)) {
+          pageCache_.reset();
+        }
+      } else {
+        pageCache_.reset();
+      }
     }
   }
 }
@@ -929,6 +935,9 @@ void ReaderState::navigateNext(Core& core) {
   pos.sectionPage = currentSectionPage_;
   pos.flatPage = currentPage_;
   auto result = ReaderNavigation::next(type, pos, pageCache_.get(), core.content.pageCount());
+  if (!result.needsRender && !pageCache_) {
+    result.needsRender = true;
+  }
   applyNavResult(result, core);
 }
 
@@ -980,6 +989,9 @@ void ReaderState::navigatePrev(Core& core) {
   pos.sectionPage = currentSectionPage_;
   pos.flatPage = currentPage_;
   auto result = ReaderNavigation::prev(type, pos, pageCache_.get());
+  if (!result.needsRender && !pageCache_) {
+    result.needsRender = true;
+  }
   applyNavResult(result, core);
 }
 

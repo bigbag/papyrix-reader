@@ -467,5 +467,85 @@ int main() {
     runner.expectFalse(result.needsRender, "FB2 prev: needsRender is false at start of book");
   }
 
+  // ============================================
+  // Null cache force-render (ReaderState pattern)
+  // ReaderState forces needsRender=true when pageCache
+  // is null to ensure re-render triggers re-caching.
+  // ============================================
+
+  // Test 29: EPUB next with null cache - caller forces needsRender
+  {
+    ReaderNavigation::Position pos;
+    pos.spineIndex = 1;
+    pos.sectionPage = 5;
+    PageCache* cache = nullptr;
+    auto result = ReaderNavigation::next(ContentType::Epub, pos, cache, 0);
+    runner.expectFalse(result.needsRender, "null_cache_epub_next_nav_returns_false");
+
+    if (!result.needsRender && !cache) {
+      result.needsRender = true;
+    }
+    runner.expectTrue(result.needsRender, "null_cache_epub_next_forced_render");
+  }
+
+  // Test 30: TXT next with null cache - caller forces needsRender
+  {
+    ReaderNavigation::Position pos;
+    pos.sectionPage = 5;
+    PageCache* cache = nullptr;
+    auto result = ReaderNavigation::next(ContentType::Txt, pos, cache, 0);
+    runner.expectFalse(result.needsRender, "null_cache_txt_next_nav_returns_false");
+
+    if (!result.needsRender && !cache) {
+      result.needsRender = true;
+    }
+    runner.expectTrue(result.needsRender, "null_cache_txt_next_forced_render");
+  }
+
+  // Test 31: EPUB prev at sectionPage 0 with null cache - forced render
+  {
+    ReaderNavigation::Position pos;
+    pos.spineIndex = 0;
+    pos.sectionPage = 0;
+    PageCache* cache = nullptr;
+    auto result = ReaderNavigation::prev(ContentType::Epub, pos, cache);
+    runner.expectFalse(result.needsRender, "null_cache_epub_prev_start_returns_false");
+
+    if (!result.needsRender && !cache) {
+      result.needsRender = true;
+    }
+    runner.expectTrue(result.needsRender, "null_cache_epub_prev_start_forced_render");
+  }
+
+  // Test 32: At end of complete cache - no override (cache exists)
+  {
+    PageCache cache(20, false);
+    ReaderNavigation::Position pos;
+    pos.sectionPage = 19;
+    PageCache* cachePtr = &cache;
+    auto result = ReaderNavigation::next(ContentType::Txt, pos, cachePtr, 0);
+    runner.expectFalse(result.needsRender, "end_of_cache_no_render");
+
+    if (!result.needsRender && !cachePtr) {
+      result.needsRender = true;
+    }
+    runner.expectFalse(result.needsRender, "end_of_cache_no_override");
+  }
+
+  // Test 33: FB2 next with null cache - forced render
+  {
+    ReaderNavigation::Position pos;
+    pos.spineIndex = 2;
+    pos.sectionPage = 3;
+    PageCache* cache = nullptr;
+    auto result = ReaderNavigation::next(ContentType::Fb2, pos, cache, 0);
+    runner.expectFalse(result.needsRender, "null_cache_fb2_next_returns_false");
+
+    if (!result.needsRender && !cache) {
+      result.needsRender = true;
+    }
+    runner.expectTrue(result.needsRender, "null_cache_fb2_next_forced_render");
+  }
+
   return runner.allPassed() ? 0 : 1;
 }

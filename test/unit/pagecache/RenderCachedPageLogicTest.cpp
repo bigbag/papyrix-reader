@@ -116,6 +116,13 @@ class MockPageCache {
     return result;
   }
 
+  bool loadFromDisk(uint16_t diskPages) {
+    if (diskPages == 0) return false;
+    pageCount_ = diskPages;
+    isPartial_ = true;
+    return true;
+  }
+
   uint16_t pageCount() const { return pageCount_; }
   bool isPartial() const { return isPartial_; }
 
@@ -151,6 +158,7 @@ struct ReaderCacheState {
   int currentSectionPage = 0;
 
   int totalPagesForChapter = 25;  // Configurable chapter size
+  uint16_t diskCachePages = 0;    // Simulates pages saved on disk before failure
 
   void createOrExtendCache() {
     // Create parser if we don't have one (or if spine changed)
@@ -197,6 +205,18 @@ struct ReaderCacheState {
 
     pageCount = pageCache ? pageCache->pageCount() : 0;
     return pageNum < pageCount;
+  }
+
+  // Simulates backgroundCacheImpl failure recovery (lines 509-518)
+  void handleCacheFailure(bool needsExtend) {
+    if (needsExtend) {
+      pageCache.reset(new MockPageCache());
+      if (!pageCache->loadFromDisk(diskCachePages)) {
+        pageCache.reset();
+      }
+    } else {
+      pageCache.reset();
+    }
   }
 
   // Simulates the backward navigation loop from the diff (lines 584-593)
@@ -571,6 +591,58 @@ int main() {
     state.createOrExtendCache();
 
     runner.expectTrue(state.ensurePageCached(0), "ensure_first_page");
+  }
+
+  // ============================================
+  // Extend failure recovery (backgroundCacheImpl)
+  // ============================================
+
+  // Test 22: Extend failure reloads partial cache from disk
+  {
+    ReaderCacheState state;
+    state.totalPagesForChapter = 30;
+    state.createOrExtendCache();
+    uint16_t cachedBefore = state.pageCache->pageCount();
+    runner.expectEq(static_cast<uint16_t>(10), cachedBefore, "extend_fail_initial_chunk");
+
+    state.diskCachePages = cachedBefore;
+    state.pageCache.reset();
+    state.handleCacheFailure(true);
+
+    runner.expectTrue(state.pageCache != nullptr, "extend_fail_cache_reloaded");
+    runner.expectEq(cachedBefore, state.pageCache->pageCount(), "extend_fail_pages_preserved");
+    runner.expectTrue(state.pageCache->isPartial(), "extend_fail_still_partial");
+  }
+
+  // Test 23: Extend failure with no disk cache → pageCache null
+  {
+    ReaderCacheState state;
+    state.diskCachePages = 0;
+    state.handleCacheFailure(true);
+
+    runner.expectTrue(state.pageCache == nullptr, "extend_fail_no_disk_null");
+  }
+
+  // Test 24: Fresh create failure → pageCache destroyed (never reloads)
+  {
+    ReaderCacheState state;
+    state.totalPagesForChapter = 30;
+    state.createOrExtendCache();
+    state.diskCachePages = state.pageCache->pageCount();
+
+    state.handleCacheFailure(false);
+
+    runner.expectTrue(state.pageCache == nullptr, "create_fail_cache_destroyed");
+  }
+
+  // Test 25: Extend failure → reload succeeds with different page count
+  {
+    ReaderCacheState state;
+    state.diskCachePages = 7;
+    state.handleCacheFailure(true);
+
+    runner.expectTrue(state.pageCache != nullptr, "extend_fail_reload_7_pages");
+    runner.expectEq(static_cast<uint16_t>(7), state.pageCache->pageCount(), "extend_fail_reload_count");
   }
 
   return runner.allPassed() ? 0 : 1;
