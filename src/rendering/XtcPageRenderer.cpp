@@ -165,10 +165,9 @@ XtcPageRenderer::RenderResult XtcPageRenderer::render(xtc::XtcParser& parser, ui
 
     renderer_.displayGrayBuffer();
 
-    // Restore framebuffer for next page render WITHOUT hardware cleanup.
-    // Leave inGrayscaleMode = true and LSB/MSB data in BW/RED RAM so that
-    // displayBuffer()'s grayscaleRevert() can apply lut_grayscale_revert
-    // to drive the panel from gray back to BW on the next page.
+    // Restore framebuffer and sync hardware RAMs so the next page turn
+    // does a clean differential refresh instead of relying on grayscaleRevert()
+    // (which leaves stale MSB data in RED RAM in single-buffer mode).
     renderer_.clearScreen();
     for (uint16_t y = 0; y < pageHeight; y++) {
       for (uint16_t x = 0; x < pageWidth; x++) {
@@ -178,6 +177,7 @@ XtcPageRenderer::RenderResult XtcPageRenderer::render(xtc::XtcParser& parser, ui
       }
       if (y % 100 == 0) esp_task_wdt_reset();
     }
+    renderer_.cleanupGrayscaleWithFrameBuffer();
     LOG_DBG(TAG, "Rendered page %u/%u (2-bit grayscale)", pageNum + 1, parser.getPageCount());
     free(plane2Buffer);
   } else {
