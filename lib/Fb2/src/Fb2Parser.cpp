@@ -275,11 +275,13 @@ void XMLCALL Fb2Parser::startElement(void* userData, const XML_Char* name, const
       self->startNewTextBlock(style);
     }
   } else if (strcmp(localName, "emphasis") == 0) {
+    self->flushPartWordBuffer();
     self->italicUntilDepth_ = std::min(self->italicUntilDepth_, self->depth_);
   } else if (strcmp(localName, "code") == 0) {
-    // FB2 <code> renders italic (no monospace font bundled) — mirrors EPUB behavior.
+    self->flushPartWordBuffer();
     self->italicUntilDepth_ = std::min(self->italicUntilDepth_, self->depth_);
   } else if (strcmp(localName, "strong") == 0) {
+    self->flushPartWordBuffer();
     self->boldUntilDepth_ = std::min(self->boldUntilDepth_, self->depth_);
   } else if (strcmp(localName, "empty-line") == 0) {
     self->flushPartWordBuffer();
@@ -309,9 +311,12 @@ void XMLCALL Fb2Parser::endElement(void* userData, const XML_Char* name) {
   auto* self = static_cast<Fb2Parser*>(userData);
   const char* localName = stripNamespace(name);
 
+  if (strcmp(localName, "emphasis") == 0 || strcmp(localName, "code") == 0 || strcmp(localName, "strong") == 0) {
+    self->flushPartWordBuffer();
+  }
+
   self->depth_--;
 
-  // Check bold/italic depth AFTER decrementing (depth_ now matches startElement's value)
   if (self->depth_ <= self->boldUntilDepth_) {
     self->boldUntilDepth_ = INT_MAX;
   }

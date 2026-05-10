@@ -126,6 +126,91 @@ static const StyledRun* findRun(const std::vector<StyledRun>& runs, const std::s
   return nullptr;
 }
 
+// Word-buffering harness that mirrors production Fb2Parser's partWordBuffer/flush behavior.
+// Unlike TestFb2StyleParser (which captures style per characterData callback), this harness
+// only assigns style at flush time, reproducing the bug where the last word in a style tag
+// loses formatting.
+class TestFb2WordFlushParser {
+  static constexpr int MAX_WORD_SIZE = 128;
+
+  int depth_ = 0;
+  int boldUntilDepth_ = INT_MAX;
+  int italicUntilDepth_ = INT_MAX;
+  char wordBuffer_[MAX_WORD_SIZE + 1] = {};
+  int wordIndex_ = 0;
+
+  static const char* stripNamespace(const XML_Char* name) {
+    const char* tag = strrchr(name, ':');
+    return tag ? tag + 1 : name;
+  }
+
+  void flushWordBuffer() {
+    if (wordIndex_ == 0) return;
+    wordBuffer_[wordIndex_] = '\0';
+    bool bold = (boldUntilDepth_ < INT_MAX);
+    bool italic = (italicUntilDepth_ < INT_MAX);
+    words.push_back({std::string(wordBuffer_), bold, italic});
+    wordIndex_ = 0;
+  }
+
+  static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char**) {
+    auto* self = static_cast<TestFb2WordFlushParser*>(userData);
+    const char* localName = stripNamespace(name);
+
+    if (strcmp(localName, "emphasis") == 0 || strcmp(localName, "code") == 0) {
+      self->flushWordBuffer();
+      self->italicUntilDepth_ = std::min(self->italicUntilDepth_, self->depth_);
+    } else if (strcmp(localName, "strong") == 0) {
+      self->flushWordBuffer();
+      self->boldUntilDepth_ = std::min(self->boldUntilDepth_, self->depth_);
+    }
+    self->depth_++;
+  }
+
+  static void XMLCALL endElement(void* userData, const XML_Char* name) {
+    auto* self = static_cast<TestFb2WordFlushParser*>(userData);
+    const char* localName = stripNamespace(name);
+
+    if (strcmp(localName, "emphasis") == 0 || strcmp(localName, "code") == 0 ||
+        strcmp(localName, "strong") == 0) {
+      self->flushWordBuffer();
+    }
+
+    self->depth_--;
+    if (self->depth_ <= self->boldUntilDepth_) self->boldUntilDepth_ = INT_MAX;
+    if (self->depth_ <= self->italicUntilDepth_) self->italicUntilDepth_ = INT_MAX;
+
+    if (strcmp(localName, "p") == 0) self->flushWordBuffer();
+  }
+
+  static void XMLCALL characterData(void* userData, const XML_Char* s, int len) {
+    auto* self = static_cast<TestFb2WordFlushParser*>(userData);
+    for (int i = 0; i < len; i++) {
+      if (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r') {
+        self->flushWordBuffer();
+        continue;
+      }
+      if (self->wordIndex_ < MAX_WORD_SIZE) {
+        self->wordBuffer_[self->wordIndex_++] = s[i];
+      }
+    }
+  }
+
+ public:
+  std::vector<StyledRun> words;
+
+  bool parse(const std::string& xml) {
+    XML_Parser parser = XML_ParserCreate("UTF-8");
+    if (!parser) return false;
+    XML_SetUserData(parser, this);
+    XML_SetElementHandler(parser, startElement, endElement);
+    XML_SetCharacterDataHandler(parser, characterData);
+    const bool ok = XML_Parse(parser, xml.data(), static_cast<int>(xml.size()), 1) != XML_STATUS_ERROR;
+    XML_ParserFree(parser);
+    return ok;
+  }
+};
+
 int main() {
   TestUtils::TestRunner runner("Fb2 Inline Styles");
 
@@ -271,6 +356,90 @@ int main() {
       runner.expectTrue(r->bold, "verse_strong_bold: bold set");
       runner.expectFalse(r->italic, "verse_strong_bold: italic not set");
     }
+  }
+
+  // --- Word-flush tests (reproduce issue #114: last word loses style) ---
+
+  // Test 12: Last word in <emphasis> retains italic
+  {
+    TestFb2WordFlushParser p;
+    bool ok = p.parse(wrap("<emphasis>foo bar</emphasis>"));
+    runner.expectTrue(ok, "flush_emphasis_last_word: parses");
+    const StyledRun* r = findRun(p.words, "bar");
+    runner.expectTrue(r != nullptr, "flush_emphasis_last_word: 'bar' found");
+    if (r) runner.expectTrue(r->italic, "flush_emphasis_last_word: 'bar' is italic");
+  }
+
+  // Test 13: Last word in <strong> retains bold
+  {
+    TestFb2WordFlushParser p;
+    bool ok = p.parse(wrap("<strong>foo bar</strong>"));
+    runner.expectTrue(ok, "flush_strong_last_word: parses");
+    const StyledRun* r = findRun(p.words, "bar");
+    runner.expectTrue(r != nullptr, "flush_strong_last_word: 'bar' found");
+    if (r) runner.expectTrue(r->bold, "flush_strong_last_word: 'bar' is bold");
+  }
+
+  // Test 14: Last word in <code> retains italic
+  {
+    TestFb2WordFlushParser p;
+    bool ok = p.parse(wrap("<code>foo bar</code>"));
+    runner.expectTrue(ok, "flush_code_last_word: parses");
+    const StyledRun* r = findRun(p.words, "bar");
+    runner.expectTrue(r != nullptr, "flush_code_last_word: 'bar' found");
+    if (r) runner.expectTrue(r->italic, "flush_code_last_word: 'bar' is italic");
+  }
+
+  // Test 15: Single word with punctuation in <emphasis> is italic
+  {
+    TestFb2WordFlushParser p;
+    bool ok = p.parse(wrap("<emphasis>word.</emphasis>"));
+    runner.expectTrue(ok, "flush_emphasis_single_word: parses");
+    const StyledRun* r = findRun(p.words, "word.");
+    runner.expectTrue(r != nullptr, "flush_emphasis_single_word: 'word.' found");
+    if (r) runner.expectTrue(r->italic, "flush_emphasis_single_word: 'word.' is italic");
+  }
+
+  // Test 16: Nested <emphasis> inside <strong> — inner word is bold+italic
+  {
+    TestFb2WordFlushParser p;
+    bool ok = p.parse(wrap("<strong>a <emphasis>b</emphasis> c</strong>"));
+    runner.expectTrue(ok, "flush_nested: parses");
+    const StyledRun* rb = findRun(p.words, "b");
+    runner.expectTrue(rb != nullptr, "flush_nested: 'b' found");
+    if (rb) runner.expectTrue(rb->bold && rb->italic, "flush_nested: 'b' is bold+italic");
+    const StyledRun* rc = findRun(p.words, "c");
+    runner.expectTrue(rc != nullptr, "flush_nested: 'c' found");
+    if (rc) {
+      runner.expectTrue(rc->bold, "flush_nested: 'c' is bold");
+      runner.expectFalse(rc->italic, "flush_nested: 'c' is not italic");
+    }
+  }
+
+  // Test 17: Opening boundary — word before <emphasis> stays regular
+  {
+    TestFb2WordFlushParser p;
+    bool ok = p.parse(wrap("word<emphasis>italic</emphasis>"));
+    runner.expectTrue(ok, "flush_opening_boundary: parses");
+    const StyledRun* rw = findRun(p.words, "word");
+    runner.expectTrue(rw != nullptr, "flush_opening_boundary: 'word' found");
+    if (rw) runner.expectFalse(rw->italic, "flush_opening_boundary: 'word' is not italic");
+    const StyledRun* ri = findRun(p.words, "italic");
+    runner.expectTrue(ri != nullptr, "flush_opening_boundary: 'italic' found");
+    if (ri) runner.expectTrue(ri->italic, "flush_opening_boundary: 'italic' is italic");
+  }
+
+  // Test 18: Word after closing </emphasis> is regular
+  {
+    TestFb2WordFlushParser p;
+    bool ok = p.parse(wrap("<emphasis>italic</emphasis> normal"));
+    runner.expectTrue(ok, "flush_after_close: parses");
+    const StyledRun* ri = findRun(p.words, "italic");
+    runner.expectTrue(ri != nullptr, "flush_after_close: 'italic' found");
+    if (ri) runner.expectTrue(ri->italic, "flush_after_close: 'italic' is italic");
+    const StyledRun* rn = findRun(p.words, "normal");
+    runner.expectTrue(rn != nullptr, "flush_after_close: 'normal' found");
+    if (rn) runner.expectFalse(rn->italic, "flush_after_close: 'normal' is not italic");
   }
 
   return runner.allPassed() ? 0 : 1;
