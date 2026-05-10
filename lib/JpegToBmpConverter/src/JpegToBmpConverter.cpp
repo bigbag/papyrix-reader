@@ -4,6 +4,7 @@
 
 #define TAG "JPEG"
 #include <SdFat.h>
+#include <esp_heap_caps.h>
 #include <picojpeg.h>
 
 #include <algorithm>
@@ -349,6 +350,16 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
     return false;
   }
 
+  const size_t totalWorkingSet = mcuRowPixels + (needsScaling ? outWidth * 6 : 0) + 2048;
+  constexpr size_t HEAP_RESERVE = 20 * 1024;
+  const size_t availableHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+  if (totalWorkingSet + HEAP_RESERVE > availableHeap) {
+    LOG_ERR(TAG, "Insufficient heap for JPEG decode: need %zu + %zuK reserve, have %zu", totalWorkingSet,
+            HEAP_RESERVE / 1024, availableHeap);
+    free(rowBuffer);
+    return false;
+  }
+
   auto* mcuRowBuffer = static_cast<uint8_t*>(malloc(mcuRowPixels));
   if (!mcuRowBuffer) {
     LOG_ERR(TAG, "Failed to allocate MCU row buffer (%d bytes)", mcuRowPixels);
@@ -473,6 +484,18 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
 
           mcuRowBuffer[blockY * imageInfo.m_width + pixelX] = gray;
         }
+      }
+
+      if (shouldAbort && (mcuX & 3) == 3 && shouldAbort()) {
+        LOG_INF(TAG, "Abort requested during JPEG decode (MCU %d,%d)", mcuX, mcuY);
+        if (rowAccum) delete[] rowAccum;
+        if (rowCount) delete[] rowCount;
+        delete atkinsonDitherer;
+        delete fsDitherer;
+        delete atkinson1BitDitherer;
+        free(mcuRowBuffer);
+        free(rowBuffer);
+        return false;
       }
     }
 
