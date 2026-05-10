@@ -221,7 +221,7 @@ void pngInitCallback(pngle_t* pngle, uint32_t w, uint32_t h) {
   ctx->needsScaling = false;
 
   if (ctx->targetMaxWidth > 0 && ctx->targetMaxHeight > 0 &&
-      (static_cast<int>(w) != ctx->targetMaxWidth || static_cast<int>(h) != ctx->targetMaxHeight)) {
+      (static_cast<int>(w) > ctx->targetMaxWidth || static_cast<int>(h) > ctx->targetMaxHeight)) {
     const float scaleToFitWidth = static_cast<float>(ctx->targetMaxWidth) / w;
     const float scaleToFitHeight = static_cast<float>(ctx->targetMaxHeight) / h;
     const float scale = (scaleToFitWidth < scaleToFitHeight) ? scaleToFitWidth : scaleToFitHeight;

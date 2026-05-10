@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <new>
 
 // ============================================================================
 // IMAGE PROCESSING OPTIONS - Toggle these to test different configurations
@@ -12,31 +13,9 @@ constexpr bool USE_ATKINSON = true;  // Use Atkinson dithering instead of Floyd-
 // ============================================================================
 
 Bitmap::~Bitmap() {
+  delete[] preloadedRows_;
   delete atkinsonDitherer;
   delete fsDitherer;
-}
-
-uint16_t Bitmap::readLE16(FsFile& f) {
-  const int c0 = f.read();
-  const int c1 = f.read();
-  const auto b0 = static_cast<uint8_t>(c0 < 0 ? 0 : c0);
-  const auto b1 = static_cast<uint8_t>(c1 < 0 ? 0 : c1);
-  return static_cast<uint16_t>(b0) | (static_cast<uint16_t>(b1) << 8);
-}
-
-uint32_t Bitmap::readLE32(FsFile& f) {
-  const int c0 = f.read();
-  const int c1 = f.read();
-  const int c2 = f.read();
-  const int c3 = f.read();
-
-  const auto b0 = static_cast<uint8_t>(c0 < 0 ? 0 : c0);
-  const auto b1 = static_cast<uint8_t>(c1 < 0 ? 0 : c1);
-  const auto b2 = static_cast<uint8_t>(c2 < 0 ? 0 : c2);
-  const auto b3 = static_cast<uint8_t>(c3 < 0 ? 0 : c3);
-
-  return static_cast<uint32_t>(b0) | (static_cast<uint32_t>(b1) << 8) | (static_cast<uint32_t>(b2) << 16) |
-         (static_cast<uint32_t>(b3) << 24);
 }
 
 const char* Bitmap::errorToString(BmpReaderError err) {
@@ -81,70 +60,69 @@ BmpReaderError Bitmap::parseHeaders() {
   if (!file) return BmpReaderError::FileInvalid;
   if (!file.seek(0)) return BmpReaderError::SeekStartFailed;
 
-  // --- BMP FILE HEADER ---
-  const uint16_t bfType = readLE16(file);
-  if (bfType != 0x4D42) return BmpReaderError::NotBMP;
+  uint8_t hdr[54];
+  if (file.read(hdr, sizeof(hdr)) != static_cast<int>(sizeof(hdr))) {
+    return BmpReaderError::FileInvalid;
+  }
 
-  file.seekCur(8);
-  bfOffBits = readLE32(file);
+  auto leU16 = [](const uint8_t* p) -> uint16_t { return static_cast<uint16_t>(p[0] | (uint16_t(p[1]) << 8)); };
+  auto leU32 = [](const uint8_t* p) -> uint32_t {
+    return uint32_t(p[0]) | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16) | (uint32_t(p[3]) << 24);
+  };
 
-  // --- DIB HEADER ---
-  const uint32_t biSize = readLE32(file);
+  if (leU16(hdr + 0) != 0x4D42) return BmpReaderError::NotBMP;
+  bfOffBits = leU32(hdr + 10);
+  const uint32_t biSize = leU32(hdr + 14);
   if (biSize < 40) return BmpReaderError::DIBTooSmall;
 
-  width = static_cast<int32_t>(readLE32(file));
-  const auto rawHeight = static_cast<int32_t>(readLE32(file));
+  width = static_cast<int32_t>(leU32(hdr + 18));
+  const auto rawHeight = static_cast<int32_t>(leU32(hdr + 22));
   topDown = rawHeight < 0;
   height = topDown ? -rawHeight : rawHeight;
 
-  const uint16_t planes = readLE16(file);
-  bpp = readLE16(file);
-  const uint32_t comp = readLE32(file);
+  const uint16_t planes = leU16(hdr + 26);
+  bpp = leU16(hdr + 28);
+  const uint32_t comp = leU32(hdr + 30);
+  const uint32_t colorsUsed = leU32(hdr + 46);
   const bool validBpp = bpp == 1 || bpp == 2 || bpp == 8 || bpp == 24 || bpp == 32;
 
   if (planes != 1) return BmpReaderError::BadPlanes;
   if (!validBpp) return BmpReaderError::UnsupportedBpp;
-  // Allow BI_RGB (0) for all, and BI_BITFIELDS (3) for 32bpp which is common for BGRA masks.
   if (!(comp == 0 || (bpp == 32 && comp == 3))) return BmpReaderError::UnsupportedCompression;
-
-  file.seekCur(12);  // biSizeImage, biXPelsPerMeter, biYPelsPerMeter
-  const uint32_t colorsUsed = readLE32(file);
   if (colorsUsed > 256u) return BmpReaderError::PaletteTooLarge;
-  file.seekCur(4);  // biClrImportant
-
   if (width <= 0 || height <= 0) return BmpReaderError::BadDimensions;
 
-  // Safety limits to prevent memory issues on ESP32
   constexpr int MAX_IMAGE_WIDTH = 2048;
   constexpr int MAX_IMAGE_HEIGHT = 3072;
   if (width > MAX_IMAGE_WIDTH || height > MAX_IMAGE_HEIGHT) {
     return BmpReaderError::ImageTooLarge;
   }
 
-  // Pre-calculate Row Bytes to avoid doing this every row
   rowBytes = (width * bpp + 31) / 32 * 4;
 
   for (int i = 0; i < 256; i++) paletteLum[i] = static_cast<uint8_t>(i);
   if (colorsUsed > 0) {
+    uint8_t palBuf[256 * 4];
+    const int palBytes = static_cast<int>(colorsUsed * 4);
+    if (file.read(palBuf, palBytes) != palBytes) return BmpReaderError::FileInvalid;
     for (uint32_t i = 0; i < colorsUsed; i++) {
-      uint8_t rgb[4];
-      file.read(rgb, 4);  // Read B, G, R, Reserved in one go
+      const uint8_t* rgb = palBuf + i * 4;
       paletteLum[i] = (77u * rgb[2] + 150u * rgb[1] + 29u * rgb[0]) >> 8;
     }
   }
+
+  isIdentityPalette_ = (bpp == 2 && colorsUsed >= 4 && paletteLum[0] == 0x00 && paletteLum[1] == 0x55 &&
+                        paletteLum[2] == 0xAA && paletteLum[3] == 0xFF);
 
   if (!file.seek(bfOffBits)) {
     return BmpReaderError::SeekPixelDataFailed;
   }
 
-  // Clean up existing ditherers (safe if nullptr)
   delete atkinsonDitherer;
   atkinsonDitherer = nullptr;
   delete fsDitherer;
   fsDitherer = nullptr;
 
-  // Create ditherer if enabled (only for 2-bit output)
-  // Use OUTPUT dimensions for dithering (after prescaling)
   if (bpp > 2 && dithering) {
     if (USE_ATKINSON) {
       atkinsonDitherer = new AtkinsonDitherer(width);
@@ -158,8 +136,13 @@ BmpReaderError Bitmap::parseHeaders() {
 
 // packed 2bpp output, 0 = black, 1 = dark gray, 2 = light gray, 3 = white
 BmpReaderError Bitmap::readRow(uint8_t* data, uint8_t* rowBuffer, int rowY) const {
-  // Note: rowBuffer should be pre-allocated by the caller to size 'rowBytes'
-  if (file.read(rowBuffer, rowBytes) != rowBytes) return BmpReaderError::ShortReadRow;
+  if (preloadedRows_) {
+    const uint8_t* src = preloadedRow(rowY);
+    if (!src) return BmpReaderError::ShortReadRow;
+    memcpy(rowBuffer, src, rowBytes);
+  } else {
+    if (file.read(rowBuffer, rowBytes) != rowBytes) return BmpReaderError::ShortReadRow;
+  }
 
   prevRowY += 1;
 
@@ -223,8 +206,13 @@ BmpReaderError Bitmap::readRow(uint8_t* data, uint8_t* rowBuffer, int rowY) cons
       break;
     }
     case 2: {
+      if (isIdentityPalette_ && !atkinsonDitherer && !fsDitherer) {
+        const int bytesIn = (width * 2 + 7) / 8;
+        memcpy(data, rowBuffer, bytesIn);
+        return BmpReaderError::Ok;
+      }
       for (int x = 0; x < width; x++) {
-        lum = paletteLum[(rowBuffer[x >> 2] >> (6 - ((x & 3) * 2))) & 0x03];
+        lum = paletteLum[(rowBuffer[x >> 2] >> (6 - ((x & 3) << 1))) & 0x03];
         packPixel(lum);
       }
       break;
@@ -251,12 +239,42 @@ BmpReaderError Bitmap::readRow(uint8_t* data, uint8_t* rowBuffer, int rowY) cons
   return BmpReaderError::Ok;
 }
 
-BmpReaderError Bitmap::rewindToData() const {
+bool Bitmap::preloadAllRows() const {
+  if (preloadedRows_) return true;
+  if (rowBytes <= 0 || height <= 0) return false;
+
+  const size_t total = static_cast<size_t>(rowBytes) * static_cast<size_t>(height);
+  if (total > 256 * 1024) return false;
+
+  preloadedRows_ = new (std::nothrow) uint8_t[total];
+  if (!preloadedRows_) return false;
+
   if (!file.seek(bfOffBits)) {
-    return BmpReaderError::SeekPixelDataFailed;
+    delete[] preloadedRows_;
+    preloadedRows_ = nullptr;
+    return false;
+  }
+  if (file.read(preloadedRows_, total) != static_cast<int>(total)) {
+    delete[] preloadedRows_;
+    preloadedRows_ = nullptr;
+    file.seek(bfOffBits);
+    return false;
+  }
+  return true;
+}
+
+const uint8_t* Bitmap::preloadedRow(int rowIndex) const {
+  if (!preloadedRows_ || rowIndex < 0 || rowIndex >= height) return nullptr;
+  return preloadedRows_ + static_cast<size_t>(rowIndex) * static_cast<size_t>(rowBytes);
+}
+
+BmpReaderError Bitmap::rewindToData() const {
+  if (!preloadedRows_) {
+    if (!file.seek(bfOffBits)) {
+      return BmpReaderError::SeekPixelDataFailed;
+    }
   }
 
-  // Reset dithering state when rewinding
   prevRowY = -1;
   if (fsDitherer) fsDitherer->reset();
   if (atkinsonDitherer) atkinsonDitherer->reset();

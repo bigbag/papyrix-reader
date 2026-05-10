@@ -37,16 +37,18 @@ class Bitmap {
   BmpReaderError parseHeaders();
   BmpReaderError readRow(uint8_t* data, uint8_t* rowBuffer, int rowY) const;
   BmpReaderError rewindToData() const;
+  bool preloadAllRows() const;
+  bool isPreloaded() const { return preloadedRows_ != nullptr; }
+  const uint8_t* preloadedRow(int rowIndex) const;
   int getWidth() const { return width; }
   int getHeight() const { return height; }
   bool isTopDown() const { return topDown; }
   bool hasGreyscale() const { return bpp > 1; }
+  uint16_t getBpp() const { return bpp; }
   int getRowBytes() const { return rowBytes; }
+  bool isIdentityPalette() const { return isIdentityPalette_; }
 
  private:
-  static uint16_t readLE16(FsFile& f);
-  static uint32_t readLE32(FsFile& f);
-
   FsFile& file;
   bool dithering = false;
   int width = 0;
@@ -56,9 +58,11 @@ class Bitmap {
   uint16_t bpp = 0;
   int rowBytes = 0;
   uint8_t paletteLum[256] = {};
+  bool isIdentityPalette_ = false;
+  mutable uint8_t* preloadedRows_ = nullptr;
 
   // Dithering state (mutable for const methods)
-  mutable int prevRowY = -1;  // Track row progression for noise dithering
+  mutable int prevRowY = -1;
   mutable AtkinsonDitherer* atkinsonDitherer = nullptr;
   mutable FloydSteinbergDitherer* fsDitherer = nullptr;
 };

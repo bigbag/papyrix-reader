@@ -466,8 +466,6 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
     isScaled = true;
   }
 
-  // Use pre-allocated row buffers to avoid per-call heap allocation
-  // Verify bitmap fits within our pre-allocated buffer sizes
   const size_t outputRowSize = static_cast<size_t>((bitmap.getWidth() + 3) / 4);
   const size_t rowBytesSize = static_cast<size_t>(bitmap.getRowBytes());
 
@@ -481,11 +479,9 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
     return;
   }
 
-  // Inverse mapping: iterate destination pixels, sample from source.
-  // This avoids gaps/overlaps that forward mapping causes when downscaling.
   const int destWidth = isScaled ? static_cast<int>(bitmap.getWidth() * scale) : bitmap.getWidth();
   const int destHeight = isScaled ? static_cast<int>(bitmap.getHeight() * scale) : bitmap.getHeight();
-  const float invScale = isScaled ? (1.0f / scale) : 1.0f;
+  const uint32_t invScale_fp = isScaled ? static_cast<uint32_t>((1.0f / scale) * 65536.0f + 0.5f) : 65536U;
 
   const int screenW = getScreenWidth();
   const int screenH = getScreenHeight();
@@ -498,26 +494,33 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   const int stride = einkDisplay.getDisplayWidthBytes();
   const int bmpW = bitmap.getWidth();
 
+  const bool preloaded = bitmap.preloadAllRows();
+  const bool fastDirect = preloaded && bitmap.isIdentityPalette();
+
   int lastSrcY = -1;
+  const uint8_t* srcRow = nullptr;
   for (int destY = 0; destY < destHeight; destY++) {
     const int screenY = bitmap.isTopDown() ? (y + destY) : (y + destHeight - 1 - destY);
     if (screenY < 0 || screenY >= screenH) continue;
 
-    int srcY = isScaled ? static_cast<int>(destY * invScale) : destY;
+    int srcY = isScaled ? static_cast<int>((uint32_t(destY) * invScale_fp) >> 16) : destY;
     if (srcY >= bitmap.getHeight()) srcY = bitmap.getHeight() - 1;
 
-    if (srcY != lastSrcY) {
+    if (fastDirect) {
+      srcRow = bitmap.preloadedRow(srcY);
+    } else if (srcY != lastSrcY) {
       if (bitmap.readRow(bitmapOutputRow_, bitmapRowBytes_, srcY) != BmpReaderError::Ok) {
         LOG_ERR(TAG, "Failed to read row %d from bitmap", srcY);
         return;
       }
       lastSrcY = srcY;
+      srcRow = bitmapOutputRow_;
     }
 
     for (int dx = dxStart; dx < dxEnd; dx++) {
-      int bmpX = isScaled ? static_cast<int>(dx * invScale) : dx;
+      int bmpX = isScaled ? static_cast<int>((uint32_t(dx) * invScale_fp) >> 16) : dx;
       if (bmpX >= bmpW) bmpX = bmpW - 1;
-      const uint8_t val = (bitmapOutputRow_[bmpX / 4] >> (6 - ((bmpX * 2) % 8))) & 0x3;
+      const uint8_t val = (srcRow[bmpX >> 2] >> (6 - ((bmpX & 3) << 1))) & 0x3;
       const int sX = x + dx;
       if (renderMode == BW && val < 3) {
         orientedWriteFB(frameBuffer, stride, sX, screenY, orientation, panelW, panelH, true);
