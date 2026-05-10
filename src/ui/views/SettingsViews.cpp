@@ -48,6 +48,7 @@ void ReaderSettingsView::initDefs() {
   DEFS[7] = {tr(SHOW_IMAGES), SettingType::Toggle, nullptr, 0};
   DEFS[8] = {tr(STATUS_BAR), SettingType::Enum, statusBarValues, 3};
   DEFS[9] = {tr(READING_ORIENTATION), SettingType::Enum, orientationValues, 4};
+  DEFS[10] = {tr(FULL_BOOK_PROCESS), SettingType::Toggle, nullptr, 0};
 }
 
 // DeviceSettingsView runtime initialization

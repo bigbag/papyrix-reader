@@ -85,6 +85,7 @@ struct Settings {
   char fileListSelectedName[128] = "";  // FileListState: last selected filename
   uint16_t fileListSelectedIndex = 0;   // FileListState: last selected index
   uint8_t frontButtonLayout = FrontBCLR;
+  uint8_t fullBookProcess = 0;
 
   // Persistence (using drivers::Storage wrapper)
   Result<void> load(drivers::Storage& storage);

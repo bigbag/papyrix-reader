@@ -72,6 +72,7 @@ static constexpr KeyMapping KEY_MAP[] = {
     {"SUNLIGHT_FADING_FIX", StrId::STR_SUNLIGHT_FADING_FIX},
     {"FRONT_BUTTONS", StrId::STR_FRONT_BUTTONS},
     {"SIDE_BUTTONS", StrId::STR_SIDE_BUTTONS},
+    {"FULL_BOOK_PROCESS", StrId::STR_FULL_BOOK_PROCESS},
     {"ON", StrId::STR_ON},
     {"OFF", StrId::STR_OFF},
     {"XSMALL", StrId::STR_XSMALL},

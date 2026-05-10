@@ -110,7 +110,7 @@ struct ReaderSettingsView {
     uint8_t enumCount;
   };
 
-  static constexpr int SETTING_COUNT = 10;
+  static constexpr int SETTING_COUNT = 11;
   static constexpr int MAX_THEMES = 16;
   static SettingDef DEFS[SETTING_COUNT];
   static void initDefs();

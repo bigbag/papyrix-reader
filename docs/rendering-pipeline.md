@@ -141,11 +141,13 @@ EPUB caches one chapter per spine index (`epub_<hash>/sections/<idx>.bin`); othe
 
 ### Foreground vs. background
 
-Two entry points:
+Three entry points:
 
-**Foreground** — `renderCachedPage()` in `src/states/ReaderState.cpp:823`. If the current page isn't cached yet, draws an "Indexing..." overlay and calls `createOrExtendCache()` synchronously. Blocks UI.
+**Full book pre-processing** — When the "Full Book Process" setting is enabled, `startFullBookIndexing()` runs before normal reading begins. It processes every spine/section in the main loop (one spine per frame tick), showing a progress bar. Already-cached sections are skipped. The user can cancel with **Back**. Once complete, all page counts are exact and background caching proceeds normally. Skipped for XTC/XTCH files.
 
-**Background** — `startBackgroundCaching()` (`src/states/ReaderState.cpp:1252`) spawns a FreeRTOS task to extend the cache by another chunk while the user reads:
+**Foreground** — `renderCachedPage()` in `src/states/ReaderState.cpp`. If the current page isn't cached yet, draws an "Indexing..." overlay and calls `createOrExtendCache()` synchronously. Blocks UI.
+
+**Background** — `startBackgroundCaching()` (`src/states/ReaderState.cpp`) spawns a FreeRTOS task to extend the cache by another chunk while the user reads:
 
 ```
 Stack: 12,288 bytes (12KB)

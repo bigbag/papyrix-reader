@@ -69,6 +69,7 @@ enum class StrId : uint8_t {
   STR_SUNLIGHT_FADING_FIX,
   STR_FRONT_BUTTONS,
   STR_SIDE_BUTTONS,
+  STR_FULL_BOOK_PROCESS,
 
   // Settings enum values
   STR_ON,

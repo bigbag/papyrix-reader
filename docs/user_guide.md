@@ -189,6 +189,13 @@ Reading and display settings:
   - Options: Portrait, Landscape CW, Inverted, Landscape CCW
   - Screen orientation for reading
 
+- **Full Book Process** (default: OFF)
+  - When enabled, indexes all pages of the book before you start reading
+  - Shows a progress bar during indexing; press **Back** to cancel and return to the file list
+  - After indexing, the exact total page count is immediately available in the status bar
+  - Useful for books you want accurate page counts from the start (skipped for XTC/XTCH files)
+  - Already-cached sections are skipped, so reopening a previously indexed book is instant
+
 #### Device
 
 Power and device behavior settings:

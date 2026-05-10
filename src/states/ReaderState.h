@@ -218,6 +218,19 @@ class ReaderState : public State {
 
   // Boot mode transition - exit to UI via restart
   void exitToUI(Core& core);
+
+  // Full book pre-processing
+  bool indexingInProgress_ = false;
+  bool indexingCancelled_ = false;
+  int indexingSpine_ = 0;
+  int indexingTotalSpines_ = 0;
+  std::unique_ptr<PageCache> indexingCache_;
+  std::unique_ptr<ContentParser> indexingParser_;
+
+  void startFullBookIndexing(Core& core);
+  void processIndexingChunk(Core& core);
+  void renderIndexingScreen(Core& core);
+  bool isFullyIndexed(Core& core);
 };
 
 }  // namespace papyrix

@@ -72,6 +72,7 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "Sunlight Fading Fix",    // SUNLIGHT_FADING_FIX
     "Front Buttons",          // FRONT_BUTTONS
     "Side Buttons",           // SIDE_BUTTONS
+    "Full Book Process",      // FULL_BOOK_PROCESS
 
     // Settings enum values
     "ON",                     // ON

@@ -452,6 +452,9 @@ void SettingsState::loadReaderSettings() {
 
   // Index 9: Reading Orientation (0=Portrait, 1=Landscape CW, 2=Inverted, 3=Landscape CCW)
   readerView_.values[9] = settings.orientation;
+
+  // Index 10: Full Book Process (toggle)
+  readerView_.values[10] = settings.fullBookProcess;
 }
 
 void SettingsState::saveReaderSettings() {
@@ -495,6 +498,9 @@ void SettingsState::saveReaderSettings() {
 
   // Index 9: Reading Orientation
   settings.orientation = readerView_.values[9];
+
+  // Index 10: Full Book Process
+  settings.fullBookProcess = readerView_.values[10];
 }
 
 void SettingsState::loadDeviceSettings() {

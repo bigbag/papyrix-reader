@@ -547,6 +547,10 @@ void ReaderState::enter(Core& core) {
   needsRender_ = true;
   holdNavigated_ = false;
   powerPressStartedMs_ = 0;
+  indexingInProgress_ = false;
+  indexingCancelled_ = false;
+  indexingCache_.reset();
+  indexingParser_.reset();
   stopBackgroundCaching();  // Ensure any previous task is stopped
   invalidateGlobalPageMetrics();
   parser_.reset();  // Safe - task is stopped
@@ -681,6 +685,13 @@ void ReaderState::enter(Core& core) {
 
   LOG_INF(TAG, "Loaded: %s", core.content.metadata().title);
 
+  // Full book pre-processing: index all pages before reading
+  ContentType entryType = core.content.metadata().type;
+  if (core.settings.fullBookProcess && entryType != ContentType::Xtc && !isFullyIndexed(core)) {
+    startFullBookIndexing(core);
+    return;
+  }
+
   // Start background caching (includes thumbnail generation)
   // This runs once per book open regardless of starting position
   startBackgroundCaching(core);
@@ -691,6 +702,9 @@ void ReaderState::exit(Core& core) {
 
   // Stop background caching task first - BackgroundTask::stop() waits properly
   stopBackgroundCaching();
+  indexingInProgress_ = false;
+  indexingCache_.reset();
+  indexingParser_.reset();
   invalidateGlobalPageMetrics();
 
   if (contentLoaded_) {
@@ -730,6 +744,28 @@ StateTransition ReaderState::update(Core& core) {
       return StateTransition::to(StateId::Error);
     }
     return StateTransition::to(StateId::FileList);
+  }
+
+  // Full book pre-processing: process one chunk per frame
+  if (indexingInProgress_) {
+    Event ie;
+    while (core.events.pop(ie)) {
+      if (ie.type == EventType::ButtonPress && ie.button == Button::Back) {
+        indexingInProgress_ = false;
+        indexingCache_.reset();
+        indexingParser_.reset();
+        return StateTransition::to(sourceState_);
+      }
+    }
+    processIndexingChunk(core);
+    if (indexingCancelled_) {
+      indexingCancelled_ = false;
+      return StateTransition::to(sourceState_);
+    }
+    if (!indexingInProgress_) {
+      needsRender_ = true;
+    }
+    return StateTransition::stay(StateId::Reader);
   }
 
   Event e;
@@ -825,6 +861,12 @@ StateTransition ReaderState::update(Core& core) {
 
 void ReaderState::render(Core& core) {
   if (!needsRender_ || !contentLoaded_) {
+    return;
+  }
+
+  if (indexingInProgress_) {
+    renderIndexingScreen(core);
+    needsRender_ = false;
     return;
   }
 
@@ -1712,6 +1754,229 @@ void ReaderState::stopBackgroundCaching() {
   // pageCache_.reset() can trigger mutex ownership violations
   // (assert failed: xQueueGenericSend queue.c:832).
   vTaskDelay(10 / portTICK_PERIOD_MS);
+}
+
+// ============================================================================
+// Full Book Pre-Processing
+// ============================================================================
+
+bool ReaderState::isFullyIndexed(Core& core) {
+  const ContentType type = core.content.metadata().type;
+  const Theme& theme = THEME_MANAGER.current();
+  const auto vp = getReaderViewport(core.settings.statusBar != 0);
+  const auto config = core.settings.getRenderConfig(theme, vp.width, vp.height);
+
+  if (type == ContentType::Epub) {
+    auto* provider = core.content.asEpub();
+    if (!provider || !provider->getEpub()) return true;
+    const int spineCount = provider->getEpub()->getSpineItemsCount();
+    for (int i = 0; i < spineCount; ++i) {
+      const auto cachePath = epubSectionCachePath(provider->getEpub()->getCachePath(), i);
+      const auto probe = PageCache::probe(cachePath, config);
+      if (!probe.valid || probe.partial) return false;
+    }
+    return true;
+  }
+
+  if (type == ContentType::Fb2) {
+    auto* fb2Provider = core.content.asFb2();
+    if (!fb2Provider || !fb2Provider->getFb2()) return true;
+    const int sectionCount = fb2Provider->getSectionCount();
+    for (int i = 0; i < sectionCount; ++i) {
+      const auto cachePath = fb2Provider->getSectionCachePath(i);
+      const auto probe = PageCache::probe(cachePath, config);
+      if (!probe.valid || probe.partial) return false;
+    }
+    return true;
+  }
+
+  if (type == ContentType::Txt || type == ContentType::Markdown || type == ContentType::Html) {
+    const auto cachePath = contentCachePath(core.content.cacheDir(), config.fontId);
+    const auto probe = PageCache::probe(cachePath, config);
+    return probe.valid && !probe.partial;
+  }
+
+  return true;
+}
+
+void ReaderState::startFullBookIndexing(Core& core) {
+  const ContentType type = core.content.metadata().type;
+  const Theme& theme = THEME_MANAGER.current();
+  const auto vp = getReaderViewport(core.settings.statusBar != 0);
+  const auto config = core.settings.getRenderConfig(theme, vp.width, vp.height);
+
+  indexingInProgress_ = true;
+  indexingSpine_ = 0;
+
+  if (type == ContentType::Epub) {
+    auto* provider = core.content.asEpub();
+    indexingTotalSpines_ = (provider && provider->getEpub()) ? provider->getEpub()->getSpineItemsCount() : 0;
+    // Skip already-complete spines
+    while (indexingSpine_ < indexingTotalSpines_) {
+      const auto cachePath = epubSectionCachePath(provider->getEpub()->getCachePath(), indexingSpine_);
+      const auto probe = PageCache::probe(cachePath, config);
+      if (!probe.valid || probe.partial) break;
+      indexingSpine_++;
+    }
+  } else if (type == ContentType::Fb2) {
+    auto* fb2Provider = core.content.asFb2();
+    indexingTotalSpines_ = (fb2Provider && fb2Provider->getFb2()) ? fb2Provider->getSectionCount() : 0;
+    while (indexingSpine_ < indexingTotalSpines_) {
+      const auto cachePath = fb2Provider->getSectionCachePath(indexingSpine_);
+      const auto probe = PageCache::probe(cachePath, config);
+      if (!probe.valid || probe.partial) break;
+      indexingSpine_++;
+    }
+  } else {
+    indexingTotalSpines_ = 1;
+  }
+
+  needsRender_ = true;
+  LOG_INF(TAG, "Starting full book indexing: %d/%d spines", indexingSpine_, indexingTotalSpines_);
+}
+
+void ReaderState::processIndexingChunk(Core& core) {
+  // Prevent CPU throttling during indexing. The main loop drops to 10 MHz
+  // after 3 s of input inactivity, which also drops the APB clock. Since
+  // display and SD card share the same SPI bus derived from APB, this slows
+  // SPI writes by ~14x (40 MHz effective → ~2.5 MHz).
+  core.input.resetIdleTimer();
+  core.cpu.unthrottle();
+
+  const ContentType type = core.content.metadata().type;
+  const Theme& theme = THEME_MANAGER.current();
+  const auto vp = getReaderViewport(core.settings.statusBar != 0);
+  const auto config = core.settings.getRenderConfig(theme, vp.width, vp.height);
+
+  if (indexingSpine_ >= indexingTotalSpines_) {
+    indexingInProgress_ = false;
+    indexingCache_.reset();
+    indexingParser_.reset();
+    LOG_INF(TAG, "Full book indexing complete");
+    startBackgroundCaching(core);
+    return;
+  }
+
+  // Create parser and cache for current spine if needed
+  if (!indexingCache_) {
+    std::string cachePath;
+
+    if (type == ContentType::Epub) {
+      auto* provider = core.content.asEpub();
+      if (!provider || !provider->getEpub()) {
+        indexingInProgress_ = false;
+        return;
+      }
+      const auto* epub = provider->getEpub();
+      cachePath = epubSectionCachePath(epub->getCachePath(), indexingSpine_);
+      std::string imageCachePath = core.settings.showImages ? (epub->getCachePath() + "/images") : "";
+      indexingParser_.reset(
+          new EpubChapterParser(provider->getEpubShared(), indexingSpine_, renderer_, config, imageCachePath));
+    } else if (type == ContentType::Fb2) {
+      auto* fb2Provider = core.content.asFb2();
+      if (!fb2Provider || !fb2Provider->getFb2()) {
+        indexingInProgress_ = false;
+        return;
+      }
+      cachePath = fb2Provider->getSectionCachePath(indexingSpine_);
+      std::string lang = fb2Provider->getFb2()->getLanguage();
+      indexingParser_.reset(new Fb2Parser(fb2Provider->getSectionPath(indexingSpine_), renderer_, config, lang));
+    } else if (type == ContentType::Markdown) {
+      cachePath = contentCachePath(core.content.cacheDir(), config.fontId);
+      indexingParser_.reset(new MarkdownParser(contentPath_, renderer_, config));
+    } else if (type == ContentType::Html) {
+      cachePath = contentCachePath(core.content.cacheDir(), config.fontId);
+      indexingParser_.reset(new HtmlParser(contentPath_, core.content.cacheDir(), renderer_, config));
+    } else {
+      cachePath = contentCachePath(core.content.cacheDir(), config.fontId);
+      indexingParser_.reset(new PlainTextParser(contentPath_, renderer_, config));
+    }
+
+    indexingCache_.reset(new PageCache(cachePath));
+    if (indexingCache_->load(config) && !indexingCache_->isPartial()) {
+      // Already fully cached — skip
+      indexingCache_.reset();
+      indexingParser_.reset();
+      indexingSpine_++;
+    } else {
+      // Process entire spine in one shot (maxPages=0 = unlimited).
+      // Abort callback checks for Back button so user can cancel mid-spine.
+      auto shouldAbort = [this, &core]() -> bool {
+        Event ae;
+        while (core.events.pop(ae)) {
+          if (ae.type == EventType::ButtonPress && ae.button == Button::Back) {
+            indexingCancelled_ = true;
+            return true;
+          }
+        }
+        return false;
+      };
+      indexingParser_->reset();
+      if (!indexingCache_->create(*indexingParser_, config, 0, 0, shouldAbort)) {
+        indexingCache_.reset();
+        indexingParser_.reset();
+        indexingInProgress_ = false;
+        if (indexingCancelled_) {
+          LOG_INF(TAG, "Indexing cancelled by user at spine %d", indexingSpine_);
+        } else {
+          LOG_ERR(TAG, "Indexing: failed to create cache for spine %d", indexingSpine_);
+        }
+        return;
+      }
+      if (type == ContentType::Epub || type == ContentType::Fb2) {
+        saveAnchorMap(*indexingParser_, indexingCache_->path());
+      }
+      LOG_DBG(TAG, "Indexing: spine %d complete (%d pages)", indexingSpine_, indexingCache_->pageCount());
+      indexingCache_.reset();
+      indexingParser_.reset();
+      renderer_.clearWidthCache();
+      indexingSpine_++;
+    }
+  }
+
+  // Skip already-complete spines
+  while (indexingSpine_ < indexingTotalSpines_) {
+    std::string cachePath;
+    if (type == ContentType::Epub) {
+      auto* provider = core.content.asEpub();
+      cachePath = epubSectionCachePath(provider->getEpub()->getCachePath(), indexingSpine_);
+    } else if (type == ContentType::Fb2) {
+      cachePath = core.content.asFb2()->getSectionCachePath(indexingSpine_);
+    }
+    if (cachePath.empty()) break;
+    const auto probe = PageCache::probe(cachePath, config);
+    if (!probe.valid || probe.partial) break;
+    indexingSpine_++;
+  }
+
+  // Check if all done
+  if (indexingSpine_ >= indexingTotalSpines_) {
+    indexingInProgress_ = false;
+    indexingCache_.reset();
+    indexingParser_.reset();
+    LOG_INF(TAG, "Full book indexing complete");
+    startBackgroundCaching(core);
+  }
+
+  needsRender_ = true;
+}
+
+void ReaderState::renderIndexingScreen(Core& core) {
+  const Theme& theme = THEME_MANAGER.current();
+  const int fontId = core.settings.getReaderFontId(theme);
+  const int screenHeight = renderer_.getScreenHeight();
+  const int centerY = screenHeight / 2;
+
+  renderer_.clearScreen(theme.backgroundColor);
+  renderer_.drawCenteredText(fontId, centerY - 40, tr(INDEXING), theme.primaryTextBlack, BOLD);
+
+  if (indexingTotalSpines_ > 0) {
+    ui::progress(renderer_, theme, centerY + 10, indexingSpine_, indexingTotalSpines_);
+  }
+
+  ui::buttonBar(renderer_, theme, ui::ButtonBar(tr(BACK), "", "", ""));
+  renderer_.displayBuffer(EInkDisplay::FAST_REFRESH, false);
+  core.display.markDirty();
 }
 
 // ============================================================================
