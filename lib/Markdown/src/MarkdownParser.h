@@ -80,6 +80,7 @@ class MarkdownParser : public ContentParser {
     uint16_t pagesCreated;
     uint16_t maxPages;
     std::function<void(std::unique_ptr<Page>)> onPageComplete;
+    AbortCallback shouldAbort;
 
     // Word buffer for building words
     char wordBuffer[MAX_WORD_SIZE + 1];

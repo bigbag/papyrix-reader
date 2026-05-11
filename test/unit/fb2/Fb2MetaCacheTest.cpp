@@ -19,7 +19,7 @@
 #include "Serialization.h"
 
 namespace {
-constexpr uint8_t kMetaCacheVersion = 5;
+constexpr uint8_t kMetaCacheVersion = 6;
 }
 
 struct SectionOffset {

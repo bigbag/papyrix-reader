@@ -98,7 +98,7 @@ void MarkdownParser::flushTextBlock(ParseContext& ctx) {
           addLineToPage(ctx, textBlock);
         }
       },
-      true, [&ctx]() -> bool { return ctx.hitMaxPages; });
+      true, [&ctx]() -> bool { return ctx.hitMaxPages || (ctx.shouldAbort && ctx.shouldAbort()); });
 
   if (!ctx.hitMaxPages) {
     ctx.textBlock.reset();
@@ -387,6 +387,7 @@ bool MarkdownParser::parsePages(const std::function<void(std::unique_ptr<Page>)>
   ctx.pagesCreated = 0;
   ctx.maxPages = maxPages;
   ctx.onPageComplete = onPageComplete;
+  ctx.shouldAbort = shouldAbort;
   ctx.wordBufferIndex = 0;
 
   // Initialize md_parser
@@ -469,7 +470,7 @@ bool MarkdownParser::parsePages(const std::function<void(std::unique_ptr<Page>)>
                 addLineToPage(ctx, textBlock);
               }
             },
-            false, [&ctx]() -> bool { return ctx.hitMaxPages; });
+            false, [&ctx]() -> bool { return ctx.hitMaxPages || (ctx.shouldAbort && ctx.shouldAbort()); });
       }
     }
   }

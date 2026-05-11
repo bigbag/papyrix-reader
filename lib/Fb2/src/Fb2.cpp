@@ -21,7 +21,7 @@
 #include <cstring>
 
 namespace {
-constexpr uint8_t kMetaCacheVersion = 5;
+constexpr uint8_t kMetaCacheVersion = 6;
 constexpr char kMetaCacheFile[] = "/meta.bin";
 constexpr char kSectionFilePrefix[] = "/section_";
 constexpr char kSectionFileSuffix[] = ".fb2";
@@ -95,6 +95,8 @@ bool Fb2::load() {
   if (!scanSectionOffsets()) {
     LOG_ERR(TAG, "Failed to scan section offsets");
   }
+
+  filterNestedSections();
 
   saveMetaCache();
 
@@ -514,6 +516,70 @@ bool Fb2::scanSectionOffsets() {
     LOG_INF(TAG, "Scanned %u section offsets", static_cast<unsigned int>(sectionOffsets_.size()));
   }
   return success;
+}
+
+void Fb2::filterNestedSections() {
+  if (sectionOffsets_.size() <= 1) return;
+
+  const size_t n = sectionOffsets_.size();
+
+  std::vector<bool> isParent(n, false);
+  for (size_t i = 0; i < n; i++) {
+    for (size_t j = 0; j < n; j++) {
+      if (i != j && sectionOffsets_[i].startOffset <= sectionOffsets_[j].startOffset &&
+          sectionOffsets_[i].endOffset >= sectionOffsets_[j].endOffset &&
+          (sectionOffsets_[i].startOffset != sectionOffsets_[j].startOffset ||
+           sectionOffsets_[i].endOffset != sectionOffsets_[j].endOffset)) {
+        isParent[i] = true;
+        break;
+      }
+    }
+  }
+
+  size_t parentCount = 0;
+  for (size_t i = 0; i < n; i++) {
+    if (isParent[i]) parentCount++;
+  }
+  if (parentCount == 0) return;
+
+  // Build remap: old index → new index for leaves
+  std::vector<int> remap(n, -1);
+  int newIndex = 0;
+  for (size_t i = 0; i < n; i++) {
+    if (!isParent[i]) {
+      remap[i] = newIndex++;
+    }
+  }
+
+  // Parent sections → first child leaf
+  for (size_t i = 0; i < n; i++) {
+    if (!isParent[i]) continue;
+    for (size_t j = i + 1; j < n; j++) {
+      if (!isParent[j] && sectionOffsets_[j].startOffset >= sectionOffsets_[i].startOffset &&
+          sectionOffsets_[j].endOffset <= sectionOffsets_[i].endOffset) {
+        remap[i] = remap[j];
+        break;
+      }
+    }
+  }
+
+  for (auto& toc : tocItems_) {
+    if (toc.sectionIndex >= 0 && toc.sectionIndex < static_cast<int>(n)) {
+      toc.sectionIndex = remap[toc.sectionIndex];
+    }
+  }
+
+  std::vector<SectionOffset> filtered;
+  filtered.reserve(n - parentCount);
+  for (size_t i = 0; i < n; i++) {
+    if (!isParent[i]) {
+      filtered.push_back(sectionOffsets_[i]);
+    }
+  }
+  sectionOffsets_ = std::move(filtered);
+
+  LOG_INF(TAG, "Filtered %u parent sections, %u leaf sections remain", static_cast<unsigned int>(parentCount),
+          static_cast<unsigned int>(sectionOffsets_.size()));
 }
 
 bool Fb2::generateSectionFiles() {

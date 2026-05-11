@@ -2,6 +2,10 @@
 
 #include <Logging.h>
 
+#ifdef ARDUINO
+#include <esp_task_wdt.h>
+#endif
+
 #define TAG "CACHE"
 
 #include <Page.h>
@@ -263,6 +267,10 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
         lut.push_back(position);
         pageCount_++;
         LOG_DBG(TAG, "Page %d cached", pageCount_ - 1);
+
+#ifdef ARDUINO
+        if (pageCount_ % 10 == 0) esp_task_wdt_reset();
+#endif
 
         if (maxPages > 0 && pageCount_ >= maxPages) {
           hitMaxPages = true;

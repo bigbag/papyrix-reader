@@ -82,6 +82,7 @@ class Fb2 {
   // Helper methods
   bool parseXmlStream();
   bool scanSectionOffsets();
+  void filterNestedSections();
   bool generateSectionFiles();
   void postProcessMetadata();
   bool loadMetaCache();

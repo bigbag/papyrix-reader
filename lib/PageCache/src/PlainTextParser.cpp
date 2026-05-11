@@ -91,7 +91,10 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
             continueProcessing = false;
           }
         },
-        true, [&]() -> bool { return !continueProcessing; });
+        true,
+        [&continueProcessing, &shouldAbort]() -> bool {
+          return !continueProcessing || (shouldAbort && shouldAbort());
+        });
 
     if (continueProcessing) {
       currentBlock.reset();

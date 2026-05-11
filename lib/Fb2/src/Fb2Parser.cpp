@@ -10,6 +10,10 @@
 #include <SDCardManager.h>
 #include <Utf8.h>
 
+#ifdef ARDUINO
+#include <esp_task_wdt.h>
+#endif
+
 #define TAG "FB2_PARSE"
 
 #include <cstring>
@@ -134,7 +138,12 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
   uint16_t abortCheckCounter = 0;
 
   while (file.available() > 0) {
-    if (shouldAbort_ && (++abortCheckCounter % 10 == 0) && shouldAbort_()) {
+    if (++abortCheckCounter % 10 == 0) {
+#ifdef ARDUINO
+      esp_task_wdt_reset();
+#endif
+    }
+    if (shouldAbort_ && (abortCheckCounter % 10 == 0) && shouldAbort_()) {
       LOG_INF(TAG, "Aborted by external request");
       bytesConsumed_ = static_cast<uint32_t>(XML_GetCurrentByteIndex(xmlParser_)) + static_cast<uint32_t>(bomSkip);
       XML_ParserFree(xmlParser_);
@@ -442,7 +451,7 @@ void Fb2Parser::makePages() {
           continueProcessing = false;
         }
       },
-      true, [&continueProcessing]() -> bool { return !continueProcessing; });
+      true, [this, &continueProcessing]() -> bool { return !continueProcessing || (shouldAbort_ && shouldAbort_()); });
 
   // Paragraph spacing (same pattern as PlainTextParser/ChapterHtmlSlimParser)
   if (!hitMaxPages_) {
