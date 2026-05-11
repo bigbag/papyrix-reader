@@ -94,6 +94,14 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/Utf8/src/Utf8.cpp
       ${TEST_HELPERS}
     )
+  elseif(TEST_NAME STREQUAL "MarkdownRtlTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/Markdown/src/md_parser.c
+      ${PROJECT_ROOT}/lib/ScriptDetector/src/ScriptDetector.cpp
+      ${PROJECT_ROOT}/lib/Utf8/src/Utf8.cpp
+      ${TEST_HELPERS}
+    )
   elseif(TEST_NAME MATCHES "^MarkdownParser.*Test$")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
@@ -273,6 +281,13 @@ foreach(TEST_SRC ${TEST_SOURCES})
     )
     target_include_directories(${TEST_NAME} PRIVATE
       ${PROJECT_ROOT}/lib/BatteryMonitor/include
+    )
+  elseif(TEST_NAME STREQUAL "TxtRtlTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/ScriptDetector/src/ScriptDetector.cpp
+      ${PROJECT_ROOT}/lib/Utf8/src/Utf8.cpp
+      ${TEST_HELPERS}
     )
   else()
     add_executable(${TEST_NAME} ${TEST_SRC} ${TEST_HELPERS})

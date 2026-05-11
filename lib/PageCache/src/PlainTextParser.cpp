@@ -109,12 +109,17 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
       buffer[peekBytes] = '\0';
       detectedEncoding_ = detectEncoding(buffer, peekBytes, bomSkipBytes_);
       encodingTable_ = getEncodingTable(detectedEncoding_);
-      if (detectedEncoding_ == Encoding::Utf8) {
-        isRtl_ = ScriptDetector::containsArabic(reinterpret_cast<const char*>(buffer));
-      }
     }
     file.seekSet(bomSkipBytes_);
   }
+
+  auto addWordWithRtlCheck = [&](const std::string& word, EpdFontFamily::Style style) {
+    if (!isRtl_ && ScriptDetector::classify(word.c_str()) == ScriptDetector::Script::ARABIC) {
+      isRtl_ = true;
+      currentBlock->setRtl(true);
+    }
+    currentBlock->addWord(word, style);
+  };
 
   startNewPage();
 
@@ -160,7 +165,7 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
         // Flush partial word
         if (!partialWord.empty()) {
           partialWord.resize(utf8NormalizeNfc(&partialWord[0], partialWord.size()));
-          currentBlock->addWord(partialWord, EpdFontFamily::REGULAR);
+          addWordWithRtlCheck(partialWord, EpdFontFamily::REGULAR);
           partialWord.clear();
         }
 
@@ -198,7 +203,7 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
       if (isWhitespace(c)) {
         if (!partialWord.empty()) {
           partialWord.resize(utf8NormalizeNfc(&partialWord[0], partialWord.size()));
-          currentBlock->addWord(partialWord, EpdFontFamily::REGULAR);
+          addWordWithRtlCheck(partialWord, EpdFontFamily::REGULAR);
           partialWord.clear();
         }
         continue;
@@ -230,11 +235,11 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
           std::string overflow = partialWord.substr(safeLen);
           partialWord.resize(safeLen);
           partialWord.resize(utf8NormalizeNfc(&partialWord[0], partialWord.size()));
-          currentBlock->addWord(partialWord, EpdFontFamily::REGULAR);
+          addWordWithRtlCheck(partialWord, EpdFontFamily::REGULAR);
           partialWord = std::move(overflow);
         } else {
           partialWord.resize(utf8NormalizeNfc(&partialWord[0], partialWord.size()));
-          currentBlock->addWord(partialWord, EpdFontFamily::REGULAR);
+          addWordWithRtlCheck(partialWord, EpdFontFamily::REGULAR);
           partialWord.clear();
         }
       }
@@ -252,7 +257,7 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
   // Flush remaining content
   if (!partialWord.empty()) {
     partialWord.resize(utf8NormalizeNfc(&partialWord[0], partialWord.size()));
-    currentBlock->addWord(partialWord, EpdFontFamily::REGULAR);
+    addWordWithRtlCheck(partialWord, EpdFontFamily::REGULAR);
   }
   flushBlock();
 

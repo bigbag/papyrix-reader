@@ -59,6 +59,10 @@ void MarkdownParser::flushWordBuffer(ParseContext& ctx) {
   if (ctx.wordBufferIndex > 0) {
     ctx.wordBuffer[ctx.wordBufferIndex] = '\0';
     ctx.wordBufferIndex = utf8NormalizeNfc(ctx.wordBuffer, ctx.wordBufferIndex);
+    if (!isRtl_ && ScriptDetector::classify(ctx.wordBuffer) == ScriptDetector::Script::ARABIC) {
+      isRtl_ = true;
+      if (ctx.textBlock) ctx.textBlock->setRtl(true);
+    }
     if (ctx.textBlock) {
       ctx.textBlock->addWord(ctx.wordBuffer, static_cast<EpdFontFamily::Style>(getCurrentFontStyle(ctx)));
     }
@@ -186,11 +190,7 @@ bool MarkdownParser::tokenCallback(const md_token_t* token, void* userData) {
           self->flushWordBuffer(ctx);
         } else {
           if (ctx.wordBufferIndex >= MAX_WORD_SIZE) {
-            ctx.wordBuffer[ctx.wordBufferIndex] = '\0';
-            if (ctx.textBlock) {
-              ctx.textBlock->addWord(ctx.wordBuffer, static_cast<EpdFontFamily::Style>(self->getCurrentFontStyle(ctx)));
-            }
-            ctx.wordBufferIndex = 0;
+            self->flushWordBuffer(ctx);
           }
           ctx.wordBuffer[ctx.wordBufferIndex++] = c;
         }
@@ -365,9 +365,6 @@ bool MarkdownParser::parsePages(const std::function<void(std::unique_ptr<Page>)>
       peekBuf[peekBytes] = '\0';
       detectedEncoding_ = detectEncoding(peekBuf, peekBytes, bomSkipBytes_);
       encodingTable_ = getEncodingTable(detectedEncoding_);
-      if (detectedEncoding_ == Encoding::Utf8) {
-        isRtl_ = ScriptDetector::containsArabic(reinterpret_cast<const char*>(peekBuf));
-      }
     }
     file.seekSet(currentOffset_ + bomSkipBytes_);
   }
