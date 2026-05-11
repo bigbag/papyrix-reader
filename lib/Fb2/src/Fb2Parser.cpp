@@ -102,10 +102,10 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
 
   Hyphenation::setLanguage(language_);
 
-  // Single buffer reused for RTL peek and parsing (saves 4KB stack)
+  // Single buffer reused for encoding peek and parsing (saves 4KB stack)
   uint8_t buffer[READ_CHUNK_SIZE + 1];
 
-  // Peek first chunk for RTL + encoding detection
+  // Peek first chunk for encoding detection
   size_t peekBytes = file.read(buffer, READ_CHUNK_SIZE);
   const char* explicitEncoding = nullptr;
   size_t bomSkip = 0;
@@ -116,7 +116,6 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
     // declaration-driven path via expatUnknownEncodingHandler.
     if (detectEncoding(buffer, peekBytes, bomSkip) == Encoding::Utf8) {
       explicitEncoding = "UTF-8";
-      isRtl_ = ScriptDetector::containsArabic(reinterpret_cast<const char*>(buffer));
     }
   }
   file.seekSet(bomSkip);
@@ -415,6 +414,12 @@ void Fb2Parser::flushPartWordBuffer() {
 
   partWordBuffer_[partWordBufferIndex_] = '\0';
   partWordBufferIndex_ = static_cast<int>(utf8NormalizeNfc(partWordBuffer_, partWordBufferIndex_));
+
+  if (!isRtl_ && ScriptDetector::classify(partWordBuffer_) == ScriptDetector::Script::ARABIC) {
+    isRtl_ = true;
+    currentTextBlock_->setRtl(true);
+  }
+
   currentTextBlock_->addWord(partWordBuffer_, getCurrentFontFamily());
   partWordBufferIndex_ = 0;
 }

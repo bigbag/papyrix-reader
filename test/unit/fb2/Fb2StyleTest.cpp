@@ -12,6 +12,7 @@
 
 #include <EncodingDetector.h>
 #include <ExpatEncodingHandler.h>
+#include <ScriptDetector.h>
 #include <expat.h>
 
 #include <climits>
@@ -136,6 +137,7 @@ class TestFb2WordFlushParser {
   int depth_ = 0;
   int boldUntilDepth_ = INT_MAX;
   int italicUntilDepth_ = INT_MAX;
+  bool isRtl_ = false;
   char wordBuffer_[MAX_WORD_SIZE + 1] = {};
   int wordIndex_ = 0;
 
@@ -149,6 +151,9 @@ class TestFb2WordFlushParser {
     wordBuffer_[wordIndex_] = '\0';
     bool bold = (boldUntilDepth_ < INT_MAX);
     bool italic = (italicUntilDepth_ < INT_MAX);
+    if (!isRtl_ && ScriptDetector::classify(wordBuffer_) == ScriptDetector::Script::ARABIC) {
+      isRtl_ = true;
+    }
     words.push_back({std::string(wordBuffer_), bold, italic});
     wordIndex_ = 0;
   }
@@ -198,6 +203,7 @@ class TestFb2WordFlushParser {
 
  public:
   std::vector<StyledRun> words;
+  bool isRtl() const { return isRtl_; }
 
   bool parse(const std::string& xml) {
     XML_Parser parser = XML_ParserCreate("UTF-8");
@@ -440,6 +446,40 @@ int main() {
     const StyledRun* rn = findRun(p.words, "normal");
     runner.expectTrue(rn != nullptr, "flush_after_close: 'normal' found");
     if (rn) runner.expectFalse(rn->italic, "flush_after_close: 'normal' is not italic");
+  }
+
+  // --- RTL detection tests (word-based, mirrors flushPartWordBuffer fix) ---
+
+  // Test 19: Russian text is not RTL
+  {
+    TestFb2WordFlushParser p;
+    bool ok = p.parse(wrap("\xd0\x9f\xd1\x80\xd0\xb8\xd0\xb2\xd0\xb5\xd1\x82 \xd0\xbc\xd0\xb8\xd1\x80"));
+    runner.expectTrue(ok, "rtl_russian_not_rtl: parses");
+    runner.expectFalse(p.isRtl(), "rtl_russian_not_rtl: Russian text is LTR");
+  }
+
+  // Test 20: Arabic text sets RTL
+  {
+    TestFb2WordFlushParser p;
+    bool ok = p.parse(wrap("\xd9\x85\xd8\xb1\xd8\xad\xd8\xa8\xd8\xa7 \xd8\xa8\xd8\xa7\xd9\x84\xd8\xb9\xd8\xa7\xd9\x84\xd9\x85"));
+    runner.expectTrue(ok, "rtl_arabic_is_rtl: parses");
+    runner.expectTrue(p.isRtl(), "rtl_arabic_is_rtl: Arabic text is RTL");
+  }
+
+  // Test 21: Pure ASCII text is not RTL
+  {
+    TestFb2WordFlushParser p;
+    bool ok = p.parse(wrap("Hello world"));
+    runner.expectTrue(ok, "rtl_ascii_not_rtl: parses");
+    runner.expectFalse(p.isRtl(), "rtl_ascii_not_rtl: ASCII text is LTR");
+  }
+
+  // Test 22: Mixed Latin then Arabic sets RTL
+  {
+    TestFb2WordFlushParser p;
+    bool ok = p.parse(wrap("Hello \xd9\x85\xd8\xb1\xd8\xad\xd8\xa8\xd8\xa7"));
+    runner.expectTrue(ok, "rtl_mixed_sets_rtl: parses");
+    runner.expectTrue(p.isRtl(), "rtl_mixed_sets_rtl: mixed text with Arabic is RTL");
   }
 
   return runner.allPassed() ? 0 : 1;

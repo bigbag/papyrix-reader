@@ -186,6 +186,8 @@ foreach(TEST_SRC ${TEST_SOURCES})
     find_package(EXPAT REQUIRED)
     add_executable(${TEST_NAME}
       ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/ScriptDetector/src/ScriptDetector.cpp
+      ${PROJECT_ROOT}/lib/Utf8/src/Utf8.cpp
       ${TEST_HELPERS}
     )
     target_compile_definitions(${TEST_NAME} PRIVATE XML_GE=0)
