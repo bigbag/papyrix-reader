@@ -137,7 +137,7 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
 
   // Create read callback for extracting images from EPUB
   auto readItemFn = [this](const std::string& href, Print& out, size_t chunkSize) -> bool {
-    return epub_->readItemContentsToStream(href, out, chunkSize);
+    return epub_->readItemContentsToStream(href, out, chunkSize, renderer_.getFrameBuffer());
   };
 
   // Set up callback state for this batch

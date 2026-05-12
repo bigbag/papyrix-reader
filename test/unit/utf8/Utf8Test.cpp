@@ -71,6 +71,29 @@ static void utf8TruncateChars(std::string& str, size_t numChars) {
   str.resize(static_cast<size_t>(ptr - reinterpret_cast<const unsigned char*>(str.c_str())));
 }
 
+static size_t utf8SafeCopy(char* dst, size_t dstSize, const char* src) {
+  if (!dst || dstSize == 0) return 0;
+  if (!src) {
+    dst[0] = '\0';
+    return 0;
+  }
+  size_t maxCopy = dstSize - 1;
+  size_t srcLen = 0;
+  while (srcLen < maxCopy && src[srcLen] != '\0') {
+    ++srcLen;
+  }
+  if (srcLen == maxCopy && src[srcLen] != '\0') {
+    while (srcLen > 0 && (static_cast<unsigned char>(src[srcLen]) & 0xC0) == 0x80) {
+      --srcLen;
+    }
+  }
+  if (srcLen > 0) {
+    memcpy(dst, src, srcLen);
+  }
+  dst[srcLen] = '\0';
+  return srcLen;
+}
+
 int main() {
   TestUtils::TestRunner runner("Utf8 Functions");
 
@@ -295,6 +318,136 @@ int main() {
     utf8RemoveLastChar(str);
     // Implementation walks back until it finds a non-continuation byte or beginning
     runner.expectTrue(str.empty(), "utf8RemoveLastChar: all continuation bytes removed");
+  }
+
+  // ============================================
+  // utf8SafeCopy() tests
+  // ============================================
+
+  // Test 26: ASCII fits entirely
+  {
+    char dst[16];
+    size_t n = utf8SafeCopy(dst, sizeof(dst), "Hello");
+    runner.expectEq(static_cast<size_t>(5), n, "utf8SafeCopy: ASCII fits - returns 5");
+    runner.expectEqual("Hello", std::string(dst), "utf8SafeCopy: ASCII fits - content");
+  }
+
+  // Test 27: ASCII truncated
+  {
+    char dst[4];
+    size_t n = utf8SafeCopy(dst, sizeof(dst), "Hello");
+    runner.expectEq(static_cast<size_t>(3), n, "utf8SafeCopy: ASCII truncated - returns 3");
+    runner.expectEqual("Hel", std::string(dst), "utf8SafeCopy: ASCII truncated - content");
+  }
+
+  // Test 28: 2-byte char at boundary - don't split
+  {
+    char dst[4];  // room for 3 bytes + null
+    // "Aé" = 'A' (1 byte) + é (2 bytes) = 3 bytes total, fits exactly
+    size_t n = utf8SafeCopy(dst, sizeof(dst), "A\xC3\xA9");
+    runner.expectEq(static_cast<size_t>(3), n, "utf8SafeCopy: 2-byte fits exactly");
+    runner.expectEqual("A\xC3\xA9", std::string(dst), "utf8SafeCopy: 2-byte fits exactly - content");
+  }
+
+  // Test 29: 2-byte char would be split - back up
+  {
+    char dst[3];  // room for 2 bytes + null
+    // "Aé" needs 3 bytes, only 2 available → 'A' only
+    size_t n = utf8SafeCopy(dst, sizeof(dst), "A\xC3\xA9");
+    runner.expectEq(static_cast<size_t>(1), n, "utf8SafeCopy: 2-byte won't split - backs up to 1");
+    runner.expectEqual("A", std::string(dst), "utf8SafeCopy: 2-byte won't split - content");
+  }
+
+  // Test 30: 3-byte CJK at boundary
+  {
+    char dst[5];  // room for 4 bytes + null
+    // "A中" = 'A' (1) + 中 (3) = 4 bytes, fits exactly
+    size_t n = utf8SafeCopy(dst, sizeof(dst), "A\xE4\xB8\xAD");
+    runner.expectEq(static_cast<size_t>(4), n, "utf8SafeCopy: 3-byte CJK fits exactly");
+  }
+
+  // Test 31: 3-byte CJK would be split at byte 2
+  {
+    char dst[4];  // room for 3 bytes + null → would split 中 after byte 1
+    size_t n = utf8SafeCopy(dst, sizeof(dst), "A\xE4\xB8\xAD");
+    runner.expectEq(static_cast<size_t>(1), n, "utf8SafeCopy: 3-byte CJK won't split");
+    runner.expectEqual("A", std::string(dst), "utf8SafeCopy: 3-byte CJK won't split - content");
+  }
+
+  // Test 32: 4-byte emoji would be split
+  {
+    char dst[4];  // room for 3 bytes + null → can't fit 4-byte emoji
+    size_t n = utf8SafeCopy(dst, sizeof(dst), "\xF0\x9F\x98\x80");
+    runner.expectEq(static_cast<size_t>(0), n, "utf8SafeCopy: 4-byte emoji won't split - returns 0");
+    runner.expectEqual("", std::string(dst), "utf8SafeCopy: 4-byte emoji won't split - empty");
+  }
+
+  // Test 33: Cyrillic string truncation (the real-world case)
+  {
+    char dst[8];
+    // "Лев" = 3 Cyrillic chars × 2 bytes = 6 bytes
+    const char* src = "\xD0\x9B\xD0\xB5\xD0\xB2";
+    size_t n = utf8SafeCopy(dst, sizeof(dst), src);
+    runner.expectEq(static_cast<size_t>(6), n, "utf8SafeCopy: Cyrillic 'Лев' fits in 8");
+    runner.expectEqual(std::string(src), std::string(dst), "utf8SafeCopy: Cyrillic content");
+  }
+
+  // Test 34: Cyrillic truncation at char boundary
+  {
+    char dst[6];  // room for 5 bytes + null → fits 2 Cyrillic chars (4 bytes)
+    const char* src = "\xD0\x9B\xD0\xB5\xD0\xB2";  // "Лев" = 6 bytes
+    size_t n = utf8SafeCopy(dst, sizeof(dst), src);
+    runner.expectEq(static_cast<size_t>(4), n, "utf8SafeCopy: Cyrillic truncated - backs up");
+    runner.expectEqual("\xD0\x9B\xD0\xB5", std::string(dst), "utf8SafeCopy: Cyrillic truncated - 2 chars");
+  }
+
+  // Test 35: Null src
+  {
+    char dst[8] = "dirty";
+    size_t n = utf8SafeCopy(dst, sizeof(dst), nullptr);
+    runner.expectEq(static_cast<size_t>(0), n, "utf8SafeCopy: null src returns 0");
+    runner.expectEqual("", std::string(dst), "utf8SafeCopy: null src writes empty");
+  }
+
+  // Test 36: Empty src
+  {
+    char dst[8] = "dirty";
+    size_t n = utf8SafeCopy(dst, sizeof(dst), "");
+    runner.expectEq(static_cast<size_t>(0), n, "utf8SafeCopy: empty src returns 0");
+    runner.expectEqual("", std::string(dst), "utf8SafeCopy: empty src writes empty");
+  }
+
+  // Test 37: Buffer size 1 (only null fits)
+  {
+    char dst[1];
+    size_t n = utf8SafeCopy(dst, sizeof(dst), "Hello");
+    runner.expectEq(static_cast<size_t>(0), n, "utf8SafeCopy: size 1 buffer returns 0");
+    runner.expectEq('\0', dst[0], "utf8SafeCopy: size 1 buffer is null terminated");
+  }
+
+  // Test 38: Buffer size 0
+  {
+    char dst[1] = {'X'};
+    size_t n = utf8SafeCopy(dst, 0, "Hello");
+    runner.expectEq(static_cast<size_t>(0), n, "utf8SafeCopy: size 0 buffer returns 0");
+  }
+
+  // Test 39: Source shorter than buffer
+  {
+    char dst[256];
+    size_t n = utf8SafeCopy(dst, sizeof(dst), "Hi");
+    runner.expectEq(static_cast<size_t>(2), n, "utf8SafeCopy: short src returns 2");
+    runner.expectEqual("Hi", std::string(dst), "utf8SafeCopy: short src content");
+  }
+
+  // Test 40: Mixed ASCII + multi-byte truncation
+  {
+    char dst[6];  // room for 5 + null
+    // "Hé中" = H(1) + é(2) + 中(3) = 6 bytes, only 5 available
+    // → back up from byte 5 (middle of 中) to byte 3 = "Hé"
+    size_t n = utf8SafeCopy(dst, sizeof(dst), "H\xC3\xA9\xE4\xB8\xAD");
+    runner.expectEq(static_cast<size_t>(3), n, "utf8SafeCopy: mixed truncation - 3 bytes");
+    runner.expectEqual("H\xC3\xA9", std::string(dst), "utf8SafeCopy: mixed truncation - content");
   }
 
   return runner.allPassed() ? 0 : 1;

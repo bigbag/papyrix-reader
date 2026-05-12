@@ -1,5 +1,7 @@
 #include "EpubProvider.h"
 
+#include <Utf8.h>
+
 #include <cstring>
 
 namespace papyrix {
@@ -19,12 +21,10 @@ Result<void> EpubProvider::open(const char* path, const char* cacheDir) {
   meta.type = ContentType::Epub;
 
   const std::string& title = epub->getTitle();
-  strncpy(meta.title, title.c_str(), sizeof(meta.title) - 1);
-  meta.title[sizeof(meta.title) - 1] = '\0';
+  utf8SafeCopy(meta.title, sizeof(meta.title), title.c_str());
 
   const std::string& author = epub->getAuthor();
-  strncpy(meta.author, author.c_str(), sizeof(meta.author) - 1);
-  meta.author[sizeof(meta.author) - 1] = '\0';
+  utf8SafeCopy(meta.author, sizeof(meta.author), author.c_str());
 
   const std::string& cachePath = epub->getCachePath();
   strncpy(meta.cachePath, cachePath.c_str(), sizeof(meta.cachePath) - 1);
@@ -58,8 +58,7 @@ Result<TocEntry> EpubProvider::getTocEntry(uint16_t index) const {
 
   auto tocItem = epub->getTocItem(index);
   TocEntry entry;
-  strncpy(entry.title, tocItem.title.c_str(), sizeof(entry.title) - 1);
-  entry.title[sizeof(entry.title) - 1] = '\0';
+  utf8SafeCopy(entry.title, sizeof(entry.title), tocItem.title.c_str());
   entry.pageIndex = epub->getSpineIndexForTocIndex(index);
   entry.depth = tocItem.level;
 

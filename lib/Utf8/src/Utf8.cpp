@@ -1,5 +1,7 @@
 #include "Utf8.h"
 
+#include <cstring>
+
 #if __has_include(<esp_attr.h>)
 #include <esp_attr.h>
 #endif
@@ -70,4 +72,27 @@ void utf8TruncateChars(std::string& str, size_t numChars) {
     utf8NextCodepoint(&ptr);
   }
   str.resize(static_cast<size_t>(ptr - reinterpret_cast<const unsigned char*>(str.c_str())));
+}
+
+size_t utf8SafeCopy(char* dst, size_t dstSize, const char* src) {
+  if (!dst || dstSize == 0) return 0;
+  if (!src) {
+    dst[0] = '\0';
+    return 0;
+  }
+  size_t maxCopy = dstSize - 1;
+  size_t srcLen = 0;
+  while (srcLen < maxCopy && src[srcLen] != '\0') {
+    ++srcLen;
+  }
+  if (srcLen == maxCopy && src[srcLen] != '\0') {
+    while (srcLen > 0 && (static_cast<unsigned char>(src[srcLen]) & 0xC0) == 0x80) {
+      --srcLen;
+    }
+  }
+  if (srcLen > 0) {
+    memcpy(dst, src, srcLen);
+  }
+  dst[srcLen] = '\0';
+  return srcLen;
 }

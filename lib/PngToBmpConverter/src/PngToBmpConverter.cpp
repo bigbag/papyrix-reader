@@ -327,7 +327,7 @@ bool pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOut, int targetMaxWid
   bool success = true;
 
   while ((bytesRead = pngFile.read(buffer, sizeof(buffer))) > 0) {
-    if (ctx.aborted) {
+    if (ctx.aborted || ctx.initFailed) {
       LOG_INF(TAG, "Abort requested during PNG conversion");
       success = false;
       break;

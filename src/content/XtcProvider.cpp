@@ -3,6 +3,7 @@
 #include <CoverHelpers.h>
 #include <HardwareSerial.h>
 #include <SDCardManager.h>
+#include <Utf8.h>
 #include <XtcCoverHelper.h>
 
 #include <cstring>
@@ -25,19 +26,16 @@ Result<void> XtcProvider::open(const char* path, const char* cacheDir) {
 
   std::string title = parser.getTitle();
   if (title.empty()) {
-    // Use filename as title
     const char* lastSlash = strrchr(path, '/');
     const char* filename = lastSlash ? lastSlash + 1 : path;
-    strncpy(meta.title, filename, sizeof(meta.title) - 1);
+    utf8SafeCopy(meta.title, sizeof(meta.title), filename);
   } else {
-    strncpy(meta.title, title.c_str(), sizeof(meta.title) - 1);
+    utf8SafeCopy(meta.title, sizeof(meta.title), title.c_str());
   }
-  meta.title[sizeof(meta.title) - 1] = '\0';
 
   std::string author = parser.getAuthor();
   if (!author.empty()) {
-    strncpy(meta.author, author.c_str(), sizeof(meta.author) - 1);
-    meta.author[sizeof(meta.author) - 1] = '\0';
+    utf8SafeCopy(meta.author, sizeof(meta.author), author.c_str());
   } else {
     meta.author[0] = '\0';
   }
@@ -81,8 +79,7 @@ Result<TocEntry> XtcProvider::getTocEntry(uint16_t index) const {
   const auto& chapter = chapters[index];
 
   TocEntry entry;
-  strncpy(entry.title, chapter.name.c_str(), sizeof(entry.title) - 1);
-  entry.title[sizeof(entry.title) - 1] = '\0';
+  utf8SafeCopy(entry.title, sizeof(entry.title), chapter.name.c_str());
   entry.pageIndex = chapter.startPage;
   entry.depth = 0;  // XTC chapters are flat
 

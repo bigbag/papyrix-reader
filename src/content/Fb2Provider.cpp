@@ -1,5 +1,7 @@
 #include "Fb2Provider.h"
 
+#include <Utf8.h>
+
 #include <cstring>
 
 namespace papyrix {
@@ -19,12 +21,10 @@ Result<void> Fb2Provider::open(const char* path, const char* cacheDir) {
   meta.type = ContentType::Fb2;
 
   const std::string& title = fb2->getTitle();
-  strncpy(meta.title, title.c_str(), sizeof(meta.title) - 1);
-  meta.title[sizeof(meta.title) - 1] = '\0';
+  utf8SafeCopy(meta.title, sizeof(meta.title), title.c_str());
 
   const std::string& author = fb2->getAuthor();
-  strncpy(meta.author, author.c_str(), sizeof(meta.author) - 1);
-  meta.author[sizeof(meta.author) - 1] = '\0';
+  utf8SafeCopy(meta.author, sizeof(meta.author), author.c_str());
 
   const std::string& cachePath = fb2->getCachePath();
   strncpy(meta.cachePath, cachePath.c_str(), sizeof(meta.cachePath) - 1);
@@ -70,8 +70,7 @@ Result<TocEntry> Fb2Provider::getTocEntry(uint16_t index) const {
   const Fb2::TocItem item = fb2->getTocItem(index);
 
   TocEntry entry;
-  strncpy(entry.title, item.title.c_str(), sizeof(entry.title) - 1);
-  entry.title[sizeof(entry.title) - 1] = '\0';
+  utf8SafeCopy(entry.title, sizeof(entry.title), item.title.c_str());
   entry.pageIndex = item.sectionIndex;
   entry.depth = 0;
 
