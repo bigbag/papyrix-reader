@@ -33,7 +33,7 @@ struct Core {
 
   // === Shared buffers (pre-allocated, reused) ===
   struct Buffers {
-    char path[BufferSize::Path];
+    char path[BufferSize::FilePath];
     char text[BufferSize::Text];
     uint8_t decompress[BufferSize::Decompress];
   } buf;

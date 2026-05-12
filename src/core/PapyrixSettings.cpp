@@ -20,8 +20,8 @@ namespace {
 constexpr uint32_t SETTINGS_MAGIC = 0x53585050;
 // Minimum version we can read (allows backward compatibility)
 constexpr uint8_t MIN_SETTINGS_VERSION = 3;
-// Version 9: Moved frontButtonLayout from Theme to Settings
-constexpr uint8_t SETTINGS_FILE_VERSION = 10;
+// Version 11: Increased path buffer sizes (lastBookPath 256→512, fileListDir 256→512, fileListSelectedName 128→256)
+constexpr uint8_t SETTINGS_FILE_VERSION = 11;
 // Increment this when adding new persisted settings fields
 constexpr uint8_t SETTINGS_COUNT = 26;
 }  // namespace
@@ -151,7 +151,12 @@ Result<void> Settings::load(drivers::Storage& storage) {
     inputFile.read(reinterpret_cast<uint8_t*>(themeName), sizeof(themeName));
     themeName[sizeof(themeName) - 1] = '\0';  // Ensure null-terminated
     if (++settingsRead >= fileSettingsCount) break;
-    inputFile.read(reinterpret_cast<uint8_t*>(lastBookPath), sizeof(lastBookPath));
+    if (version <= 10) {
+      inputFile.read(reinterpret_cast<uint8_t*>(lastBookPath), 256);
+      memset(lastBookPath + 256, 0, sizeof(lastBookPath) - 256);
+    } else {
+      inputFile.read(reinterpret_cast<uint8_t*>(lastBookPath), sizeof(lastBookPath));
+    }
     lastBookPath[sizeof(lastBookPath) - 1] = '\0';
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, pendingTransition, uint8_t(3));
@@ -160,10 +165,20 @@ Result<void> Settings::load(drivers::Storage& storage) {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, sunlightFadingFix, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
-    inputFile.read(reinterpret_cast<uint8_t*>(fileListDir), sizeof(fileListDir));
+    if (version <= 10) {
+      inputFile.read(reinterpret_cast<uint8_t*>(fileListDir), 256);
+      memset(fileListDir + 256, 0, sizeof(fileListDir) - 256);
+    } else {
+      inputFile.read(reinterpret_cast<uint8_t*>(fileListDir), sizeof(fileListDir));
+    }
     fileListDir[sizeof(fileListDir) - 1] = '\0';
     if (++settingsRead >= fileSettingsCount) break;
-    inputFile.read(reinterpret_cast<uint8_t*>(fileListSelectedName), sizeof(fileListSelectedName));
+    if (version <= 10) {
+      inputFile.read(reinterpret_cast<uint8_t*>(fileListSelectedName), 128);
+      memset(fileListSelectedName + 128, 0, sizeof(fileListSelectedName) - 128);
+    } else {
+      inputFile.read(reinterpret_cast<uint8_t*>(fileListSelectedName), sizeof(fileListSelectedName));
+    }
     fileListSelectedName[sizeof(fileListSelectedName) - 1] = '\0';
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, fileListSelectedIndex);
@@ -174,10 +189,6 @@ Result<void> Settings::load(drivers::Storage& storage) {
     if (++settingsRead >= fileSettingsCount) break;
   } while (false);
 
-  // Migrate font size from version < 8 (enum values shifted +1 for FontXSmall)
-  // Old: FontSmall=0, FontMedium=1, FontLarge=2
-  // New: FontXSmall=0, FontSmall=1, FontMedium=2, FontLarge=3
-  // TODO: Delete this migration when MIN_SETTINGS_VERSION >= 8 (after version 10)
   if (version < 8) {
     fontSize++;
   }
@@ -342,7 +353,12 @@ bool Settings::loadFromFile() {
     inputFile.read(reinterpret_cast<uint8_t*>(themeName), sizeof(themeName));
     themeName[sizeof(themeName) - 1] = '\0';
     if (++settingsRead >= fileSettingsCount) break;
-    inputFile.read(reinterpret_cast<uint8_t*>(lastBookPath), sizeof(lastBookPath));
+    if (version <= 10) {
+      inputFile.read(reinterpret_cast<uint8_t*>(lastBookPath), 256);
+      memset(lastBookPath + 256, 0, sizeof(lastBookPath) - 256);
+    } else {
+      inputFile.read(reinterpret_cast<uint8_t*>(lastBookPath), sizeof(lastBookPath));
+    }
     lastBookPath[sizeof(lastBookPath) - 1] = '\0';
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, pendingTransition, uint8_t(3));
@@ -351,10 +367,20 @@ bool Settings::loadFromFile() {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, sunlightFadingFix, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
-    inputFile.read(reinterpret_cast<uint8_t*>(fileListDir), sizeof(fileListDir));
+    if (version <= 10) {
+      inputFile.read(reinterpret_cast<uint8_t*>(fileListDir), 256);
+      memset(fileListDir + 256, 0, sizeof(fileListDir) - 256);
+    } else {
+      inputFile.read(reinterpret_cast<uint8_t*>(fileListDir), sizeof(fileListDir));
+    }
     fileListDir[sizeof(fileListDir) - 1] = '\0';
     if (++settingsRead >= fileSettingsCount) break;
-    inputFile.read(reinterpret_cast<uint8_t*>(fileListSelectedName), sizeof(fileListSelectedName));
+    if (version <= 10) {
+      inputFile.read(reinterpret_cast<uint8_t*>(fileListSelectedName), 128);
+      memset(fileListSelectedName + 128, 0, sizeof(fileListSelectedName) - 128);
+    } else {
+      inputFile.read(reinterpret_cast<uint8_t*>(fileListSelectedName), sizeof(fileListSelectedName));
+    }
     fileListSelectedName[sizeof(fileListSelectedName) - 1] = '\0';
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, fileListSelectedIndex);
@@ -365,10 +391,6 @@ bool Settings::loadFromFile() {
     if (++settingsRead >= fileSettingsCount) break;
   } while (false);
 
-  // Migrate font size from version < 8 (enum values shifted +1 for FontXSmall)
-  // Old: FontSmall=0, FontMedium=1, FontLarge=2
-  // New: FontXSmall=0, FontSmall=1, FontMedium=2, FontLarge=3
-  // TODO: Delete this migration when MIN_SETTINGS_VERSION >= 8 (after version 10)
   if (version < 8) {
     fontSize++;
   }

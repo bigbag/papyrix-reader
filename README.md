@@ -99,6 +99,8 @@ on each panel.
 - [x] File explorer with nested folders
 - [x] Hidden system folders filtering (LOST.DIR, $RECYCLE.BIN, etc.)
 
+> **Tip:** If you organise your library into deeply nested folders with Cyrillic or CJK names, format the SD card as **exFAT** rather than FAT32. Non-Latin characters use 2-4 bytes each in UTF-8, so deep folder paths can exceed FAT32's path length limit.
+
 See [the user guide](docs/user_guide.md) for operating instructions, and the [customization guide](docs/customization.md) for themes and fonts. Example theme and font files are available in [`docs/examples/`](docs/examples/).
 
 ## Installing

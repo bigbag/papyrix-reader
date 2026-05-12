@@ -38,8 +38,8 @@ class FileListState : public State {
 
  private:
   GfxRenderer& renderer_;
-  char currentDir_[256];
-  char selectedPath_[256];
+  char currentDir_[512];
+  char selectedPath_[512];
 
   // File entries - dynamic vector for unlimited files
   struct FileEntry {

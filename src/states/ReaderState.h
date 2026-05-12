@@ -52,7 +52,7 @@ class ReaderState : public State {
  private:
   GfxRenderer& renderer_;
   XtcPageRenderer xtcRenderer_;
-  char contentPath_[256];
+  char contentPath_[512];
   uint32_t currentPage_;
   bool needsRender_;
   bool contentLoaded_;

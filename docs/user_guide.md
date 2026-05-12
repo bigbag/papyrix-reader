@@ -77,6 +77,8 @@ The Files screen acts as a folder and file browser.
 
 > **Note:** EPUB (.epub), FB2 (.fb2), HTML (.html, .htm), XTC (.xtc, .xtch), Markdown (.md, .markdown), and plain text (.txt, .text) file formats are supported. EPUB 2 and EPUB 3 formats are fully supported. FB2 files support metadata, TOC navigation, and text formatting (no inline images). HTML files render as standalone documents with formatting. Markdown files render with basic formatting (headers, bold, italic, lists). The device supports both FAT32 and exFAT formatted SD cards.
 
+> **Tip:** If you organise your library into deeply nested folders (especially with Cyrillic, Thai, or CJK folder names), consider formatting your SD card as **exFAT** instead of FAT32. Non-Latin characters use 2-4 bytes each in UTF-8, so long folder paths can exceed FAT32's path length limit. exFAT has no practical path length restriction. You can reformat after flashing Papyrix — just back up your files first.
+
 > **Note:** The following folders are automatically hidden from the file browser:
 > - `System Volume Information`, `LOST.DIR`, `$RECYCLE.BIN` — OS system folders
 > - `config` — Papyrix configuration files

@@ -77,12 +77,12 @@ struct Settings {
   uint8_t _reserved = 0;  // was coverDithering, kept for serialization compatibility
   uint8_t lineSpacing = SpacingNormal;
   char themeName[32] = "light";
-  char lastBookPath[256] = "";          // Path to last opened book
+  char lastBookPath[512] = "";          // Path to last opened book
   uint8_t pendingTransition = 0;        // 0=none, 1=UI, 2=Reader
   uint8_t transitionReturnTo = 0;       // ReturnTo enum value (0=HOME, 1=FILE_MANAGER)
   uint8_t sunlightFadingFix = 0;        // Power down display after refresh (SSD1677 UV protection)
-  char fileListDir[256] = "/";          // FileListState: last directory
-  char fileListSelectedName[128] = "";  // FileListState: last selected filename
+  char fileListDir[512] = "/";          // FileListState: last directory
+  char fileListSelectedName[256] = "";  // FileListState: last selected filename
   uint16_t fileListSelectedIndex = 0;   // FileListState: last selected index
   uint8_t frontButtonLayout = FrontBCLR;
   uint8_t fullBookProcess = 0;

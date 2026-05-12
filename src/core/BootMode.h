@@ -21,7 +21,7 @@ struct ModeTransition {
   uint32_t magic;      // 0xB007MODE - validation marker
   BootMode mode;       // Target boot mode
   ReturnTo returnTo;   // Where to return when exiting reader
-  char bookPath[200];  // Path to open in reader mode
+  char bookPath[512];  // Path to open in reader mode
 
   static constexpr uint32_t MAGIC = 0xB007BADE;  // "BOOT BADE" validation marker
 

@@ -229,7 +229,7 @@ StateTransition FileListState::update(Core& core) {
               if (confirmView_.isYesSelected()) {
                 // Execute delete inline (like SettingsState pattern)
                 const FileEntry& entry = files_[selectedIndex_];
-                char pathBuf[512];  // currentDir_(256) + '/' + name(128)
+                char pathBuf[1024];
                 size_t dirLen = strlen(currentDir_);
                 if (currentDir_[dirLen - 1] == '/') {
                   snprintf(pathBuf, sizeof(pathBuf), "%s%s", currentDir_, entry.name.c_str());

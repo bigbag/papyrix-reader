@@ -264,6 +264,12 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/RenderTypes/src
       ${PROJECT_ROOT}/lib/RenderTypes/src/blocks
     )
+  elseif(TEST_NAME STREQUAL "ContentTypeDetectionTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/src/content/ContentTypes.cpp
+      ${TEST_HELPERS}
+    )
   elseif(TEST_NAME STREQUAL "CpuDriverTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
