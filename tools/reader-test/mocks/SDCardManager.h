@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdio>
+#include <functional>
 #include <string>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -41,8 +42,9 @@ class SDCardManager {
 
   bool remove(const char* path) { return ::remove(path) == 0; }
 
-  bool removeDir(const char* path) {
-    // Simple recursive remove - for cache cleanup
+  using RemoveDirProgress = std::function<void(int filesDeleted)>;
+  bool removeDir(const char* path, RemoveDirProgress progress = nullptr) {
+    (void)progress;
     std::string cmd = "rm -rf '";
     cmd += path;
     cmd += "'";

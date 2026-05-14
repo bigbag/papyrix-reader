@@ -273,54 +273,97 @@ bool SDCardManager::openFileForWrite(const char* moduleName, const String& path,
   return openFileForWrite(moduleName, path.c_str(), file);
 }
 
-bool SDCardManager::removeDir(const char* path) {
-  auto dir = sd.open(path);
-  if (!dir) {
-    return false;
-  }
-  if (!dir.isDirectory()) {
-    dir.close();
-    return false;
-  }
+bool SDCardManager::removeDir(const char* path, RemoveDirProgress progress) {
+  struct Node {
+    String path;
+    Node* next;
+  };
+
+  auto freeList = [](Node*& head) {
+    while (head) {
+      auto* n = head->next;
+      delete head;
+      head = n;
+    }
+  };
+
+  Node* dirs = nullptr;
+  Node* stack = new (std::nothrow) Node{String(path), nullptr};
+  if (!stack) return false;
 
   bool allOk = true;
-  auto file = dir.openNextFile();
+  int deleted = 0;
   char name[128];
-  int iterations = 0;
   constexpr int kMaxEntries = 4096;
 
-  while (file && iterations++ < kMaxEntries) {
-    file.getName(name, sizeof(name));
+  while (stack) {
+    Node* top = stack;
+    String dirPath = std::move(top->path);
+    stack = top->next;
+    delete top;
 
-    if (name[0] == '\0' || (name[0] == '.' && (name[1] == '\0' || (name[1] == '.' && name[2] == '\0')))) {
-      file.close();
-      file = dir.openNextFile();
+    auto* dirNode = new (std::nothrow) Node{dirPath, dirs};
+    if (!dirNode) {
+      freeList(dirs);
+      freeList(stack);
+      return false;
+    }
+    dirs = dirNode;
+
+    auto dir = sd.open(dirPath.c_str());
+    if (!dir || !dir.isDirectory()) {
+      if (dir) dir.close();
       continue;
     }
 
-    String filePath = path;
-    if (!filePath.endsWith("/")) {
-      filePath += "/";
-    }
-    filePath += name;
+    int iterations = 0;
+    auto file = dir.openNextFile();
+    while (file && iterations++ < kMaxEntries) {
+      file.getName(name, sizeof(name));
+      if (name[0] == '\0' || (name[0] == '.' && (name[1] == '\0' || (name[1] == '.' && name[2] == '\0')))) {
+        file.close();
+        file = dir.openNextFile();
+        continue;
+      }
 
-    if (file.isDirectory()) {
+      String filePath = dirPath;
+      if (!filePath.endsWith("/")) filePath += "/";
+      filePath += name;
+
+      const bool isDir = file.isDirectory();
       file.close();
-      if (!removeDir(filePath.c_str())) {
-        allOk = false;
+
+      if (isDir) {
+        auto* node = new (std::nothrow) Node{std::move(filePath), stack};
+        if (!node) {
+          dir.close();
+          freeList(dirs);
+          freeList(stack);
+          return false;
+        }
+        stack = node;
+      } else {
+        if (!sd.remove(filePath.c_str())) allOk = false;
+        deleted++;
+        if ((deleted % 10) == 0) {
+          delay(1);
+          if (progress) progress(deleted);
+        }
       }
-    } else {
-      file.close();
-      if (!sd.remove(filePath.c_str())) {
-        allOk = false;
-      }
+
+      file = dir.openNextFile();
     }
-    file = dir.openNextFile();
+    dir.close();
   }
 
-  dir.close();
-  if (!allOk) {
-    return false;
+  if (progress) progress(deleted);
+
+  while (dirs) {
+    if (!sd.rmdir(dirs->path.c_str())) allOk = false;
+    auto* n = dirs->next;
+    delete dirs;
+    dirs = n;
   }
-  return sd.rmdir(path);
+
+  return allOk;
 }

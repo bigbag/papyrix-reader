@@ -354,7 +354,14 @@ void SettingsState::handleConfirm(Core& core) {
           // Clear Book Cache
           ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(CLEARING_CACHE));
 
-          auto result = core.storage.rmdir(PAPYRIX_CACHE_DIR);
+          int lastRendered = 0;
+          auto result = core.storage.rmdir(PAPYRIX_CACHE_DIR, [this, &lastRendered](int n) {
+            if (n - lastRendered < 50) return;
+            lastRendered = n;
+            char buf[64];
+            snprintf(buf, sizeof(buf), "%s (%d)", tr(CLEARING_CACHE), n);
+            ui::centeredMessage(renderer_, THEME, THEME.uiFontId, buf);
+          });
 
           const char* msg = result.ok() ? tr(CACHE_CLEARED) : tr(NO_CACHE_TO_CLEAR);
           ui::centeredMessage(renderer_, THEME, THEME.uiFontId, msg);

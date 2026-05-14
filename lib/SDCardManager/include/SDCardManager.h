@@ -3,6 +3,7 @@
 #include <SdFat.h>
 #include <WString.h>
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -40,7 +41,8 @@ class SDCardManager {
   bool openFileForWrite(const char* moduleName, const char* path, FsFile& file);
   bool openFileForWrite(const char* moduleName, const std::string& path, FsFile& file);
   bool openFileForWrite(const char* moduleName, const String& path, FsFile& file);
-  bool removeDir(const char* path);
+  using RemoveDirProgress = std::function<void(int filesDeleted)>;
+  bool removeDir(const char* path, RemoveDirProgress progress = nullptr);
 
   static SDCardManager& getInstance() { return instance; }
 

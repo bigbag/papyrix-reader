@@ -79,12 +79,12 @@ Result<void> Storage::mkdir(const char* path) {
   return Ok();
 }
 
-Result<void> Storage::rmdir(const char* path) {
+Result<void> Storage::rmdir(const char* path, RemoveDirProgress progress) {
   if (!mounted_) {
     return ErrVoid(Error::SdCardNotFound);
   }
 
-  if (!SdMan.removeDir(path)) {
+  if (!SdMan.removeDir(path, std::move(progress))) {
     return ErrVoid(Error::FileNotFound);
   }
 

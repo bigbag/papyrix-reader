@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 
 #include "../core/Result.h"
 
@@ -24,7 +25,8 @@ class Storage {
   Result<bool> exists(const char* path);
   Result<void> remove(const char* path);
   Result<void> mkdir(const char* path);
-  Result<void> rmdir(const char* path);
+  using RemoveDirProgress = std::function<void(int filesDeleted)>;
+  Result<void> rmdir(const char* path, RemoveDirProgress progress = nullptr);
 
   // Directory operations
   Result<void> openDir(const char* path, FsFile& out);
