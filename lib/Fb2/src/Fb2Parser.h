@@ -4,6 +4,7 @@
 #include <EpdFontFamily.h>
 #include <RenderConfig.h>
 #include <ScriptDetector.h>
+#include <SdFat.h>
 #include <blocks/TextBlock.h>
 #include <expat.h>
 
@@ -24,7 +25,7 @@ class Fb2Parser : public ContentParser {
   bool parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint16_t maxPages = 0,
                   const AbortCallback& shouldAbort = nullptr) override;
   bool hasMoreContent() const override { return hasMore_; }
-  bool canResume() const override { return false; }
+  bool canResume() const override { return xmlParser_ != nullptr; }
   void reset() override;
   const std::vector<std::pair<std::string, uint16_t>>& getAnchorMap() const override { return anchorMap_; }
   uint32_t bytesConsumed() const override { return bytesConsumed_; }
@@ -75,7 +76,9 @@ class Fb2Parser : public ContentParser {
   bool hitMaxPages_ = false;
   AbortCallback shouldAbort_;
 
-  // File reading
+  // File reading — kept open between resume calls
+  FsFile resumeFile_;
+  size_t bomSkip_ = 0;
   size_t fileSize_ = 0;
   // Snapshot of expat's cumulative byte index (+ BOM skip) at end of last
   // parsePages() call. Used by PageCache to extrapolate the total page count

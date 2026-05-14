@@ -23,6 +23,7 @@ class ParsedText {
   std::list<EpdFontFamily::Style> wordStyles;
   TextBlock::BLOCK_STYLE style;
   uint8_t indentLevel;
+  bool indentApplied = false;
   bool hyphenationEnabled;
   bool useGreedyBreaking = true;  // Default to greedy to avoid Knuth-Plass memory spike
   bool isRtl = false;

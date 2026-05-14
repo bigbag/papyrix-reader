@@ -222,6 +222,7 @@ class ReaderState : public State {
   // Full book pre-processing
   bool indexingInProgress_ = false;
   bool indexingCancelled_ = false;
+  bool indexingFailed_ = false;
   int indexingSpine_ = 0;
   int indexingTotalSpines_ = 0;
   std::unique_ptr<PageCache> indexingCache_;

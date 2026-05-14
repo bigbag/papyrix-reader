@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <climits>
 #include <cstring>
+#include <new>
 
 #include "../Battery.h"
 #include "../FontManager.h"
@@ -581,6 +582,7 @@ void ReaderState::enter(Core& core) {
   powerPressStartedMs_ = 0;
   indexingInProgress_ = false;
   indexingCancelled_ = false;
+  indexingFailed_ = false;
   indexingCache_.reset();
   indexingParser_.reset();
   stopBackgroundCaching();  // Ensure any previous task is stopped
@@ -793,6 +795,10 @@ StateTransition ReaderState::update(Core& core) {
     if (indexingCancelled_) {
       indexingCancelled_ = false;
       return StateTransition::to(sourceState_);
+    }
+    if (indexingFailed_) {
+      indexingFailed_ = false;
+      startBackgroundCaching(core);
     }
     if (!indexingInProgress_) {
       needsRender_ = true;
@@ -1874,10 +1880,6 @@ void ReaderState::startFullBookIndexing(Core& core) {
 }
 
 void ReaderState::processIndexingChunk(Core& core) {
-  // Prevent CPU throttling during indexing. The main loop drops to 10 MHz
-  // after 3 s of input inactivity, which also drops the APB clock. Since
-  // display and SD card share the same SPI bus derived from APB, this slows
-  // SPI writes by ~14x (40 MHz effective → ~2.5 MHz).
   core.input.resetIdleTimer();
   core.cpu.unthrottle();
 
@@ -1886,81 +1888,62 @@ void ReaderState::processIndexingChunk(Core& core) {
   const auto vp = getReaderViewport(core.settings.statusBar != 0);
   const auto config = core.settings.getRenderConfig(theme, vp.width, vp.height);
 
+  auto shouldAbort = [this, &core]() -> bool {
+    if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < 4 * 1024) return true;
+    Event ae;
+    while (core.events.pop(ae)) {
+      if (ae.type == EventType::ButtonPress && ae.button == Button::Back) {
+        indexingCancelled_ = true;
+        return true;
+      }
+    }
+    return false;
+  };
+
+  auto stopIndexing = [this]() {
+    indexingInProgress_ = false;
+    indexingFailed_ = true;
+    indexingCache_.reset();
+    indexingParser_.reset();
+    renderer_.clearWidthCache();
+    LOG_WRN(TAG, "Full book indexing failed, falling back to page-by-page caching");
+  };
+
   if (indexingSpine_ >= indexingTotalSpines_) {
     indexingInProgress_ = false;
     indexingCache_.reset();
     indexingParser_.reset();
     LOG_INF(TAG, "Full book indexing complete");
     startBackgroundCaching(core);
+    needsRender_ = true;
     return;
   }
 
-  // Create parser and cache for current spine if needed
-  if (!indexingCache_) {
-    std::string cachePath;
-
-    if (type == ContentType::Epub) {
-      auto* provider = core.content.asEpub();
-      if (!provider || !provider->getEpub()) {
-        indexingInProgress_ = false;
-        return;
-      }
-      const auto* epub = provider->getEpub();
-      cachePath = epubSectionCachePath(epub->getCachePath(), indexingSpine_);
-      std::string imageCachePath = core.settings.showImages ? (epub->getCachePath() + "/images") : "";
-      indexingParser_.reset(
-          new EpubChapterParser(provider->getEpubShared(), indexingSpine_, renderer_, config, imageCachePath));
-    } else if (type == ContentType::Fb2) {
-      auto* fb2Provider = core.content.asFb2();
-      if (!fb2Provider || !fb2Provider->getFb2()) {
-        indexingInProgress_ = false;
-        return;
-      }
-      cachePath = fb2Provider->getSectionCachePath(indexingSpine_);
-      std::string lang = fb2Provider->getFb2()->getLanguage();
-      indexingParser_.reset(new Fb2Parser(fb2Provider->getSectionPath(indexingSpine_), renderer_, config, lang));
-    } else if (type == ContentType::Markdown) {
-      cachePath = contentCachePath(core.content.cacheDir(), config.fontId);
-      indexingParser_.reset(new MarkdownParser(contentPath_, renderer_, config));
-    } else if (type == ContentType::Html) {
-      cachePath = contentCachePath(core.content.cacheDir(), config.fontId);
-      indexingParser_.reset(new HtmlParser(contentPath_, core.content.cacheDir(), renderer_, config));
-    } else {
-      cachePath = contentCachePath(core.content.cacheDir(), config.fontId);
-      indexingParser_.reset(new PlainTextParser(contentPath_, renderer_, config));
+  // --- EXTEND PATH: continue caching current spine ---
+  if (indexingCache_) {
+    size_t freeHeap = heap_caps_get_free_size(MALLOC_CAP_8BIT);
+    size_t largestBlock = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+    if (freeHeap < 15 * 1024 || largestBlock < 6 * 1024) {
+      LOG_ERR(TAG, "Indexing: heap too low for extend (free=%zu largest=%zu)", freeHeap, largestBlock);
+      stopIndexing();
+      needsRender_ = true;
+      return;
     }
 
-    indexingCache_.reset(new PageCache(cachePath));
-    if (indexingCache_->load(config) && !indexingCache_->isPartial()) {
-      // Already fully cached — skip
-      indexingCache_.reset();
-      indexingParser_.reset();
-      indexingSpine_++;
-    } else {
-      // Process entire spine in one shot (maxPages=0 = unlimited).
-      // Abort callback checks for Back button so user can cancel mid-spine.
-      auto shouldAbort = [this, &core]() -> bool {
-        Event ae;
-        while (core.events.pop(ae)) {
-          if (ae.type == EventType::ButtonPress && ae.button == Button::Back) {
-            indexingCancelled_ = true;
-            return true;
-          }
-        }
-        return false;
-      };
-      indexingParser_->reset();
-      if (!indexingCache_->create(*indexingParser_, config, 0, 0, shouldAbort)) {
+    if (!indexingCache_->extend(*indexingParser_, PageCache::DEFAULT_CACHE_CHUNK, shouldAbort)) {
+      if (indexingCancelled_) {
+        indexingInProgress_ = false;
         indexingCache_.reset();
         indexingParser_.reset();
-        indexingInProgress_ = false;
-        if (indexingCancelled_) {
-          LOG_INF(TAG, "Indexing cancelled by user at spine %d", indexingSpine_);
-        } else {
-          LOG_ERR(TAG, "Indexing: failed to create cache for spine %d", indexingSpine_);
-        }
-        return;
+        LOG_INF(TAG, "Indexing cancelled by user at spine %d", indexingSpine_);
+      } else {
+        stopIndexing();
       }
+      needsRender_ = true;
+      return;
+    }
+
+    if (!indexingCache_->isPartial()) {
       if (type == ContentType::Epub || type == ContentType::Fb2) {
         saveAnchorMap(*indexingParser_, indexingCache_->path());
       }
@@ -1970,30 +1953,160 @@ void ReaderState::processIndexingChunk(Core& core) {
       renderer_.clearWidthCache();
       indexingSpine_++;
     }
+
+    needsRender_ = true;
+    return;
   }
+
+  // --- CREATE PATH: start a new spine ---
 
   // Skip already-complete spines
   while (indexingSpine_ < indexingTotalSpines_) {
-    std::string cachePath;
+    std::string probePath;
     if (type == ContentType::Epub) {
       auto* provider = core.content.asEpub();
-      cachePath = epubSectionCachePath(provider->getEpub()->getCachePath(), indexingSpine_);
+      if (provider && provider->getEpub())
+        probePath = epubSectionCachePath(provider->getEpub()->getCachePath(), indexingSpine_);
     } else if (type == ContentType::Fb2) {
-      cachePath = core.content.asFb2()->getSectionCachePath(indexingSpine_);
+      const auto* fb2 = core.content.asFb2();
+      if (fb2) probePath = fb2->getSectionCachePath(indexingSpine_);
     }
-    if (cachePath.empty()) break;
-    const auto probe = PageCache::probe(cachePath, config);
+    if (probePath.empty()) break;
+    const auto probe = PageCache::probe(probePath, config);
     if (!probe.valid || probe.partial) break;
     indexingSpine_++;
   }
 
-  // Check if all done
   if (indexingSpine_ >= indexingTotalSpines_) {
     indexingInProgress_ = false;
     indexingCache_.reset();
     indexingParser_.reset();
     LOG_INF(TAG, "Full book indexing complete");
     startBackgroundCaching(core);
+    needsRender_ = true;
+    return;
+  }
+
+  // Heap gate before allocating parser + cache
+  size_t freeHeap = heap_caps_get_free_size(MALLOC_CAP_8BIT);
+  size_t largestBlock = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+  if (freeHeap < 28 * 1024 || largestBlock < 10 * 1024) {
+    LOG_ERR(TAG, "Indexing: heap too low for spine %d (free=%zu largest=%zu)", indexingSpine_, freeHeap, largestBlock);
+    stopIndexing();
+    needsRender_ = true;
+    return;
+  }
+
+  std::string cachePath;
+
+  if (type == ContentType::Epub) {
+    auto* provider = core.content.asEpub();
+    if (!provider || !provider->getEpub()) {
+      stopIndexing();
+      needsRender_ = true;
+      return;
+    }
+    const auto* epub = provider->getEpub();
+    cachePath = epubSectionCachePath(epub->getCachePath(), indexingSpine_);
+    std::string imageCachePath = core.settings.showImages ? (epub->getCachePath() + "/images") : "";
+    auto* p = new (std::nothrow)
+        EpubChapterParser(provider->getEpubShared(), indexingSpine_, renderer_, config, imageCachePath);
+    if (!p) {
+      LOG_ERR(TAG, "Indexing: alloc failed for parser at spine %d", indexingSpine_);
+      stopIndexing();
+      needsRender_ = true;
+      return;
+    }
+    indexingParser_.reset(p);
+  } else if (type == ContentType::Fb2) {
+    auto* fb2Provider = core.content.asFb2();
+    if (!fb2Provider || !fb2Provider->getFb2()) {
+      stopIndexing();
+      needsRender_ = true;
+      return;
+    }
+    cachePath = fb2Provider->getSectionCachePath(indexingSpine_);
+    std::string lang = fb2Provider->getFb2()->getLanguage();
+    auto* p = new (std::nothrow) Fb2Parser(fb2Provider->getSectionPath(indexingSpine_), renderer_, config, lang);
+    if (!p) {
+      LOG_ERR(TAG, "Indexing: alloc failed for parser at spine %d", indexingSpine_);
+      stopIndexing();
+      needsRender_ = true;
+      return;
+    }
+    indexingParser_.reset(p);
+  } else if (type == ContentType::Markdown) {
+    cachePath = contentCachePath(core.content.cacheDir(), config.fontId);
+    auto* p = new (std::nothrow) MarkdownParser(contentPath_, renderer_, config);
+    if (!p) {
+      LOG_ERR(TAG, "Indexing: alloc failed for parser at spine %d", indexingSpine_);
+      stopIndexing();
+      needsRender_ = true;
+      return;
+    }
+    indexingParser_.reset(p);
+  } else if (type == ContentType::Html) {
+    cachePath = contentCachePath(core.content.cacheDir(), config.fontId);
+    auto* p = new (std::nothrow) HtmlParser(contentPath_, core.content.cacheDir(), renderer_, config);
+    if (!p) {
+      LOG_ERR(TAG, "Indexing: alloc failed for parser at spine %d", indexingSpine_);
+      stopIndexing();
+      needsRender_ = true;
+      return;
+    }
+    indexingParser_.reset(p);
+  } else {
+    cachePath = contentCachePath(core.content.cacheDir(), config.fontId);
+    auto* p = new (std::nothrow) PlainTextParser(contentPath_, renderer_, config);
+    if (!p) {
+      LOG_ERR(TAG, "Indexing: alloc failed for parser at spine %d", indexingSpine_);
+      stopIndexing();
+      needsRender_ = true;
+      return;
+    }
+    indexingParser_.reset(p);
+  }
+
+  auto* c = new (std::nothrow) PageCache(cachePath);
+  if (!c) {
+    LOG_ERR(TAG, "Indexing: alloc failed for cache at spine %d", indexingSpine_);
+    stopIndexing();
+    needsRender_ = true;
+    return;
+  }
+  indexingCache_.reset(c);
+
+  if (indexingCache_->load(config) && !indexingCache_->isPartial()) {
+    indexingCache_.reset();
+    indexingParser_.reset();
+    indexingSpine_++;
+    needsRender_ = true;
+    return;
+  }
+
+  indexingParser_->reset();
+  if (!indexingCache_->create(*indexingParser_, config, PageCache::DEFAULT_CACHE_CHUNK, 0, shouldAbort)) {
+    if (indexingCancelled_) {
+      indexingInProgress_ = false;
+      indexingCache_.reset();
+      indexingParser_.reset();
+      LOG_INF(TAG, "Indexing cancelled by user at spine %d", indexingSpine_);
+    } else {
+      stopIndexing();
+    }
+    needsRender_ = true;
+    return;
+  }
+
+  if (!indexingCache_->isPartial()) {
+    if (type == ContentType::Epub || type == ContentType::Fb2) {
+      saveAnchorMap(*indexingParser_, indexingCache_->path());
+    }
+    LOG_DBG(TAG, "Indexing: spine %d complete (%d pages)", indexingSpine_, indexingCache_->pageCount());
+    indexingCache_.reset();
+    indexingParser_.reset();
+    renderer_.clearWidthCache();
+    indexingSpine_++;
   }
 
   needsRender_ = true;
