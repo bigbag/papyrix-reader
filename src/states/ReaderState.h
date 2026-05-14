@@ -55,6 +55,7 @@ class ReaderState : public State {
   char contentPath_[512];
   uint32_t currentPage_;
   bool needsRender_;
+  bool suppressRender_ = false;
   bool contentLoaded_;
   bool loadFailed_ = false;  // Track if content loading failed (for error state transition)
 

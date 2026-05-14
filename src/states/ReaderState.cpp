@@ -791,7 +791,21 @@ StateTransition ReaderState::update(Core& core) {
         return StateTransition::to(sourceState_);
       }
     }
-    processIndexingChunk(core);
+    const uint32_t kIndexingBatchMs = 3000;
+    uint32_t batchStart = millis();
+    suppressRender_ = true;
+
+    while (indexingInProgress_) {
+      processIndexingChunk(core);
+
+      if (millis() - batchStart >= kIndexingBatchMs) break;
+      if (indexingCache_ && indexingCache_->isPartial()) break;
+      if (!indexingInProgress_ || indexingCancelled_ || indexingFailed_) break;
+    }
+
+    suppressRender_ = false;
+    needsRender_ = true;
+
     if (indexingCancelled_) {
       indexingCancelled_ = false;
       return StateTransition::to(sourceState_);
@@ -1954,7 +1968,9 @@ void ReaderState::processIndexingChunk(Core& core) {
       indexingSpine_++;
     }
 
-    needsRender_ = true;
+    if (!suppressRender_) {
+      needsRender_ = true;
+    }
     return;
   }
 
@@ -2084,8 +2100,36 @@ void ReaderState::processIndexingChunk(Core& core) {
     return;
   }
 
+  uint16_t maxPages = PageCache::DEFAULT_CACHE_CHUNK;
+
+  if (type == ContentType::Fb2) {
+    const auto* fb2Provider = core.content.asFb2();
+    if (fb2Provider) {
+      std::string sectionPath = fb2Provider->getSectionPath(indexingSpine_);
+      FsFile file;
+      if (file.open(sectionPath.c_str(), O_RDONLY)) {
+        size_t fileSize = file.size();
+        file.close();
+        if (estimatePagesForBytes(fileSize) < 30) {
+          maxPages = 0;
+        }
+      }
+    }
+  } else if (type == ContentType::Epub) {
+    auto* provider = core.content.asEpub();
+    if (provider && provider->getEpub()) {
+      auto spineItem = provider->getEpub()->getSpineItem(indexingSpine_);
+      size_t itemSize = 0;
+      if (provider->getEpub()->getItemSize(spineItem.href, &itemSize)) {
+        if (estimatePagesForBytes(itemSize) < 30) {
+          maxPages = 0;
+        }
+      }
+    }
+  }
+
   indexingParser_->reset();
-  if (!indexingCache_->create(*indexingParser_, config, PageCache::DEFAULT_CACHE_CHUNK, 0, shouldAbort)) {
+  if (!indexingCache_->create(*indexingParser_, config, maxPages, 0, shouldAbort)) {
     if (indexingCancelled_) {
       indexingInProgress_ = false;
       indexingCache_.reset();
@@ -2109,7 +2153,9 @@ void ReaderState::processIndexingChunk(Core& core) {
     indexingSpine_++;
   }
 
-  needsRender_ = true;
+  if (!suppressRender_) {
+    needsRender_ = true;
+  }
 }
 
 void ReaderState::renderIndexingScreen(Core& core) {
