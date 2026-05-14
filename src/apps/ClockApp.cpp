@@ -6,6 +6,7 @@
 #include <Logging.h>
 #include <SdFat.h>
 #include <esp_sntp.h>
+#include <time.h>
 
 #include <ctime>
 
@@ -45,6 +46,17 @@ static struct {
   int8_t menuSelected = 0;
   char ntpServers[128] = "pool.ntp.org,time.nist.gov";
 } state;
+
+static void applyTimezone(int offsetHours) {
+  char tz[16];
+  if (offsetHours == 0) {
+    snprintf(tz, sizeof(tz), "UTC0");
+  } else {
+    snprintf(tz, sizeof(tz), "UTC%d", -offsetHours);
+  }
+  setenv("TZ", tz, 1);
+  tzset();
+}
 
 static int parseNtpServers(const char* servers, const char* out[NTP_SERVER_MAX]) {
   int count = 0;
@@ -127,7 +139,7 @@ static void syncNtpWithConnection() {
     count = 2;
   }
   LOG_INF(TAG, "NTP servers: %s", state.ntpServers);
-  configTime(state.utcOffset * 3600, 0, servers[0], count > 1 ? servers[1] : nullptr, count > 2 ? servers[2] : nullptr);
+  configTime(0, 0, servers[0], count > 1 ? servers[1] : nullptr, count > 2 ? servers[2] : nullptr);
 
   bool synced = false;
   for (int i = 0; i < 20; i++) {
@@ -139,6 +151,8 @@ static void syncNtpWithConnection() {
   }
   struct tm timeinfo;
   if (synced && getLocalTime(&timeinfo, 0)) {
+    applyTimezone(state.utcOffset);
+    getLocalTime(&timeinfo, 0);
     LOG_INF(TAG, "NTP sync OK: %04d-%02d-%02d %02d:%02d:%02d", timeinfo.tm_year + 1900, timeinfo.tm_mon + 1,
             timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
   } else {
@@ -423,7 +437,7 @@ void onMenuButton(Core& core, Button btn) {
         state.utcOffset = static_cast<int8_t>(state.utcOffset + delta);
         if (state.utcOffset > 14) state.utcOffset = -12;
         if (state.utcOffset < -12) state.utcOffset = 14;
-        configTime(state.utcOffset * 3600, 0, "pool.ntp.org");  // just changes offset, servers don't matter
+        applyTimezone(state.utcOffset);
       } else if (state.menuSelected == 1) {
         state.use24h = !state.use24h;
       } else if (state.menuSelected == 2) {
