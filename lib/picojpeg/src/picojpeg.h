@@ -105,10 +105,18 @@ typedef struct {
 typedef unsigned char (*pjpeg_need_bytes_callback_t)(unsigned char* pBuf, unsigned char buf_size,
                                                      unsigned char* pBytes_actually_read, void* pCallback_data);
 
+// Decode mode flags for the 'reduce' parameter:
+//   0 = Full quality decode (default)
+//   1 = DC-only reduce mode (one pixel per block, very fast, low quality)
+//   2 = Grayscale-only mode (full Y quality, skip chroma IDCT/upsample/convert)
+#define PJPG_FULL_DECODE 0
+#define PJPG_REDUCE_DC_ONLY 1
+#define PJPG_GRAYSCALE_ONLY 2
+
 // Initializes the decompressor. Returns 0 on success, or one of the above error codes on failure.
 // pNeed_bytes_callback will be called to fill the decompressor's internal input buffer.
-// If reduce is 1, only the first pixel of each block will be decoded. This mode is much faster because it skips the AC
-// dequantization, IDCT and chroma upsampling of every image pixel. Not thread safe.
+// reduce: PJPG_FULL_DECODE (0), PJPG_REDUCE_DC_ONLY (1), or PJPG_GRAYSCALE_ONLY (2).
+// Not thread safe.
 unsigned char pjpeg_decode_init(pjpeg_image_info_t* pInfo, pjpeg_need_bytes_callback_t pNeed_bytes_callback,
                                 void* pCallback_data, unsigned char reduce);
 

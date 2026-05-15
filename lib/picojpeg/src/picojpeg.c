@@ -5,14 +5,15 @@
 // Also integrated and tested changes from Chris Phoenix <cphoenix@gmail.com>.
 //------------------------------------------------------------------------------
 #include "picojpeg.h"
+
+#pragma GCC optimize("O2")
 //------------------------------------------------------------------------------
 // Set to 1 if right shifts on signed ints are always unsigned (logical) shifts
 // When 1, arithmetic right shifts will be emulated by using a logical shift
 // with special case code to ensure the sign bit is replicated.
 #define PJPG_RIGHT_SHIFT_IS_ALWAYS_UNSIGNED 0
 
-// Define PJPG_INLINE to "inline" if your C compiler supports explicit inlining
-#define PJPG_INLINE
+#define PJPG_INLINE __attribute__((always_inline)) inline
 //------------------------------------------------------------------------------
 typedef unsigned char uint8;
 typedef unsigned short uint16;
@@ -325,83 +326,18 @@ static PJPG_INLINE uint8 getBit(void) {
   return ret;
 }
 //------------------------------------------------------------------------------
-static uint16 getExtendTest(uint8 i) {
-  switch (i) {
-    case 0:
-      return 0;
-    case 1:
-      return 0x0001;
-    case 2:
-      return 0x0002;
-    case 3:
-      return 0x0004;
-    case 4:
-      return 0x0008;
-    case 5:
-      return 0x0010;
-    case 6:
-      return 0x0020;
-    case 7:
-      return 0x0040;
-    case 8:
-      return 0x0080;
-    case 9:
-      return 0x0100;
-    case 10:
-      return 0x0200;
-    case 11:
-      return 0x0400;
-    case 12:
-      return 0x0800;
-    case 13:
-      return 0x1000;
-    case 14:
-      return 0x2000;
-    case 15:
-      return 0x4000;
-    default:
-      return 0;
-  }
-}
-//------------------------------------------------------------------------------
-static int16 getExtendOffset(uint8 i) {
-  switch (i) {
-    case 0:
-      return 0;
-    case 1:
-      return ((-1) << 1) + 1;
-    case 2:
-      return ((-1) << 2) + 1;
-    case 3:
-      return ((-1) << 3) + 1;
-    case 4:
-      return ((-1) << 4) + 1;
-    case 5:
-      return ((-1) << 5) + 1;
-    case 6:
-      return ((-1) << 6) + 1;
-    case 7:
-      return ((-1) << 7) + 1;
-    case 8:
-      return ((-1) << 8) + 1;
-    case 9:
-      return ((-1) << 9) + 1;
-    case 10:
-      return ((-1) << 10) + 1;
-    case 11:
-      return ((-1) << 11) + 1;
-    case 12:
-      return ((-1) << 12) + 1;
-    case 13:
-      return ((-1) << 13) + 1;
-    case 14:
-      return ((-1) << 14) + 1;
-    case 15:
-      return ((-1) << 15) + 1;
-    default:
-      return 0;
-  }
+static const uint16 gExtendTest[] = {
+    0,      0x0001, 0x0002, 0x0004, 0x0008, 0x0010, 0x0020, 0x0040,
+    0x0080, 0x0100, 0x0200, 0x0400, 0x0800, 0x1000, 0x2000, 0x4000,
 };
+
+static PJPG_INLINE uint16 getExtendTest(uint8 i) { return (i < 16) ? gExtendTest[i] : 0; }
+//------------------------------------------------------------------------------
+static const int16 gExtendOffset[] = {
+    0, -1, -3, -7, -15, -31, -63, -127, -255, -511, -1023, -2047, -4095, -8191, -16383, -32767,
+};
+
+static PJPG_INLINE int16 getExtendOffset(uint8 i) { return (i < 16) ? gExtendOffset[i] : 0; }
 //------------------------------------------------------------------------------
 static PJPG_INLINE int16 huffExtend(uint16 x, uint8 s) {
   return ((x < getExtendTest(s)) ? ((int16)x + getExtendOffset(s)) : (int16)x);
@@ -1568,6 +1504,17 @@ static void copyY(uint8 dstOfs) {
   }
 }
 /*----------------------------------------------------------------------------*/
+// Copy Y to R buffer only (grayscale-only mode)
+static void copyYOnly(uint8 dstOfs) {
+  uint8 i;
+  uint8* pRDst = gMCUBufR + dstOfs;
+  int16* pSrc = gCoeffBuf;
+
+  for (i = 64; i > 0; i--) {
+    *pRDst++ = (uint8)*pSrc++;
+  }
+}
+/*----------------------------------------------------------------------------*/
 // Cb convert to RGB and accumulate
 static void convertCb(uint8 dstOfs) {
   uint8 i;
@@ -1907,6 +1854,33 @@ static void transformBlockReduce(uint8 mcuBlock) {
   }
 }
 //------------------------------------------------------------------------------
+static void transformBlockGrayscale(uint8 mcuBlock) {
+  uint8 componentID = gMCUOrg[mcuBlock];
+
+  if (componentID != 0) return;
+
+  idctRows();
+  idctCols();
+
+  switch (gScanType) {
+    case PJPG_GRAYSCALE:
+    case PJPG_YH1V1:
+      copyYOnly(0);
+      break;
+    case PJPG_YH1V2:
+      copyYOnly(mcuBlock == 0 ? 0 : 128);
+      break;
+    case PJPG_YH2V1:
+      copyYOnly(mcuBlock == 0 ? 0 : 64);
+      break;
+    case PJPG_YH2V2: {
+      static const uint8 yOfs[] = {0, 64, 128, 192};
+      copyYOnly(yOfs[mcuBlock]);
+      break;
+    }
+  }
+}
+//------------------------------------------------------------------------------
 static uint8 decodeNextMCU(void) {
   uint8 status;
   uint8 mcuBlock;
@@ -1941,8 +1915,8 @@ static uint8 decodeNextMCU(void) {
 
     compACTab = gCompACTab[componentID];
 
-    if (gReduce) {
-      // Decode, but throw out the AC coefficients in reduce mode.
+    if (gReduce == PJPG_REDUCE_DC_ONLY) {
+      // DC-only reduce mode: parse and discard AC coefficients
       for (k = 1; k < 64; k++) {
         s = huffDecode(compACTab ? &gHuffTab3 : &gHuffTab2, compACTab ? gHuffVal3 : gHuffVal2);
 
@@ -1962,15 +1936,41 @@ static uint8 decodeNextMCU(void) {
           if (r == 15) {
             if ((k + 16) > 64) return PJPG_DECODE_ERROR;
 
-            k += (16 - 1);  // - 1 because the loop counter is k
+            k += (16 - 1);
           } else
             break;
         }
       }
 
       transformBlockReduce(mcuBlock);
+    } else if ((gReduce == PJPG_GRAYSCALE_ONLY) && (componentID != 0)) {
+      // Grayscale-only mode, chroma block: parse Huffman to advance bitstream, skip IDCT/upsample/convert
+      for (k = 1; k < 64; k++) {
+        s = huffDecode(compACTab ? &gHuffTab3 : &gHuffTab2, compACTab ? gHuffVal3 : gHuffVal2);
+
+        numExtraBits = s & 0xF;
+        if (numExtraBits) getBits2(numExtraBits);
+
+        r = s >> 4;
+        s &= 15;
+
+        if (s) {
+          if (r) {
+            if ((k + r) > 63) return PJPG_DECODE_ERROR;
+
+            k = (uint8)(k + r);
+          }
+        } else {
+          if (r == 15) {
+            if ((k + 16) > 64) return PJPG_DECODE_ERROR;
+
+            k += (16 - 1);
+          } else
+            break;
+        }
+      }
     } else {
-      // Decode and dequantize AC coefficients
+      // Full decode (reduce==0) or grayscale-only Y blocks
       for (k = 1; k < 64; k++) {
         uint16 extraBits;
 
@@ -2004,7 +2004,7 @@ static uint8 decodeNextMCU(void) {
 
             for (r = 16; r > 0; r--) gCoeffBuf[ZAG[k++]] = 0;
 
-            k--;  // - 1 because the loop counter is k
+            k--;
           } else
             break;
         }
@@ -2012,7 +2012,10 @@ static uint8 decodeNextMCU(void) {
 
       while (k < 64) gCoeffBuf[ZAG[k++]] = 0;
 
-      transformBlock(mcuBlock);
+      if (gReduce == PJPG_GRAYSCALE_ONLY)
+        transformBlockGrayscale(mcuBlock);
+      else
+        transformBlock(mcuBlock);
     }
   }
 

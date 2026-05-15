@@ -271,7 +271,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
 
   // Initialize picojpeg decoder
   pjpeg_image_info_t imageInfo;
-  const unsigned char status = pjpeg_decode_init(&imageInfo, jpegReadCallback, &context, 0);
+  const unsigned char status = pjpeg_decode_init(&imageInfo, jpegReadCallback, &context, PJPG_GRAYSCALE_ONLY);
   if (status != 0) {
     LOG_ERR(TAG, "JPEG decode init failed with error code: %d", status);
     return false;
@@ -472,15 +472,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
           const int blockIndex = blockRow * blocksPerRow + blockCol;
           const int pixelOffset = blockIndex * 64 + localY * 8 + localX;
 
-          uint8_t gray;
-          if (imageInfo.m_comps == 1) {
-            gray = imageInfo.m_pMCUBufR[pixelOffset];
-          } else {
-            const uint8_t r = imageInfo.m_pMCUBufR[pixelOffset];
-            const uint8_t g = imageInfo.m_pMCUBufG[pixelOffset];
-            const uint8_t b = imageInfo.m_pMCUBufB[pixelOffset];
-            gray = rgbToGray(r, g, b);
-          }
+          const uint8_t gray = imageInfo.m_pMCUBufR[pixelOffset];
 
           mcuRowBuffer[blockY * imageInfo.m_width + pixelX] = gray;
         }
