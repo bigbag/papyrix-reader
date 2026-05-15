@@ -63,6 +63,7 @@ class Epub {
   bool readItemContentsToStream(const std::string& itemHref, Print& out, size_t chunkSize,
                                 uint8_t* dictBuffer = nullptr) const;
   bool getItemSize(const std::string& itemHref, size_t* size) const;
+  bool getSpineItemSizes(std::vector<size_t>& sizes) const;
   BookMetadataCache::SpineEntry getSpineItem(int spineIndex) const;
   BookMetadataCache::TocEntry getTocItem(int tocIndex) const;
   int getSpineItemsCount() const;

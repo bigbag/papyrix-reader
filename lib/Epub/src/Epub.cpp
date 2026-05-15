@@ -8,6 +8,8 @@
 #include <ZipFile.h>
 #include <esp_heap_caps.h>
 
+#include <algorithm>
+
 #define TAG "EPUB"
 
 #include "../../src/config.h"
@@ -931,6 +933,34 @@ bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, con
 bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {
   const std::string path = FsHelpers::normalisePath(itemHref);
   return ZipFile(filepath).getInflatedFileSize(path.c_str(), size);
+}
+
+bool Epub::getSpineItemSizes(std::vector<size_t>& sizes) const {
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) return false;
+
+  const int spineCount = bookMetadataCache->getSpineCount();
+  sizes.resize(static_cast<size_t>(spineCount), 0);
+  if (spineCount == 0) return true;
+
+  std::vector<ZipFile::SizeTarget> targets;
+  targets.reserve(static_cast<size_t>(spineCount));
+  for (int i = 0; i < spineCount; ++i) {
+    const auto entry = bookMetadataCache->getSpineEntry(i);
+    const std::string path = FsHelpers::normalisePath(entry.href);
+    if (path.size() >= 255) continue;  // fillUncompressedSizes stack buffer limit
+    const auto len = static_cast<uint16_t>(path.size());
+    targets.push_back({ZipFile::fnvHash64(path.c_str(), len), len, static_cast<uint16_t>(i)});
+  }
+  std::sort(targets.begin(), targets.end());
+
+  std::vector<uint32_t> rawSizes(static_cast<size_t>(spineCount), 0);
+  ZipFile zf(filepath);
+  zf.fillUncompressedSizes(targets, rawSizes);
+
+  for (int i = 0; i < spineCount; ++i) {
+    sizes[static_cast<size_t>(i)] = static_cast<size_t>(rawSizes[static_cast<size_t>(i)]);
+  }
+  return true;
 }
 
 int Epub::getSpineItemsCount() const {

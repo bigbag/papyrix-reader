@@ -340,14 +340,7 @@ void ReaderState::initializeGlobalPageMetrics(Core& core) {
   std::vector<size_t> itemSizes(static_cast<size_t>(spineCount), 0);
 
   if (type == ContentType::Epub) {
-    const auto* epub = core.content.asEpub()->getEpub();
-    for (int i = 0; i < spineCount; ++i) {
-      const auto spineItem = epub->getSpineItem(i);
-      size_t itemSize = 0;
-      if (epub->getItemSize(spineItem.href, &itemSize)) {
-        itemSizes[static_cast<size_t>(i)] = itemSize;
-      }
-    }
+    core.content.asEpub()->getEpub()->getSpineItemSizes(itemSizes);
   } else {
     const auto* fb2 = core.content.asFb2()->getFb2();
     const auto& offsets = fb2->getSectionOffsets();
