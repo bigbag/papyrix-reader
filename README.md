@@ -21,6 +21,8 @@ auto-detects the panel variant at boot via I²C signature scan (BQ27220 fuel gau
 
 ![Home screen](./docs/images/device.jpg)
 
+> **Warning:** Papyrix does not support OTA updates. Some Xteink units (e.g. from AliExpress) ship with USB flashing locked — if you flash Papyrix on a locked device by OTA, you will have no way to update or recover. Only flash Papyrix on devices with unlocked USB.
+
 ## Motivation
 
 E-paper devices are fantastic for reading, but most commercially available readers are closed systems with limited customisation. The **Xteink X4** and **Xteink X3** are affordable e-paper devices, however the official firmware remains closed.
