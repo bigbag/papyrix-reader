@@ -159,6 +159,7 @@ bool ReaderState::saveMetricsIndex(const std::string& sectionsDir, const RenderC
 bool ReaderState::loadMetricsIndex(const std::string& sectionsDir, const RenderConfig& config, int spineCount) {
   std::vector<MetricsEntry> entries;
   if (!readMetricsIndexFile(sectionsDir, config, spineCount, entries)) return false;
+  globalSectionPageMetrics_.resize(static_cast<size_t>(spineCount));
   for (int i = 0; i < spineCount; ++i) {
     auto& m = globalSectionPageMetrics_[static_cast<size_t>(i)];
     m.pages = entries[static_cast<size_t>(i)].pages;
@@ -304,26 +305,34 @@ void ReaderState::initializeGlobalPageMetrics(Core& core) {
 
   globalSectionPageMetrics_.resize(static_cast<size_t>(spineCount));
 
-  auto applyLivePageCacheOverlay = [&]() {
-    if (currentSpineIndex_ >= 0 && currentSpineIndex_ < spineCount && pageCache_ && pageCache_->pageCount() > 0) {
-      auto& metric = globalSectionPageMetrics_[static_cast<size_t>(currentSpineIndex_)];
-      const auto currentPages = static_cast<uint16_t>(std::max<int>(1, pageCache_->pageCount()));
-      const bool currentIsPartial = pageCache_->isPartial();
-      if (currentPages > metric.pages || !metric.exact) {
-        metric.pages = std::max(metric.pages, currentPages);
-        if (!currentIsPartial) {
-          metric.exact = true;
-        }
-      }
+  auto applyLivePageCacheOverlay = [&]() -> bool {
+    if (currentSpineIndex_ < 0 || currentSpineIndex_ >= spineCount || !pageCache_ || pageCache_->pageCount() == 0) {
+      return false;
     }
+    auto& metric = globalSectionPageMetrics_[static_cast<size_t>(currentSpineIndex_)];
+    const auto currentPages = static_cast<uint16_t>(std::max<int>(1, pageCache_->pageCount()));
+    const bool currentIsPartial = pageCache_->isPartial();
+    bool changed = false;
+    if (currentPages > metric.pages) {
+      metric.pages = currentPages;
+      changed = true;
+    }
+    if (!currentIsPartial && !metric.exact) {
+      metric.exact = true;
+      changed = true;
+    }
+    return changed;
   };
 
   // Fast path: metrics.bin already has exact page counts for every spine.
   // Skip the per-spine getItemSize / directory-scan / calibration work entirely.
   if (loadMetricsIndex(sectionsDir, config, spineCount)) {
-    applyLivePageCacheOverlay();
+    const bool overlayChanged = applyLivePageCacheOverlay();
     recomputeGlobalPageMetricTotal();
     globalSectionPageMetricsInitialized_ = true;
+    if (overlayChanged) {
+      saveMetricsIndex(sectionsDir, config);
+    }
     return;
   }
 
@@ -380,6 +389,7 @@ void ReaderState::initializeGlobalPageMetrics(Core& core) {
       entry.close();
 
       if (prefixLen > 0 && strncmp(name, filePrefix, prefixLen) != 0) continue;
+      if (strcmp(name, kMetricsIndexFilename) == 0) continue;
       char* dot = strrchr(name + prefixLen, '.');
       if (!dot || strcmp(dot, ".bin") != 0) continue;
       *dot = '\0';
