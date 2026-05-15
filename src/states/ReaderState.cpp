@@ -48,7 +48,7 @@ namespace {
 constexpr int horizontalPadding = 5;
 constexpr int statusBarMargin = 23;
 constexpr size_t kEstimatedBytesPerPage = 2048;
-constexpr uint8_t kMetricsIndexVersion = 1;
+constexpr uint8_t kMetricsIndexVersion = 2;
 constexpr const char* kMetricsIndexFilename = "metrics.bin";
 
 uint16_t estimatePagesForBytes(const size_t bytes, const size_t bytesPerPage = kEstimatedBytesPerPage) {
@@ -64,6 +64,62 @@ inline std::string epubSectionCachePath(const std::string& epubCachePath, int sp
 
 inline std::string contentCachePath(const char* cacheDir, int fontId) {
   return std::string(cacheDir) + "/pages_" + std::to_string(fontId) + ".bin";
+}
+
+struct MetricsEntry {
+  uint16_t pages;
+  bool exact;
+  uint32_t byteSize;
+};
+
+bool readMetricsIndexFile(const std::string& sectionsDir, const RenderConfig& config, int spineCount,
+                          std::vector<MetricsEntry>& out) {
+  const std::string path = sectionsDir + "/" + kMetricsIndexFilename;
+  FsFile file;
+  if (!SdMan.openFileForRead("MIDX", path, file)) return false;
+
+  uint8_t version;
+  if (!serialization::readPodChecked(file, version) || version != kMetricsIndexVersion) {
+    file.close();
+    return false;
+  }
+
+  RenderConfig fileConfig;
+  serialization::readPod(file, fileConfig.fontId);
+  serialization::readPod(file, fileConfig.lineCompression);
+  serialization::readPod(file, fileConfig.indentLevel);
+  serialization::readPod(file, fileConfig.spacingLevel);
+  serialization::readPod(file, fileConfig.paragraphAlignment);
+  serialization::readPod(file, fileConfig.hyphenation);
+  serialization::readPod(file, fileConfig.showImages);
+  serialization::readPod(file, fileConfig.viewportWidth);
+  serialization::readPod(file, fileConfig.viewportHeight);
+  if (config != fileConfig) {
+    file.close();
+    return false;
+  }
+
+  uint16_t entryCount;
+  if (!serialization::readPodChecked(file, entryCount) || entryCount != static_cast<uint16_t>(spineCount)) {
+    file.close();
+    return false;
+  }
+
+  out.resize(static_cast<size_t>(spineCount));
+  for (int i = 0; i < spineCount; ++i) {
+    uint16_t pages;
+    uint8_t flags;
+    uint32_t byteSize;
+    if (!serialization::readPodChecked(file, pages) || !serialization::readPodChecked(file, flags) ||
+        !serialization::readPodChecked(file, byteSize)) {
+      file.close();
+      return false;
+    }
+    out[static_cast<size_t>(i)] = MetricsEntry{pages, (flags & 1) != 0, byteSize};
+  }
+
+  file.close();
+  return true;
 }
 }  // namespace
 
@@ -92,6 +148,7 @@ bool ReaderState::saveMetricsIndex(const std::string& sectionsDir, const RenderC
     serialization::writePod(file, m.pages);
     const uint8_t flags = m.exact ? 1 : 0;
     serialization::writePod(file, flags);
+    serialization::writePod(file, m.byteSize);
   }
 
   file.close();
@@ -100,49 +157,15 @@ bool ReaderState::saveMetricsIndex(const std::string& sectionsDir, const RenderC
 }
 
 bool ReaderState::loadMetricsIndex(const std::string& sectionsDir, const RenderConfig& config, int spineCount) {
-  const std::string path = sectionsDir + "/" + kMetricsIndexFilename;
-  FsFile file;
-  if (!SdMan.openFileForRead("MIDX", path, file)) return false;
-
-  uint8_t version;
-  serialization::readPod(file, version);
-  if (version != kMetricsIndexVersion) {
-    file.close();
-    return false;
-  }
-
-  RenderConfig fileConfig;
-  serialization::readPod(file, fileConfig.fontId);
-  serialization::readPod(file, fileConfig.lineCompression);
-  serialization::readPod(file, fileConfig.indentLevel);
-  serialization::readPod(file, fileConfig.spacingLevel);
-  serialization::readPod(file, fileConfig.paragraphAlignment);
-  serialization::readPod(file, fileConfig.hyphenation);
-  serialization::readPod(file, fileConfig.showImages);
-  serialization::readPod(file, fileConfig.viewportWidth);
-  serialization::readPod(file, fileConfig.viewportHeight);
-  if (config != fileConfig) {
-    file.close();
-    return false;
-  }
-
-  uint16_t entryCount;
-  serialization::readPod(file, entryCount);
-  if (entryCount != static_cast<uint16_t>(spineCount)) {
-    file.close();
-    return false;
-  }
-
+  std::vector<MetricsEntry> entries;
+  if (!readMetricsIndexFile(sectionsDir, config, spineCount, entries)) return false;
   for (int i = 0; i < spineCount; ++i) {
     auto& m = globalSectionPageMetrics_[static_cast<size_t>(i)];
-    serialization::readPod(file, m.pages);
-    uint8_t flags;
-    serialization::readPod(file, flags);
-    m.exact = (flags & 1) != 0;
+    m.pages = entries[static_cast<size_t>(i)].pages;
+    m.exact = entries[static_cast<size_t>(i)].exact;
+    m.byteSize = entries[static_cast<size_t>(i)].byteSize;
   }
-
-  file.close();
-  LOG_DBG(TAG, "Loaded metrics index: %u entries", entryCount);
+  LOG_DBG(TAG, "Loaded metrics index: %d entries", spineCount);
   return true;
 }
 
@@ -260,16 +283,55 @@ void ReaderState::initializeGlobalPageMetrics(Core& core) {
   const auto config = core.settings.getRenderConfig(theme, vp.width, vp.height);
 
   int spineCount = 0;
-  std::vector<size_t> itemSizes;
+  std::string sectionsDir;
+  const char* filePrefix = "";  // EPUB: "N.bin", FB2: "pages_N.bin"
 
   if (type == ContentType::Epub) {
     auto* provider = core.content.asEpub();
     if (!provider || !provider->getEpub()) return;
-    const auto* epub = provider->getEpub();
-    spineCount = epub->getSpineItemsCount();
-    if (spineCount <= 0) return;
+    spineCount = provider->getEpub()->getSpineItemsCount();
+    sectionsDir = std::string(core.content.cacheDir()) + "/sections";
+  } else if (type == ContentType::Fb2) {
+    auto* fb2Provider = core.content.asFb2();
+    if (!fb2Provider || !fb2Provider->getFb2()) return;
+    spineCount = fb2Provider->getSectionCount();
+    sectionsDir = fb2Provider->getFb2()->getCachePath();
+    filePrefix = "pages_";
+  } else {
+    return;
+  }
+  if (spineCount <= 0) return;
 
-    itemSizes.resize(static_cast<size_t>(spineCount), 0);
+  globalSectionPageMetrics_.resize(static_cast<size_t>(spineCount));
+
+  auto applyLivePageCacheOverlay = [&]() {
+    if (currentSpineIndex_ >= 0 && currentSpineIndex_ < spineCount && pageCache_ && pageCache_->pageCount() > 0) {
+      auto& metric = globalSectionPageMetrics_[static_cast<size_t>(currentSpineIndex_)];
+      const auto currentPages = static_cast<uint16_t>(std::max<int>(1, pageCache_->pageCount()));
+      const bool currentIsPartial = pageCache_->isPartial();
+      if (currentPages > metric.pages || !metric.exact) {
+        metric.pages = std::max(metric.pages, currentPages);
+        if (!currentIsPartial) {
+          metric.exact = true;
+        }
+      }
+    }
+  };
+
+  // Fast path: metrics.bin already has exact page counts for every spine.
+  // Skip the per-spine getItemSize / directory-scan / calibration work entirely.
+  if (loadMetricsIndex(sectionsDir, config, spineCount)) {
+    applyLivePageCacheOverlay();
+    recomputeGlobalPageMetricTotal();
+    globalSectionPageMetricsInitialized_ = true;
+    return;
+  }
+
+  // Slow path: collect spine byte sizes for calibration/estimation
+  std::vector<size_t> itemSizes(static_cast<size_t>(spineCount), 0);
+
+  if (type == ContentType::Epub) {
+    const auto* epub = core.content.asEpub()->getEpub();
     for (int i = 0; i < spineCount; ++i) {
       const auto spineItem = epub->getSpineItem(i);
       size_t itemSize = 0;
@@ -277,15 +339,9 @@ void ReaderState::initializeGlobalPageMetrics(Core& core) {
         itemSizes[static_cast<size_t>(i)] = itemSize;
       }
     }
-  } else if (type == ContentType::Fb2) {
-    auto* fb2Provider = core.content.asFb2();
-    if (!fb2Provider || !fb2Provider->getFb2()) return;
-    const auto* fb2 = fb2Provider->getFb2();
-    spineCount = fb2Provider->getSectionCount();
-    if (spineCount <= 0) return;
-
+  } else {
+    const auto* fb2 = core.content.asFb2()->getFb2();
     const auto& offsets = fb2->getSectionOffsets();
-    itemSizes.resize(static_cast<size_t>(spineCount), 0);
     for (int i = 0; i < spineCount; ++i) {
       const auto& off = offsets[static_cast<size_t>(i)];
       if (off.endOffset > off.startOffset) {
@@ -306,78 +362,47 @@ void ReaderState::initializeGlobalPageMetrics(Core& core) {
         itemSizes[static_cast<size_t>(spineCount - 1)] = nonZeroSizes[nonZeroSizes.size() / 2];
       }
     }
-  } else {
-    return;
   }
 
-  globalSectionPageMetrics_.resize(static_cast<size_t>(spineCount));
-
-  // Set byte sizes for all sections
   for (int i = 0; i < spineCount; ++i) {
     globalSectionPageMetrics_[static_cast<size_t>(i)].byteSize =
         static_cast<uint32_t>(itemSizes[static_cast<size_t>(i)]);
   }
 
-  std::string sectionsDir;
-  const char* filePrefix = "";  // EPUB: "N.bin", FB2: "pages_N.bin"
-  if (type == ContentType::Epub) {
-    sectionsDir = std::string(core.content.cacheDir()) + "/sections";
-  } else {
-    sectionsDir = core.content.asFb2()->getFb2()->getCachePath();
-    filePrefix = "pages_";
+  // Scan sections directory to find which caches exist on disk
+  const size_t prefixLen = strlen(filePrefix);
+  FsFile dir;
+  if (dir.open(sectionsDir.c_str(), O_RDONLY)) {
+    FsFile entry;
+    char name[24];
+    while ((entry = dir.openNextFile(O_RDONLY))) {
+      entry.getName(name, sizeof(name));
+      entry.close();
+
+      if (prefixLen > 0 && strncmp(name, filePrefix, prefixLen) != 0) continue;
+      char* dot = strrchr(name + prefixLen, '.');
+      if (!dot || strcmp(dot, ".bin") != 0) continue;
+      *dot = '\0';
+      const int idx = atoi(name + prefixLen);
+      if (idx < 0 || idx >= spineCount) continue;
+      if (idx == currentSpineIndex_ && pageCache_) continue;
+
+      const std::string cachePath = (type == ContentType::Epub) ? epubSectionCachePath(core.content.cacheDir(), idx)
+                                                                : core.content.asFb2()->getSectionCachePath(idx);
+      const auto probe = PageCache::probe(cachePath, config);
+      if (probe.valid && probe.pageCount > 0) {
+        auto& metric = globalSectionPageMetrics_[static_cast<size_t>(idx)];
+        metric.pages = probe.pageCount;
+        metric.exact = !probe.partial;
+      }
+    }
+    dir.close();
   }
+
+  applyLivePageCacheOverlay();
 
   size_t calibrationBytes = 0;
   uint32_t calibrationPages = 0;
-
-  // Fast path: load cached metrics index instead of scanning the directory.
-  // Falls back to directory scan if the file is missing or config changed.
-  if (!loadMetricsIndex(sectionsDir, config, spineCount)) {
-    // Slow path: scan sections directory to find which caches exist on disk
-    const size_t prefixLen = strlen(filePrefix);
-    FsFile dir;
-    if (dir.open(sectionsDir.c_str(), O_RDONLY)) {
-      FsFile entry;
-      char name[24];
-      while ((entry = dir.openNextFile(O_RDONLY))) {
-        entry.getName(name, sizeof(name));
-        entry.close();
-
-        if (prefixLen > 0 && strncmp(name, filePrefix, prefixLen) != 0) continue;
-        char* dot = strrchr(name + prefixLen, '.');
-        if (!dot || strcmp(dot, ".bin") != 0) continue;
-        *dot = '\0';
-        const int idx = atoi(name + prefixLen);
-        if (idx < 0 || idx >= spineCount) continue;
-        if (idx == currentSpineIndex_ && pageCache_) continue;
-
-        const std::string cachePath = (type == ContentType::Epub) ? epubSectionCachePath(core.content.cacheDir(), idx)
-                                                                  : core.content.asFb2()->getSectionCachePath(idx);
-        const auto probe = PageCache::probe(cachePath, config);
-        if (probe.valid && probe.pageCount > 0) {
-          auto& metric = globalSectionPageMetrics_[static_cast<size_t>(idx)];
-          metric.pages = probe.pageCount;
-          metric.exact = !probe.partial;
-        }
-      }
-      dir.close();
-    }
-  }
-
-  // Apply live pageCache_ data for current spine (already in memory, no SD I/O)
-  if (currentSpineIndex_ >= 0 && currentSpineIndex_ < spineCount && pageCache_ && pageCache_->pageCount() > 0) {
-    auto& metric = globalSectionPageMetrics_[static_cast<size_t>(currentSpineIndex_)];
-    const auto currentPages = static_cast<uint16_t>(std::max<int>(1, pageCache_->pageCount()));
-    const bool currentIsPartial = pageCache_->isPartial();
-    if (currentPages > metric.pages || !metric.exact) {
-      metric.pages = std::max(metric.pages, currentPages);
-      if (!currentIsPartial) {
-        metric.exact = true;
-      }
-    }
-  }
-
-  // Calibrate estimates from exact metrics
   for (const auto& m : globalSectionPageMetrics_) {
     if (m.exact && m.byteSize > 0 && m.pages > 0) {
       calibrationBytes += m.byteSize;
@@ -1940,6 +1965,13 @@ bool ReaderState::isFullyIndexed(Core& core) {
     auto* provider = core.content.asEpub();
     if (!provider || !provider->getEpub()) return true;
     const int spineCount = provider->getEpub()->getSpineItemsCount();
+
+    const std::string sectionsDir = provider->getEpub()->getCachePath() + "/sections";
+    std::vector<MetricsEntry> entries;
+    if (readMetricsIndexFile(sectionsDir, config, spineCount, entries)) {
+      return std::all_of(entries.begin(), entries.end(), [](const MetricsEntry& e) { return e.exact; });
+    }
+
     for (int i = 0; i < spineCount; ++i) {
       const auto cachePath = epubSectionCachePath(provider->getEpub()->getCachePath(), i);
       const auto probe = PageCache::probe(cachePath, config);
@@ -1952,6 +1984,13 @@ bool ReaderState::isFullyIndexed(Core& core) {
     auto* fb2Provider = core.content.asFb2();
     if (!fb2Provider || !fb2Provider->getFb2()) return true;
     const int sectionCount = fb2Provider->getSectionCount();
+
+    const std::string sectionsDir = fb2Provider->getFb2()->getCachePath();
+    std::vector<MetricsEntry> entries;
+    if (readMetricsIndexFile(sectionsDir, config, sectionCount, entries)) {
+      return std::all_of(entries.begin(), entries.end(), [](const MetricsEntry& e) { return e.exact; });
+    }
+
     for (int i = 0; i < sectionCount; ++i) {
       const auto cachePath = fb2Provider->getSectionCachePath(i);
       const auto probe = PageCache::probe(cachePath, config);
@@ -1981,21 +2020,46 @@ void ReaderState::startFullBookIndexing(Core& core) {
   if (type == ContentType::Epub) {
     auto* provider = core.content.asEpub();
     indexingTotalSpines_ = (provider && provider->getEpub()) ? provider->getEpub()->getSpineItemsCount() : 0;
-    // Skip already-complete spines
-    while (indexingSpine_ < indexingTotalSpines_) {
-      const auto cachePath = epubSectionCachePath(provider->getEpub()->getCachePath(), indexingSpine_);
-      const auto probe = PageCache::probe(cachePath, config);
-      if (!probe.valid || probe.partial) break;
-      indexingSpine_++;
+    bool skippedViaIndex = false;
+    if (provider && provider->getEpub() && indexingTotalSpines_ > 0) {
+      const std::string sectionsDir = provider->getEpub()->getCachePath() + "/sections";
+      std::vector<MetricsEntry> entries;
+      if (readMetricsIndexFile(sectionsDir, config, indexingTotalSpines_, entries)) {
+        while (indexingSpine_ < indexingTotalSpines_ && entries[static_cast<size_t>(indexingSpine_)].exact) {
+          indexingSpine_++;
+        }
+        skippedViaIndex = true;
+      }
+    }
+    if (!skippedViaIndex) {
+      while (indexingSpine_ < indexingTotalSpines_) {
+        const auto cachePath = epubSectionCachePath(provider->getEpub()->getCachePath(), indexingSpine_);
+        const auto probe = PageCache::probe(cachePath, config);
+        if (!probe.valid || probe.partial) break;
+        indexingSpine_++;
+      }
     }
   } else if (type == ContentType::Fb2) {
     auto* fb2Provider = core.content.asFb2();
     indexingTotalSpines_ = (fb2Provider && fb2Provider->getFb2()) ? fb2Provider->getSectionCount() : 0;
-    while (indexingSpine_ < indexingTotalSpines_) {
-      const auto cachePath = fb2Provider->getSectionCachePath(indexingSpine_);
-      const auto probe = PageCache::probe(cachePath, config);
-      if (!probe.valid || probe.partial) break;
-      indexingSpine_++;
+    bool skippedViaIndex = false;
+    if (fb2Provider && fb2Provider->getFb2() && indexingTotalSpines_ > 0) {
+      const std::string sectionsDir = fb2Provider->getFb2()->getCachePath();
+      std::vector<MetricsEntry> entries;
+      if (readMetricsIndexFile(sectionsDir, config, indexingTotalSpines_, entries)) {
+        while (indexingSpine_ < indexingTotalSpines_ && entries[static_cast<size_t>(indexingSpine_)].exact) {
+          indexingSpine_++;
+        }
+        skippedViaIndex = true;
+      }
+    }
+    if (!skippedViaIndex) {
+      while (indexingSpine_ < indexingTotalSpines_) {
+        const auto cachePath = fb2Provider->getSectionCachePath(indexingSpine_);
+        const auto probe = PageCache::probe(cachePath, config);
+        if (!probe.valid || probe.partial) break;
+        indexingSpine_++;
+      }
     }
   } else {
     indexingTotalSpines_ = 1;
