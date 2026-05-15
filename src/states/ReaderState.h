@@ -134,6 +134,9 @@ class ReaderState : public State {
   void recalibrateGlobalPageEstimates();
   void recomputeGlobalPageMetricTotal();
   GlobalPageMetrics resolveGlobalPageMetrics(Core& core);
+  bool saveMetricsIndex(const std::string& sectionsDir, const RenderConfig& config);
+  bool loadMetricsIndex(const std::string& sectionsDir, const RenderConfig& config, int spineCount);
+  void deleteMetricsIndex(Core& core);
 
   std::vector<SectionPageMetric> globalSectionPageMetrics_;
   uint32_t globalSectionPageMetricTotal_ = 0;
