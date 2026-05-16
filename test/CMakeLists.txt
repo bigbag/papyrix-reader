@@ -295,6 +295,13 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/Utf8/src/Utf8.cpp
       ${TEST_HELPERS}
     )
+  elseif(TEST_NAME STREQUAL "FirmwareUpdaterTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/src/core/FirmwareUpdater.cpp
+      ${PROJECT_ROOT}/src/core/OtaBootSwitch.cpp
+      ${TEST_HELPERS}
+    )
   else()
     add_executable(${TEST_NAME} ${TEST_SRC} ${TEST_HELPERS})
   endif()

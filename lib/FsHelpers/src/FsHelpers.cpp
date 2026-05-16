@@ -5,7 +5,9 @@
 
 namespace {
 // Folders/files to hide from file browsers (UI and web interface)
-const char* HIDDEN_FS_ITEMS[] = {"System Volume Information", "LOST.DIR", "$RECYCLE.BIN", "config", "XTCache", "sleep"};
+const char* HIDDEN_FS_ITEMS[] = {
+    "System Volume Information", "LOST.DIR", "$RECYCLE.BIN", "config", "XTCache", "sleep", "firmware.bin",
+    "force_update.bin"};
 constexpr size_t HIDDEN_FS_ITEMS_COUNT = sizeof(HIDDEN_FS_ITEMS) / sizeof(HIDDEN_FS_ITEMS[0]);
 }  // namespace
 

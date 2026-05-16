@@ -78,6 +78,9 @@ void PapyrixWebServer::begin() {
   server_->on("/api/locale", HTTP_GET, [this] { handleLocaleStatus(); });
   server_->on("/api/locale", HTTP_POST, [this] { handleLocaleUploadPost(); }, [this] { handleLocaleUpload(); });
   server_->on("/api/locale-delete", HTTP_POST, [this] { handleLocaleDelete(); });
+  server_->on("/api/firmware", HTTP_GET, [this] { handleFirmwareStatus(); });
+  server_->on("/api/firmware", HTTP_POST, [this] { handleFirmwareUploadPost(); }, [this] { handleFirmwareUpload(); });
+  server_->on("/api/firmware-delete", HTTP_POST, [this] { handleFirmwareDelete(); });
   server_->onNotFound([this] { handleNotFound(); });
 
   server_->begin();
@@ -669,6 +672,136 @@ void PapyrixWebServer::handleLocaleDelete() {
     server_->send(200, "text/plain", "Locale file deleted");
   } else {
     server_->send(500, "text/plain", "Failed to delete locale file");
+  }
+}
+
+// --- Firmware file management ---
+
+void PapyrixWebServer::handleFirmwareStatus() {
+  JsonDocument doc;
+  bool exists = SdMan.exists(PAPYRIX_FIRMWARE_FILE);
+  doc["exists"] = exists;
+
+  if (exists) {
+    FsFile file = SdMan.open(PAPYRIX_FIRMWARE_FILE);
+    if (file) {
+      doc["size"] = file.size();
+      file.close();
+    }
+  }
+
+  char json[128];
+  serializeJson(doc, json, sizeof(json));
+  server_->send(200, "application/json", json);
+}
+
+void PapyrixWebServer::handleFirmwareUpload() {
+  if (!running_ || !server_) return;
+
+  HTTPUpload& upload = server_->upload();
+
+  if (upload.status == UPLOAD_FILE_START) {
+    upload_.fileName = "firmware.bin";
+    upload_.path = "/";
+    upload_.size = 0;
+    upload_.success = false;
+    upload_.error = "";
+    upload_.bufferPos = 0;
+
+    if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < UploadState::BUFFER_SIZE * 2) {
+      upload_.error = "Insufficient memory for upload";
+      return;
+    }
+    upload_.buffer.resize(UploadState::BUFFER_SIZE);
+
+    if (!FsHelpers::hasExtension(upload.filename.c_str(), ".bin")) {
+      upload_.error = "Only .bin files accepted";
+      return;
+    }
+
+    LOG_INF(TAG, "Firmware upload start: %s", upload.filename.c_str());
+
+    if (SdMan.exists(PAPYRIX_FIRMWARE_FILE)) {
+      SdMan.remove(PAPYRIX_FIRMWARE_FILE);
+    }
+
+    if (!SdMan.openFileForWrite("WEB", PAPYRIX_FIRMWARE_FILE, upload_.file)) {
+      upload_.error = "Failed to create firmware file";
+      return;
+    }
+
+  } else if (upload.status == UPLOAD_FILE_WRITE) {
+    if (upload_.file && upload_.error.isEmpty()) {
+      const uint8_t* data = upload.buf;
+      size_t remaining = upload.currentSize;
+
+      while (remaining > 0) {
+        size_t space = UploadState::BUFFER_SIZE - upload_.bufferPos;
+        size_t toCopy = remaining < space ? remaining : space;
+        memcpy(upload_.buffer.data() + upload_.bufferPos, data, toCopy);
+        upload_.bufferPos += toCopy;
+        data += toCopy;
+        remaining -= toCopy;
+
+        if (upload_.bufferPos >= UploadState::BUFFER_SIZE) {
+          if (!flushUploadBuffer()) {
+            upload_.error = "Write failed - disk full?";
+            upload_.file.close();
+            return;
+          }
+        }
+      }
+
+      upload_.size += upload.currentSize;
+    }
+
+  } else if (upload.status == UPLOAD_FILE_END) {
+    if (upload_.file) {
+      if (upload_.error.isEmpty() && !flushUploadBuffer()) {
+        upload_.error = "Write failed - disk full?";
+      }
+      upload_.file.close();
+      if (upload_.error.isEmpty()) {
+        upload_.success = true;
+        LOG_INF(TAG, "Firmware upload complete: %zu bytes", upload_.size);
+      }
+    }
+    upload_.buffer.clear();
+    upload_.buffer.shrink_to_fit();
+
+  } else if (upload.status == UPLOAD_FILE_ABORTED) {
+    upload_.bufferPos = 0;
+    upload_.buffer.clear();
+    upload_.buffer.shrink_to_fit();
+    if (upload_.file) {
+      upload_.file.close();
+      SdMan.remove(PAPYRIX_FIRMWARE_FILE);
+    }
+    upload_.error = "Upload aborted";
+    LOG_ERR(TAG, "Firmware upload aborted");
+  }
+}
+
+void PapyrixWebServer::handleFirmwareUploadPost() {
+  if (upload_.success) {
+    server_->send(200, "text/plain", "Firmware file uploaded");
+  } else {
+    String error = upload_.error.isEmpty() ? "Unknown error" : upload_.error;
+    server_->send(400, "text/plain", error);
+  }
+}
+
+void PapyrixWebServer::handleFirmwareDelete() {
+  if (!SdMan.exists(PAPYRIX_FIRMWARE_FILE)) {
+    server_->send(404, "text/plain", "No firmware file found");
+    return;
+  }
+
+  if (SdMan.remove(PAPYRIX_FIRMWARE_FILE)) {
+    LOG_INF(TAG, "Firmware file deleted");
+    server_->send(200, "text/plain", "Firmware file deleted");
+  } else {
+    server_->send(500, "text/plain", "Failed to delete firmware file");
   }
 }
 

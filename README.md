@@ -19,9 +19,12 @@ A lightweight, user-friendly firmware for the **Xteink X4** and **Xteink X3** e-
 Built using **PlatformIO** and targeting the **ESP32-C3** microcontroller. A single firmware
 auto-detects the panel variant at boot via I²C signature scan (BQ27220 fuel gauge, DS3231 RTC, QMI8658 IMU).
 
-![Home screen](./docs/images/device.jpg)
+> **Warning:** Papyrix does not support OTA updates. Some Xteink units (e.g. from AliExpress)
+> ship with USB flashing locked — if you flash Papyrix on a locked device by OTA, you will
+> have no way to update or recover over USB. Firmware updates and [emergency recovery](#emergency-recovery)
+> are still possible from SD card. Only flash Papyrix on devices with unlocked USB.
 
-> **Warning:** Papyrix does not support OTA updates. Some Xteink units (e.g. from AliExpress) ship with USB flashing locked — if you flash Papyrix on a locked device by OTA, you will have no way to update or recover. Only flash Papyrix on devices with unlocked USB.
+![Home screen](./docs/images/device.jpg)
 
 ## Motivation
 
@@ -93,6 +96,7 @@ on each panel.
 
 ### Maintenance
 - [x] Cleanup menu (clear caches, fonts, factory reset)
+- [x] Firmware updates from SD card
 - [x] System info (version, uptime, memory, storage)
 
 ### File System
@@ -105,19 +109,34 @@ on each panel.
 
 See [the user guide](docs/user_guide.md) for operating instructions, and the [customization guide](docs/customization.md) for themes and fonts. Example theme and font files are available in [`docs/examples/`](docs/examples/).
 
-## Installing
+### Installing & Firmware Updates
 
-### Using Papyrix Flasher (Recommended)
+> Need to recover a bricked device? [Jump to emergency recovery](#emergency-recovery).
 
-The easiest way to install Papyrix is using [papyrix-flasher](https://github.com/bigbag/papyrix-flasher) — a cross-platform CLI tool with auto-detection and embedded bootloader. Download the latest release for your platform and run:
+The recommended way to install or update Papyrix is
+**[papyrix-flasher](https://github.com/bigbag/papyrix-flasher)** — a cross-platform
+CLI tool with auto-detection and embedded bootloader. Download the latest release for
+your platform and run:
 
 ```bash
 papyrix-flasher flash firmware.bin
 ```
 
-### Manual Build
+**From SD card:** You can also install or update using an SD card:
 
-See [Development](#development) below.
+1. Copy the firmware file as `/firmware.bin` to the root of your SD card.
+2. Insert the SD card into the device.
+3. Go to **Settings > Firmware Update** and press **Run**.
+
+The device flashes the firmware from SD card and reboots automatically.
+
+#### Emergency Recovery
+
+If the device will not boot, copy the firmware as `/force_update.bin` to the SD card.
+On next boot, the device flashes it automatically before starting the UI — no
+interaction needed.
+
+See the [customization guide](docs/customization.md) for details.
 
 ## Development
 

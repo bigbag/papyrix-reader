@@ -211,3 +211,13 @@ MEMORY_ERROR=Помилка пам'яті
 PAGE_LOAD_ERROR=Помилка завантаження сторінки
 RECEIVING=Отримання...
 BOOTING=ЗАПУСК
+
+# Firmware Update (from SD card)
+FIRMWARE_UPDATE=Оновлення прошивки
+FIRMWARE_WARNING=Не вимикайте пристрій та не виймайте SD-карту під час оновлення
+FIRMWARE_FILE_FOUND=Знайдено
+FLASHING_UPDATE=Встановлення...
+UPDATE_COMPLETE=Оновлення завершено! Перезавантаження...
+UPDATE_FAILED=Помилка оновлення
+NO_FIRMWARE_FILE=Файл прошивки на SD-карті не знайдено
+VALIDATING_FIRMWARE=Перевірка...

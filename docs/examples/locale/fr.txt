@@ -211,3 +211,13 @@ MEMORY_ERROR=Erreur mémoire
 PAGE_LOAD_ERROR=Erreur de chargement
 RECEIVING=Réception...
 BOOTING=DÉMARRAGE
+
+# Firmware Update (from SD card)
+FIRMWARE_UPDATE=Mise à jour du firmware
+FIRMWARE_WARNING=Ne pas éteindre ni retirer la carte SD pendant la mise à jour
+FIRMWARE_FILE_FOUND=Trouvé
+FLASHING_UPDATE=Installation...
+UPDATE_COMPLETE=Mise à jour terminée ! Redémarrage...
+UPDATE_FAILED=Échec de la mise à jour
+NO_FIRMWARE_FILE=Aucun fichier firmware trouvé sur la carte SD
+VALIDATING_FIRMWARE=Validation...

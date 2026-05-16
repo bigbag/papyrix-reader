@@ -108,7 +108,7 @@ void render(const GfxRenderer& r, const Theme& t, const SettingsMenuView& v) {
 
   title(r, t, t.screenMarginTop, tr(SETTINGS));
 
-  const char* items[] = {tr(READER), tr(DEVICE), tr(CLEANUP), tr(SYSTEM_INFO)};
+  const char* items[] = {tr(READER), tr(DEVICE), tr(CLEANUP), tr(FIRMWARE_UPDATE), tr(SYSTEM_INFO)};
   const int startY = 60;
   for (int i = 0; i < SettingsMenuView::ITEM_COUNT; i++) {
     const int y = startY + i * (t.itemHeight + t.itemSpacing);
@@ -237,6 +237,40 @@ void render(const GfxRenderer& r, const Theme& t, const ConfirmDialogView& v) {
   }
 
   ButtonBar btns{tr(BACK), tr(CONFIRM), "<<", ">>"};
+  buttonBar(r, t, btns);
+
+  r.displayBuffer();
+}
+
+void render(const GfxRenderer& r, const Theme& t, const FirmwareUpdateView& v) {
+  r.clearScreen(t.backgroundColor);
+
+  title(r, t, t.screenMarginTop, tr(FIRMWARE_UPDATE));
+
+  const int lineHeight = r.getLineHeight(t.uiFontId) + 8;
+  const int startY = 60;
+
+  const int marginX = t.screenMarginSide + t.itemPaddingX;
+  const int maxTextWidth = r.getScreenWidth() - marginX * 2;
+  auto warningLines = r.wrapTextWithHyphenation(t.uiFontId, tr(FIRMWARE_WARNING), maxTextWidth, 2);
+  for (size_t i = 0; i < warningLines.size(); i++) {
+    r.drawText(t.uiFontId, marginX, startY + lineHeight * (1 + static_cast<int>(i)), warningLines[i].c_str(),
+               t.primaryTextBlack);
+  }
+
+  const int statusY = startY + lineHeight * 3;
+  r.drawCenteredText(t.uiFontId, statusY, v.statusLine, t.primaryTextBlack);
+
+  if (v.state == FirmwareUpdateView::State::Flashing) {
+    progress(r, t, statusY + lineHeight, v.progressPercent, 100);
+  }
+
+  if (v.state == FirmwareUpdateView::State::Error) {
+    r.drawCenteredText(t.uiFontId, statusY + lineHeight * 2, tr(PRESS_ANY_BUTTON), t.primaryTextBlack);
+  }
+
+  bool interactive = v.state == FirmwareUpdateView::State::Idle || v.state == FirmwareUpdateView::State::Error;
+  ButtonBar btns{interactive ? tr(BACK) : "", interactive ? tr(RUN) : "", "", ""};
   buttonBar(r, t, btns);
 
   r.displayBuffer();

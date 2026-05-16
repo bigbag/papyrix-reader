@@ -799,6 +799,7 @@ std::vector<std::string> GfxRenderer::wrapTextWithHyphenation(const int fontId, 
     const int remainingWidth = getTextWidth(fontId, remaining.c_str(), style);
     if (remainingWidth <= maxWidth) {
       lines.push_back(remaining);
+      remaining.clear();
       break;
     }
 

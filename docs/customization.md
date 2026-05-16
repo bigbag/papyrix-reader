@@ -397,6 +397,25 @@ Built-in fonts are always available:
 
 ---
 
+## Firmware Updates
+
+Firmware updates are loaded from an SD card. Copy the firmware binary as `firmware.bin`
+to the root of your SD card, then go to **Settings > Firmware Update** and press **Run**.
+
+The device will:
+
+1. Read the firmware binary from SD card
+2. Flash it to the inactive partition
+3. Reboot automatically
+
+### Emergency Recovery
+
+If the device will not boot normally, rename the firmware file to `force_update.bin`
+on the SD card root. On next boot, the device flashes it automatically before the UI
+starts — no interaction needed.
+
+---
+
 ## SD Card Structure
 
 Here's the complete SD card structure for customization:
@@ -415,8 +434,10 @@ Here's the complete SD card structure for customization:
 │       │   └── bold.epdfont       # optional
 │       └── my-ui-font/
 │           └── regular.epdfont
-├── sleep.bmp              # Custom sleep image (optional)
-└── sleep/                 # Multiple sleep images (optional)
+├── firmware.bin            # Firmware update file
+├── force_update.bin        # Emergency auto-flash on boot
+├── sleep.bmp                # Custom sleep image (optional)
+└── sleep/                   # Multiple sleep images (optional)
     ├── image1.bmp
     └── image2.bmp
 ```

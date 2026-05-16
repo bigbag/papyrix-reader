@@ -47,6 +47,7 @@
 #include "I18nLoader.h"
 #include "core/BootMode.h"
 #include "core/Core.h"
+#include "core/FirmwareUpdater.h"
 #include "core/StateMachine.h"
 #include "images/PapyrixLogo.h"
 #include "states/AppLauncherState.h"
@@ -374,6 +375,22 @@ bool earlyInit() {
     setupDisplayAndFonts();
     showErrorScreen("SD card error");
     return false;
+  }
+
+  // Emergency firmware flash from SD card (force_update.bin) — blocking, runs before any UI init
+  if (SdMan.exists(PAPYRIX_EMERGENCY_FW_FILE)) {
+    auto& fw = papyrix::FirmwareUpdater::instance();
+    fw.findFirmwareFile(PAPYRIX_EMERGENCY_FW_FILE);
+    if (fw.beginUpdate()) {
+      while (fw.pump()) {
+        delay(1);
+      }
+    }
+    SdMan.remove(PAPYRIX_EMERGENCY_FW_FILE);
+    if (fw.progress().phase == papyrix::FirmwareUpdatePhase::Complete) {
+      delay(2000);
+      ESP.restart();
+    }
   }
 
   // Load settings before wakeup verification - without this, a full power cycle

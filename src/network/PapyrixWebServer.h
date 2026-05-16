@@ -59,6 +59,12 @@ class PapyrixWebServer {
   void handleLocaleUpload();
   void handleLocaleUploadPost();
   void handleLocaleDelete();
+
+  // Firmware file management
+  void handleFirmwareStatus();
+  void handleFirmwareUpload();
+  void handleFirmwareUploadPost();
+  void handleFirmwareDelete();
 };
 
 }  // namespace papyrix

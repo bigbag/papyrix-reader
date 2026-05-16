@@ -10,6 +10,7 @@
 #include <algorithm>
 
 #include "../Battery.h"
+#include "../core/FirmwareUpdater.h"
 
 #define TAG "SETTINGS_UI"
 #include "../config.h"
@@ -35,6 +36,7 @@ SettingsState::SettingsState(GfxRenderer& renderer)
       deviceView_{},
       cleanupView_{},
       confirmView_{},
+      firmwareView_{},
       infoView_{} {}
 
 SettingsState::~SettingsState() = default;
@@ -58,6 +60,9 @@ void SettingsState::enter(Core& core) {
   cleanupView_.selected = 0;
   cleanupView_.needsRender = true;
   confirmView_.needsRender = true;
+  firmwareView_ = ui::FirmwareUpdateView{};
+  lastFirmwareRenderMs_ = 0;
+  firmwareCompleteMs_ = 0;
   infoView_.clear();
   infoView_.needsRender = true;
 
@@ -173,6 +178,13 @@ StateTransition SettingsState::update(Core& core) {
               currentScreen_ = SettingsScreen::Cleanup;
               cleanupView_.needsRender = true;
               needsRender_ = true;
+            } else if (currentScreen_ == SettingsScreen::FirmwareUpdate) {
+              if (firmwareView_.state == ui::FirmwareUpdateView::State::Flashing ||
+                  firmwareView_.state == ui::FirmwareUpdateView::State::Validating) {
+                // Back is disabled during validation/flashing
+              } else {
+                goBack(core);
+              }
             } else {
               goBack(core);
             }
@@ -192,6 +204,54 @@ StateTransition SettingsState::update(Core& core) {
     goNetwork_ = false;
     core.settings.save(core.storage);
     return StateTransition::to(StateId::Network);
+  }
+
+  // Firmware validation (runs after "Validating..." frame is rendered)
+  if (currentScreen_ == SettingsScreen::FirmwareUpdate &&
+      firmwareView_.state == ui::FirmwareUpdateView::State::Validating &&
+      firmwareValidationRendered_) {
+    if (!FW_UPDATER.beginUpdate()) {
+      firmwareView_.state = ui::FirmwareUpdateView::State::Error;
+      snprintf(firmwareView_.statusLine, sizeof(firmwareView_.statusLine), "%s", tr(UPDATE_FAILED));
+    } else {
+      firmwareView_.state = ui::FirmwareUpdateView::State::Flashing;
+      snprintf(firmwareView_.statusLine, sizeof(firmwareView_.statusLine), "%s", tr(FLASHING_UPDATE));
+      lastFirmwareRenderMs_ = 0;
+    }
+    firmwareView_.needsRender = true;
+    needsRender_ = true;
+  }
+
+  // Firmware update pump (runs each frame while flashing)
+  if (currentScreen_ == SettingsScreen::FirmwareUpdate &&
+      firmwareView_.state == ui::FirmwareUpdateView::State::Flashing) {
+    if (!FW_UPDATER.pump()) {
+      const auto& p = FW_UPDATER.progress();
+      if (p.phase == FirmwareUpdatePhase::Complete) {
+        firmwareView_.state = ui::FirmwareUpdateView::State::Complete;
+        snprintf(firmwareView_.statusLine, sizeof(firmwareView_.statusLine), "%s", tr(UPDATE_COMPLETE));
+        firmwareCompleteMs_ = millis();
+      } else {
+        firmwareView_.state = ui::FirmwareUpdateView::State::Error;
+        snprintf(firmwareView_.statusLine, sizeof(firmwareView_.statusLine), "%s", tr(UPDATE_FAILED));
+      }
+      needsRender_ = true;
+      firmwareView_.needsRender = true;
+    } else {
+      const auto& p = FW_UPDATER.progress();
+      firmwareView_.progressPercent =
+          p.totalBytes > 0 ? static_cast<int>(static_cast<int64_t>(p.bytesFlashed) * 100 / p.totalBytes) : 0;
+      if (millis() - lastFirmwareRenderMs_ >= 3000) {
+        lastFirmwareRenderMs_ = millis();
+        needsRender_ = true;
+        firmwareView_.needsRender = true;
+      }
+    }
+  }
+
+  // Auto-restart after showing "Update complete" for 2 seconds
+  if (firmwareCompleteMs_ != 0 && millis() - firmwareCompleteMs_ >= 2000) {
+    ESP.restart();
   }
 
   if (goHome_) {
@@ -224,6 +284,9 @@ void SettingsState::render(Core& core) {
       case SettingsScreen::ConfirmDialog:
         viewNeedsRender = confirmView_.needsRender;
         break;
+      case SettingsScreen::FirmwareUpdate:
+        viewNeedsRender = firmwareView_.needsRender;
+        break;
     }
     if (!viewNeedsRender) {
       return;
@@ -255,6 +318,15 @@ void SettingsState::render(Core& core) {
       ui::render(renderer_, THEME, confirmView_);
       confirmView_.needsRender = false;
       break;
+    case SettingsScreen::FirmwareUpdate:
+      ui::render(renderer_, THEME, firmwareView_);
+      firmwareView_.needsRender = false;
+      if (firmwareView_.state == ui::FirmwareUpdateView::State::Validating &&
+          !firmwareValidationRendered_) {
+        firmwareValidationRendered_ = true;
+        needsRender_ = true;
+      }
+      break;
   }
 
   needsRender_ = false;
@@ -280,7 +352,20 @@ void SettingsState::openSelected() {
       cleanupView_.needsRender = true;
       currentScreen_ = SettingsScreen::Cleanup;
       break;
-    case 3:  // System Info
+    case 3:  // Firmware Update
+      firmwareView_.state = ui::FirmwareUpdateView::State::Idle;
+      firmwareView_.progressPercent = 0;
+      firmwareView_.needsRender = true;
+      lastFirmwareRenderMs_ = 0;
+      if (FW_UPDATER.findFirmwareFile()) {
+        snprintf(firmwareView_.statusLine, sizeof(firmwareView_.statusLine), "%s: %s", tr(FIRMWARE_FILE_FOUND),
+                 PAPYRIX_FIRMWARE_FILE);
+      } else {
+        snprintf(firmwareView_.statusLine, sizeof(firmwareView_.statusLine), "%s", tr(NO_FIRMWARE_FILE));
+      }
+      currentScreen_ = SettingsScreen::FirmwareUpdate;
+      break;
+    case 4:  // System Info
       populateSystemInfo();
       infoView_.needsRender = true;
       currentScreen_ = SettingsScreen::SystemInfo;
@@ -315,6 +400,12 @@ void SettingsState::goBack(Core& core) {
       pendingAction_ = 0;
       currentScreen_ = SettingsScreen::Cleanup;
       cleanupView_.needsRender = true;
+      break;
+    case SettingsScreen::FirmwareUpdate:
+      FW_UPDATER.abort();
+      FW_UPDATER.reset();
+      currentScreen_ = SettingsScreen::Menu;
+      menuView_.needsRender = true;
       break;
     default:
       break;
@@ -398,6 +489,35 @@ void SettingsState::handleConfirm(Core& core) {
         pendingAction_ = 0;
         currentScreen_ = SettingsScreen::Cleanup;
         cleanupView_.needsRender = true;
+        needsRender_ = true;
+      }
+      break;
+
+    case SettingsScreen::FirmwareUpdate:
+      if (firmwareView_.state == ui::FirmwareUpdateView::State::Error) {
+        firmwareView_.state = ui::FirmwareUpdateView::State::Idle;
+        firmwareView_.needsRender = true;
+        needsRender_ = true;
+        FW_UPDATER.reset();
+        if (FW_UPDATER.findFirmwareFile()) {
+          snprintf(firmwareView_.statusLine, sizeof(firmwareView_.statusLine), "%s: %s", tr(FIRMWARE_FILE_FOUND),
+                   PAPYRIX_FIRMWARE_FILE);
+        } else {
+          snprintf(firmwareView_.statusLine, sizeof(firmwareView_.statusLine), "%s", tr(NO_FIRMWARE_FILE));
+        }
+      } else if (firmwareView_.state == ui::FirmwareUpdateView::State::Idle) {
+        if (!FW_UPDATER.isFirmwareAvailable()) {
+          firmwareView_.state = ui::FirmwareUpdateView::State::Error;
+          snprintf(firmwareView_.statusLine, sizeof(firmwareView_.statusLine), "%s", tr(NO_FIRMWARE_FILE));
+          firmwareView_.needsRender = true;
+          needsRender_ = true;
+          break;
+        }
+        firmwareView_.state = ui::FirmwareUpdateView::State::Validating;
+        firmwareValidationRendered_ = false;
+        snprintf(firmwareView_.statusLine, sizeof(firmwareView_.statusLine), "%s", tr(VALIDATING_FIRMWARE));
+        firmwareView_.progressPercent = 0;
+        firmwareView_.needsRender = true;
         needsRender_ = true;
       }
       break;

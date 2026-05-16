@@ -130,7 +130,7 @@ information on how to connect and upload files.
 
 ![Settings](images/settings.jpg)
 
-The Settings screen is organized into four categories:
+The Settings screen is organized into five categories:
 
 #### Reader
 
@@ -248,6 +248,19 @@ Maintenance actions for the device:
 - **Clear Book Cache** — Delete all cached book data and reading progress
 - **Clear Device Storage** — Erase internal flash storage (requires restart)
 - **Factory Reset** — Erase ALL data (caches, settings, WiFi credentials, fonts) and restart device
+
+#### Firmware Update
+
+Install firmware updates from an SD card:
+
+- Copy the firmware binary as `/firmware.bin` to the root of your SD card
+- Select **Firmware Update** from the Settings menu and press **Run**
+- The device flashes the firmware and reboots automatically
+- **Do not power off or remove the SD card during the update**
+
+For emergency recovery (device won't boot), copy the firmware as `/force_update.bin` to the SD card. On next boot, the device flashes it automatically before starting the UI.
+
+Firmware binaries can also be uploaded via the [web server](webserver.md) — use the **Firmware** tab to upload a `.bin` file, then run the update from the device.
 
 #### System Info
 

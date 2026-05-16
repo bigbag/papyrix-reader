@@ -108,7 +108,7 @@ Once connected, the screen will display:
 
 ## Step 5: Using the Web Interface
 
-The web interface uses a tab-based layout with four tabs: **Books**, **Sleep**, **Fonts**, and **Themes**. The firmware version is shown in the top-right corner.
+The web interface uses a tab-based layout with six tabs: **Books**, **Sleep**, **Fonts**, **Themes**, **Locale**, and **Firmware**. The firmware version is shown in the top-right corner.
 
 ![Books tab](images/web-books.png)
 
@@ -198,6 +198,25 @@ The Themes tab manages `.theme` files for custom CJK font themes.
 - Use **Upload** to add new theme files
 
 See the [Customization Guide](customization.md) for details on creating and using custom themes.
+
+### Locale Tab
+
+The Locale tab manages custom locale (language) files for the device UI.
+
+- Shows whether a custom locale file is installed
+- Use **Upload** to add a custom locale file
+- Use **Delete** to remove the installed locale and revert to built-in translations
+
+See `docs/examples/locale/` in the repository for locale file examples.
+
+### Firmware Tab
+
+The Firmware tab manages firmware update files for the device.
+
+- Shows whether a firmware file is present on the SD card (`firmware.bin`)
+- Use **Upload** to add a `.bin` firmware file
+- Use **Delete** to remove the firmware file
+- A note reminds you to run the update from **Settings > Firmware Update** on the device
 
 ---
 

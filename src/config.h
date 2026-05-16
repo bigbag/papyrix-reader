@@ -63,6 +63,8 @@
 #define PAPYRIX_SETTINGS_FILE PAPYRIX_DIR "/settings.bin"
 #define PAPYRIX_STATE_FILE PAPYRIX_DIR "/state.bin"
 #define PAPYRIX_WIFI_FILE PAPYRIX_DIR "/wifi.bin"
+#define PAPYRIX_FIRMWARE_FILE "/firmware.bin"
+#define PAPYRIX_EMERGENCY_FW_FILE "/force_update.bin"
 
 // Thumbnail dimensions for home screen
 #define THUMB_WIDTH 320

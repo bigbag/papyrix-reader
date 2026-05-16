@@ -16,7 +16,7 @@ namespace ui {
 // ============================================================================
 
 struct SettingsMenuView {
-  static constexpr int ITEM_COUNT = 4;
+  static constexpr int ITEM_COUNT = 5;
 
   ButtonBar buttons;
   int8_t selected = 0;
@@ -262,5 +262,21 @@ struct ConfirmDialogView {
 };
 
 void render(const GfxRenderer& r, const Theme& t, const ConfirmDialogView& v);
+
+// ============================================================================
+// FirmwareUpdateView - Firmware update from SD card
+// ============================================================================
+
+struct FirmwareUpdateView {
+  enum class State : uint8_t { Idle, Validating, Flashing, Complete, Error };
+
+  ButtonBar buttons;
+  State state = State::Idle;
+  char statusLine[128] = "";
+  int progressPercent = 0;
+  bool needsRender = true;
+};
+
+void render(const GfxRenderer& r, const Theme& t, const FirmwareUpdateView& v);
 
 }  // namespace ui

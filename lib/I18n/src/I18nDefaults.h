@@ -215,6 +215,16 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "Page load error",        // PAGE_LOAD_ERROR
     "Receiving...",           // RECEIVING
     "BOOTING",               // BOOTING
+
+    // Firmware Update (from SD card)
+    "Firmware Update",      // FIRMWARE_UPDATE
+    "Do not power off or remove SD card during update",  // FIRMWARE_WARNING
+    "Found",                // FIRMWARE_FILE_FOUND
+    "Flashing...",          // FLASHING_UPDATE
+    "Update complete! Restarting...", // UPDATE_COMPLETE
+    "Update failed",        // UPDATE_FAILED
+    "No firmware file found on SD card",  // NO_FIRMWARE_FILE
+    "Validating...",        // VALIDATING_FIRMWARE
 };
 // clang-format on
 
