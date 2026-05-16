@@ -1,5 +1,66 @@
 
 
+## v1.23.0 (2026-05-16)
+
+*  Update docs [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add firmware update from SD card with validation [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.22.6 (2026-05-16)
+
+*  ReaderState: Save overlay to metrics.bin so next open hits fast path with accurate counts [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  picojpeg: Add grayscale-only decode mode, skip chroma IDCT and RGB conversion [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Epub: Batch spine item size lookups into single ZIP pass [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.22.5 (2026-05-15)
+
+*  Utf8: Add utf8SafeCopy and replace strncpy in all content providers [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add resumable FB2 parsing, chunked indexing, and fix resume indent bug. Issue #106 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  ClockApp: Fix timezone offset using TZ env var. Issue #118 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  ReaderState: Batch monolithic spines and only chunk large ones during full-book indexing. Issue #106 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  SDCardManager: Replace recursive removeDir with iterative and add progress callback [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  ReaderState: Cache page metrics to SD to avoid slow directory scan on book open [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  ReaderState: Bump metrics.bin to v2 with byteSize, skip directory scan on fast-path [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.22.4 (2026-05-12)
+
+*  Increase path buffers to 512 bytes for long UTF-8 file paths: Issue #106 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.22.3 (2026-05-11)
+
+*  Fb2: Filter nested sections to leaf-only, add WDT resets and abort propagation across parsers . Issue #106 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Fb2: Detect RTL from word content instead of initial buffer peek [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Markdown, Txt: Detect RTL from word content instead of initial buffer peek [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.22.2 (2026-05-11)
+
+*  PageCache: Preserve partial cache when extend fails instead of deleting it [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Optimize bitmap rendering: bulk I/O, fixed-point scaling, identity palette fast path, downscale-only [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  JpegToBmpConverter: Add heap pre-check and abort support during decode [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Fix LRU counter overflow, CSS bold/italic flush, UTF-8-safe TOC truncation, and removeDir safety guards [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  XtcPageRenderer: Sync hardware RAMs after grayscale render to fix stale RED RAM on page turn [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add fsync, SD card retry loops, heap checks before caching, and fix state rollback on LUT write failure [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Fb2: Flush word buffer at style tag boundaries to fix last-word style loss. Issue #114 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.22.1 (2026-05-10)
+
+*  Update changelog [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Switch battery percentage to hardware-reported readPercentage(). Issue #100 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add full book pre-processing to index all pages before reading, Issue #106 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
 ## v1.22.0 (2026-05-08)
 
 *  Update changelog [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
