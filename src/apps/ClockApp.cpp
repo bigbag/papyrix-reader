@@ -205,6 +205,7 @@ void enter(Core& core) {
   state.menuSelected = 0;
 
   loadSettings(core);
+  applyTimezone(state.utcOffset);
 
   ui::centeredMessage(renderer, THEME, THEME.uiFontId, "Syncing time...");
   renderer.displayBuffer();
