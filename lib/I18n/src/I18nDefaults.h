@@ -225,6 +225,8 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "Update failed",        // UPDATE_FAILED
     "No firmware file found on SD card",  // NO_FIRMWARE_FILE
     "Validating...",        // VALIDATING_FIRMWARE
+    "Bookmark",             // BOOKMARK_VAL
+    "Bookmark added",       // BOOKMARK_ADDED
 };
 // clang-format on
 

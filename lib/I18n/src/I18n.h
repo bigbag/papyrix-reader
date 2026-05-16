@@ -223,6 +223,10 @@ enum class StrId : uint8_t {
   STR_NO_FIRMWARE_FILE,
   STR_VALIDATING_FIRMWARE,
 
+  // Short power button: Bookmark
+  STR_BOOKMARK_VAL,
+  STR_BOOKMARK_ADDED,
+
   STR__COUNT
 };
 

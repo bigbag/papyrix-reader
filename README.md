@@ -88,7 +88,7 @@ on each panel.
 - [x] Custom fonts from SD card (`/config/fonts/`, .epdfont format)
 - [x] Custom sleep screens (Dark/Light/Custom/Cover modes)
 - [x] Button remapping (side and front buttons)
-- [x] Power button page turn (one-handed reading)
+- [x] Power button actions (page turn, bookmark, or sleep on short press)
 
 ### Network & Connectivity
 - [x] WiFi file transfer (web server)

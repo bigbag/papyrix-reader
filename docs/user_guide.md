@@ -216,10 +216,11 @@ Power and device behavior settings:
   - **Home:** Always start at the Home screen
 
 - **Short Power Button** (default: Ignore)
-  - Options: Ignore, Sleep, Page Turn
+  - Options: Ignore, Sleep, Page Turn, Bookmark
   - **Ignore:** Short press does nothing (long press for sleep)
   - **Sleep:** Short press puts device to sleep
   - **Page Turn:** Short press turns to next page while reading (convenient for one-handed reading)
+  - **Bookmark:** Short press bookmarks the current page while reading (shows a brief notification)
 
 - **Pages Per Refresh** (default: 15)
   - Options: 1, 5, 10, 15, 30
@@ -362,7 +363,7 @@ Once you have opened a book, the button layout changes to facilitate reading.
 
 - **Previous Page:** Press **Left** or **Volume Up**
 - **Next Page:** Press **Right** or **Volume Down**
-- **Power Button:** When **Short Power Button** is set to **Page Turn** in Settings, pressing the power button also turns to the next page (convenient for one-handed reading)
+- **Power Button:** When **Short Power Button** is set to **Page Turn** in Settings, pressing the power button turns to the next page (convenient for one-handed reading). When set to **Bookmark**, it bookmarks the current page instead.
 
 ### Chapter Navigation
 * **Next Chapter:** Press and **hold** the **Right** (or **Volume Down**) button briefly, then release.
@@ -408,6 +409,8 @@ Use **Left/Right** (or **Volume Up/Down**) to move the selection cursor through 
 
 - Each book supports up to **20 bookmarks**. Adding a bookmark when the limit is reached is silently ignored.
 - Duplicate bookmarks at the same position are not allowed.
+- Bookmark labels include the chapter title and page number (e.g., "Chapter 1, p.42").
+- Bookmarks can also be added via the **Power button** when **Short Power Button** is set to **Bookmark** in Settings.
 - Bookmarks are **persisted to the SD card** and survive device restarts.
 - Each book has its own independent set of bookmarks.
 

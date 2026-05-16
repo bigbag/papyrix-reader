@@ -208,8 +208,7 @@ StateTransition SettingsState::update(Core& core) {
 
   // Firmware validation (runs after "Validating..." frame is rendered)
   if (currentScreen_ == SettingsScreen::FirmwareUpdate &&
-      firmwareView_.state == ui::FirmwareUpdateView::State::Validating &&
-      firmwareValidationRendered_) {
+      firmwareView_.state == ui::FirmwareUpdateView::State::Validating && firmwareValidationRendered_) {
     if (!FW_UPDATER.beginUpdate()) {
       firmwareView_.state = ui::FirmwareUpdateView::State::Error;
       snprintf(firmwareView_.statusLine, sizeof(firmwareView_.statusLine), "%s", tr(UPDATE_FAILED));
@@ -321,8 +320,7 @@ void SettingsState::render(Core& core) {
     case SettingsScreen::FirmwareUpdate:
       ui::render(renderer_, THEME, firmwareView_);
       firmwareView_.needsRender = false;
-      if (firmwareView_.state == ui::FirmwareUpdateView::State::Validating &&
-          !firmwareValidationRendered_) {
+      if (firmwareView_.state == ui::FirmwareUpdateView::State::Validating && !firmwareValidationRendered_) {
         firmwareValidationRendered_ = true;
         needsRender_ = true;
       }

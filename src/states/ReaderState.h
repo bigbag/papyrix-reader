@@ -102,10 +102,14 @@ class ReaderState : public State {
   // Track whether a chapter jump already fired during a button hold
   bool holdNavigated_ = false;
 
-  // Track power press start when short power action is mapped to page turn.
-  // This lets us execute page turn only on short release and avoid accidental
-  // turns when the same press is held to enter sleep.
+  // Track power press start when short power action is mapped to page turn or bookmark.
+  // This lets us execute the action only on short release and avoid accidental
+  // triggers when the same press is held to enter sleep.
   uint32_t powerPressStartedMs_ = 0;
+
+  // Bookmark notification auto-dismiss timer
+  uint32_t bookmarkNotifyMs_ = 0;
+  void showBookmarkNotification(Core& core);
 
   // Rendering
   void renderCurrentPage(Core& core);

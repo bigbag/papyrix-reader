@@ -202,6 +202,8 @@ static constexpr KeyMapping KEY_MAP[] = {
     {"UPDATE_FAILED", StrId::STR_UPDATE_FAILED},
     {"NO_FIRMWARE_FILE", StrId::STR_NO_FIRMWARE_FILE},
     {"VALIDATING_FIRMWARE", StrId::STR_VALIDATING_FIRMWARE},
+    {"BOOKMARK_VAL", StrId::STR_BOOKMARK_VAL},
+    {"BOOKMARK_ADDED", StrId::STR_BOOKMARK_ADDED},
 };
 // clang-format on
 

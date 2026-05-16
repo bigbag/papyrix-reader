@@ -911,6 +911,12 @@ void ReaderState::exit(Core& core) {
 }
 
 StateTransition ReaderState::update(Core& core) {
+  // Auto-dismiss bookmark notification after ~1s
+  if (bookmarkNotifyMs_ != 0 && millis() - bookmarkNotifyMs_ >= 1000) {
+    bookmarkNotifyMs_ = 0;
+    needsRender_ = true;
+  }
+
   // Handle load failure - transition to error state or back to file list
   if (loadFailed_ || !contentLoaded_) {
     // If error message was set, show ErrorState; otherwise just go back to FileList
@@ -986,7 +992,8 @@ StateTransition ReaderState::update(Core& core) {
             // Won't reach here after restart
             return StateTransition::stay(StateId::Reader);
           case Button::Power:
-            if (core.settings.shortPwrBtn == Settings::PowerPageTurn) {
+            if (core.settings.shortPwrBtn == Settings::PowerPageTurn ||
+                core.settings.shortPwrBtn == Settings::PowerBookmark) {
               powerPressStartedMs_ = millis();
             }
             break;
@@ -1026,10 +1033,19 @@ StateTransition ReaderState::update(Core& core) {
               navigatePrev(core);
               break;
             case Button::Power:
-              if (core.settings.shortPwrBtn == Settings::PowerPageTurn && powerPressStartedMs_ != 0) {
+              if (powerPressStartedMs_ != 0) {
                 const uint32_t heldMs = millis() - powerPressStartedMs_;
                 if (heldMs < core.settings.getPowerButtonDuration()) {
-                  navigateNext(core);
+                  if (core.settings.shortPwrBtn == Settings::PowerPageTurn) {
+                    navigateNext(core);
+                  } else if (core.settings.shortPwrBtn == Settings::PowerBookmark) {
+                    int prevCount = bookmarkCount_;
+                    addBookmark(core);
+                    if (bookmarkCount_ > prevCount) {
+                      showBookmarkNotification(core);
+                      needsRender_ = false;
+                    }
+                  }
                 }
               }
               break;
@@ -2392,11 +2408,13 @@ void ReaderState::exitTocMode() {
 
 void ReaderState::handleTocInput(Core& core, const Event& e) {
   if (e.button == Button::Power && e.type == EventType::ButtonRelease) {
-    if (core.settings.shortPwrBtn == Settings::PowerPageTurn && powerPressStartedMs_ != 0) {
+    if (powerPressStartedMs_ != 0) {
       const uint32_t heldMs = millis() - powerPressStartedMs_;
       if (heldMs < core.settings.getPowerButtonDuration()) {
-        tocView_.moveDown();
-        needsRender_ = true;
+        if (core.settings.shortPwrBtn == Settings::PowerPageTurn) {
+          tocView_.moveDown();
+          needsRender_ = true;
+        }
       }
     }
     powerPressStartedMs_ = 0;
@@ -2438,7 +2456,8 @@ void ReaderState::handleTocInput(Core& core, const Event& e) {
       break;
 
     case Button::Power:
-      if (e.type == EventType::ButtonPress && core.settings.shortPwrBtn == Settings::PowerPageTurn) {
+      if (e.type == EventType::ButtonPress && (core.settings.shortPwrBtn == Settings::PowerPageTurn ||
+                                               core.settings.shortPwrBtn == Settings::PowerBookmark)) {
         powerPressStartedMs_ = millis();
       }
       break;
@@ -2894,8 +2913,11 @@ void ReaderState::addBookmark(Core& core) {
   bm.flatPage = currentPage_;
 
   if (cachedChapterTitle_[0] != '\0') {
-    strncpy(bm.label, cachedChapterTitle_, sizeof(bm.label) - 1);
-    bm.label[sizeof(bm.label) - 1] = '\0';
+    if (type == ContentType::Xtc) {
+      snprintf(bm.label, sizeof(bm.label), "%s, p.%u", cachedChapterTitle_, static_cast<unsigned>(currentPage_ + 1));
+    } else {
+      snprintf(bm.label, sizeof(bm.label), "%s, p.%d", cachedChapterTitle_, lastRenderedSectionPage_ + 1);
+    }
   } else {
     if (type == ContentType::Xtc) {
       snprintf(bm.label, sizeof(bm.label), "Page %u", static_cast<unsigned>(currentPage_ + 1));
@@ -2937,6 +2959,14 @@ void ReaderState::addBookmark(Core& core) {
   populateBookmarkView();
   needsRender_ = true;
   LOG_DBG(TAG, "Added bookmark at position %d", insertPos);
+}
+
+void ReaderState::showBookmarkNotification(Core& core) {
+  const Theme& theme = THEME_MANAGER.current();
+  ui::overlayBox(renderer_, theme, theme.uiFontId, renderer_.getScreenHeight() / 2 - 20, tr(BOOKMARK_ADDED));
+  renderer_.displayBuffer();
+  core.display.markDirty();
+  bookmarkNotifyMs_ = millis();
 }
 
 void ReaderState::deleteBookmark(Core& core, int index) {
