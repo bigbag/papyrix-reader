@@ -33,7 +33,7 @@ FileListState::FileListState(GfxRenderer& renderer)
       firstRender_(true),
       currentScreen_(Screen::Browse),
       confirmView_{} {
-  strcpy(currentDir_, "/");
+  snprintf(currentDir_, sizeof(currentDir_), "/");
   selectedPath_[0] = '\0';
 }
 
@@ -44,7 +44,7 @@ void FileListState::setDirectory(const char* dir) {
     strncpy(currentDir_, dir, sizeof(currentDir_) - 1);
     currentDir_[sizeof(currentDir_) - 1] = '\0';
   } else {
-    strcpy(currentDir_, "/");
+    snprintf(currentDir_, sizeof(currentDir_), "/");
   }
 }
 
@@ -312,7 +312,7 @@ StateTransition FileListState::update(Core& core) {
   // Return to home if requested
   if (goHome_) {
     goHome_ = false;
-    strcpy(currentDir_, "/");  // Reset for next entry
+    snprintf(currentDir_, sizeof(currentDir_), "/");  // Reset for next entry
     return StateTransition::to(StateId::Home);
   }
 
@@ -461,7 +461,7 @@ void FileListState::goBack(Core& core) {
   if (lastSlash && lastSlash != currentDir_) {
     *lastSlash = '\0';
   } else {
-    strcpy(currentDir_, "/");
+    snprintf(currentDir_, sizeof(currentDir_), "/");
   }
 
   selectedIndex_ = 0;
