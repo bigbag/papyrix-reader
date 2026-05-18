@@ -54,6 +54,7 @@ bool renderCoverFromBmp(GfxRenderer& renderer, const std::string& bmpPath, int m
   auto rect = calculateCenteredRect(bitmap.getWidth(), bitmap.getHeight(), marginLeft, marginTop, viewportWidth,
                                     viewportHeight);
 
+  renderer.clearScreen(0xFF);
   renderer.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height);
 
   if (pagesPerRefreshValue == 0) {
