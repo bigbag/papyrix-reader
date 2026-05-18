@@ -2109,12 +2109,14 @@ void ReaderState::processIndexingChunk(Core& core) {
     return false;
   };
 
-  auto stopIndexing = [this]() {
+  auto stopIndexing = [this, &theme]() {
     indexingInProgress_ = false;
     indexingFailed_ = true;
     indexingCache_.reset();
     indexingParser_.reset();
     renderer_.clearWidthCache();
+    renderer_.clearScreen(theme.backgroundColor);
+    renderer_.displayBuffer(EInkDisplay::HALF_REFRESH);
     LOG_WRN(TAG, "Full book indexing failed, falling back to page-by-page caching");
   };
 
@@ -2126,6 +2128,8 @@ void ReaderState::processIndexingChunk(Core& core) {
     deleteMetricsIndex(core);
     invalidateGlobalPageMetrics();
     startBackgroundCaching(core);
+    renderer_.clearScreen(theme.backgroundColor);
+    renderer_.displayBuffer(EInkDisplay::HALF_REFRESH);
     needsRender_ = true;
     return;
   }
