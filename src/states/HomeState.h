@@ -43,6 +43,9 @@ class HomeState : public State {
 
   void loadLastBook(Core& core);
   void updateBattery();
+
+  static constexpr unsigned long kBatteryPollIntervalMs = 5000;
+  unsigned long lastBatteryPollMs_ = 0;
   void renderCoverToCard();
 
   // Compressed thumbnail caching methods

@@ -35,6 +35,7 @@ void HomeState::enter(Core& core) {
 
   // Update battery
   updateBattery();
+  lastBatteryPollMs_ = millis();
 
   view_.needsRender = true;
 }
@@ -109,6 +110,12 @@ void HomeState::updateBattery() {
 }
 
 StateTransition HomeState::update(Core& core) {
+  const unsigned long now = millis();
+  if (now - lastBatteryPollMs_ >= kBatteryPollIntervalMs) {
+    lastBatteryPollMs_ = now;
+    updateBattery();
+  }
+
   Event e;
   while (core.events.pop(e)) {
     switch (e.type) {
