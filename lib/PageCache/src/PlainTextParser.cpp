@@ -28,6 +28,7 @@ void PlainTextParser::reset() {
   encodingTable_ = nullptr;
   bomSkipBytes_ = 0;
   pendingBlock_.reset();
+  pendingSpacing_ = 0;
 }
 
 bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint16_t maxPages,
@@ -135,6 +136,10 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
       file.close();
       return true;
     }
+    if (pendingSpacing_ > 0) {
+      currentPageY += pendingSpacing_;
+      pendingSpacing_ = 0;
+    }
   }
 
   if (!currentBlock) {
@@ -171,6 +176,15 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
 
         // Flush current block (paragraph)
         if (!flushBlock()) {
+          // Save paragraph spacing for next batch
+          switch (config_.spacingLevel) {
+            case 1:
+              pendingSpacing_ = lineHeight / 4;
+              break;
+            case 3:
+              pendingSpacing_ = lineHeight;
+              break;
+          }
           // currentBlock still has unconsumed words — save for next call
           pendingBlock_ = std::move(currentBlock);
           currentOffset_ = file.position() - (bytesRead - i - 1);

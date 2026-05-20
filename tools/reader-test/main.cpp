@@ -148,11 +148,12 @@ static void dumpCacheDir(const std::string& dir, const GfxRenderer& gfx, int fon
 }
 
 static void usage() {
-  fprintf(stderr, "Usage: reader-test [--dump] [--batch N] [--no-statusbar] [--cjk-font PATH] <file.epub|.md|.txt|.fb2|.html|.htm> [output_dir]\n");
+  fprintf(stderr, "Usage: reader-test [--dump] [--batch N] [--cold-extend] [--no-statusbar] [--cjk-font PATH] <file.epub|.md|.txt|.fb2|.html|.htm> [output_dir]\n");
   fprintf(stderr, "       reader-test --cache-dump <cache_dir>\n");
   fprintf(stderr, "  --dump           Print parsed text content of each page\n");
   fprintf(stderr, "  --batch N        Cache N pages per batch (default: 5, matching device)\n");
   fprintf(stderr, "                   Use 0 for unlimited (no suspend/resume)\n");
+  fprintf(stderr, "  --cold-extend    Destroy parser between batches (simulates device cold extend)\n");
   fprintf(stderr, "  --no-statusbar   Use full viewport height (no status bar margin)\n");
   fprintf(stderr, "  --cjk-font PATH  Load external CJK font (.bin) for text width measurement\n");
   fprintf(stderr, "  --cache-dump     Dump text from existing device cache directory\n");
@@ -167,12 +168,16 @@ int main(int argc, char* argv[]) {
 
   bool dump = false;
   bool showStatusBar = true;
+  bool coldExtend = false;
   uint16_t batchSize = 5;
   std::string cjkFontPath;
   int argIdx = 1;
   while (argIdx < argc && argv[argIdx][0] == '-') {
     if (strcmp(argv[argIdx], "--dump") == 0) {
       dump = true;
+      argIdx++;
+    } else if (strcmp(argv[argIdx], "--cold-extend") == 0) {
+      coldExtend = true;
       argIdx++;
     } else if (strcmp(argv[argIdx], "--no-statusbar") == 0) {
       showStatusBar = false;
@@ -270,9 +275,14 @@ int main(int argc, char* argv[]) {
       EpubChapterParser parser(epub, i, gfx, config, imageCachePath);
       PageCache cache(cachePath);
       cache.create(parser, config, batchSize);
-      // Extend in batches until all pages are cached, matching device behavior
       while (batchSize > 0 && cache.isPartial()) {
-        cache.extend(parser, batchSize);
+        if (coldExtend) {
+          parser.reset();
+          EpubChapterParser freshParser(epub, i, gfx, config, imageCachePath);
+          cache.extend(freshParser, batchSize);
+        } else {
+          cache.extend(parser, batchSize);
+        }
       }
       printf("  Spine %d: %d pages -> %s\n", i, cache.pageCount(), cachePath.c_str());
       if (dump) dumpPages(cache, gfx, FONT_ID);

@@ -627,6 +627,7 @@ bool ChapterHtmlSlimParser::initParser() {
   cssHeapOk_ = true;
   pendingEmergencySplit_ = false;
   pendingNewTextBlock_ = false;
+  pendingSpacing_ = 0;
   aborted_ = false;
   stopRequested_ = false;
   suspended_ = false;
@@ -797,6 +798,11 @@ bool ChapterHtmlSlimParser::resumeParsing() {
     suspended_ = false;
     parseStartTime_ = millis();
 
+    if (pendingSpacing_ > 0) {
+      currentPageNextY += pendingSpacing_;
+      pendingSpacing_ = 0;
+    }
+
     if (currentTextBlock && !currentTextBlock->isEmpty()) {
       makePages();
       if (stopRequested_) {
@@ -827,6 +833,11 @@ bool ChapterHtmlSlimParser::resumeParsing() {
   elementCounter_ = 0;
   stopRequested_ = false;
   suspended_ = false;
+
+  if (pendingSpacing_ > 0) {
+    currentPageNextY += pendingSpacing_;
+    pendingSpacing_ = 0;
+  }
 
   // Lay out remaining words from the text block that was interrupted when the
   // previous batch hit its page limit. Without this, words after the page-break
@@ -962,10 +973,19 @@ void ChapterHtmlSlimParser::makePages() {
   if (!stopRequested_) {
     switch (config.spacingLevel) {
       case 1:
-        currentPageNextY += lineHeight / 4;  // Small (1/4 line)
+        currentPageNextY += lineHeight / 4;
         break;
       case 3:
-        currentPageNextY += lineHeight;  // Large (full line)
+        currentPageNextY += lineHeight;
+        break;
+    }
+  } else if (currentTextBlock->isEmpty()) {
+    switch (config.spacingLevel) {
+      case 1:
+        pendingSpacing_ = lineHeight / 4;
+        break;
+      case 3:
+        pendingSpacing_ = lineHeight;
         break;
     }
   }

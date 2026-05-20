@@ -86,6 +86,7 @@ void Fb2Parser::reset() {
   currentPageNextY_ = 0;
   pagesCreated_ = 0;
   hitMaxPages_ = false;
+  pendingSpacing_ = 0;
   fileSize_ = 0;
   bytesConsumed_ = 0;
   anchorMap_.clear();
@@ -105,6 +106,12 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
   // RESUME PATH: parser suspended from previous maxPages stop
   if (xmlParser_ && resumeFile_) {
     LOG_DBG(TAG, "Resuming parse from previous position");
+
+    if (pendingSpacing_ > 0) {
+      currentPageNextY_ += pendingSpacing_;
+      pendingSpacing_ = 0;
+    }
+
     auto status = XML_ResumeParser(xmlParser_);
     if (status == XML_STATUS_ERROR) {
       LOG_ERR(TAG, "Resume parse error: %s", XML_ErrorString(XML_GetErrorCode(xmlParser_)));
@@ -497,6 +504,15 @@ void Fb2Parser::makePages() {
         break;
     }
     currentTextBlock_.reset();
+  } else if (currentTextBlock_->isEmpty()) {
+    switch (config_.spacingLevel) {
+      case 1:
+        pendingSpacing_ = lineHeight / 4;
+        break;
+      case 3:
+        pendingSpacing_ = lineHeight;
+        break;
+    }
   }
 }
 

@@ -42,6 +42,7 @@ void MarkdownParser::reset() {
   encodingTable_ = nullptr;
   bomSkipBytes_ = 0;
   pendingTextBlock_.reset();
+  pendingSpacing_ = 0;
 }
 
 int MarkdownParser::getCurrentFontStyle(const ParseContext& ctx) const {
@@ -113,6 +114,15 @@ void MarkdownParser::flushTextBlock(ParseContext& ctx) {
         break;
       case 3:
         ctx.pageNextY += lineHeight;
+        break;
+    }
+  } else if (ctx.textBlock->isEmpty()) {
+    switch (config_.spacingLevel) {
+      case 1:
+        pendingSpacing_ = lineHeight / 4;
+        break;
+      case 3:
+        pendingSpacing_ = lineHeight;
         break;
     }
   }
@@ -404,6 +414,10 @@ bool MarkdownParser::parsePages(const std::function<void(std::unique_ptr<Page>)>
       }
       file.close();
       return true;
+    }
+    if (pendingSpacing_ > 0) {
+      ctx.pageNextY += pendingSpacing_;
+      pendingSpacing_ = 0;
     }
   }
 

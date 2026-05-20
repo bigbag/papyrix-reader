@@ -31,6 +31,7 @@ class PlainTextParser : public ContentParser {
   // Carries over unconsumed words from a paragraph that was
   // interrupted by a page-batch limit.
   std::unique_ptr<ParsedText> pendingBlock_;
+  int16_t pendingSpacing_ = 0;
 
  public:
   PlainTextParser(std::string filepath, GfxRenderer& renderer, const RenderConfig& config);

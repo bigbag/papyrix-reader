@@ -74,6 +74,7 @@ class Fb2Parser : public ContentParser {
   uint16_t maxPages_ = 0;
   uint16_t pagesCreated_ = 0;
   bool hitMaxPages_ = false;
+  int16_t pendingSpacing_ = 0;
   AbortCallback shouldAbort_;
 
   // File reading — kept open between resume calls

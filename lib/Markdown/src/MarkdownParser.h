@@ -65,6 +65,7 @@ class MarkdownParser : public ContentParser {
   // Carries over unconsumed words from a text block that was
   // interrupted by a page-batch limit.
   std::unique_ptr<ParsedText> pendingTextBlock_;
+  int16_t pendingSpacing_ = 0;
 
   // Parsing context passed through md_parser callback
   struct ParseContext {
