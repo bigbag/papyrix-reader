@@ -32,6 +32,7 @@ class PlainTextParser : public ContentParser {
   // interrupted by a page-batch limit.
   std::unique_ptr<ParsedText> pendingBlock_;
   int16_t pendingSpacing_ = 0;
+  bool pendingSawNewline_ = false;
 
  public:
   PlainTextParser(std::string filepath, GfxRenderer& renderer, const RenderConfig& config);
