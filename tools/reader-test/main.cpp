@@ -41,6 +41,9 @@ MockLittleFS LittleFS;
 // GfxRenderer static frame buffer
 uint8_t GfxRenderer::frameBuffer_[EInkDisplay::BUFFER_SIZE];
 
+// Simulation globals (set via --sim-heap / --fail-serialize)
+size_t g_simHeapSize = 0;
+
 enum ContentType { EPUB, MARKDOWN, TXT_FILE, FB2_FILE, HTML_FILE, UNKNOWN };
 
 static ContentType detectType(const std::string& path) {
@@ -155,8 +158,10 @@ static void usage() {
   fprintf(stderr, "                   Use 0 for unlimited (no suspend/resume)\n");
   fprintf(stderr, "  --cold-extend    Destroy parser between batches (simulates device cold extend)\n");
   fprintf(stderr, "  --no-statusbar   Use full viewport height (no status bar margin)\n");
-  fprintf(stderr, "  --cjk-font PATH  Load external CJK font (.bin) for text width measurement\n");
-  fprintf(stderr, "  --cache-dump     Dump text from existing device cache directory\n");
+  fprintf(stderr, "  --cjk-font PATH     Load external CJK font (.bin) for text width measurement\n");
+  fprintf(stderr, "  --cache-dump        Dump text from existing device cache directory\n");
+  fprintf(stderr, "  --fail-serialize N  Simulate serialize failure every N pages\n");
+  fprintf(stderr, "  --sim-heap SIZE     Simulate device heap size in bytes\n");
   fprintf(stderr, "  output_dir defaults to /tmp/papyrix-cache/\n");
 }
 
@@ -187,6 +192,12 @@ int main(int argc, char* argv[]) {
       argIdx += 2;
     } else if (strcmp(argv[argIdx], "--cjk-font") == 0 && argIdx + 1 < argc) {
       cjkFontPath = argv[argIdx + 1];
+      argIdx += 2;
+    } else if (strcmp(argv[argIdx], "--fail-serialize") == 0 && argIdx + 1 < argc) {
+      PageCache::setFailSerializeInterval(static_cast<uint16_t>(atoi(argv[argIdx + 1])));
+      argIdx += 2;
+    } else if (strcmp(argv[argIdx], "--sim-heap") == 0 && argIdx + 1 < argc) {
+      g_simHeapSize = static_cast<size_t>(atol(argv[argIdx + 1]));
       argIdx += 2;
     } else if (strcmp(argv[argIdx], "--cache-dump") == 0) {
       // Handled after renderer setup
@@ -276,6 +287,7 @@ int main(int argc, char* argv[]) {
       PageCache cache(cachePath);
       cache.create(parser, config, batchSize);
       while (batchSize > 0 && cache.isPartial()) {
+        uint16_t before = cache.pageCount();
         if (coldExtend) {
           parser.reset();
           EpubChapterParser freshParser(epub, i, gfx, config, imageCachePath);
@@ -283,6 +295,7 @@ int main(int argc, char* argv[]) {
         } else {
           cache.extend(parser, batchSize);
         }
+        if (cache.pageCount() == before) break;
       }
       printf("  Spine %d: %d pages -> %s\n", i, cache.pageCount(), cachePath.c_str());
       if (dump) dumpPages(cache, gfx, FONT_ID);
@@ -323,7 +336,9 @@ int main(int argc, char* argv[]) {
       PageCache cache(cachePath);
       cache.create(parser, config, batchSize);
       while (batchSize > 0 && cache.isPartial()) {
+        uint16_t before = cache.pageCount();
         cache.extend(parser, batchSize);
+        if (cache.pageCount() == before) break;
       }
       totalPages += cache.pageCount();
       if (dump) dumpPages(cache, gfx, FONT_ID);
@@ -345,7 +360,9 @@ int main(int argc, char* argv[]) {
     PageCache cache(cachePath);
     cache.create(parser, config, batchSize);
     while (batchSize > 0 && cache.isPartial()) {
+      uint16_t before = cache.pageCount();
       cache.extend(parser, batchSize);
+      if (cache.pageCount() == before) break;
     }
     printf("HTML: %d pages -> %s\n", cache.pageCount(), cachePath.c_str());
     if (dump) dumpPages(cache, gfx, FONT_ID);

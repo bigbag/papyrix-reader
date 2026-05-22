@@ -109,6 +109,12 @@ class PageCache {
   bool needsExtension(uint16_t currentPage) const { return isPartial_ && currentPage >= pageCount_ - EXTEND_THRESHOLD; }
   const std::string& path() const { return cachePath_; }
 
+#ifndef ARDUINO
+  static uint16_t failSerializeInterval_;
+  static uint16_t failSerializeCounter_;
+  static void setFailSerializeInterval(uint16_t n) { failSerializeInterval_ = n; }
+#endif
+
   // Suppress the worst early-skew sample (description page + first chunk).
   // 3 cached pages is enough that the body/metadata ratio has stabilized.
   static constexpr uint16_t kMinPagesForEstimate = 3;

@@ -273,15 +273,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   // Query CSS for combined style (tag + classes + inline)
   CssStyle cssStyle;
   if (self->cssParser_) {
-    if (++self->elementCounter_ % CSS_HEAP_CHECK_INTERVAL == 0) {
-      self->cssHeapOk_ = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) >= MIN_FREE_HEAP;
-      if (!self->cssHeapOk_) {
-        LOG_ERR(TAG, "Low memory, skipping CSS lookups");
-      }
-    }
-    if (self->cssHeapOk_) {
-      cssStyle = self->cssParser_->getCombinedStyle(name, classAttr);
-    }
+    cssStyle = self->cssParser_->getCombinedStyle(name, classAttr);
   }
   // Inline styles override stylesheet rules (static method, no instance needed)
   if (!styleAttr.empty()) {
@@ -623,8 +615,6 @@ void ChapterHtmlSlimParser::cleanupParser() {
 bool ChapterHtmlSlimParser::initParser() {
   parseStartTime_ = millis();
   loopCounter_ = 0;
-  elementCounter_ = 0;
-  cssHeapOk_ = true;
   pendingEmergencySplit_ = false;
   pendingNewTextBlock_ = false;
   pendingSpacing_ = 0;
@@ -742,19 +732,18 @@ bool ChapterHtmlSlimParser::parseLoop() {
     // By splitting here, we save that stack space - critical for external fonts which
     // add extra frames through getExternalGlyphWidth() → ExternalFont::getGlyph() (SD I/O).
     if (pendingEmergencySplit_ && currentTextBlock && !currentTextBlock->isEmpty()) {
-      pendingEmergencySplit_ = false;
       const size_t freeHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
-      if (freeHeap < MIN_FREE_HEAP * 2) {
-        LOG_ERR(TAG, "Low memory (%zu), aborting parse", freeHeap);
-        aborted_ = true;
-        break;
+      if (freeHeap < MIN_FREE_HEAP) {
+        LOG_ERR(TAG, "Low memory (%zu), deferring emergency split", freeHeap);
+      } else {
+        pendingEmergencySplit_ = false;
+        LOG_DBG(TAG, "Text block too long (%zu words), splitting", currentTextBlock->size());
+        currentTextBlock->setUseGreedyBreaking(true);
+        currentTextBlock->layoutAndExtractLines(
+            renderer, config.fontId, config.viewportWidth,
+            [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); }, true,
+            [this]() -> bool { return stopRequested_ || shouldAbort(); });
       }
-      LOG_DBG(TAG, "Text block too long (%zu words), splitting", currentTextBlock->size());
-      currentTextBlock->setUseGreedyBreaking(true);
-      currentTextBlock->layoutAndExtractLines(
-          renderer, config.fontId, config.viewportWidth,
-          [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); }, true,
-          [this]() -> bool { return stopRequested_ || shouldAbort(); });
     }
   } while (!done);
 
@@ -830,7 +819,6 @@ bool ChapterHtmlSlimParser::resumeParsing() {
   // Reset per-extend state
   parseStartTime_ = millis();
   loopCounter_ = 0;
-  elementCounter_ = 0;
   stopRequested_ = false;
   suspended_ = false;
 
@@ -951,10 +939,10 @@ void ChapterHtmlSlimParser::makePages() {
 
   // Check memory before expensive layout operation
   const size_t freeHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
-  if (freeHeap < MIN_FREE_HEAP * 2) {
-    LOG_ERR(TAG, "Insufficient memory for layout (%zu bytes)", freeHeap);
-    currentTextBlock.reset();
-    aborted_ = true;
+  if (freeHeap < MIN_FREE_HEAP) {
+    LOG_ERR(TAG, "Insufficient memory for layout (%zu bytes), suspending", freeHeap);
+    stopRequested_ = true;
+    if (xmlParser_) XML_StopParser(xmlParser_, XML_TRUE);
     return;
   }
 

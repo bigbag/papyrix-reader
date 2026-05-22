@@ -598,11 +598,15 @@ void ReaderState::createOrExtendCacheImpl(ContentParser& parser, const std::stri
 
   if (pageCache_) {
     if (needsExtend) {
-      pageCache_->extend(parser, PageCache::DEFAULT_CACHE_CHUNK);
+      if (!pageCache_->extend(parser, PageCache::DEFAULT_CACHE_CHUNK)) {
+        LOG_ERR(TAG, "Cache extend failed");
+      }
       saveAnchorMap(parser, cachePath);
     } else if (needsCreate) {
-      parser.reset();  // Ensure clean state for fresh cache creation
-      pageCache_->create(parser, config, PageCache::DEFAULT_CACHE_CHUNK);
+      parser.reset();
+      if (!pageCache_->create(parser, config, PageCache::DEFAULT_CACHE_CHUNK)) {
+        LOG_ERR(TAG, "Cache create failed");
+      }
       saveAnchorMap(parser, cachePath);
     }
   }
@@ -1565,12 +1569,11 @@ bool ReaderState::ensurePageCached(Core& core, uint16_t pageNum) {
   bool isPartial = pageCache_->isPartial();
 
   if (pageNum < pageCount) {
-    // Check if we should pre-extend (approaching end of partial cache)
     if (needsExtension) {
       LOG_DBG(TAG, "Pre-extending cache at page %d", pageNum);
       createOrExtendCache(core);
     }
-    return true;
+    return pageCache_ && pageNum < pageCache_->pageCount();
   }
 
   // Page not cached yet - need to extend

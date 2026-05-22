@@ -14,6 +14,11 @@
 
 #include "ContentParser.h"
 
+#ifndef ARDUINO
+uint16_t PageCache::failSerializeInterval_ = 0;
+uint16_t PageCache::failSerializeCounter_ = 0;
+#endif
+
 namespace {
 constexpr uint8_t CACHE_FILE_VERSION = 19;  // v19: + bytesConsumed/totalBytes for partial-cache page-total estimate
 
@@ -62,6 +67,11 @@ bool PageCache::writeHeader(bool isPartial) {
 }
 
 bool PageCache::writeLut(const std::vector<uint32_t>& lut) {
+  if (lut.size() != pageCount_) {
+    LOG_ERR(TAG, "LUT size mismatch: %zu entries vs %u pages", lut.size(), pageCount_);
+    return false;
+  }
+
   const uint32_t lutOffset = file_.position();
 
   for (const uint32_t pos : lut) {
@@ -110,12 +120,26 @@ bool PageCache::loadLut(std::vector<uint32_t>& lut) {
   file_.seek(kPageCountOffset);
   serialization::readPod(file_, pageCount_);
 
+  // Validate LUT fits within file
+  const size_t lutEnd = lutOffset_ + static_cast<size_t>(pageCount_) * sizeof(uint32_t);
+  if (lutEnd > fileSize) {
+    LOG_ERR(TAG, "LUT extends past file: %zu > %zu", lutEnd, fileSize);
+    file_.close();
+    return false;
+  }
+
   // Read existing LUT entries
   file_.seek(lutOffset_);
   lut.reserve(pageCount_);
   for (uint16_t i = 0; i < pageCount_; i++) {
     uint32_t pos;
     serialization::readPod(file_, pos);
+    if (pos == 0 || pos < kHeaderSize || pos >= lutOffset_) {
+      LOG_ERR(TAG, "Corrupt LUT entry %d: position %u", i, pos);
+      file_.close();
+      lut.clear();
+      return false;
+    }
     lut.push_back(pos);
   }
 
@@ -259,14 +283,22 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
 
         // Serialize new page
         const uint32_t position = file_.position();
+#ifndef ARDUINO
+        if (failSerializeInterval_ > 0 && ++failSerializeCounter_ % failSerializeInterval_ == 0) {
+          LOG_ERR(TAG, "Simulated serialize failure (page %u)", pageCount_);
+          hitMaxPages = true;
+          return;
+        }
+#endif
         if (!page->serialize(file_)) {
-          LOG_ERR(TAG, "Failed to serialize page %d", pageCount_);
+          LOG_ERR(TAG, "Failed to serialize page %u, stopping", pageCount_);
+          hitMaxPages = true;
           return;
         }
 
         lut.push_back(position);
         pageCount_++;
-        LOG_DBG(TAG, "Page %d cached", pageCount_ - 1);
+        LOG_DBG(TAG, "Page %u cached", pageCount_ - 1);
 
 #ifdef ARDUINO
         if (pageCount_ % 10 == 0) esp_task_wdt_reset();
@@ -352,10 +384,23 @@ bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const Ab
     file_.seekEnd();
 
     const uint16_t pagesBefore = pageCount_;
+    bool hitMaxPages = false;
     bool parseOk = parser.parsePages(
-        [this, &lut](std::unique_ptr<Page> page) {
+        [this, &lut, &hitMaxPages](std::unique_ptr<Page> page) {
+          if (hitMaxPages) return;
           const uint32_t position = file_.position();
-          if (!page->serialize(file_)) return;
+#ifndef ARDUINO
+          if (failSerializeInterval_ > 0 && ++failSerializeCounter_ % failSerializeInterval_ == 0) {
+            LOG_ERR(TAG, "Simulated serialize failure (page %u)", pageCount_);
+            hitMaxPages = true;
+            return;
+          }
+#endif
+          if (!page->serialize(file_)) {
+            LOG_ERR(TAG, "Failed to serialize page %u, stopping", pageCount_);
+            hitMaxPages = true;
+            return;
+          }
           lut.push_back(position);
           pageCount_++;
         },
