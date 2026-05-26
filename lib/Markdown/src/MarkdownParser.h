@@ -67,6 +67,11 @@ class MarkdownParser : public ContentParser {
   std::unique_ptr<ParsedText> pendingTextBlock_;
   int16_t pendingSpacing_ = 0;
 
+  // Carries over a partial page so the next batch continues filling it
+  // instead of emitting a nearly-empty page.
+  std::unique_ptr<Page> pendingPage_;
+  int16_t pendingPageNextY_ = 0;
+
   // Parsing context passed through md_parser callback
   struct ParseContext {
     MarkdownParser* self;

@@ -3,8 +3,9 @@
 #include <EpdFont.h>
 #include <EpdFontFamily.h>
 #include <GfxRenderer.h>
-#include <MarkdownParser.h>
 #include <Page.h>
+#include <ParsedText.h>
+#include <PlainTextParser.h>
 #include <RenderConfig.h>
 #include <SDCardManager.h>
 
@@ -21,9 +22,7 @@ static constexpr int FONT_ID = 42;
 static constexpr uint16_t VIEWPORT_W = 300;
 static constexpr uint16_t VIEWPORT_H = 200;
 
-// Fixed-width ASCII glyphs (space through '~', codepoints 32-126)
 static const EpdGlyph testGlyphs[] = {
-    // Each glyph: width=6, height=10, advanceX=7, left=0, top=10, dataLength=0, dataOffset=0
     {6, 10, 7, 0, 10, 0, 0}, {6, 10, 7, 0, 10, 0, 0}, {6, 10, 7, 0, 10, 0, 0}, {6, 10, 7, 0, 10, 0, 0},
     {6, 10, 7, 0, 10, 0, 0}, {6, 10, 7, 0, 10, 0, 0}, {6, 10, 7, 0, 10, 0, 0}, {6, 10, 7, 0, 10, 0, 0},
     {6, 10, 7, 0, 10, 0, 0}, {6, 10, 7, 0, 10, 0, 0}, {6, 10, 7, 0, 10, 0, 0}, {6, 10, 7, 0, 10, 0, 0},
@@ -47,20 +46,13 @@ static const EpdGlyph testGlyphs[] = {
     {6, 10, 7, 0, 10, 0, 0}, {6, 10, 7, 0, 10, 0, 0}, {6, 10, 7, 0, 10, 0, 0}, {6, 10, 7, 0, 10, 0, 0},
     {6, 10, 7, 0, 10, 0, 0}, {6, 10, 7, 0, 10, 0, 0}, {6, 10, 7, 0, 10, 0, 0}, {6, 10, 7, 0, 10, 0, 0},
     {6, 10, 7, 0, 10, 0, 0}, {6, 10, 7, 0, 10, 0, 0}, {6, 10, 7, 0, 10, 0, 0}, {6, 10, 7, 0, 10, 0, 0},
-    {6, 10, 7, 0, 10, 0, 0}, {6, 10, 7, 0, 10, 0, 0}, {6, 10, 7, 0, 10, 0, 0},  // 95 glyphs total (32-126)
+    {6, 10, 7, 0, 10, 0, 0}, {6, 10, 7, 0, 10, 0, 0}, {6, 10, 7, 0, 10, 0, 0},
 };
 
 static const EpdUnicodeInterval testIntervals[] = {{32, 126, 0}};
 
 static const EpdFontData testFontData = {
-    nullptr,        // bitmap (not needed for width measurement)
-    testGlyphs,     // glyph array
-    testIntervals,  // intervals
-    1,              // intervalCount
-    14,             // advanceY (line height)
-    11,             // ascender
-    3,              // descender
-    false,          // is2Bit
+    nullptr, testGlyphs, testIntervals, 1, 14, 11, 3, false,
 };
 
 struct TestSetup {
@@ -99,7 +91,7 @@ static std::vector<std::string> collectWords(const std::vector<std::unique_ptr<P
   return words;
 }
 
-static std::vector<std::unique_ptr<Page>> parseAll(MarkdownParser& parser, uint16_t maxPages) {
+static std::vector<std::unique_ptr<Page>> parseAll(PlainTextParser& parser, uint16_t maxPages) {
   std::vector<std::unique_ptr<Page>> allPages;
 
   auto onPage = [&](std::unique_ptr<Page> page) { allPages.push_back(std::move(page)); };
@@ -111,35 +103,35 @@ static std::vector<std::unique_ptr<Page>> parseAll(MarkdownParser& parser, uint1
   return allPages;
 }
 
-static std::string makeMarkdown(int paragraphs, int wordsPerParagraph) {
-  std::string md;
+static std::string makePlainText(int paragraphs, int wordsPerParagraph) {
+  std::string text;
   for (int p = 0; p < paragraphs; p++) {
     for (int w = 0; w < wordsPerParagraph; w++) {
-      if (w > 0) md += ' ';
-      md += "word";
-      md += std::to_string(p * wordsPerParagraph + w);
+      if (w > 0) text += ' ';
+      text += "word";
+      text += std::to_string(p * wordsPerParagraph + w);
     }
-    md += "\n\n";
+    text += "\n\n";
   }
-  return md;
+  return text;
 }
 
 int main() {
-  TestUtils::TestRunner runner("Markdown Batch Parsing");
+  TestUtils::TestRunner runner("TXT Batch Parsing");
 
   // Test 1: Batched vs unbatched produce identical word output
   {
     TestSetup setup;
-    std::string content = makeMarkdown(20, 30);
-    const std::string path = "/test_batch.md";
+    std::string content = makePlainText(20, 30);
+    const std::string path = "/test_batch.txt";
 
     SdMan.registerFile(path, content);
-    MarkdownParser unbatched(path, setup.gfx, setup.config);
+    PlainTextParser unbatched(path, setup.gfx, setup.config);
     auto unbatchedPages = parseAll(unbatched, 0);
     auto unbatchedWords = collectWords(unbatchedPages);
 
     SdMan.registerFile(path, content);
-    MarkdownParser batched(path, setup.gfx, setup.config);
+    PlainTextParser batched(path, setup.gfx, setup.config);
     auto batchedPages = parseAll(batched, 3);
     auto batchedWords = collectWords(batchedPages);
 
@@ -168,99 +160,34 @@ int main() {
   // Test 2: Small batch size (1 page per batch) — stress test resume logic
   {
     TestSetup setup;
-    std::string content = makeMarkdown(10, 20);
-    const std::string path = "/test_batch1.md";
+    std::string content = makePlainText(10, 20);
+    const std::string path = "/test_batch1.txt";
 
     SdMan.registerFile(path, content);
-    MarkdownParser unbatched(path, setup.gfx, setup.config);
+    PlainTextParser unbatched(path, setup.gfx, setup.config);
     auto unbatchedWords = collectWords(parseAll(unbatched, 0));
 
     SdMan.registerFile(path, content);
-    MarkdownParser batched(path, setup.gfx, setup.config);
+    PlainTextParser batched(path, setup.gfx, setup.config);
     auto batchedWords = collectWords(parseAll(batched, 1));
 
     runner.expectEq(static_cast<int>(unbatchedWords.size()), static_cast<int>(batchedWords.size()),
                     "batch1: same word count");
-    bool allMatch = unbatchedWords == batchedWords;
-    runner.expectTrue(allMatch, "batch1: all words identical");
+    runner.expectTrue(unbatchedWords == batchedWords, "batch1: all words identical");
   }
 
-  // Test 3: Heading at paragraph boundary
+  // Test 3: Multiple batch resumes (many batches)
   {
     TestSetup setup;
-    std::string content;
-    for (int i = 0; i < 15; i++) {
-      content += "Paragraph " + std::to_string(i) + " with several words to fill the page layout ";
-      content += "and some more text to make it wrap across lines properly.\n\n";
-    }
-    content += "### Section Heading\n\n";
-    for (int i = 0; i < 10; i++) {
-      content += "After heading paragraph " + std::to_string(i) + " with more words here.\n\n";
-    }
-    const std::string path = "/test_heading.md";
+    std::string content = makePlainText(50, 20);
+    const std::string path = "/test_many_batches.txt";
 
     SdMan.registerFile(path, content);
-    MarkdownParser unbatched(path, setup.gfx, setup.config);
+    PlainTextParser unbatched(path, setup.gfx, setup.config);
     auto unbatchedWords = collectWords(parseAll(unbatched, 0));
 
     SdMan.registerFile(path, content);
-    MarkdownParser batched(path, setup.gfx, setup.config);
-    auto batchedWords = collectWords(parseAll(batched, 3));
-
-    runner.expectEq(static_cast<int>(unbatchedWords.size()), static_cast<int>(batchedWords.size()),
-                    "heading: same word count");
-
-    bool hasSection = false;
-    bool hasAfter = false;
-    for (auto& w : batchedWords) {
-      if (w == "Section") hasSection = true;
-      if (w == "After") hasAfter = true;
-    }
-    runner.expectTrue(hasSection, "heading: 'Section' present in batched output");
-    runner.expectTrue(hasAfter, "heading: 'After' present in batched output");
-
-    bool allMatch = unbatchedWords == batchedWords;
-    runner.expectTrue(allMatch, "heading: all words identical");
-  }
-
-  // Test 4: List items across batch boundaries
-  {
-    TestSetup setup;
-    std::string content;
-    for (int i = 0; i < 8; i++) {
-      content += "Filler paragraph " + std::to_string(i) + " to push the list further down.\n\n";
-    }
-    for (int i = 0; i < 10; i++) {
-      content += "- List item " + std::to_string(i) + " with some extra text\n";
-    }
-    content += "\n";
-    const std::string path = "/test_list.md";
-
-    SdMan.registerFile(path, content);
-    MarkdownParser unbatched(path, setup.gfx, setup.config);
-    auto unbatchedWords = collectWords(parseAll(unbatched, 0));
-
-    SdMan.registerFile(path, content);
-    MarkdownParser batched(path, setup.gfx, setup.config);
-    auto batchedWords = collectWords(parseAll(batched, 2));
-
-    runner.expectEq(static_cast<int>(unbatchedWords.size()), static_cast<int>(batchedWords.size()),
-                    "list: same word count");
-    runner.expectTrue(unbatchedWords == batchedWords, "list: all words identical");
-  }
-
-  // Test 5: Multiple batch resumes (many batches)
-  {
-    TestSetup setup;
-    std::string content = makeMarkdown(50, 20);
-    const std::string path = "/test_many_batches.md";
-
-    SdMan.registerFile(path, content);
-    MarkdownParser unbatched(path, setup.gfx, setup.config);
-    auto unbatchedWords = collectWords(parseAll(unbatched, 0));
-
-    SdMan.registerFile(path, content);
-    MarkdownParser batched(path, setup.gfx, setup.config);
+    PlainTextParser batched(path, setup.gfx, setup.config);
     auto batchedWords = collectWords(parseAll(batched, 2));
 
     runner.expectEq(static_cast<int>(unbatchedWords.size()), static_cast<int>(batchedWords.size()),
@@ -268,38 +195,14 @@ int main() {
     runner.expectTrue(unbatchedWords == batchedWords, "many_batches: all words identical");
   }
 
-  // Test 6: Blockquote across batch boundary
+  // Test 4: No nearly-empty pages at batch boundaries
   {
     TestSetup setup;
-    std::string content;
-    for (int i = 0; i < 10; i++) {
-      content += "Filler text paragraph " + std::to_string(i) + " to fill pages before quote.\n\n";
-    }
-    content += "> This is a blockquote that should survive batching intact.\n\n";
-    content += "Normal text after blockquote.\n\n";
-    const std::string path = "/test_quote.md";
+    std::string content = makePlainText(30, 25);
+    const std::string path = "/test_no_sparse.txt";
 
     SdMan.registerFile(path, content);
-    MarkdownParser unbatched(path, setup.gfx, setup.config);
-    auto unbatchedWords = collectWords(parseAll(unbatched, 0));
-
-    SdMan.registerFile(path, content);
-    MarkdownParser batched(path, setup.gfx, setup.config);
-    auto batchedWords = collectWords(parseAll(batched, 3));
-
-    runner.expectEq(static_cast<int>(unbatchedWords.size()), static_cast<int>(batchedWords.size()),
-                    "blockquote: same word count");
-    runner.expectTrue(unbatchedWords == batchedWords, "blockquote: all words identical");
-  }
-
-  // Test 7: No nearly-empty pages at batch boundaries
-  {
-    TestSetup setup;
-    std::string content = makeMarkdown(30, 25);
-    const std::string path = "/test_no_sparse.md";
-
-    SdMan.registerFile(path, content);
-    MarkdownParser parser(path, setup.gfx, setup.config);
+    PlainTextParser parser(path, setup.gfx, setup.config);
     auto pages = parseAll(parser, 3);
 
     runner.expectTrue(pages.size() > 5, "no_sparse: enough pages to test");
@@ -318,6 +221,58 @@ int main() {
                           ? ("no_sparse: page " + std::to_string(sparsePage) + " has only " +
                              std::to_string(pages[sparsePage]->elements.size()) + " element(s)")
                           : "no_sparse: all non-final pages have >2 elements");
+  }
+
+  // Test 5: Paragraph break at batch boundary preserves spacing
+  {
+    TestSetup setup;
+    std::string content;
+    for (int i = 0; i < 15; i++) {
+      content += "Paragraph " + std::to_string(i) + " with several words to fill the page layout ";
+      content += "and some more text to make it wrap across lines properly.\n\n";
+    }
+    const std::string path = "/test_para_break.txt";
+
+    SdMan.registerFile(path, content);
+    PlainTextParser unbatched(path, setup.gfx, setup.config);
+    auto unbatchedWords = collectWords(parseAll(unbatched, 0));
+
+    SdMan.registerFile(path, content);
+    PlainTextParser batched(path, setup.gfx, setup.config);
+    auto batchedWords = collectWords(parseAll(batched, 3));
+
+    runner.expectEq(static_cast<int>(unbatchedWords.size()), static_cast<int>(batchedWords.size()),
+                    "para_break: same word count");
+    runner.expectTrue(unbatchedWords == batchedWords, "para_break: all words identical");
+  }
+
+  // Test 6: Mixed paragraphs with varying lengths across batch boundaries
+  {
+    TestSetup setup;
+    std::string content;
+    for (int i = 0; i < 10; i++) {
+      content += "Short paragraph " + std::to_string(i) + ".\n\n";
+    }
+    for (int i = 0; i < 5; i++) {
+      content += "Long paragraph " + std::to_string(i) + " with many extra words added here to ";
+      content += "fill up lines and push text across multiple page boundaries for testing.\n\n";
+    }
+    for (int i = 0; i < 10; i++) {
+      content += "Trailing paragraph " + std::to_string(i) + ".\n\n";
+    }
+    const std::string path = "/test_mixed.txt";
+
+    SdMan.registerFile(path, content);
+    PlainTextParser unbatched(path, setup.gfx, setup.config);
+    auto unbatchedWords = collectWords(parseAll(unbatched, 0));
+
+    SdMan.registerFile(path, content);
+    PlainTextParser batched(path, setup.gfx, setup.config);
+    auto batchedWords = collectWords(parseAll(batched, 2));
+
+    runner.expectEq(static_cast<int>(unbatchedWords.size()), static_cast<int>(batchedWords.size()),
+                    "mixed: same word count");
+    runner.expectTrue(unbatchedWords == batchedWords, "mixed: all words identical");
   }
 
   return runner.allPassed() ? 0 : 1;

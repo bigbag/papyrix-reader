@@ -33,6 +33,11 @@ class PlainTextParser : public ContentParser {
   std::unique_ptr<ParsedText> pendingBlock_;
   int16_t pendingSpacing_ = 0;
   bool pendingSawNewline_ = false;
+  std::string pendingPartialWord_;
+
+  // Carries over a partial page so the next batch continues filling it.
+  std::unique_ptr<Page> pendingPage_;
+  int16_t pendingPageY_ = 0;
 
  public:
   PlainTextParser(std::string filepath, GfxRenderer& renderer, const RenderConfig& config);

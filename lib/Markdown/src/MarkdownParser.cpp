@@ -43,6 +43,8 @@ void MarkdownParser::reset() {
   bomSkipBytes_ = 0;
   pendingTextBlock_.reset();
   pendingSpacing_ = 0;
+  pendingPage_.reset();
+  pendingPageNextY_ = 0;
 }
 
 int MarkdownParser::getCurrentFontStyle(const ParseContext& ctx) const {
@@ -418,24 +420,31 @@ bool MarkdownParser::parsePages(const std::function<void(std::unique_ptr<Page>)>
   md_parser_t parser;
   md_parser_init(&parser, tokenCallback, &ctx);
 
+  // Resume: restore partial page from previous batch
+  if (pendingPage_) {
+    ctx.currentPage = std::move(pendingPage_);
+    ctx.pageNextY = pendingPageNextY_;
+    pendingPageNextY_ = 0;
+  }
+
   // Resume: flush any pending text block carried over from a previous interrupted batch
   if (pendingTextBlock_) {
     ctx.textBlock = std::move(pendingTextBlock_);
     flushTextBlock(ctx);
     if (ctx.hitMaxPages) {
-      // Still can't fit — save and return
       pendingTextBlock_ = std::move(ctx.textBlock);
-      if (ctx.currentPage && !ctx.currentPage->elements.empty() && onPageComplete) {
-        onPageComplete(std::move(ctx.currentPage));
-        ctx.pagesCreated++;
+      if (ctx.currentPage && !ctx.currentPage->elements.empty()) {
+        pendingPage_ = std::move(ctx.currentPage);
+        pendingPageNextY_ = ctx.pageNextY;
       }
       file.close();
       return true;
     }
-    if (pendingSpacing_ > 0) {
-      ctx.pageNextY += pendingSpacing_;
-      pendingSpacing_ = 0;
-    }
+  }
+
+  if (pendingSpacing_ > 0) {
+    ctx.pageNextY += pendingSpacing_;
+    pendingSpacing_ = 0;
   }
 
   // Start with a paragraph block
@@ -514,9 +523,17 @@ bool MarkdownParser::parsePages(const std::function<void(std::unique_ptr<Page>)>
 
   // Finalize
   flushTextBlock(ctx);
-  if (ctx.currentPage && !ctx.currentPage->elements.empty() && onPageComplete) {
-    onPageComplete(std::move(ctx.currentPage));
-    ctx.pagesCreated++;
+
+  if (ctx.hitMaxPages) {
+    if (ctx.currentPage && !ctx.currentPage->elements.empty()) {
+      pendingPage_ = std::move(ctx.currentPage);
+      pendingPageNextY_ = ctx.pageNextY;
+    }
+  } else {
+    if (ctx.currentPage && !ctx.currentPage->elements.empty() && onPageComplete) {
+      onPageComplete(std::move(ctx.currentPage));
+      ctx.pagesCreated++;
+    }
   }
 
   // Save any unconsumed text block for the next parsePages call

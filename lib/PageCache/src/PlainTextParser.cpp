@@ -30,6 +30,9 @@ void PlainTextParser::reset() {
   pendingBlock_.reset();
   pendingSpacing_ = 0;
   pendingSawNewline_ = false;
+  pendingPartialWord_.clear();
+  pendingPage_.reset();
+  pendingPageY_ = 0;
 }
 
 bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint16_t maxPages,
@@ -53,7 +56,7 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
   std::unique_ptr<Page> currentPage;
   int16_t currentPageY = 0;
   uint16_t pagesCreated = 0;
-  std::string partialWord;
+  std::string partialWord = std::move(pendingPartialWord_);
   uint16_t abortCheckCounter = 0;
   bool sawNewline = pendingSawNewline_;
   pendingSawNewline_ = false;
@@ -127,24 +130,34 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
     currentBlock->addWord(word, style);
   };
 
-  startNewPage();
+  // Resume: restore partial page from previous batch
+  if (pendingPage_) {
+    currentPage = std::move(pendingPage_);
+    currentPageY = pendingPageY_;
+    pendingPageY_ = 0;
+  } else {
+    startNewPage();
+  }
 
   // Resume: flush any pending block carried over from a previous interrupted batch
   if (pendingBlock_) {
     currentBlock = std::move(pendingBlock_);
     if (!flushBlock()) {
       pendingBlock_ = std::move(currentBlock);
+      pendingPartialWord_ = std::move(partialWord);
       pendingSawNewline_ = sawNewline;
       if (currentPage && !currentPage->elements.empty()) {
-        onPageComplete(std::move(currentPage));
+        pendingPage_ = std::move(currentPage);
+        pendingPageY_ = currentPageY;
       }
       file.close();
       return true;
     }
-    if (pendingSpacing_ > 0) {
-      currentPageY += pendingSpacing_;
-      pendingSpacing_ = 0;
-    }
+  }
+
+  if (pendingSpacing_ > 0) {
+    currentPageY += pendingSpacing_;
+    pendingSpacing_ = 0;
   }
 
   if (!currentBlock) {
@@ -197,7 +210,8 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
             file.close();
 
             if (currentPage && !currentPage->elements.empty()) {
-              onPageComplete(std::move(currentPage));
+              pendingPage_ = std::move(currentPage);
+              pendingPageY_ = currentPageY;
             }
             return true;
           }
@@ -271,6 +285,14 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
     // Check if we hit max pages
     if (maxPages > 0 && pagesCreated >= maxPages) {
       pendingSawNewline_ = sawNewline;
+      pendingPartialWord_ = std::move(partialWord);
+      if (currentBlock && !currentBlock->isEmpty()) {
+        pendingBlock_ = std::move(currentBlock);
+      }
+      if (currentPage && !currentPage->elements.empty()) {
+        pendingPage_ = std::move(currentPage);
+        pendingPageY_ = currentPageY;
+      }
       currentOffset_ = file.position();
       hasMore_ = (currentOffset_ < fileSize_);
       file.close();

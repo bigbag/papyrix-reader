@@ -324,6 +324,33 @@ foreach(TEST_SRC ${TEST_SOURCES})
     target_include_directories(${TEST_NAME} PRIVATE
       ${PROJECT_ROOT}/lib/BatteryMonitor/include
     )
+  elseif(TEST_NAME STREQUAL "TxtBatchTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/PageCache/src/PlainTextParser.cpp
+      ${PROJECT_ROOT}/lib/RenderTypes/src/ParsedText.cpp
+      ${PROJECT_ROOT}/lib/RenderTypes/src/blocks/TextBlock.cpp
+      ${PROJECT_ROOT}/lib/RenderTypes/src/Page.cpp
+      ${PROJECT_ROOT}/lib/EpdFont/src/EpdFont.cpp
+      ${PROJECT_ROOT}/lib/EpdFont/src/EpdFontFamily.cpp
+      ${PROJECT_ROOT}/lib/ScriptDetector/src/ScriptDetector.cpp
+      ${PROJECT_ROOT}/lib/Utf8/src/Utf8.cpp
+      ${PROJECT_ROOT}/lib/Utf8/src/Utf8Nfc.cpp
+      ${PROJECT_ROOT}/lib/Hyphenation/src/Hyphenation.cpp
+      ${PROJECT_ROOT}/lib/Hyphenation/src/HyphenationCommon.cpp
+      ${PROJECT_ROOT}/lib/Hyphenation/src/Hyphenator.cpp
+      ${PROJECT_ROOT}/lib/Hyphenation/src/LanguageRegistry.cpp
+      ${PROJECT_ROOT}/lib/Hyphenation/src/LiangHyphenation.cpp
+      ${TEST_HELPERS}
+    )
+    target_include_directories(${TEST_NAME} PRIVATE
+      ${PROJECT_ROOT}/lib/Hyphenation/src
+      ${PROJECT_ROOT}/lib/Encoding/src
+      ${PROJECT_ROOT}/lib/ExternalFont/src
+      ${PROJECT_ROOT}/lib/ArabicShaper/src
+      ${PROJECT_ROOT}/lib/ThaiShaper/src
+    )
+    target_compile_options(${TEST_NAME} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-include Arduino.h>)
   elseif(TEST_NAME STREQUAL "TxtRtlTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
