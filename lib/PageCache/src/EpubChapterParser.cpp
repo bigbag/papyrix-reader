@@ -44,6 +44,9 @@ void EpubChapterParser::reset() {
   parseHtmlPath_.clear();
   chapterBasePath_.clear();
   anchorMap_.clear();
+  currentSubSection_ = 0;
+  totalSubSections_ = 0;
+  subSectionPageOffset_ = 0;
 }
 
 const std::vector<std::pair<std::string, uint16_t>>& EpubChapterParser::getAnchorMap() const {
@@ -70,7 +73,31 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
     hasMore_ = liveParser_->isSuspended() || liveParser_->wasAborted() || (!success && pagesCreated_ > 0);
 
     if (!liveParser_->isSuspended()) {
-      anchorMap_ = liveParser_->getAnchorMap();
+      if (totalSubSections_ > 0 && currentSubSection_ < totalSubSections_ - 1) {
+        // Merge anchor map from completed sub-section with page offset
+        const auto& subAnchors = liveParser_->getAnchorMap();
+        for (const auto& anchor : subAnchors) {
+          anchorMap_.emplace_back(anchor.first, anchor.second + static_cast<uint16_t>(subSectionPageOffset_));
+        }
+        subSectionPageOffset_ += pagesCreated_;
+        currentSubSection_++;
+        liveParser_.reset();
+        cleanupTempFiles();
+        initialized_ = false;
+        renderer_.clearWidthCache();
+        hasMore_ = true;
+        return success || pagesCreated_ > 0;
+      }
+
+      if (totalSubSections_ > 0) {
+        // Final sub-section — merge anchors with offset
+        const auto& subAnchors = liveParser_->getAnchorMap();
+        for (const auto& anchor : subAnchors) {
+          anchorMap_.emplace_back(anchor.first, anchor.second + static_cast<uint16_t>(subSectionPageOffset_));
+        }
+      } else {
+        anchorMap_ = liveParser_->getAnchorMap();
+      }
       liveParser_.reset();
       cleanupTempFiles();
       initialized_ = false;
@@ -83,8 +110,32 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
   // INIT PATH: first call — extract HTML, normalize, create parser
   Hyphenation::setLanguage(epub_->getLanguage());
 
-  const auto localPath = epub_->getSpineItem(spineIndex_).href;
-  const bool isVirtualSection = localPath.find("/sections/") != std::string::npos;
+  auto localPath = epub_->getSpineItem(spineIndex_).href;
+  bool isVirtualSection = localPath.find("/sections/") != std::string::npos;
+
+  // On-demand spine splitting: detect or trigger splitting for oversized items
+  if (!isVirtualSection && totalSubSections_ == 0) {
+    int vsCount = epub_->getVirtualSectionCount(spineIndex_);
+    if (vsCount > 0) {
+      totalSubSections_ = vsCount;
+      currentSubSection_ = 0;
+    } else {
+      size_t itemSize = 0;
+      if (epub_->getItemSize(localPath, &itemSize) && itemSize > Epub::MAX_SECTION_SIZE) {
+        if (epub_->splitSingleSpineItem(spineIndex_, renderer_.getFrameBuffer())) {
+          vsCount = epub_->getVirtualSectionCount(spineIndex_);
+          if (vsCount > 0) {
+            totalSubSections_ = vsCount;
+            currentSubSection_ = 0;
+          }
+        }
+      }
+    }
+  }
+  if (totalSubSections_ > 0) {
+    localPath = epub_->getVirtualSectionPath(spineIndex_, currentSubSection_);
+    isVirtualSection = true;
+  }
 
   if (isVirtualSection) {
     // Virtual section: pre-extracted file on SD card (from spine splitting).
@@ -213,9 +264,31 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
 
   hasMore_ = liveParser_->isSuspended() || liveParser_->wasAborted() || (!success && pagesCreated_ > 0);
 
-  // If parser finished (not suspended), clean up
+  // If parser finished (not suspended), handle sub-section chaining or clean up
   if (!liveParser_->isSuspended()) {
-    anchorMap_ = liveParser_->getAnchorMap();
+    if (totalSubSections_ > 0 && currentSubSection_ < totalSubSections_ - 1) {
+      const auto& subAnchors = liveParser_->getAnchorMap();
+      for (const auto& anchor : subAnchors) {
+        anchorMap_.emplace_back(anchor.first, anchor.second + static_cast<uint16_t>(subSectionPageOffset_));
+      }
+      subSectionPageOffset_ += pagesCreated_;
+      currentSubSection_++;
+      liveParser_.reset();
+      cleanupTempFiles();
+      initialized_ = false;
+      renderer_.clearWidthCache();
+      hasMore_ = true;
+      return success || pagesCreated_ > 0;
+    }
+
+    if (totalSubSections_ > 0) {
+      const auto& subAnchors = liveParser_->getAnchorMap();
+      for (const auto& anchor : subAnchors) {
+        anchorMap_.emplace_back(anchor.first, anchor.second + static_cast<uint16_t>(subSectionPageOffset_));
+      }
+    } else {
+      anchorMap_ = liveParser_->getAnchorMap();
+    }
     liveParser_.reset();
     cleanupTempFiles();
     initialized_ = false;

@@ -61,7 +61,11 @@ class Epub {
   ~Epub() = default;
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true);
+  bool loadMetadataOnly();
   bool splitLargeSpineItems(uint8_t* decompressBuffer = nullptr);
+  bool splitSingleSpineItem(int spineIndex, uint8_t* decompressBuffer = nullptr);
+  int getVirtualSectionCount(int spineIndex) const;
+  std::string getVirtualSectionPath(int spineIndex, int sectionIndex) const;
   bool clearCache() const;
   void setupCacheDir() const;
   const std::string& getCachePath() const;
@@ -84,6 +88,7 @@ class Epub {
   bool getSpineItemSizes(std::vector<size_t>& sizes) const;
   BookMetadataCache::SpineEntry getSpineItem(int spineIndex) const;
   BookMetadataCache::TocEntry getTocItem(int tocIndex) const;
+  bool getTocItems(std::vector<BookMetadataCache::TocEntry>& entries, int maxCount) const;
   int getSpineItemsCount() const;
   int getTocItemsCount() const;
   int getSpineIndexForTocIndex(int tocIndex) const;

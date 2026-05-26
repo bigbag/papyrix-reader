@@ -473,3 +473,26 @@ BookMetadataCache::TocEntry BookMetadataCache::readTocEntry(FsFile& file) const 
   }
   return entry;
 }
+
+bool BookMetadataCache::readTocEntries(std::vector<TocEntry>& entries, int maxCount) {
+  if (!loaded || tocCount == 0) return false;
+
+  const int count = (maxCount > 0 && maxCount < tocCount) ? maxCount : tocCount;
+  entries.clear();
+  entries.reserve(static_cast<size_t>(count));
+
+  // Read position of first TOC entry from LUT
+  bookFile.seek(lutOffset + sizeof(uint32_t) * spineCount);
+  uint32_t firstTocPos;
+  serialization::readPod(bookFile, firstTocPos);
+
+  // Seek to first TOC entry and read sequentially
+  bookFile.seek(firstTocPos);
+  for (int i = 0; i < count; i++) {
+    auto entry = readTocEntry(bookFile);
+    if (entry.title.empty() && entry.href.empty()) break;
+    entries.push_back(std::move(entry));
+  }
+
+  return !entries.empty();
+}

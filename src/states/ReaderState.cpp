@@ -2473,8 +2473,24 @@ void ReaderState::handleTocInput(Core& core, const Event& e) {
 
 void ReaderState::populateTocView(Core& core) {
   tocView_.clear();
-  const uint16_t count = core.content.tocCount();
 
+  // EPUB: bulk sequential read (single seek instead of per-entry disk I/O)
+  if (core.content.metadata().type == ContentType::Epub) {
+    auto* provider = core.content.asEpub();
+    if (provider && provider->getEpub()) {
+      std::vector<BookMetadataCache::TocEntry> entries;
+      if (provider->getEpub()->getTocItems(entries, ui::ChapterListView::MAX_CHAPTERS)) {
+        for (const auto& entry : entries) {
+          tocView_.addChapter(entry.title.c_str(), entry.spineIndex >= 0 ? static_cast<uint16_t>(entry.spineIndex) : 0,
+                              entry.level);
+        }
+        return;
+      }
+    }
+  }
+
+  // Fallback for non-EPUB or if bulk read fails
+  const uint16_t count = core.content.tocCount();
   for (uint16_t i = 0; i < count && i < ui::ChapterListView::MAX_CHAPTERS; i++) {
     auto result = core.content.getTocEntry(i);
     if (result.ok()) {

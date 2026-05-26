@@ -133,6 +133,29 @@ class SDCardManager {
     return "";
   }
 
+  bool remove(const char* path) {
+    files_.erase(path);
+    writtenFiles_.erase(path);
+    return true;
+  }
+
+  bool rename(const char* oldPath, const char* newPath) {
+    auto it = files_.find(oldPath);
+    if (it != files_.end()) {
+      files_[newPath] = it->second;
+      files_.erase(it);
+    }
+    auto wit = writtenFiles_.find(oldPath);
+    if (wit != writtenFiles_.end()) {
+      writtenFiles_[newPath] = wit->second;
+      writtenFiles_.erase(wit);
+    }
+    return true;
+  }
+
+  bool mkdir(const char*) { return true; }
+  bool removeDir(const char*) { return true; }
+
   static SDCardManager& getInstance() {
     static SDCardManager instance;
     return instance;

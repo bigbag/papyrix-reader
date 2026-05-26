@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <Bitmap.h>
 #include <CoverHelpers.h>
+#include <Epub.h>
 #include <GfxRenderer.h>
 #include <Group5.h>
 #include <I18n.h>
@@ -11,6 +12,7 @@
 #include <esp_system.h>
 
 #include "../config.h"
+#include "../content/ContentTypes.h"
 #include "../core/BootMode.h"
 #include "../core/Core.h"
 #include "../drivers/Device.h"
@@ -74,29 +76,49 @@ void HomeState::loadLastBook(Core& core) {
   // Try to load from saved path in settings
   const char* savedPath = core.settings.lastBookPath;
   if (savedPath[0] != '\0' && core.storage.exists(savedPath)) {
-    // Open temporarily to get metadata
-    auto result = core.content.open(savedPath, papyrix::drivers::Device::instance().cacheDir());
-    if (result.ok()) {
-      const auto& meta = core.content.metadata();
-      view_.setBook(meta.title, meta.author, savedPath);
-      // Set path in buf for "Continue Reading" button
-      strncpy(core.buf.path, savedPath, sizeof(core.buf.path) - 1);
-      core.buf.path[sizeof(core.buf.path) - 1] = '\0';
+    const auto contentType = detectContentType(savedPath);
 
-      // Check for existing thumbnail or cover (no async generation - ReaderState handles that)
-      if (core.settings.showImages) {
-        coverBmpPath_ = core.content.getThumbnailPath();
-        if (!coverBmpPath_.empty() && SdMan.exists(coverBmpPath_.c_str())) {
-          hasCoverImage_ = true;
-          LOG_DBG(TAG, "Using cached thumbnail: %s", coverBmpPath_.c_str());
+    if (contentType == ContentType::Epub) {
+      // EPUB: lightweight metadata-only load (no CSS, TOC, spine splitting)
+      Epub epub(savedPath, papyrix::drivers::Device::instance().cacheDir());
+      if (epub.loadMetadataOnly()) {
+        view_.setBook(epub.getTitle().c_str(), epub.getAuthor().c_str(), savedPath);
+        strncpy(core.buf.path, savedPath, sizeof(core.buf.path) - 1);
+        core.buf.path[sizeof(core.buf.path) - 1] = '\0';
+
+        if (core.settings.showImages) {
+          const std::string thumbPath = epub.getThumbBmpPath();
+          if (!thumbPath.empty() && SdMan.exists(thumbPath.c_str())) {
+            coverBmpPath_ = thumbPath;
+            hasCoverImage_ = true;
+            LOG_DBG(TAG, "Using cached thumbnail: %s", coverBmpPath_.c_str());
+          }
         }
+        view_.hasCoverBmp = hasCoverImage_;
+      } else {
+        view_.clearBook();
       }
-      view_.hasCoverBmp = hasCoverImage_;
-
-      // Close to free memory (will reopen when user selects Continue Reading)
-      core.content.close();
     } else {
-      view_.clearBook();
+      // Non-EPUB: use full content pipeline (fast for TXT/Markdown/FB2)
+      auto result = core.content.open(savedPath, papyrix::drivers::Device::instance().cacheDir());
+      if (result.ok()) {
+        const auto& meta = core.content.metadata();
+        view_.setBook(meta.title, meta.author, savedPath);
+        strncpy(core.buf.path, savedPath, sizeof(core.buf.path) - 1);
+        core.buf.path[sizeof(core.buf.path) - 1] = '\0';
+
+        if (core.settings.showImages) {
+          coverBmpPath_ = core.content.getThumbnailPath();
+          if (!coverBmpPath_.empty() && SdMan.exists(coverBmpPath_.c_str())) {
+            hasCoverImage_ = true;
+            LOG_DBG(TAG, "Using cached thumbnail: %s", coverBmpPath_.c_str());
+          }
+        }
+        view_.hasCoverBmp = hasCoverImage_;
+        core.content.close();
+      } else {
+        view_.clearBook();
+      }
     }
   } else {
     view_.clearBook();

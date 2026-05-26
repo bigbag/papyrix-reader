@@ -46,6 +46,11 @@ class EpubChapterParser : public ContentParser {
   // Captured anchor map from parser (persisted after liveParser_ is destroyed)
   std::vector<std::pair<std::string, uint16_t>> anchorMap_;
 
+  // Sub-section chaining for on-demand spine splitting
+  int currentSubSection_ = 0;
+  int totalSubSections_ = 0;
+  int subSectionPageOffset_ = 0;
+
   void cleanupTempFiles();
 
  public:

@@ -358,6 +358,12 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/Utf8/src/Utf8.cpp
       ${TEST_HELPERS}
     )
+  elseif(TEST_NAME STREQUAL "BookMetadataCacheTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/Epub/src/Epub/BookMetadataCache.cpp
+      ${TEST_HELPERS}
+    )
   elseif(TEST_NAME STREQUAL "FirmwareUpdaterTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}

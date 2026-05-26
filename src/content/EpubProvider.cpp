@@ -59,7 +59,7 @@ Result<TocEntry> EpubProvider::getTocEntry(uint16_t index) const {
   auto tocItem = epub->getTocItem(index);
   TocEntry entry;
   utf8SafeCopy(entry.title, sizeof(entry.title), tocItem.title.c_str());
-  entry.pageIndex = epub->getSpineIndexForTocIndex(index);
+  entry.pageIndex = tocItem.spineIndex >= 0 ? tocItem.spineIndex : 0;
   entry.depth = tocItem.level;
 
   return Ok(entry);

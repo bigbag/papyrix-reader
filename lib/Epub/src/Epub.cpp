@@ -433,12 +433,198 @@ bool Epub::load(const bool buildIfMissing) {
     return false;
   }
 
-  if (!splitLargeSpineItems()) {
+  LOG_INF(TAG, "Loaded ePub: %s", filepath.c_str());
+  return true;
+}
+
+bool Epub::loadMetadataOnly() {
+  LOG_INF(TAG, "Loading metadata only: %s", filepath.c_str());
+
+  bookMetadataCache.reset(new BookMetadataCache(cachePath));
+
+  if (bookMetadataCache->load()) {
+    LOG_INF(TAG, "Metadata from cache: %s", filepath.c_str());
+    return true;
+  }
+
+  // No cache — minimal OPF parse for title/author
+  setupCacheDir();
+  if (!bookMetadataCache->beginWrite()) return false;
+  if (!bookMetadataCache->beginContentOpfPass()) {
+    bookMetadataCache.reset();
     return false;
   }
 
-  LOG_INF(TAG, "Loaded ePub: %s", filepath.c_str());
+  BookMetadataCache::BookMetadata bookMetadata;
+  bool ok = parseContentOpf(bookMetadata);
+
+  bookMetadataCache->endContentOpfPass();
+  bookMetadataCache->endWrite();
+  bookMetadataCache->cleanupTmpFiles();
+
+  if (!ok) {
+    bookMetadataCache.reset();
+    return false;
+  }
+
+  bookMetadataCache->coreMetadata = bookMetadata;
   return true;
+}
+
+bool Epub::splitSingleSpineItem(int spineIndex, uint8_t* decompressBuffer) {
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) return false;
+
+  const size_t freeHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+  if (freeHeap < MIN_HEAP_FOR_SCAN) {
+    LOG_INF(TAG, "Skip single spine split: heap too low (%zu < %zu)", freeHeap, MIN_HEAP_FOR_SCAN);
+    return false;
+  }
+
+  const auto entry = bookMetadataCache->getSpineEntry(spineIndex);
+  if (entry.href.empty() || entry.href[0] == '/') return false;
+
+  size_t itemSize = 0;
+  if (!getItemSize(entry.href, &itemSize) || itemSize <= MAX_SECTION_SIZE) return true;
+
+  LOG_INF(TAG, "On-demand split: spine %d (%s), %zu bytes", spineIndex, entry.href.c_str(), itemSize);
+
+  constexpr size_t kDictSize = 32768;
+  bool ownsDictBuf = false;
+  if (!decompressBuffer) {
+    decompressBuffer = static_cast<uint8_t*>(malloc(kDictSize));
+    if (!decompressBuffer) {
+      LOG_ERR(TAG, "Failed to alloc decompress buffer for single spine split");
+      return false;
+    }
+    ownsDictBuf = true;
+  }
+
+  setupCacheDir();
+
+  const std::string tmpPath = cachePath + "/.tmp_split_" + std::to_string(spineIndex) + ".html";
+  {
+    FsFile tmpFile;
+    if (!SdMan.openFileForWrite("EPUB", tmpPath, tmpFile)) {
+      if (ownsDictBuf) free(decompressBuffer);
+      return false;
+    }
+    bool ok = readItemContentsToStream(entry.href, tmpFile, 1024, decompressBuffer);
+    tmpFile.close();
+    if (!ok) {
+      SdMan.remove(tmpPath.c_str());
+      if (ownsDictBuf) free(decompressBuffer);
+      return false;
+    }
+  }
+
+  SpineSplit split;
+  split.originalSpineIndex = spineIndex;
+  split.originalHref = entry.href;
+  {
+    size_t lastSlash = entry.href.rfind('/');
+    if (lastSlash != std::string::npos) {
+      split.chapterBasePath = entry.href.substr(0, lastSlash + 1);
+    }
+  }
+
+  std::vector<SectionRange> bestGrouped;
+
+  for (int scanLevel = 0; scanLevel <= 1; scanLevel++) {
+    split.sections.clear();
+    split.anchorByteOffsets.clear();
+    if (!scanSectionBoundaries(tmpPath, split, scanLevel, decompressBuffer) || split.sections.empty()) break;
+
+    std::vector<SectionRange> grouped;
+    uint32_t sectionStart = 0;
+    uint32_t cumulativeSize = 0;
+    bool firstElement = true;
+
+    for (size_t j = 0; j < split.sections.size(); j++) {
+      const bool hasHeading = (split.sections[j].startOffset & 0x80000000u) != 0;
+      const uint32_t elemStart = split.sections[j].startOffset & 0x7FFFFFFFu;
+      const uint32_t elemEnd = split.sections[j].endOffset;
+      const uint32_t elemSize = elemEnd - elemStart;
+
+      if (firstElement) {
+        sectionStart = elemStart;
+        cumulativeSize = elemSize;
+        firstElement = false;
+        continue;
+      }
+
+      bool shouldSplit = false;
+      if (hasHeading && cumulativeSize >= MIN_SECTION_SIZE) shouldSplit = true;
+      if (cumulativeSize + elemSize > MAX_SECTION_SIZE && cumulativeSize >= MIN_SECTION_SIZE) shouldSplit = true;
+
+      if (shouldSplit) {
+        SectionRange range;
+        range.startOffset = sectionStart;
+        range.endOffset = elemStart;
+        grouped.push_back(range);
+        sectionStart = elemStart;
+        cumulativeSize = elemSize;
+      } else {
+        cumulativeSize += elemSize;
+      }
+    }
+
+    if (!firstElement) {
+      SectionRange range;
+      range.startOffset = sectionStart;
+      range.endOffset = split.sections.back().endOffset;
+      grouped.push_back(range);
+    }
+
+    if (grouped.size() > bestGrouped.size()) {
+      bestGrouped = grouped;
+    }
+
+    bool anyOversized = false;
+    for (const auto& s : grouped) {
+      if (s.endOffset - s.startOffset > MAX_SECTION_SIZE) {
+        anyOversized = true;
+        break;
+      }
+    }
+
+    if (!anyOversized) break;
+    LOG_INF(TAG, "Spine %d: oversized at level %d (%zu sections), rescanning", spineIndex, scanLevel, grouped.size());
+  }
+
+  if (bestGrouped.size() <= 1) {
+    LOG_INF(TAG, "Spine %d: only 1 section after grouping, skipping", spineIndex);
+    SdMan.remove(tmpPath.c_str());
+    if (ownsDictBuf) free(decompressBuffer);
+    return true;
+  }
+
+  LOG_INF(TAG, "Spine %d: split into %u sections", spineIndex, static_cast<unsigned>(bestGrouped.size()));
+  split.sections = std::move(bestGrouped);
+
+  if (!extractSections(tmpPath, split, decompressBuffer)) {
+    SdMan.remove(tmpPath.c_str());
+    if (ownsDictBuf) free(decompressBuffer);
+    return false;
+  }
+
+  SdMan.remove(tmpPath.c_str());
+  if (ownsDictBuf) free(decompressBuffer);
+  return true;
+}
+
+int Epub::getVirtualSectionCount(int spineIndex) const {
+  const std::string firstSection = sectionFilePath(spineIndex, 0);
+  if (!SdMan.exists(firstSection.c_str())) return 0;
+
+  int count = 1;
+  while (SdMan.exists(sectionFilePath(spineIndex, count).c_str())) {
+    count++;
+  }
+  return count;
+}
+
+std::string Epub::getVirtualSectionPath(int spineIndex, int sectionIndex) const {
+  return sectionFilePath(spineIndex, sectionIndex);
 }
 
 bool Epub::clearCache() const {
@@ -480,28 +666,19 @@ const std::string& Epub::getPath() const { return filepath; }
 
 const std::string& Epub::getTitle() const {
   static std::string blank;
-  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-    return blank;
-  }
-
+  if (!bookMetadataCache) return blank;
   return bookMetadataCache->coreMetadata.title;
 }
 
 const std::string& Epub::getAuthor() const {
   static std::string blank;
-  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-    return blank;
-  }
-
+  if (!bookMetadataCache) return blank;
   return bookMetadataCache->coreMetadata.author;
 }
 
 const std::string& Epub::getLanguage() const {
   static std::string blank;
-  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-    return blank;
-  }
-
+  if (!bookMetadataCache) return blank;
   return bookMetadataCache->coreMetadata.language;
 }
 
@@ -1002,6 +1179,11 @@ BookMetadataCache::TocEntry Epub::getTocItem(const int tocIndex) const {
   }
 
   return bookMetadataCache->getTocEntry(tocIndex);
+}
+
+bool Epub::getTocItems(std::vector<BookMetadataCache::TocEntry>& entries, int maxCount) const {
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) return false;
+  return bookMetadataCache->readTocEntries(entries, maxCount);
 }
 
 int Epub::getTocItemsCount() const {

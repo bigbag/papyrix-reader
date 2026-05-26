@@ -88,6 +88,7 @@ class BookMetadataCache {
   bool load();
   SpineEntry getSpineEntry(int index);
   TocEntry getTocEntry(int index);
+  bool readTocEntries(std::vector<TocEntry>& entries, int maxCount);
   int getSpineCount() const { return spineCount; }
   int getTocCount() const { return tocCount; }
   bool isLoaded() const { return loaded; }
