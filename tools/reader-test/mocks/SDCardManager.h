@@ -42,6 +42,8 @@ class SDCardManager {
 
   bool remove(const char* path) { return ::remove(path) == 0; }
 
+  bool rename(const char* oldPath, const char* newPath) { return ::rename(oldPath, newPath) == 0; }
+
   using RemoveDirProgress = std::function<void(int filesDeleted)>;
   bool removeDir(const char* path, RemoveDirProgress progress = nullptr) {
     (void)progress;

@@ -2,11 +2,13 @@
 
 #include <CoverHelpers.h>
 #include <FsHelpers.h>
+#include <Html5Normalizer.h>
 #include <ImageConverter.h>
 #include <Logging.h>
 #include <SDCardManager.h>
 #include <ZipFile.h>
 #include <esp_heap_caps.h>
+#include <expat.h>
 
 #include <algorithm>
 
@@ -428,6 +430,10 @@ bool Epub::load(const bool buildIfMissing) {
   bookMetadataCache.reset(new BookMetadataCache(cachePath));
   if (!bookMetadataCache->load()) {
     LOG_ERR(TAG, "Failed to reload cache after writing");
+    return false;
+  }
+
+  if (!splitLargeSpineItems()) {
     return false;
   }
 
@@ -1054,4 +1060,502 @@ int Epub::getSpineIndexForTextReference() const {
   // This should not happen, as we checked for empty textReferenceHref earlier
   LOG_ERR(TAG, "Section not found for text reference");
   return 0;
+}
+
+// ============= SPINE SPLITTING FOR LARGE CHAPTERS =============
+
+std::string Epub::sectionFilePath(int originalSpineIndex, int sectionIndex) const {
+  return cachePath + "/sections/" + std::to_string(originalSpineIndex) + "_" + std::to_string(sectionIndex) + ".html";
+}
+
+bool Epub::scanSectionBoundaries(const std::string& htmlPath, SpineSplit& result, int splitDepth) const {
+  FsFile file;
+  if (!SdMan.openFileForRead("ESCAN", htmlPath, file)) {
+    return false;
+  }
+
+  struct ScanCtx {
+    std::vector<SectionRange>* splitPoints;
+    std::unordered_map<std::string, uint32_t>* anchors;
+    std::string* headHtml;
+    XML_Parser parser = nullptr;
+    int depth = 0;
+    bool inBody = false;
+    bool inHead = false;
+    int bodyDepth = 0;
+    bool currentElementHasHeading = false;
+    uint32_t currentElementStart = 0;
+    uint32_t headStart = 0;
+    uint32_t headEnd = 0;
+    int splitDepth = 0;
+  };
+
+  ScanCtx ctx;
+  ctx.splitPoints = &result.sections;
+  ctx.anchors = &result.anchorByteOffsets;
+  ctx.headHtml = &result.headHtml;
+  ctx.splitDepth = splitDepth;
+
+  XML_Parser parser = XML_ParserCreate(nullptr);
+  if (!parser) {
+    file.close();
+    return false;
+  }
+  ctx.parser = parser;
+
+  auto onStart = [](void* userData, const XML_Char* name, const XML_Char** atts) {
+    auto* c = static_cast<ScanCtx*>(userData);
+    c->depth++;
+
+    if (strcmp(name, "head") == 0) {
+      c->inHead = true;
+      c->headStart = static_cast<uint32_t>(XML_GetCurrentByteIndex(c->parser));
+      return;
+    }
+    if (strcmp(name, "body") == 0) {
+      c->inBody = true;
+      c->bodyDepth = c->depth;
+      return;
+    }
+
+    if (!c->inBody) return;
+
+    if (atts) {
+      for (int i = 0; atts[i]; i += 2) {
+        if (strcmp(atts[i], "id") == 0 && atts[i + 1][0] != '\0') {
+          int64_t byteIdx = XML_GetCurrentByteIndex(c->parser);
+          if (byteIdx >= 0) {
+            (*c->anchors)[atts[i + 1]] = static_cast<uint32_t>(byteIdx);
+          }
+        }
+      }
+    }
+
+    // Track split-point elements. On the first pass (splitDepth==0), we record
+    // body-child elements (depth == bodyDepth+1). After grouping, if any section
+    // exceeds the size cap, we rescan at bodyDepth+2. The splitDepth field
+    // controls which level we're currently recording.
+    const int targetDepth = c->bodyDepth + 1 + c->splitDepth;
+    if (c->depth == targetDepth) {
+      int64_t byteIdx = XML_GetCurrentByteIndex(c->parser);
+      if (byteIdx >= 0) {
+        c->currentElementStart = static_cast<uint32_t>(byteIdx);
+        c->currentElementHasHeading = false;
+      }
+    }
+
+    if (c->depth > c->bodyDepth) {
+      if (strcmp(name, "h1") == 0 || strcmp(name, "h2") == 0 || strcmp(name, "h3") == 0 || strcmp(name, "h4") == 0 ||
+          strcmp(name, "h5") == 0 || strcmp(name, "h6") == 0) {
+        c->currentElementHasHeading = true;
+      }
+    }
+  };
+
+  auto onEnd = [](void* userData, const XML_Char* name) {
+    auto* c = static_cast<ScanCtx*>(userData);
+
+    if (strcmp(name, "head") == 0 && c->inHead) {
+      c->inHead = false;
+      int64_t byteIdx = XML_GetCurrentByteIndex(c->parser);
+      if (byteIdx >= 0) {
+        c->headEnd = static_cast<uint32_t>(byteIdx) + static_cast<uint32_t>(XML_GetCurrentByteCount(c->parser));
+      }
+    }
+
+    const int targetDepth = c->bodyDepth + 1 + c->splitDepth;
+    if (c->inBody && c->depth == targetDepth) {
+      int64_t byteIdx = XML_GetCurrentByteIndex(c->parser);
+      if (byteIdx >= 0) {
+        uint32_t endOffset = static_cast<uint32_t>(byteIdx) + static_cast<uint32_t>(XML_GetCurrentByteCount(c->parser));
+        SectionRange sp;
+        sp.startOffset = c->currentElementStart;
+        sp.endOffset = endOffset;
+        if (c->currentElementHasHeading) {
+          sp.startOffset |= 0x80000000u;
+        }
+        c->splitPoints->push_back(sp);
+      }
+    }
+
+    c->depth--;
+  };
+
+  XML_SetUserData(parser, &ctx);
+  XML_SetElementHandler(parser, onStart, onEnd);
+
+  constexpr size_t kChunkSize = 4096;
+  uint8_t buffer[kChunkSize];
+  bool success = true;
+
+  while (file.available() > 0) {
+    const size_t bytesRead = file.read(buffer, kChunkSize);
+    if (bytesRead == 0) break;
+    const int done = (file.available() == 0) ? 1 : 0;
+    if (XML_Parse(parser, reinterpret_cast<const char*>(buffer), static_cast<int>(bytesRead), done) ==
+        XML_STATUS_ERROR) {
+      LOG_ERR(TAG, "Section scan parse error: %s", XML_ErrorString(XML_GetErrorCode(parser)));
+      success = false;
+      break;
+    }
+  }
+
+  file.close();
+  XML_ParserFree(parser);
+
+  // Extract <head> content from the HTML file
+  if (success && ctx.headStart > 0 && ctx.headEnd > ctx.headStart) {
+    FsFile headFile;
+    if (SdMan.openFileForRead("ESCAN", htmlPath, headFile)) {
+      headFile.seek(ctx.headStart);
+      const size_t headSize = ctx.headEnd - ctx.headStart;
+      result.headHtml.resize(headSize);
+      headFile.read(reinterpret_cast<uint8_t*>(&result.headHtml[0]), headSize);
+      headFile.close();
+    }
+  }
+
+  LOG_INF(TAG, "Scanned %u body-child elements, %u anchors", static_cast<unsigned>(result.sections.size()),
+          static_cast<unsigned>(result.anchorByteOffsets.size()));
+  return success;
+}
+
+bool Epub::splitLargeSpineItems(uint8_t* decompressBuffer) {
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) return false;
+
+  const size_t freeHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+  if (freeHeap < MIN_HEAP_FOR_SCAN) {
+    LOG_INF(TAG, "Skip spine splitting: heap too low (%zu < %zu)", freeHeap, MIN_HEAP_FOR_SCAN);
+    return true;
+  }
+
+  std::vector<size_t> sizes;
+  if (!getSpineItemSizes(sizes)) return false;
+
+  constexpr size_t kDictSize = 32768;
+  bool ownsDictBuf = false;
+  if (!decompressBuffer) {
+    decompressBuffer = static_cast<uint8_t*>(malloc(kDictSize));
+    if (!decompressBuffer) {
+      LOG_ERR(TAG, "Failed to alloc decompress buffer for spine splitting");
+      return false;
+    }
+    ownsDictBuf = true;
+  }
+
+  std::vector<SpineSplit> splits;
+
+  for (int i = 0; i < static_cast<int>(sizes.size()); i++) {
+    if (sizes[i] <= MAX_SECTION_SIZE) continue;
+
+    const auto entry = bookMetadataCache->getSpineEntry(i);
+    if (!entry.href.empty() && entry.href[0] == '/') continue;
+    LOG_INF(TAG, "Spine item %d (%s) is %zu bytes, scanning for split points", i, entry.href.c_str(), sizes[i]);
+
+    const std::string tmpPath = cachePath + "/.tmp_split_" + std::to_string(i) + ".html";
+    {
+      FsFile tmpFile;
+      if (!SdMan.openFileForWrite("EPUB", tmpPath, tmpFile)) continue;
+      bool ok = readItemContentsToStream(entry.href, tmpFile, 1024, decompressBuffer);
+      tmpFile.close();
+      if (!ok) {
+        SdMan.remove(tmpPath.c_str());
+        continue;
+      }
+    }
+
+    SpineSplit split;
+    split.originalSpineIndex = i;
+    split.originalHref = entry.href;
+    {
+      size_t lastSlash = entry.href.rfind('/');
+      if (lastSlash != std::string::npos) {
+        split.chapterBasePath = entry.href.substr(0, lastSlash + 1);
+      }
+    }
+
+    // Scan at two levels: body-child (level 0) and body-grandchild (level 1).
+    // Level 1 catches block elements (paragraphs) inside large container divs.
+    // Don't go deeper — level 2+ hits inline elements that produce broken HTML.
+    std::vector<SectionRange> grouped;
+    std::vector<SectionRange> bestGrouped;
+
+    for (int scanLevel = 0; scanLevel <= 1; scanLevel++) {
+      split.sections.clear();
+      split.anchorByteOffsets.clear();
+      if (!scanSectionBoundaries(tmpPath, split, scanLevel) || split.sections.empty()) break;
+
+      grouped.clear();
+      uint32_t sectionStart = 0;
+      uint32_t cumulativeSize = 0;
+      bool firstElement = true;
+
+      for (size_t j = 0; j < split.sections.size(); j++) {
+        const bool hasHeading = (split.sections[j].startOffset & 0x80000000u) != 0;
+        const uint32_t elemStart = split.sections[j].startOffset & 0x7FFFFFFFu;
+        const uint32_t elemEnd = split.sections[j].endOffset;
+        const uint32_t elemSize = elemEnd - elemStart;
+
+        if (firstElement) {
+          sectionStart = elemStart;
+          cumulativeSize = elemSize;
+          firstElement = false;
+          continue;
+        }
+
+        bool shouldSplit = false;
+        if (hasHeading && cumulativeSize >= MIN_SECTION_SIZE) shouldSplit = true;
+        if (cumulativeSize + elemSize > MAX_SECTION_SIZE && cumulativeSize >= MIN_SECTION_SIZE) shouldSplit = true;
+
+        if (shouldSplit) {
+          SectionRange range;
+          range.startOffset = sectionStart;
+          range.endOffset = elemStart;
+          grouped.push_back(range);
+          sectionStart = elemStart;
+          cumulativeSize = elemSize;
+        } else {
+          cumulativeSize += elemSize;
+        }
+      }
+
+      if (!firstElement) {
+        SectionRange range;
+        range.startOffset = sectionStart;
+        range.endOffset = split.sections.back().endOffset;
+        grouped.push_back(range);
+      }
+
+      if (grouped.size() > bestGrouped.size()) {
+        bestGrouped = grouped;
+      }
+
+      bool anyOversized = false;
+      for (const auto& s : grouped) {
+        if (s.endOffset - s.startOffset > MAX_SECTION_SIZE) {
+          anyOversized = true;
+          break;
+        }
+      }
+
+      if (!anyOversized) break;
+      LOG_INF(TAG, "Spine item %d: oversized section at level %d (%zu sections), rescanning deeper", i, scanLevel,
+              grouped.size());
+    }
+
+    grouped = std::move(bestGrouped);
+
+    if (grouped.size() <= 1) {
+      LOG_INF(TAG, "Spine item %d: only 1 section after grouping, skipping split", i);
+      SdMan.remove(tmpPath.c_str());
+      continue;
+    }
+
+    LOG_INF(TAG, "Spine item %d: split into %u sections", i, static_cast<unsigned>(grouped.size()));
+    split.sections = std::move(grouped);
+
+    // Extract sections to separate files
+    if (!extractSections(tmpPath, split)) {
+      SdMan.remove(tmpPath.c_str());
+      continue;
+    }
+
+    SdMan.remove(tmpPath.c_str());
+    splits.push_back(std::move(split));
+  }
+
+  if (splits.empty()) {
+    if (ownsDictBuf) free(decompressBuffer);
+    return true;
+  }
+
+  // Rebuild book.bin with expanded spine
+  if (!rebuildBookBinWithSplits(splits)) {
+    LOG_ERR(TAG, "Failed to rebuild book.bin with splits, recovering original cache");
+    bookMetadataCache.reset(new BookMetadataCache(cachePath));
+    if (!bookMetadataCache->load()) {
+      LOG_ERR(TAG, "Failed to recover original cache after split failure");
+      if (ownsDictBuf) free(decompressBuffer);
+      return false;
+    }
+    if (ownsDictBuf) free(decompressBuffer);
+    return true;
+  }
+
+  if (ownsDictBuf) free(decompressBuffer);
+
+  // Reload cache
+  bookMetadataCache.reset(new BookMetadataCache(cachePath));
+  if (!bookMetadataCache->load()) {
+    LOG_ERR(TAG, "Failed to reload cache after spine splitting");
+    return false;
+  }
+
+  LOG_INF(TAG, "Spine splitting complete: %d items now %d", static_cast<int>(sizes.size()), getSpineItemsCount());
+  return true;
+}
+
+bool Epub::extractSections(const std::string& htmlPath, const SpineSplit& split) {
+  // Ensure sections directory exists
+  const std::string sectionsDir = cachePath + "/sections";
+  SdMan.mkdir(sectionsDir.c_str());
+
+  // Write base path sidecar for image resolution in virtual sections
+  if (!split.chapterBasePath.empty()) {
+    const std::string basePathFile = cachePath + "/sections/" + std::to_string(split.originalSpineIndex) + ".base";
+    FsFile bpFile;
+    if (SdMan.openFileForWrite("EPUB", basePathFile, bpFile)) {
+      bpFile.write(reinterpret_cast<const uint8_t*>(split.chapterBasePath.c_str()), split.chapterBasePath.size());
+      bpFile.close();
+    }
+  }
+
+  const std::string htmlWrapper =
+      "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+      "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n";
+  const std::string bodyOpen = "<body><div>\n";
+  const std::string bodyClose = "\n</div></body>\n</html>\n";
+
+  constexpr size_t kCopyBufSize = 4096;
+
+  auto cleanupSections = [&]() {
+    for (size_t k = 0; k < split.sections.size(); k++) {
+      const std::string path = sectionFilePath(split.originalSpineIndex, static_cast<int>(k));
+      if (SdMan.exists(path.c_str())) SdMan.remove(path.c_str());
+    }
+  };
+
+  for (size_t i = 0; i < split.sections.size(); i++) {
+    const std::string outPath = sectionFilePath(split.originalSpineIndex, static_cast<int>(i));
+
+    if (SdMan.exists(outPath.c_str())) continue;
+
+    FsFile outFile;
+    if (!SdMan.openFileForWrite("EPUB", outPath, outFile)) {
+      LOG_ERR(TAG, "Failed to create section file: %s", outPath.c_str());
+      cleanupSections();
+      return false;
+    }
+
+    outFile.write(htmlWrapper.c_str(), htmlWrapper.size());
+    if (!split.headHtml.empty()) {
+      outFile.write(split.headHtml.c_str(), split.headHtml.size());
+      outFile.write("\n", 1);
+    }
+    outFile.write(bodyOpen.c_str(), bodyOpen.size());
+
+    FsFile inFile;
+    if (!SdMan.openFileForRead("EPUB", htmlPath, inFile)) {
+      outFile.close();
+      cleanupSections();
+      return false;
+    }
+
+    const uint32_t start = split.sections[i].startOffset;
+    const uint32_t end = split.sections[i].endOffset;
+    inFile.seek(start);
+
+    uint8_t buf[kCopyBufSize];
+    uint32_t remaining = end - start;
+    while (remaining > 0) {
+      const size_t toRead = remaining < kCopyBufSize ? remaining : kCopyBufSize;
+      const size_t bytesRead = inFile.read(buf, toRead);
+      if (bytesRead == 0) break;
+      outFile.write(buf, bytesRead);
+      remaining -= static_cast<uint32_t>(bytesRead);
+    }
+
+    inFile.close();
+    outFile.write(bodyClose.c_str(), bodyClose.size());
+    outFile.close();
+
+    const std::string normPath = outPath + ".norm";
+    if (html5::normalizeVoidElements(outPath, normPath)) {
+      SdMan.remove(outPath.c_str());
+      SdMan.rename(normPath.c_str(), outPath.c_str());
+    }
+  }
+
+  return true;
+}
+
+bool Epub::rebuildBookBinWithSplits(const std::vector<SpineSplit>& splits) {
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) return false;
+
+  std::unordered_map<int, const SpineSplit*> splitMap;
+  for (const auto& s : splits) {
+    splitMap[s.originalSpineIndex] = &s;
+  }
+
+  const int origSpineCount = bookMetadataCache->getSpineCount();
+  const int origTocCount = bookMetadataCache->getTocCount();
+
+  BookMetadataCache::BookMetadata metadata;
+  metadata.title = getTitle();
+  metadata.author = getAuthor();
+  metadata.language = getLanguage();
+  metadata.coverItemHref = bookMetadataCache->coreMetadata.coverItemHref;
+  metadata.textReferenceHref = bookMetadataCache->coreMetadata.textReferenceHref;
+
+  std::vector<BookMetadataCache::SpineEntry> origSpine;
+  origSpine.reserve(origSpineCount);
+  for (int i = 0; i < origSpineCount; i++) {
+    origSpine.push_back(bookMetadataCache->getSpineEntry(i));
+  }
+
+  std::vector<BookMetadataCache::TocEntry> origToc;
+  origToc.reserve(origTocCount);
+  for (int i = 0; i < origTocCount; i++) {
+    origToc.push_back(bookMetadataCache->getTocEntry(i));
+  }
+
+  std::vector<BookMetadataCache::SpineEntry> newSpine;
+  std::vector<int> spineRemap(origSpineCount, 0);
+
+  for (int i = 0; i < origSpineCount; i++) {
+    spineRemap[i] = static_cast<int>(newSpine.size());
+    auto it = splitMap.find(i);
+    if (it != splitMap.end()) {
+      const SpineSplit& split = *it->second;
+      for (size_t j = 0; j < split.sections.size(); j++) {
+        BookMetadataCache::SpineEntry entry;
+        entry.href = sectionFilePath(i, static_cast<int>(j));
+        entry.tocIndex = -1;
+        newSpine.push_back(entry);
+      }
+    } else {
+      newSpine.push_back(origSpine[i]);
+    }
+  }
+
+  for (auto& toc : origToc) {
+    if (toc.spineIndex < 0 || toc.spineIndex >= origSpineCount) continue;
+
+    auto it = splitMap.find(toc.spineIndex);
+    if (it == splitMap.end()) {
+      toc.spineIndex = static_cast<int16_t>(spineRemap[toc.spineIndex]);
+      continue;
+    }
+
+    const SpineSplit& split = *it->second;
+    int targetSection = 0;
+
+    if (!toc.anchor.empty()) {
+      auto anchorIt = split.anchorByteOffsets.find(toc.anchor);
+      if (anchorIt != split.anchorByteOffsets.end()) {
+        const uint32_t anchorOffset = anchorIt->second;
+        for (size_t j = 0; j < split.sections.size(); j++) {
+          if (anchorOffset >= split.sections[j].startOffset && anchorOffset < split.sections[j].endOffset) {
+            targetSection = static_cast<int>(j);
+            break;
+          }
+        }
+      }
+    }
+
+    toc.spineIndex = static_cast<int16_t>(spineRemap[toc.spineIndex] + targetSection);
+  }
+
+  bookMetadataCache.reset(new BookMetadataCache(cachePath));
+  return bookMetadataCache->rebuildFromMemory(metadata, newSpine, origToc);
 }

@@ -2,6 +2,7 @@
 
 #include <Print.h>
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -13,21 +14,33 @@
 class ZipFile;
 
 class Epub {
-  // the ncx file (EPUB 2)
+ public:
+  struct SectionRange {
+    uint32_t startOffset = 0;
+    uint32_t endOffset = 0;
+  };
+
+  struct SpineSplit {
+    int originalSpineIndex = -1;
+    std::string originalHref;
+    std::string chapterBasePath;
+    std::string headHtml;
+    std::vector<SectionRange> sections;
+    std::unordered_map<std::string, uint32_t> anchorByteOffsets;
+  };
+
+  static constexpr size_t MAX_SECTION_SIZE = 64 * 1024;
+  static constexpr size_t MIN_SECTION_SIZE = 1024;
+  static constexpr size_t MIN_HEAP_FOR_SCAN = 48 * 1024;
+
+ private:
   std::string tocNcxItem;
-  // the nav file (EPUB 3)
   std::string tocNavItem;
-  // where is the EPUBfile?
   std::string filepath;
-  // the base path for items in the EPUB file
   std::string contentBasePath;
-  // Uniq cache key based on filepath
   std::string cachePath;
-  // Spine and TOC cache
   std::unique_ptr<BookMetadataCache> bookMetadataCache;
-  // CSS parser for stylesheet rules
   std::unique_ptr<CssParser> cssParser_;
-  // CSS file paths from manifest
   std::vector<std::string> cssFiles_;
 
   bool findContentOpfFile(std::string* contentOpfFile) const;
@@ -36,14 +49,19 @@ class Epub {
   bool parseTocNcxFile() const;
   bool parseTocNavFile() const;
 
+  bool scanSectionBoundaries(const std::string& htmlPath, SpineSplit& result, int splitDepth = 0) const;
+  bool extractSections(const std::string& htmlPath, const SpineSplit& split);
+  bool rebuildBookBinWithSplits(const std::vector<SpineSplit>& splits);
+  std::string sectionFilePath(int originalSpineIndex, int sectionIndex) const;
+
  public:
   explicit Epub(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)) {
-    // create a cache key based on the filepath
     cachePath = cacheDir + "/epub_" + std::to_string(std::hash<std::string>{}(this->filepath));
   }
   ~Epub() = default;
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true);
+  bool splitLargeSpineItems(uint8_t* decompressBuffer = nullptr);
   bool clearCache() const;
   void setupCacheDir() const;
   const std::string& getCachePath() const;

@@ -81,58 +81,102 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
   }
 
   // INIT PATH: first call — extract HTML, normalize, create parser
-  // Set up hyphenation language from EPUB metadata
   Hyphenation::setLanguage(epub_->getLanguage());
 
   const auto localPath = epub_->getSpineItem(spineIndex_).href;
-  tmpHtmlPath_ = epub_->getCachePath() + "/.tmp_" + std::to_string(spineIndex_) + ".html";
+  const bool isVirtualSection = localPath.find("/sections/") != std::string::npos;
 
-  // Derive chapter base path for resolving relative image paths
-  {
-    size_t lastSlash = localPath.rfind('/');
-    if (lastSlash != std::string::npos) {
-      chapterBasePath_ = localPath.substr(0, lastSlash + 1);
-    } else {
-      chapterBasePath_.clear();
+  if (isVirtualSection) {
+    // Virtual section: pre-extracted file on SD card (from spine splitting).
+    // No ZIP decompression or normalization needed — already done during extraction.
+    parseHtmlPath_ = localPath;
+    tmpHtmlPath_.clear();
+    normalizedPath_.clear();
+
+    // Derive chapter base path from original EPUB content path for image resolution.
+    // Prefer the .base sidecar file (exact match for this split group), fall back to
+    // walking the spine backwards for backward compatibility with older caches.
+    chapterBasePath_.clear();
+    {
+      size_t sectionsPos = localPath.rfind("/sections/");
+      if (sectionsPos != std::string::npos) {
+        size_t nameStart = sectionsPos + 10;  // past "/sections/"
+        size_t underscore = localPath.find('_', nameStart);
+        if (underscore != std::string::npos) {
+          std::string origIdx = localPath.substr(nameStart, underscore - nameStart);
+          const std::string bpFile = epub_->getCachePath() + "/sections/" + origIdx + ".base";
+          FsFile bp;
+          if (SdMan.openFileForRead("ECP", bpFile, bp)) {
+            char buf[256];
+            const size_t n = bp.read(reinterpret_cast<uint8_t*>(buf), sizeof(buf) - 1);
+            if (n > 0) {
+              buf[n] = '\0';
+              chapterBasePath_ = buf;
+            }
+            bp.close();
+          }
+        }
+      }
     }
-  }
 
-  // Stream HTML to temp file
-  bool success = false;
-  for (int attempt = 0; attempt < 3 && !success; attempt++) {
-    if (attempt > 0) {
-      LOG_ERR(TAG, "Retrying stream (attempt %d)...", attempt + 1);
-      delay(50);
+    if (chapterBasePath_.empty()) {
+      for (int si = spineIndex_; si >= 0; si--) {
+        const auto entry = epub_->getSpineItem(si);
+        if (entry.href.find("/sections/") == std::string::npos) {
+          size_t lastSlash = entry.href.rfind('/');
+          if (lastSlash != std::string::npos) {
+            chapterBasePath_ = entry.href.substr(0, lastSlash + 1);
+          }
+          break;
+        }
+      }
+    }
+  } else {
+    // Normal spine item: decompress from EPUB ZIP
+    tmpHtmlPath_ = epub_->getCachePath() + "/.tmp_" + std::to_string(spineIndex_) + ".html";
+
+    {
+      size_t lastSlash = localPath.rfind('/');
+      if (lastSlash != std::string::npos) {
+        chapterBasePath_ = localPath.substr(0, lastSlash + 1);
+      } else {
+        chapterBasePath_.clear();
+      }
     }
 
-    if (SdMan.exists(tmpHtmlPath_.c_str())) {
-      SdMan.remove(tmpHtmlPath_.c_str());
+    bool success = false;
+    for (int attempt = 0; attempt < 3 && !success; attempt++) {
+      if (attempt > 0) {
+        LOG_ERR(TAG, "Retrying stream (attempt %d)...", attempt + 1);
+        delay(50);
+      }
+
+      if (SdMan.exists(tmpHtmlPath_.c_str())) {
+        SdMan.remove(tmpHtmlPath_.c_str());
+      }
+
+      FsFile tmpHtml;
+      if (!SdMan.openFileForWrite("EPUB", tmpHtmlPath_, tmpHtml)) {
+        continue;
+      }
+      success = epub_->readItemContentsToStream(localPath, tmpHtml, 1024, renderer_.getFrameBuffer());
+      tmpHtml.close();
+
+      if (!success && SdMan.exists(tmpHtmlPath_.c_str())) {
+        SdMan.remove(tmpHtmlPath_.c_str());
+      }
     }
 
-    FsFile tmpHtml;
-    if (!SdMan.openFileForWrite("EPUB", tmpHtmlPath_, tmpHtml)) {
-      continue;
+    if (!success) {
+      LOG_ERR(TAG, "Failed to stream HTML to temp file");
+      return false;
     }
-    // Reuse frame buffer (48KB) as ZIP decompression dict (32KB) — safe because
-    // the background task owns the renderer and display isn't active during parsing
-    success = epub_->readItemContentsToStream(localPath, tmpHtml, 1024, renderer_.getFrameBuffer());
-    tmpHtml.close();
 
-    if (!success && SdMan.exists(tmpHtmlPath_.c_str())) {
-      SdMan.remove(tmpHtmlPath_.c_str());
+    normalizedPath_ = epub_->getCachePath() + "/.norm_" + std::to_string(spineIndex_) + ".html";
+    parseHtmlPath_ = tmpHtmlPath_;
+    if (html5::normalizeVoidElements(tmpHtmlPath_, normalizedPath_)) {
+      parseHtmlPath_ = normalizedPath_;
     }
-  }
-
-  if (!success) {
-    LOG_ERR(TAG, "Failed to stream HTML to temp file");
-    return false;
-  }
-
-  // Normalize HTML5 void elements for Expat parser
-  normalizedPath_ = epub_->getCachePath() + "/.norm_" + std::to_string(spineIndex_) + ".html";
-  parseHtmlPath_ = tmpHtmlPath_;
-  if (html5::normalizeVoidElements(tmpHtmlPath_, normalizedPath_)) {
-    parseHtmlPath_ = normalizedPath_;
   }
 
   // Create read callback for extracting images from EPUB
@@ -164,7 +208,7 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
                                               chapterBasePath_, imageCachePath_, readItemFn, epub_->getCssParser(),
                                               shouldAbort));
 
-  success = liveParser_->parseAndBuildPages();
+  bool success = liveParser_->parseAndBuildPages();
   initialized_ = true;
 
   hasMore_ = liveParser_->isSuspended() || liveParser_->wasAborted() || (!success && pagesCreated_ > 0);

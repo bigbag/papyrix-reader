@@ -81,6 +81,8 @@ class BookMetadataCache {
 
   // Post-processing to update mappings and sizes
   bool buildBookBin(const std::string& epubPath, const BookMetadata& metadata);
+  bool rebuildFromMemory(const BookMetadata& metadata, const std::vector<SpineEntry>& spine,
+                         const std::vector<TocEntry>& toc);
 
   // Reading phase (read mode)
   bool load();
