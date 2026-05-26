@@ -49,8 +49,8 @@ class Epub {
   bool parseTocNcxFile() const;
   bool parseTocNavFile() const;
 
-  bool scanSectionBoundaries(const std::string& htmlPath, SpineSplit& result, int splitDepth = 0) const;
-  bool extractSections(const std::string& htmlPath, const SpineSplit& split);
+  bool scanSectionBoundaries(const std::string& htmlPath, SpineSplit& result, int splitDepth, uint8_t* ioBuf) const;
+  bool extractSections(const std::string& htmlPath, const SpineSplit& split, uint8_t* ioBuf);
   bool rebuildBookBinWithSplits(const std::vector<SpineSplit>& splits);
   std::string sectionFilePath(int originalSpineIndex, int sectionIndex) const;
 

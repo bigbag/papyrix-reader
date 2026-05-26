@@ -1068,7 +1068,8 @@ std::string Epub::sectionFilePath(int originalSpineIndex, int sectionIndex) cons
   return cachePath + "/sections/" + std::to_string(originalSpineIndex) + "_" + std::to_string(sectionIndex) + ".html";
 }
 
-bool Epub::scanSectionBoundaries(const std::string& htmlPath, SpineSplit& result, int splitDepth) const {
+bool Epub::scanSectionBoundaries(const std::string& htmlPath, SpineSplit& result, int splitDepth,
+                                 uint8_t* ioBuf) const {
   FsFile file;
   if (!SdMan.openFileForRead("ESCAN", htmlPath, file)) {
     return false;
@@ -1185,14 +1186,13 @@ bool Epub::scanSectionBoundaries(const std::string& htmlPath, SpineSplit& result
   XML_SetElementHandler(parser, onStart, onEnd);
 
   constexpr size_t kChunkSize = 4096;
-  uint8_t buffer[kChunkSize];
   bool success = true;
 
   while (file.available() > 0) {
-    const size_t bytesRead = file.read(buffer, kChunkSize);
+    const size_t bytesRead = file.read(ioBuf, kChunkSize);
     if (bytesRead == 0) break;
     const int done = (file.available() == 0) ? 1 : 0;
-    if (XML_Parse(parser, reinterpret_cast<const char*>(buffer), static_cast<int>(bytesRead), done) ==
+    if (XML_Parse(parser, reinterpret_cast<const char*>(ioBuf), static_cast<int>(bytesRead), done) ==
         XML_STATUS_ERROR) {
       LOG_ERR(TAG, "Section scan parse error: %s", XML_ErrorString(XML_GetErrorCode(parser)));
       success = false;
@@ -1283,7 +1283,7 @@ bool Epub::splitLargeSpineItems(uint8_t* decompressBuffer) {
     for (int scanLevel = 0; scanLevel <= 1; scanLevel++) {
       split.sections.clear();
       split.anchorByteOffsets.clear();
-      if (!scanSectionBoundaries(tmpPath, split, scanLevel) || split.sections.empty()) break;
+      if (!scanSectionBoundaries(tmpPath, split, scanLevel, decompressBuffer) || split.sections.empty()) break;
 
       grouped.clear();
       uint32_t sectionStart = 0;
@@ -1355,7 +1355,7 @@ bool Epub::splitLargeSpineItems(uint8_t* decompressBuffer) {
     split.sections = std::move(grouped);
 
     // Extract sections to separate files
-    if (!extractSections(tmpPath, split)) {
+    if (!extractSections(tmpPath, split, decompressBuffer)) {
       SdMan.remove(tmpPath.c_str());
       continue;
     }
@@ -1395,7 +1395,7 @@ bool Epub::splitLargeSpineItems(uint8_t* decompressBuffer) {
   return true;
 }
 
-bool Epub::extractSections(const std::string& htmlPath, const SpineSplit& split) {
+bool Epub::extractSections(const std::string& htmlPath, const SpineSplit& split, uint8_t* ioBuf) {
   // Ensure sections directory exists
   const std::string sectionsDir = cachePath + "/sections";
   SdMan.mkdir(sectionsDir.c_str());
@@ -1455,13 +1455,12 @@ bool Epub::extractSections(const std::string& htmlPath, const SpineSplit& split)
     const uint32_t end = split.sections[i].endOffset;
     inFile.seek(start);
 
-    uint8_t buf[kCopyBufSize];
     uint32_t remaining = end - start;
     while (remaining > 0) {
       const size_t toRead = remaining < kCopyBufSize ? remaining : kCopyBufSize;
-      const size_t bytesRead = inFile.read(buf, toRead);
+      const size_t bytesRead = inFile.read(ioBuf, toRead);
       if (bytesRead == 0) break;
-      outFile.write(buf, bytesRead);
+      outFile.write(ioBuf, bytesRead);
       remaining -= static_cast<uint32_t>(bytesRead);
     }
 
