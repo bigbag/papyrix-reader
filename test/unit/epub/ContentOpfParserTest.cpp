@@ -11,8 +11,10 @@
 #include <Utf8Nfc.h>
 #include <expat.h>
 
+#include <algorithm>
 #include <cstring>
 #include <string>
+#include <vector>
 
 constexpr size_t MAX_TITLE_LENGTH = 256;
 constexpr size_t MAX_AUTHOR_LENGTH = 128;
@@ -553,6 +555,75 @@ int main() {
         "<item id=\"second\" href=\"second.jpg\" media-type=\"image/jpeg\" properties=\"cover-image\"/>"));
     runner.expectTrue(ok, "cover_first_wins: parses successfully");
     runner.expectEqual("first.jpg", parser.coverItemHref, "cover_first_wins: first href captured");
+  }
+
+  // ============================================
+  // fnvHash32 + sorted-vector collision-safe lookup
+  // Mirrors the manifest index logic in ContentOpfParser
+  // ============================================
+
+  {
+    // Reproduce the hash + lower_bound lookup used in spine parsing
+    struct ManifestIndexEntry {
+      uint32_t idHash;
+      uint32_t fileOffset;
+      bool operator<(const ManifestIndexEntry& o) const { return idHash < o.idHash; }
+    };
+
+    auto fnvHash32 = [](const char* s) -> uint32_t {
+      uint32_t h = 2166136261u;
+      while (*s) {
+        h ^= static_cast<uint8_t>(*s++);
+        h *= 16777619u;
+      }
+      return h;
+    };
+
+    // Simulate a lookup that finds the correct entry on first try
+    {
+      std::vector<ManifestIndexEntry> index;
+      // Store: "chap1" -> offset 0, "chap2" -> offset 100
+      index.push_back({fnvHash32("chap1"), 0});
+      index.push_back({fnvHash32("chap2"), 100});
+      std::sort(index.begin(), index.end());
+
+      const uint32_t h = fnvHash32("chap2");
+      auto it = std::lower_bound(index.begin(), index.end(), ManifestIndexEntry{h, 0});
+      runner.expectTrue(it != index.end() && it->idHash == h, "hash_lookup_basic: found");
+      runner.expectEq(100u, it->fileOffset, "hash_lookup_basic: correct offset");
+    }
+
+    // Simulate hash collision: two different IDs with same hash
+    // Force collision by inserting two entries with the same hash but different offsets
+    {
+      const uint32_t collisionHash = fnvHash32("itemA");
+      std::vector<ManifestIndexEntry> index;
+      index.push_back({collisionHash, 0});    // "itemA" at offset 0
+      index.push_back({collisionHash, 200});  // "itemB" (forced same hash) at offset 200
+      std::sort(index.begin(), index.end());
+
+      // lower_bound finds first entry with the collision hash
+      auto it = std::lower_bound(index.begin(), index.end(), ManifestIndexEntry{collisionHash, 0});
+      runner.expectTrue(it != index.end() && it->idHash == collisionHash, "hash_collision: first found");
+      runner.expectEq(0u, it->fileOffset, "hash_collision: first at offset 0");
+
+      // Advance past first collision — second entry also reachable
+      ++it;
+      runner.expectTrue(it != index.end() && it->idHash == collisionHash, "hash_collision: second found");
+      runner.expectEq(200u, it->fileOffset, "hash_collision: second at offset 200");
+    }
+
+    // No match: hash not in index
+    {
+      std::vector<ManifestIndexEntry> index;
+      index.push_back({fnvHash32("chap1"), 0});
+      std::sort(index.begin(), index.end());
+
+      const uint32_t h = fnvHash32("nonexistent");
+      auto it = std::lower_bound(index.begin(), index.end(), ManifestIndexEntry{h, 0});
+      bool found = (it != index.end() && it->idHash == h);
+      runner.expectFalse(found, "hash_no_match: not found");
+    }
   }
 
   return runner.allPassed() ? 0 : 1;

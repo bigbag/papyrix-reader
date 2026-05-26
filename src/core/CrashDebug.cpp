@@ -20,6 +20,7 @@ struct CrashMarker {
 };
 
 RTC_DATA_ATTR CrashMarker rtcCrashMarker;
+RTC_DATA_ATTR bool skipHomeMetadata_ = false;
 
 const char* phaseName(const CrashPhase phase) {
   switch (phase) {
@@ -39,6 +40,8 @@ const char* phaseName(const CrashPhase phase) {
       return "epub_toc_resolved";
     case CrashPhase::EpubTocRender:
       return "epub_toc_render";
+    case CrashPhase::HomeMetadataLoad:
+      return "home_metadata_load";
   }
   return "unknown";
 }
@@ -118,11 +121,24 @@ void logBootInfo(const esp_reset_reason_t reason) {
           phaseName(static_cast<CrashPhase>(rtcCrashMarker.phase)), static_cast<int>(rtcCrashMarker.spine),
           static_cast<unsigned>(rtcCrashMarker.attempt));
 
+  if (isAbnormalReset(reason) && rtcCrashMarker.phase == static_cast<uint8_t>(CrashPhase::HomeMetadataLoad)) {
+    LOG_ERR(TAG, "Crash during home metadata load — skipping on this boot");
+    skipHomeMetadata_ = true;
+  }
+
   if (!isAbnormalReset(reason)) {
     LOG_ERR(TAG, "Clearing stale crash marker after non-abnormal reset");
   }
 
   clear();
+}
+
+bool shouldSkipHomeMetadata() {
+  if (skipHomeMetadata_) {
+    skipHomeMetadata_ = false;
+    return true;
+  }
+  return false;
 }
 
 }  // namespace papyrix::crashdebug

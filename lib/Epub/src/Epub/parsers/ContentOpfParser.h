@@ -1,7 +1,7 @@
 #pragma once
 #include <Print.h>
 
-#include <unordered_map>
+#include <algorithm>
 #include <vector>
 
 #include "Epub.h"
@@ -25,6 +25,21 @@ class ContentOpfParser final : public Print {
     IN_GUIDE,
   };
 
+  struct ManifestIndexEntry {
+    uint32_t idHash;
+    uint32_t fileOffset;
+    bool operator<(const ManifestIndexEntry& o) const { return idHash < o.idHash; }
+  };
+
+  static uint32_t fnvHash32(const char* s) {
+    uint32_t h = 2166136261u;
+    while (*s) {
+      h ^= static_cast<uint8_t>(*s++);
+      h *= 16777619u;
+    }
+    return h;
+  }
+
   const std::string& cachePath;
   const std::string& baseContentPath;
   size_t remainingSize;
@@ -32,7 +47,7 @@ class ContentOpfParser final : public Print {
   ParserState state = START;
   BookMetadataCache* cache;
   FsFile tempItemStore;
-  std::unordered_map<std::string, std::string> manifestIndex;  // itemId -> href
+  std::vector<ManifestIndexEntry> manifestCompact_;
   std::string coverItemId;
   std::vector<std::string> cssFiles_;
 

@@ -62,24 +62,30 @@ struct GlobalPageMetrics {
 };
 
 GlobalPageMetrics resolveMetrics(const std::vector<SectionPageMetric>& metrics, int currentSpineIndex,
-                                 int currentSectionPage) {
+                                 int currentSectionPage, int textStartIndex = 0) {
   GlobalPageMetrics result;
   if (metrics.empty()) return result;
 
   const int clampedSpine = std::clamp(currentSpineIndex, 0, static_cast<int>(metrics.size()) - 1);
   uint32_t pagesBefore = 0;
+  uint32_t frontMatterPages = 0;
   bool totalIsExact = true;
   for (int i = 0; i < clampedSpine; ++i) {
     pagesBefore += metrics[static_cast<size_t>(i)].pages;
     totalIsExact = totalIsExact && metrics[static_cast<size_t>(i)].exact;
+  }
+  for (int i = 0; i < textStartIndex && i < static_cast<int>(metrics.size()); ++i) {
+    frontMatterPages += metrics[static_cast<size_t>(i)].pages;
   }
   for (int i = clampedSpine; i < static_cast<int>(metrics.size()); ++i) {
     totalIsExact = totalIsExact && metrics[static_cast<size_t>(i)].exact;
   }
 
   uint32_t total = recomputeTotal(metrics);
-  result.currentPage = static_cast<int>(pagesBefore) + std::max(currentSectionPage, 0) + 1;
-  result.totalPages = static_cast<int>(std::max<uint32_t>(total, result.currentPage));
+  const int adjustedBefore = std::max(static_cast<int>(pagesBefore) - static_cast<int>(frontMatterPages), 0);
+  const int adjustedTotal = std::max(static_cast<int>(total) - static_cast<int>(frontMatterPages), 1);
+  result.currentPage = adjustedBefore + std::max(currentSectionPage, 0) + 1;
+  result.totalPages = std::max(adjustedTotal, result.currentPage);
   result.totalIsExact = totalIsExact;
   return result;
 }
@@ -301,6 +307,79 @@ int main() {
     };
     auto gm = resolveMetrics(metrics, 1, -3);
     runner.expectEq(11, gm.currentPage, "resolve_negative_section_page");  // 10 + max(-3,0) + 1
+  }
+
+  // ============================================
+  // Front-matter subtraction (textStartIndex)
+  // ============================================
+
+  // Basic front-matter: 2 front-matter sections, reading at section 2
+  {
+    std::vector<SectionPageMetric> metrics = {
+        {3, true, 1000},   // cover
+        {5, true, 2000},   // dedication
+        {20, true, 8000},  // chapter 1
+        {15, true, 6000},  // chapter 2
+    };
+    auto gm = resolveMetrics(metrics, 2, 0, 2);
+    // pagesBefore=3+5=8, frontMatter=3+5=8, adjusted=0, current=0+0+1=1
+    runner.expectEq(1, gm.currentPage, "frontmatter_at_text_start_current");
+    // total=43, adjustedTotal=43-8=35
+    runner.expectEq(35, gm.totalPages, "frontmatter_at_text_start_total");
+  }
+
+  // Reading in the middle of text with front-matter offset
+  {
+    std::vector<SectionPageMetric> metrics = {
+        {3, true, 1000},   // cover
+        {5, true, 2000},   // dedication
+        {20, true, 8000},  // chapter 1
+        {15, true, 6000},  // chapter 2
+    };
+    auto gm = resolveMetrics(metrics, 3, 10, 2);
+    // pagesBefore=3+5+20=28, frontMatter=3+5=8, adjusted=20, current=20+10+1=31
+    runner.expectEq(31, gm.currentPage, "frontmatter_mid_text_current");
+    // total=43, adjustedTotal=43-8=35
+    runner.expectEq(35, gm.totalPages, "frontmatter_mid_text_total");
+  }
+
+  // Reading in front-matter (spine < textStart): no underflow
+  {
+    std::vector<SectionPageMetric> metrics = {
+        {3, true, 1000},   // cover
+        {5, true, 2000},   // dedication
+        {20, true, 8000},  // chapter 1
+        {15, true, 6000},  // chapter 2
+    };
+    auto gm = resolveMetrics(metrics, 0, 1, 2);
+    // pagesBefore=0, frontMatter=3+5=8, adjusted=max(0-8,0)=0, current=0+1+1=2
+    runner.expectEq(2, gm.currentPage, "frontmatter_in_frontmatter_current");
+    // total=43, adjustedTotal=43-8=35, max(35,2)=35
+    runner.expectEq(35, gm.totalPages, "frontmatter_in_frontmatter_total");
+  }
+
+  // Front-matter at spine 1 of 2 (clampedSpine=1 < textStart=2, but only 2 sections)
+  {
+    std::vector<SectionPageMetric> metrics = {
+        {3, true, 1000},
+        {5, true, 2000},
+    };
+    auto gm = resolveMetrics(metrics, 1, 2, 2);
+    // pagesBefore=3, frontMatter=3+5=8, adjusted=max(3-8,0)=0, current=0+2+1=3
+    runner.expectEq(3, gm.currentPage, "frontmatter_all_front_current");
+    // total=8, adjustedTotal=max(8-8,1)=1, max(1,3)=3
+    runner.expectEq(3, gm.totalPages, "frontmatter_all_front_total");
+  }
+
+  // textStartIndex=0 means no front-matter (default)
+  {
+    std::vector<SectionPageMetric> metrics = {
+        {10, true, 5000},
+        {20, true, 8000},
+    };
+    auto gm = resolveMetrics(metrics, 1, 5, 0);
+    runner.expectEq(16, gm.currentPage, "no_frontmatter_current");  // 10+5+1
+    runner.expectEq(30, gm.totalPages, "no_frontmatter_total");
   }
 
   return runner.allPassed() ? 0 : 1;

@@ -162,28 +162,20 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
 
   if (self->state == IN_PACKAGE && (strcmp(name, "manifest") == 0 || strcmp(name, "opf:manifest") == 0)) {
     self->state = IN_MANIFEST;
-    if (!SdMan.openFileForWrite("COF", self->cachePath + itemCacheFile, self->tempItemStore)) {
-      LOG_ERR(TAG, "Couldn't open temp items file for writing. This is probably going to be a fatal error.");
+    if (self->cache) {
+      if (!SdMan.openFileForWrite("COF", self->cachePath + itemCacheFile, self->tempItemStore)) {
+        LOG_ERR(TAG, "Couldn't open temp items file for writing. This is probably going to be a fatal error.");
+      }
     }
     return;
   }
 
   if (self->state == IN_PACKAGE && (strcmp(name, "spine") == 0 || strcmp(name, "opf:spine") == 0)) {
     self->state = IN_SPINE;
-    if (!SdMan.openFileForRead("COF", self->cachePath + itemCacheFile, self->tempItemStore)) {
-      LOG_ERR(TAG, "Couldn't open temp items file for reading. This is probably going to be a fatal error.");
-    } else {
-      std::string itemId;
-      std::string href;
-      while (self->tempItemStore.available()) {
-        if (!serialization::readString(self->tempItemStore, itemId) ||
-            !serialization::readString(self->tempItemStore, href)) {
-          LOG_ERR(TAG, "Failed to read manifest item from temp store");
-          break;
-        }
-        self->manifestIndex[itemId] = href;
+    if (self->cache) {
+      if (!SdMan.openFileForRead("COF", self->cachePath + itemCacheFile, self->tempItemStore)) {
+        LOG_ERR(TAG, "Couldn't open temp items file for reading. This is probably going to be a fatal error.");
       }
-      self->tempItemStore.close();
     }
     return;
   }
@@ -229,9 +221,12 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       }
     }
 
-    // Write items down to SD card
-    serialization::writeString(self->tempItemStore, itemId);
-    serialization::writeString(self->tempItemStore, href);
+    if (self->cache) {
+      const uint32_t offset = static_cast<uint32_t>(self->tempItemStore.position());
+      serialization::writeString(self->tempItemStore, itemId);
+      serialization::writeString(self->tempItemStore, href);
+      self->manifestCompact_.push_back({fnvHash32(itemId.c_str()), offset});
+    }
 
     if (itemId == self->coverItemId) {
       self->coverItemHref = href;
@@ -271,16 +266,23 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     return;
   }
 
-  // NOTE: This relies on spine appearing after item manifest (which is pretty safe as it's part of the EPUB spec)
-  // Only run the spine parsing if there's a cache to add it to
   if (self->cache) {
     if (self->state == IN_SPINE && (strcmp(name, "itemref") == 0 || strcmp(name, "opf:itemref") == 0)) {
       for (int i = 0; atts[i]; i += 2) {
         if (strcmp(atts[i], "idref") == 0) {
-          const std::string idref = atts[i + 1];
-          auto it = self->manifestIndex.find(idref);
-          if (it != self->manifestIndex.end()) {
-            self->cache->createSpineEntry(it->second);
+          const uint32_t h = fnvHash32(atts[i + 1]);
+          auto it =
+              std::lower_bound(self->manifestCompact_.begin(), self->manifestCompact_.end(), ManifestIndexEntry{h, 0});
+          while (it != self->manifestCompact_.end() && it->idHash == h) {
+            self->tempItemStore.seek(it->fileOffset);
+            std::string storedId;
+            std::string href;
+            if (serialization::readString(self->tempItemStore, storedId) &&
+                serialization::readString(self->tempItemStore, href) && storedId == atts[i + 1]) {
+              self->cache->createSpineEntry(href);
+              break;
+            }
+            ++it;
           }
         }
       }
@@ -299,7 +301,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       }
     }
     if (!guideHref.empty()) {
-      if (type == "text" || (type == "start" && !self->textReferenceHref.empty())) {
+      if ((type == "text" || type == "start") && self->textReferenceHref.empty()) {
         LOG_INF(TAG, "Found %s reference in guide: %s", type.c_str(), guideHref.c_str());
         self->textReferenceHref = guideHref;
       } else if ((type == "cover" || type == "cover-page") && self->guideCoverPageHref.empty()) {
@@ -360,6 +362,13 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
 
   if (self->state == IN_SPINE && (strcmp(name, "spine") == 0 || strcmp(name, "opf:spine") == 0)) {
     self->state = IN_PACKAGE;
+    if (self->cache) {
+      self->tempItemStore.close();
+      {
+        std::vector<ManifestIndexEntry> tmp;
+        self->manifestCompact_.swap(tmp);
+      }
+    }
     return;
   }
 
@@ -370,7 +379,10 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
 
   if (self->state == IN_MANIFEST && (strcmp(name, "manifest") == 0 || strcmp(name, "opf:manifest") == 0)) {
     self->state = IN_PACKAGE;
-    self->tempItemStore.close();
+    if (self->cache) {
+      self->tempItemStore.close();
+      std::sort(self->manifestCompact_.begin(), self->manifestCompact_.end());
+    }
     return;
   }
 

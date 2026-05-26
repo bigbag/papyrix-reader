@@ -526,18 +526,26 @@ ReaderState::GlobalPageMetrics ReaderState::resolveGlobalPageMetrics(Core& core)
     if (globalSectionPageMetricsInitialized_ && !globalSectionPageMetrics_.empty()) {
       const int clampedSpine =
           std::clamp(currentSpineIndex_, 0, static_cast<int>(globalSectionPageMetrics_.size()) - 1);
+      const int textStart = (type == ContentType::Epub) ? textStartIndex_ : 0;
       uint32_t pagesBefore = 0;
+      uint32_t frontMatterPages = 0;
       bool totalIsExact = true;
       for (int i = 0; i < clampedSpine; ++i) {
         const auto& sm = globalSectionPageMetrics_[static_cast<size_t>(i)];
         pagesBefore += sm.pages;
         totalIsExact = totalIsExact && sm.exact;
       }
+      for (int i = 0; i < textStart && i < static_cast<int>(globalSectionPageMetrics_.size()); ++i) {
+        frontMatterPages += globalSectionPageMetrics_[static_cast<size_t>(i)].pages;
+      }
       for (int i = clampedSpine; i < static_cast<int>(globalSectionPageMetrics_.size()); ++i) {
         totalIsExact = totalIsExact && globalSectionPageMetrics_[static_cast<size_t>(i)].exact;
       }
-      metrics.currentPage = static_cast<int>(pagesBefore) + std::max(currentSectionPage_, 0) + 1;
-      metrics.totalPages = static_cast<int>(std::max<uint32_t>(globalSectionPageMetricTotal_, metrics.currentPage));
+      const int adjustedBefore = std::max(static_cast<int>(pagesBefore) - static_cast<int>(frontMatterPages), 0);
+      const int adjustedTotal =
+          std::max(static_cast<int>(globalSectionPageMetricTotal_) - static_cast<int>(frontMatterPages), 1);
+      metrics.currentPage = adjustedBefore + std::max(currentSectionPage_, 0) + 1;
+      metrics.totalPages = std::max(adjustedTotal, metrics.currentPage);
       metrics.totalIsExact = totalIsExact;
       return metrics;
     }
@@ -2819,7 +2827,7 @@ void ReaderState::handleMenuAction(Core& core, int action) {
         const Theme& theme = THEME_MANAGER.current();
         renderer_.clearScreen(theme.backgroundColor);
         ui::overlayBox(renderer_, theme, core.settings.getReaderFontId(theme), renderer_.getScreenHeight() / 2 - 20,
-                       "No chapters");
+                       "Chapters unavailable");
         renderer_.displayBuffer();
         core.display.markDirty();
         startBackgroundCaching(core);

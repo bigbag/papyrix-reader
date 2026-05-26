@@ -71,6 +71,15 @@ bool BookMetadataCache::endTocPass() {
   return true;
 }
 
+bool BookMetadataCache::skipTocPass() {
+  LOG_INF(TAG, "Skipping TOC pass (heap too low)");
+  if (!SdMan.openFileForWrite("BMC", cachePath + tmpTocBinFile, tocFile)) {
+    return false;
+  }
+  tocFile.close();
+  return true;
+}
+
 bool BookMetadataCache::endWrite() {
   if (!buildMode) {
     LOG_ERR(TAG, "endWrite called but not in build mode");
@@ -136,45 +145,45 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   }
 
   // LUTs complete
-  // Loop through spines from spine file matching up TOC indexes and writing to book.bin
+  // Write spine entries, mapping each to its TOC chapter when TOC data exists
+  spineFile.seek(0);
 
-  // Build spineIndex->tocIndex mapping in one pass (O(n) instead of O(n*m))
-  std::vector<int16_t> spineToTocIndex(spineCount, -1);
-  tocFile.seek(0);
-  for (int j = 0; j < tocCount; j++) {
-    auto tocEntry = readTocEntry(tocFile);
-    if (tocEntry.spineIndex >= 0 && static_cast<uint16_t>(tocEntry.spineIndex) < spineCount) {
-      if (spineToTocIndex[tocEntry.spineIndex] == -1) {
-        spineToTocIndex[tocEntry.spineIndex] = static_cast<int16_t>(j);
+  if (tocCount > 0) {
+    std::vector<int16_t> spineToTocIndex(spineCount, -1);
+    tocFile.seek(0);
+    for (int j = 0; j < tocCount; j++) {
+      auto tocEntry = readTocEntry(tocFile);
+      if (tocEntry.spineIndex >= 0 && static_cast<uint16_t>(tocEntry.spineIndex) < spineCount) {
+        if (spineToTocIndex[tocEntry.spineIndex] == -1) {
+          spineToTocIndex[tocEntry.spineIndex] = static_cast<int16_t>(j);
+        }
       }
     }
-  }
 
-  // Write spine entries with TOC mapping (cumulativeSize is no longer used - progress is page-based)
-  spineFile.seek(0);
-  int lastSpineTocIndex = -1;
-  for (uint16_t i = 0; i < spineCount; i++) {
-    auto spineEntry = readSpineEntry(spineFile);
-
-    // O(1) lookup using prebuilt mapping
-    spineEntry.tocIndex = spineToTocIndex[i];
-
-    // Not a huge deal if we don't find a TOC entry for the spine entry, this is expected behaviour for EPUBs
-    if (spineEntry.tocIndex == -1) {
-      LOG_DBG(TAG, "Warning: Could not find TOC entry for spine item %d: %s, using title from last section", i,
-              spineEntry.href.c_str());
-      spineEntry.tocIndex = lastSpineTocIndex;
+    int lastSpineTocIndex = -1;
+    for (uint16_t i = 0; i < spineCount; i++) {
+      auto spineEntry = readSpineEntry(spineFile);
+      spineEntry.tocIndex = spineToTocIndex[i];
+      if (spineEntry.tocIndex == -1) {
+        LOG_DBG(TAG, "Warning: Could not find TOC entry for spine item %d: %s, using title from last section", i,
+                spineEntry.href.c_str());
+        spineEntry.tocIndex = lastSpineTocIndex;
+      }
+      lastSpineTocIndex = spineEntry.tocIndex;
+      writeSpineEntry(bookFile, spineEntry);
     }
-    lastSpineTocIndex = spineEntry.tocIndex;
 
-    writeSpineEntry(bookFile, spineEntry);
-  }
-
-  // Loop through toc entries from toc file writing to book.bin
-  tocFile.seek(0);
-  for (int i = 0; i < tocCount; i++) {
-    auto tocEntry = readTocEntry(tocFile);
-    writeTocEntry(bookFile, tocEntry);
+    tocFile.seek(0);
+    for (int i = 0; i < tocCount; i++) {
+      auto tocEntry = readTocEntry(tocFile);
+      writeTocEntry(bookFile, tocEntry);
+    }
+  } else {
+    for (uint16_t i = 0; i < spineCount; i++) {
+      auto spineEntry = readSpineEntry(spineFile);
+      spineEntry.tocIndex = -1;
+      writeSpineEntry(bookFile, spineEntry);
+    }
   }
 
   bookFile.close();

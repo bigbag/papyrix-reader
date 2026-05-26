@@ -15,6 +15,7 @@
 #include "../content/ContentTypes.h"
 #include "../core/BootMode.h"
 #include "../core/Core.h"
+#include "../core/CrashDebug.h"
 #include "../drivers/Device.h"
 #include "Battery.h"
 #include "FontManager.h"
@@ -76,12 +77,20 @@ void HomeState::loadLastBook(Core& core) {
   // Try to load from saved path in settings
   const char* savedPath = core.settings.lastBookPath;
   if (savedPath[0] != '\0' && core.storage.exists(savedPath)) {
+    if (papyrix::crashdebug::shouldSkipHomeMetadata()) {
+      LOG_INF(TAG, "Skipping metadata load after previous crash");
+      view_.clearBook();
+      return;
+    }
+
     const auto contentType = detectContentType(savedPath);
 
     if (contentType == ContentType::Epub) {
       // EPUB: lightweight metadata-only load (no CSS, TOC, spine splitting)
+      papyrix::crashdebug::mark(papyrix::crashdebug::CrashPhase::HomeMetadataLoad);
       Epub epub(savedPath, papyrix::drivers::Device::instance().cacheDir());
       if (epub.loadMetadataOnly()) {
+        papyrix::crashdebug::clear();
         view_.setBook(epub.getTitle().c_str(), epub.getAuthor().c_str(), savedPath);
         strncpy(core.buf.path, savedPath, sizeof(core.buf.path) - 1);
         core.buf.path[sizeof(core.buf.path) - 1] = '\0';
@@ -96,11 +105,14 @@ void HomeState::loadLastBook(Core& core) {
         }
         view_.hasCoverBmp = hasCoverImage_;
       } else {
+        papyrix::crashdebug::clear();
         view_.clearBook();
       }
     } else {
       // Non-EPUB: use full content pipeline (fast for TXT/Markdown/FB2)
+      papyrix::crashdebug::mark(papyrix::crashdebug::CrashPhase::HomeMetadataLoad);
       auto result = core.content.open(savedPath, papyrix::drivers::Device::instance().cacheDir());
+      papyrix::crashdebug::clear();
       if (result.ok()) {
         const auto& meta = core.content.metadata();
         view_.setBook(meta.title, meta.author, savedPath);
