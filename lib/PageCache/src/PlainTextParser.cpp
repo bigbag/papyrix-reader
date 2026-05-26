@@ -74,6 +74,8 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
       startNewPage();
 
       if (maxPages > 0 && pagesCreated >= maxPages) {
+        currentPage->elements.push_back(std::make_shared<PageLine>(line, 0, currentPageY));
+        currentPageY += lineHeight;
         return false;
       }
     }

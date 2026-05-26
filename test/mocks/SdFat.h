@@ -73,6 +73,8 @@ class FsFile {
     return true;
   }
 
+  bool seekSet(size_t pos) { return seek(pos); }
+
   bool seekCur(int offset) {
     const auto newPos = static_cast<int64_t>(pos_) + offset;
     if (newPos < 0 || static_cast<size_t>(newPos) > buffer_.size()) return false;

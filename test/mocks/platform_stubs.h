@@ -12,6 +12,7 @@
 #define MALLOC_CAP_8BIT 0x01
 #endif
 inline size_t heap_caps_get_largest_free_block(uint32_t) { return 200000; }
+inline size_t heap_caps_get_free_size(uint32_t) { return 200000; }
 
 // PROGMEM / pgm_read helpers for host builds
 #ifndef PROGMEM

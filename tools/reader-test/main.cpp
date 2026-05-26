@@ -314,7 +314,12 @@ int main(int argc, char* argv[]) {
     MarkdownParser parser(filepath, gfx, config);
     std::string cachePath = outputDir + "/pages_0.bin";
     PageCache cache(cachePath);
-    cache.create(parser, config, 0);
+    cache.create(parser, config, batchSize);
+    while (batchSize > 0 && cache.isPartial()) {
+      uint16_t before = cache.pageCount();
+      cache.extend(parser, batchSize);
+      if (cache.pageCount() == before) break;
+    }
     printf("Markdown: %d pages -> %s\n", cache.pageCount(), cachePath.c_str());
     if (dump) dumpPages(cache, gfx, FONT_ID);
 
@@ -378,7 +383,12 @@ int main(int argc, char* argv[]) {
     PlainTextParser parser(filepath, gfx, config);
     std::string cachePath = outputDir + "/pages_0.bin";
     PageCache cache(cachePath);
-    cache.create(parser, config, 0);
+    cache.create(parser, config, batchSize);
+    while (batchSize > 0 && cache.isPartial()) {
+      uint16_t before = cache.pageCount();
+      cache.extend(parser, batchSize);
+      if (cache.pageCount() == before) break;
+    }
     printf("TXT: %d pages -> %s\n", cache.pageCount(), cachePath.c_str());
     if (dump) dumpPages(cache, gfx, FONT_ID);
   }
