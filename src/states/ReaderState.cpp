@@ -1378,6 +1378,13 @@ void ReaderState::renderCurrentPage(Core& core) {
     }
   }
 
+  if (forceDoubleRefresh_) {
+    const bool turnOffScreen = core.settings.sunlightFadingFix != 0;
+    renderer_.clearScreen(~theme.backgroundColor);
+    renderer_.displayBuffer(EInkDisplay::FAST_REFRESH, turnOffScreen);
+    forceDoubleRefresh_ = false;
+  }
+
   switch (type) {
     case ContentType::Epub:
     case ContentType::Txt:
@@ -1832,8 +1839,7 @@ bool ReaderState::renderCoverPage(Core& core) {
                                                    vp.marginLeft, pagesUntilRefresh,
                                                    core.settings.getPagesPerRefreshValue(), turnOffScreen);
 
-  // Force half refresh on next page to fully clear the cover image
-  pagesUntilFullRefresh_ = 1;
+  forceDoubleRefresh_ = true;
   return rendered;
 }
 

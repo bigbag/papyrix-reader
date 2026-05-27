@@ -84,6 +84,7 @@ class ReaderState : public State {
   std::unique_ptr<ContentParser> parser_;
   int parserSpineIndex_ = -1;
   uint8_t pagesUntilFullRefresh_;
+  bool forceDoubleRefresh_ = false;
 
   // Background caching (uses BackgroundTask for proper lifecycle management)
   BackgroundTask cacheTask_;
