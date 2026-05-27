@@ -227,7 +227,7 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
 
       normalizedPath_ = epub_->getCachePath() + "/.norm_" + std::to_string(spineIndex_) + ".html";
       parseHtmlPath_ = tmpHtmlPath_;
-      if (html5::normalizeVoidElements(tmpHtmlPath_, normalizedPath_)) {
+      if (html5::normalizeHtmlForXml(tmpHtmlPath_, normalizedPath_)) {
         parseHtmlPath_ = normalizedPath_;
       }
     }

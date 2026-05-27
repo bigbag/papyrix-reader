@@ -9,11 +9,11 @@ namespace html5 {
 
 namespace {
 
-// HTML5 void elements that cannot have closing tags (lowercase for case-insensitive matching)
 constexpr const char* VOID_ELEMENTS[] = {"img",  "br",  "hr",    "input", "meta",   "link",  "area",
                                          "base", "col", "embed", "param", "source", "track", "wbr"};
 constexpr size_t VOID_ELEMENT_COUNT = sizeof(VOID_ELEMENTS) / sizeof(VOID_ELEMENTS[0]);
 constexpr size_t MAX_TAG_NAME_LENGTH = 8;
+constexpr size_t MAX_ATTR_NAME_LENGTH = 32;
 constexpr size_t BUFFER_SIZE = 1024;
 
 enum class State { Normal, InTagStart, InTagName, InTagAttrs, InQuote, InClosingTagName, InClosingTagRest };
@@ -36,9 +36,15 @@ bool isVoidElement(const char* name, size_t len) {
   return false;
 }
 
+bool isAttrNameStart(char c) { return std::isalpha(static_cast<unsigned char>(c)) || c == '_'; }
+
+bool isAttrNameChar(char c) {
+  return std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == ':' || c == '.' || c == '_';
+}
+
 }  // namespace
 
-bool normalizeVoidElements(const std::string& inputPath, const std::string& outputPath) {
+bool normalizeHtmlForXml(const std::string& inputPath, const std::string& outputPath) {
   FsFile inFile, outFile;
 
   if (!SdMan.openFileForRead("H5N", inputPath, inFile)) {
@@ -53,14 +59,18 @@ bool normalizeVoidElements(const std::string& inputPath, const std::string& outp
   State state = State::Normal;
   char tagName[MAX_TAG_NAME_LENGTH + 1] = {0};
   size_t tagNameLen = 0;
-  char closingTagWhitespace[8] = {0};  // Buffer for whitespace in closing tags
+  char closingTagWhitespace[8] = {0};
   size_t closingTagWsLen = 0;
   bool isCurrentTagVoid = false;
   char quoteChar = 0;
   char prevChar = 0;
 
+  char attrNameBuf[MAX_ATTR_NAME_LENGTH + 1] = {0};
+  size_t attrNameLen = 0;
+  bool inAttrName = false;
+
   uint8_t readBuffer[BUFFER_SIZE];
-  uint8_t writeBuffer[BUFFER_SIZE + 64];  // Extra space for insertions
+  uint8_t writeBuffer[BUFFER_SIZE + 128];
   size_t writePos = 0;
 
   auto flushWrite = [&]() -> bool {
@@ -81,6 +91,35 @@ bool normalizeVoidElements(const std::string& inputPath, const std::string& outp
     return true;
   };
 
+  auto flushBareAttr = [&]() -> bool {
+    for (size_t j = 0; j < attrNameLen; j++) {
+      if (!writeChar(attrNameBuf[j])) return false;
+    }
+    if (!writeChar('=')) return false;
+    if (!writeChar('"')) return false;
+    if (!writeChar('"')) return false;
+    attrNameLen = 0;
+    inAttrName = false;
+    return true;
+  };
+
+  auto flushAttrNameRaw = [&]() -> bool {
+    for (size_t j = 0; j < attrNameLen; j++) {
+      if (!writeChar(attrNameBuf[j])) return false;
+    }
+    attrNameLen = 0;
+    inAttrName = false;
+    return true;
+  };
+
+  auto closeCurrentTag = [&]() -> bool {
+    if (isCurrentTagVoid && prevChar != '/') {
+      if (!writeChar(' ')) return false;
+      if (!writeChar('/')) return false;
+    }
+    return writeChar('>');
+  };
+
   while (inFile.available()) {
     int bytesRead = inFile.read(readBuffer, BUFFER_SIZE);
     if (bytesRead <= 0) break;
@@ -94,7 +133,6 @@ bool normalizeVoidElements(const std::string& inputPath, const std::string& outp
             state = State::InTagStart;
             tagNameLen = 0;
             isCurrentTagVoid = false;
-            // Don't write '<' yet - might need to skip if it's a void element closing tag
           } else {
             if (!writeChar(c)) goto error;
           }
@@ -102,13 +140,10 @@ bool normalizeVoidElements(const std::string& inputPath, const std::string& outp
 
         case State::InTagStart:
           if (c == '/') {
-            // Closing tag - need to check if it's a void element
             state = State::InClosingTagName;
             tagNameLen = 0;
             closingTagWsLen = 0;
-            // Don't write '</' yet - buffer it in case we need to skip
           } else if (c == '!' || c == '?') {
-            // Comment or processing instruction - skip normalization
             state = State::Normal;
             if (!writeChar('<')) goto error;
             if (!writeChar(c)) goto error;
@@ -132,12 +167,10 @@ bool normalizeVoidElements(const std::string& inputPath, const std::string& outp
             }
             if (!writeChar(c)) goto error;
           } else {
-            // End of tag name
             tagName[tagNameLen] = '\0';
             isCurrentTagVoid = isVoidElement(tagName, tagNameLen);
 
             if (c == '>') {
-              // Tag ends immediately after name
               if (isCurrentTagVoid && prevChar != '/') {
                 if (!writeChar(' ')) goto error;
                 if (!writeChar('/')) goto error;
@@ -146,13 +179,15 @@ bool normalizeVoidElements(const std::string& inputPath, const std::string& outp
               state = State::Normal;
             } else if (std::isspace(static_cast<unsigned char>(c))) {
               state = State::InTagAttrs;
+              inAttrName = false;
+              attrNameLen = 0;
               if (!writeChar(c)) goto error;
             } else if (c == '/') {
-              // Self-closing indicator
               if (!writeChar(c)) goto error;
               state = State::InTagAttrs;
+              inAttrName = false;
+              attrNameLen = 0;
             } else {
-              // Unexpected character
               if (!writeChar(c)) goto error;
               state = State::Normal;
             }
@@ -161,18 +196,51 @@ bool normalizeVoidElements(const std::string& inputPath, const std::string& outp
 
         case State::InTagAttrs:
           if (c == '"' || c == '\'') {
+            if (inAttrName) {
+              if (!flushBareAttr()) goto error;
+            }
             state = State::InQuote;
             quoteChar = c;
             if (!writeChar(c)) goto error;
-          } else if (c == '>') {
-            // End of tag - insert self-closing if needed
-            if (isCurrentTagVoid && prevChar != '/') {
-              if (!writeChar(' ')) goto error;
-              if (!writeChar('/')) goto error;
+          } else if (c == '=') {
+            if (inAttrName) {
+              if (!flushAttrNameRaw()) goto error;
             }
             if (!writeChar(c)) goto error;
+          } else if (c == '>') {
+            if (inAttrName) {
+              if (!flushBareAttr()) goto error;
+            }
+            if (!closeCurrentTag()) goto error;
             state = State::Normal;
+          } else if (c == '<') {
+            if (inAttrName) {
+              if (!flushBareAttr()) goto error;
+            }
+            if (!closeCurrentTag()) goto error;
+            state = State::InTagStart;
+            tagNameLen = 0;
+            isCurrentTagVoid = false;
+          } else if (isAttrNameStart(c) && !inAttrName) {
+            if (prevChar == '"' || prevChar == '\'') {
+              if (!writeChar(' ')) goto error;
+            }
+            inAttrName = true;
+            attrNameLen = 0;
+            attrNameBuf[attrNameLen++] = c;
+          } else if (inAttrName && isAttrNameChar(c)) {
+            if (attrNameLen < MAX_ATTR_NAME_LENGTH) {
+              attrNameBuf[attrNameLen++] = c;
+            }
+          } else if (std::isspace(static_cast<unsigned char>(c))) {
+            if (inAttrName) {
+              if (!flushBareAttr()) goto error;
+            }
+            if (!writeChar(c)) goto error;
           } else {
+            if (inAttrName) {
+              if (!flushAttrNameRaw()) goto error;
+            }
             if (!writeChar(c)) goto error;
           }
           break;
@@ -180,8 +248,17 @@ bool normalizeVoidElements(const std::string& inputPath, const std::string& outp
         case State::InQuote:
           if (c == quoteChar) {
             state = State::InTagAttrs;
+            inAttrName = false;
+            attrNameLen = 0;
+            if (!writeChar(c)) goto error;
+          } else if (c == '<') {
+            if (!writeChar('&')) goto error;
+            if (!writeChar('l')) goto error;
+            if (!writeChar('t')) goto error;
+            if (!writeChar(';')) goto error;
+          } else {
+            if (!writeChar(c)) goto error;
           }
-          if (!writeChar(c)) goto error;
           break;
 
         case State::InClosingTagName:
@@ -189,7 +266,6 @@ bool normalizeVoidElements(const std::string& inputPath, const std::string& outp
             if (tagNameLen < MAX_TAG_NAME_LENGTH) {
               tagName[tagNameLen++] = c;
             } else {
-              // Tag too long to be void - flush buffer and passthrough
               if (!writeChar('<')) goto error;
               if (!writeChar('/')) goto error;
               for (size_t j = 0; j < tagNameLen; j++) {
@@ -199,12 +275,10 @@ bool normalizeVoidElements(const std::string& inputPath, const std::string& outp
               state = State::InClosingTagRest;
             }
           } else if (c == '>') {
-            // End of closing tag - check if it's a void element
             tagName[tagNameLen] = '\0';
             if (isVoidElement(tagName, tagNameLen)) {
-              // Skip the entire closing tag (don't output anything)
+              // Skip closing tag for void elements
             } else {
-              // Not a void element - output the buffered "</tagname>" with any whitespace
               if (!writeChar('<')) goto error;
               if (!writeChar('/')) goto error;
               for (size_t j = 0; j < tagNameLen; j++) {
@@ -217,13 +291,10 @@ bool normalizeVoidElements(const std::string& inputPath, const std::string& outp
             }
             state = State::Normal;
           } else if (std::isspace(static_cast<unsigned char>(c))) {
-            // Whitespace before '>' in closing tag (unusual but valid)
-            // Buffer it in case we need to replay for non-void elements
             if (closingTagWsLen < sizeof(closingTagWhitespace)) {
               closingTagWhitespace[closingTagWsLen++] = c;
             }
           } else {
-            // Unexpected character - output what we have and return to normal
             if (!writeChar('<')) goto error;
             if (!writeChar('/')) goto error;
             for (size_t j = 0; j < tagNameLen; j++) {
@@ -246,12 +317,17 @@ bool normalizeVoidElements(const std::string& inputPath, const std::string& outp
     }
   }
 
-  // Handle EOF - flush any buffered but uncommitted content
-  if (state == State::InTagStart) {
-    // We saw '<' but nothing else
+  if (state == State::InTagAttrs || state == State::InTagName) {
+    if (inAttrName) {
+      if (!flushBareAttr()) goto error;
+    }
+    if (!closeCurrentTag()) goto error;
+  } else if (state == State::InQuote) {
+    if (!writeChar(quoteChar)) goto error;
+    if (!closeCurrentTag()) goto error;
+  } else if (state == State::InTagStart) {
     if (!writeChar('<')) goto error;
   } else if (state == State::InClosingTagName) {
-    // We were in the middle of a closing tag - output what we have
     if (!writeChar('<')) goto error;
     if (!writeChar('/')) goto error;
     for (size_t j = 0; j < tagNameLen; j++) {

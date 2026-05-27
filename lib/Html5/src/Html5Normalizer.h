@@ -3,10 +3,11 @@
 
 namespace html5 {
 
-// Normalize HTML5 void elements to XHTML self-closing format
-// Converts <img src="x"> to <img src="x" />
-// Processes file in streaming mode for memory efficiency
-// Returns true on success
-bool normalizeVoidElements(const std::string& inputPath, const std::string& outputPath);
+// Normalize HTML for Expat (XML) parsing:
+//  - Self-close void elements: <img src="x"> → <img src="x" />
+//  - Escape '<' inside quoted attribute values → &lt;
+//  - Normalize bare boolean attributes: defer → defer=""
+//  - Force-close tags when '<' appears in unquoted attribute area
+bool normalizeHtmlForXml(const std::string& inputPath, const std::string& outputPath);
 
 }  // namespace html5

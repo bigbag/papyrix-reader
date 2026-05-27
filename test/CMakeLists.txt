@@ -364,6 +364,15 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/Epub/src/Epub/BookMetadataCache.cpp
       ${TEST_HELPERS}
     )
+  elseif(TEST_NAME STREQUAL "Html5NormalizerTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/Html5/src/Html5Normalizer.cpp
+      ${TEST_HELPERS}
+    )
+    target_include_directories(${TEST_NAME} PRIVATE
+      ${PROJECT_ROOT}/lib/Html5/src
+    )
   elseif(TEST_NAME STREQUAL "FirmwareUpdaterTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}

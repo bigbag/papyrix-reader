@@ -83,7 +83,7 @@ bool HtmlParser::parsePages(const std::function<void(std::unique_ptr<Page>)>& on
   std::string parseHtmlPath = filepath_;
   normalizedPath_ = cacheDir_ + "/.norm_tmp.html";
 
-  if (html5::normalizeVoidElements(filepath_, normalizedPath_)) {
+  if (html5::normalizeHtmlForXml(filepath_, normalizedPath_)) {
     parseHtmlPath = normalizedPath_;
   } else {
     normalizedPath_.clear();

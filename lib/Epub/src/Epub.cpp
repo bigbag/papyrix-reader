@@ -1647,7 +1647,7 @@ bool Epub::extractSections(const std::string& htmlPath, const SpineSplit& split,
     outFile.close();
 
     const std::string normPath = outPath + ".norm";
-    if (html5::normalizeVoidElements(outPath, normPath)) {
+    if (html5::normalizeHtmlForXml(outPath, normPath)) {
       SdMan.remove(outPath.c_str());
       SdMan.rename(normPath.c_str(), outPath.c_str());
     }
