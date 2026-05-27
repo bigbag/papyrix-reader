@@ -39,6 +39,9 @@ class TestFb2Parser {
   std::string currentAuthorFirst;
   std::string currentAuthorLast;
 
+  // Parser handle for early termination
+  XML_Parser xmlParser_ = nullptr;
+
   // TOC state
   bool inBody = false;
   int bodyCount_ = 0;
@@ -147,6 +150,10 @@ class TestFb2Parser {
 
     if (strcmp(tag, "title-info") == 0) {
       self->inTitleInfo = false;
+      if (self->metadataOnly && self->xmlParser_) {
+        XML_StopParser(self->xmlParser_, XML_FALSE);
+        return;
+      }
     }
 
     if (strcmp(tag, "book-title") == 0) {
@@ -243,6 +250,7 @@ class TestFb2Parser {
   std::string coverRef;
   std::string coverContentType;
   std::vector<TocItem> tocItems;
+  bool metadataOnly = false;
 
   bool parse(const std::string& xml) {
     // Mirror production logic: if bytes are actually UTF-8, force Expat to UTF-8
@@ -258,6 +266,7 @@ class TestFb2Parser {
     XML_Parser parser = XML_ParserCreate(explicitEncoding);
     if (!parser) return false;
 
+    xmlParser_ = parser;
     XML_SetUserData(parser, this);
     XML_SetUnknownEncodingHandler(parser, expatUnknownEncodingHandler, nullptr);
     XML_SetElementHandler(parser, startElement, endElement);
@@ -266,8 +275,13 @@ class TestFb2Parser {
     const char* data = xml.data() + bomSkip;
     const int len = static_cast<int>(xml.size() - bomSkip);
     if (XML_Parse(parser, data, len, 1) == XML_STATUS_ERROR) {
-      XML_ParserFree(parser);
-      return false;
+      if (metadataOnly && XML_GetErrorCode(parser) == XML_ERROR_ABORTED) {
+        // Expected early termination
+      } else {
+        xmlParser_ = nullptr;
+        XML_ParserFree(parser);
+        return false;
+      }
     }
 
     // Post-process title (same as Fb2::parseXmlContent)
@@ -291,6 +305,7 @@ class TestFb2Parser {
       language.erase(language.begin());
     }
 
+    xmlParser_ = nullptr;
     XML_ParserFree(parser);
     return true;
   }
@@ -881,6 +896,75 @@ int main() {
     bool ok = parser.parse(xml);
     runner.expectTrue(ok, "utf8_bom: parses successfully");
     runner.expectEqual("Bom", parser.title, "utf8_bom: title correct after BOM strip");
+  }
+
+  // ============================================
+  // Metadata-only early termination (Issue: Home screen perf)
+  // ============================================
+
+  // Test: metadataOnly stops after </title-info>, captures title/author/lang/cover
+  {
+    TestFb2Parser parser;
+    parser.metadataOnly = true;
+    bool ok = parser.parse(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+        "<FictionBook xmlns=\"http://www.gribuser.ru/xml/fictionbook/2.0\" "
+        "xmlns:l=\"http://www.w3.org/1999/xlink\">"
+        "<description><title-info>"
+        "<author><first-name>George</first-name><last-name>Orwell</last-name></author>"
+        "<book-title>1984</book-title>"
+        "<coverpage><image l:href=\"#cover.jpg\"/></coverpage>"
+        "<lang>en</lang>"
+        "</title-info></description>"
+        "<body>"
+        "<section><title><p>Chapter 1</p></title><p>It was a bright cold day...</p></section>"
+        "<section><title><p>Chapter 2</p></title><p>More text</p></section>"
+        "</body>"
+        "<binary id=\"cover.jpg\" content-type=\"image/jpeg\">base64data</binary>"
+        "</FictionBook>");
+    runner.expectTrue(ok, "metadata_only: parses successfully with early stop");
+    runner.expectEqual("1984", parser.title, "metadata_only: title captured");
+    runner.expectEqual("George Orwell", parser.author, "metadata_only: author captured");
+    runner.expectEqual("en", parser.language, "metadata_only: language captured");
+    runner.expectEqual("cover.jpg", parser.coverRef, "metadata_only: cover ref captured");
+    runner.expectEq(static_cast<size_t>(0), parser.tocItems.size(), "metadata_only: no TOC items (body not parsed)");
+  }
+
+  // Test: metadataOnly with UTF-8 metadata
+  {
+    TestFb2Parser parser;
+    parser.metadataOnly = true;
+    bool ok = parser.parse(makeFb2(
+        "<author><first-name>\xD0\x9B\xD0\xB5\xD0\xB2</first-name>"
+        "<last-name>\xD0\xA2\xD0\xBE\xD0\xBB\xD1\x81\xD1\x82\xD0\xBE\xD0\xB9</last-name></author>"
+        "<book-title>\xD0\x92\xD0\xBE\xD0\xB9\xD0\xBD\xD0\xB0 \xD0\xB8 \xD0\xBC\xD0\xB8\xD1\x80</book-title>"
+        "<lang>ru</lang>"));
+    runner.expectTrue(ok, "metadata_only_utf8: parses successfully");
+    runner.expectEqual("\xD0\x92\xD0\xBE\xD0\xB9\xD0\xBD\xD0\xB0 \xD0\xB8 \xD0\xBC\xD0\xB8\xD1\x80", parser.title,
+                       "metadata_only_utf8: UTF-8 title");
+    runner.expectEqual(
+        "\xD0\x9B\xD0\xB5\xD0\xB2 \xD0\xA2\xD0\xBE\xD0\xBB\xD1\x81\xD1\x82\xD0\xBE\xD0\xB9", parser.author,
+        "metadata_only_utf8: UTF-8 author");
+  }
+
+  // Test: metadataOnly with CP1251 encoding
+  {
+    TestFb2Parser parser;
+    parser.metadataOnly = true;
+    bool ok = parser.parse(
+        "<?xml version=\"1.0\" encoding=\"windows-1251\"?>"
+        "<FictionBook xmlns=\"http://www.gribuser.ru/xml/fictionbook/2.0\">"
+        "<description><title-info>"
+        "<author><first-name>\xCB\xE5\xE2</first-name>"
+        "<last-name>\xD2\xEE\xEB\xF1\xF2\xEE\xE9</last-name></author>"
+        "<book-title>\xC2\xEE\xE9\xED\xE0 \xE8 \xEC\xE8\xF0</book-title>"
+        "<lang>ru</lang>"
+        "</title-info></description>"
+        "<body><section><p>\xD2\xE5\xEA\xF1\xF2</p></section></body>"
+        "</FictionBook>");
+    runner.expectTrue(ok, "metadata_only_cp1251: parses successfully");
+    runner.expectEqual("\xD0\x92\xD0\xBE\xD0\xB9\xD0\xBD\xD0\xB0 \xD0\xB8 \xD0\xBC\xD0\xB8\xD1\x80", parser.title,
+                       "metadata_only_cp1251: title decoded to UTF-8");
   }
 
   return runner.allPassed() ? 0 : 1;

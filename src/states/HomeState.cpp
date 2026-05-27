@@ -4,6 +4,7 @@
 #include <Bitmap.h>
 #include <CoverHelpers.h>
 #include <Epub.h>
+#include <Fb2.h>
 #include <GfxRenderer.h>
 #include <Group5.h>
 #include <I18n.h>
@@ -108,8 +109,31 @@ void HomeState::loadLastBook(Core& core) {
         papyrix::crashdebug::clear();
         view_.clearBook();
       }
+    } else if (contentType == ContentType::Fb2) {
+      // FB2: lightweight metadata-only load (no section scanning/file generation)
+      papyrix::crashdebug::mark(papyrix::crashdebug::CrashPhase::HomeMetadataLoad);
+      Fb2 fb2(savedPath, papyrix::drivers::Device::instance().cacheDir());
+      if (fb2.loadMetadataOnly()) {
+        papyrix::crashdebug::clear();
+        view_.setBook(fb2.getTitle().c_str(), fb2.getAuthor().c_str(), savedPath);
+        strncpy(core.buf.path, savedPath, sizeof(core.buf.path) - 1);
+        core.buf.path[sizeof(core.buf.path) - 1] = '\0';
+
+        if (core.settings.showImages) {
+          const std::string thumbPath = fb2.getThumbBmpPath();
+          if (!thumbPath.empty() && SdMan.exists(thumbPath.c_str())) {
+            coverBmpPath_ = thumbPath;
+            hasCoverImage_ = true;
+            LOG_DBG(TAG, "Using cached thumbnail: %s", coverBmpPath_.c_str());
+          }
+        }
+        view_.hasCoverBmp = hasCoverImage_;
+      } else {
+        papyrix::crashdebug::clear();
+        view_.clearBook();
+      }
     } else {
-      // Non-EPUB: use full content pipeline (fast for TXT/Markdown/FB2)
+      // Non-EPUB/FB2: use full content pipeline (fast for TXT/Markdown)
       papyrix::crashdebug::mark(papyrix::crashdebug::CrashPhase::HomeMetadataLoad);
       auto result = core.content.open(savedPath, papyrix::drivers::Device::instance().cacheDir());
       papyrix::crashdebug::clear();

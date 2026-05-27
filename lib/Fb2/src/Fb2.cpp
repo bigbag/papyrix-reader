@@ -68,7 +68,7 @@ bool Fb2::load() {
   }
 
   // Try loading from metadata cache first
-  if (loadMetaCache()) {
+  if (loadMetaCache() && !sectionOffsets_.empty()) {
     loaded = true;
     LOG_INF(TAG, "Loaded from cache: %s (title: '%s', author: '%s')", filepath.c_str(), title.c_str(), author.c_str());
     if (!generateSectionFiles()) {
@@ -85,6 +85,10 @@ bool Fb2::load() {
 
   fileSize = file.size();
   file.close();
+
+  // Clear author before re-parsing — unlike title/language (cleared by their start
+  // tags), author uses += accumulation and would duplicate if already set from cache
+  author.clear();
 
   // Stream-parse in chunks (file may exceed available RAM)
   if (!parseXmlStream()) {
@@ -113,6 +117,38 @@ bool Fb2::load() {
   loaded = true;
   LOG_INF(TAG, "Loaded FB2: %s (title: '%s', author: '%s', sections: %u)", filepath.c_str(), title.c_str(),
           author.c_str(), static_cast<unsigned int>(sectionOffsets_.size()));
+  return true;
+}
+
+bool Fb2::loadMetadataOnly() {
+  LOG_INF(TAG, "Loading metadata only: %s", filepath.c_str());
+
+  if (!SdMan.exists(filepath.c_str())) {
+    LOG_ERR(TAG, "File does not exist");
+    return false;
+  }
+
+  if (loadMetaCache()) {
+    return true;
+  }
+
+  FsFile file;
+  if (!SdMan.openFileForRead("FB2", filepath, file)) {
+    LOG_ERR(TAG, "Failed to open file");
+    return false;
+  }
+  fileSize = file.size();
+  file.close();
+
+  metadataOnly_ = true;
+  bool ok = parseXmlStream();
+  metadataOnly_ = false;
+
+  if (!ok) {
+    return false;
+  }
+
+  saveMetaCache();
   return true;
 }
 
@@ -236,6 +272,10 @@ void XMLCALL Fb2::endElement(void* userData, const XML_Char* name) {
 
   if (strcmp(tag, "title-info") == 0) {
     self->inTitleInfo = false;
+    if (self->metadataOnly_) {
+      XML_StopParser(self->xmlParser_, XML_FALSE);
+      return;
+    }
   }
 
   if (strcmp(tag, "book-title") == 0) {
@@ -375,6 +415,9 @@ bool Fb2::parseXmlStream() {
     const int done = (file.available() == 0) ? 1 : 0;
     if (XML_Parse(xmlParser_, reinterpret_cast<const char*>(buffer), static_cast<int>(bytesRead), done) ==
         XML_STATUS_ERROR) {
+      if (metadataOnly_ && XML_GetErrorCode(xmlParser_) == XML_ERROR_ABORTED) {
+        break;
+      }
       LOG_ERR(TAG, "XML parse error: %s", XML_ErrorString(XML_GetErrorCode(xmlParser_)));
       success = false;
       break;

@@ -80,6 +80,8 @@ class Fb2 {
   static void XMLCALL characterData(void* userData, const XML_Char* s, int len);
 
   // Helper methods
+  bool metadataOnly_ = false;
+
   bool parseXmlStream();
   bool scanSectionOffsets();
   void filterNestedSections();
@@ -99,6 +101,13 @@ class Fb2 {
    * @return true on success
    */
   bool load();
+
+  /**
+   * Load only metadata (title, author, language, cover ref) without scanning sections
+   * or generating section files. Uses cache when available.
+   * @return true on success
+   */
+  bool loadMetadataOnly();
 
   /**
    * Clear cached data
