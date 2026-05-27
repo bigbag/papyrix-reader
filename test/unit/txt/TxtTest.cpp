@@ -322,5 +322,46 @@ int main() {
     runner.expectTrue(path1 != path2, "Hash: case-sensitive paths");
   }
 
+  // ============================================
+  // Leading whitespace in filenames (Issue #135)
+  // ============================================
+
+  // Test 43: Title extraction with leading whitespace
+  {
+    std::string title = extractTitle("/ book.txt");
+    runner.expectEqual(" book", title, "extractTitle: leading space in filename");
+  }
+
+  // Test 44: Title extraction with multiple leading spaces
+  {
+    std::string title = extractTitle("/  book.txt");
+    runner.expectEqual("  book", title, "extractTitle: multiple leading spaces");
+  }
+
+  // Test 45: Title extraction with leading space in subdirectory
+  {
+    std::string title = extractTitle("/Books/ my novel.epub");
+    runner.expectEqual(" my novel", title, "extractTitle: leading space in subdir");
+  }
+
+  // Test 46: Cache path differs for whitespace vs non-whitespace filename
+  {
+    std::string path1 = generateCachePath("/cache", "/ book.txt");
+    std::string path2 = generateCachePath("/cache", "/book.txt");
+    runner.expectTrue(path1 != path2, "Hash: leading space produces different hash");
+  }
+
+  // Test 47: Directory extraction with leading-space filename in root
+  {
+    std::string dir = extractDirectory("/ book.txt");
+    runner.expectTrue(dir.empty() || dir == "/", "extractDirectory: leading space root file");
+  }
+
+  // Test 48: Directory extraction with leading-space filename in subdir
+  {
+    std::string dir = extractDirectory("/Books/ book.txt");
+    runner.expectEqual("/Books", dir, "extractDirectory: leading space in subdir");
+  }
+
   return runner.allPassed() ? 0 : 1;
 }

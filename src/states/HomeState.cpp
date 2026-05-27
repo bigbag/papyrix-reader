@@ -77,7 +77,8 @@ void HomeState::loadLastBook(Core& core) {
 
   // Try to load from saved path in settings
   const char* savedPath = core.settings.lastBookPath;
-  if (savedPath[0] != '\0' && core.storage.exists(savedPath)) {
+  auto existsResult = core.storage.exists(savedPath);
+  if (savedPath[0] != '\0' && existsResult.ok() && *existsResult) {
     if (papyrix::crashdebug::shouldSkipHomeMetadata()) {
       LOG_INF(TAG, "Skipping metadata load after previous crash");
       view_.clearBook();

@@ -2,6 +2,8 @@
 
 #include <Logging.h>
 
+#include <cstring>
+
 #define TAG "SD"
 
 namespace {
@@ -227,6 +229,69 @@ bool SDCardManager::ensureDirectoryExists(const char* path) {
   return false;
 }
 
+FsFile SDCardManager::open(const char* path, oflag_t oflag) {
+  FsFile file = sd.open(path, oflag);
+  if (!file) {
+    openByDirScan(path, oflag, file);
+  }
+  return file;
+}
+
+bool SDCardManager::exists(const char* path) {
+  if (sd.exists(path)) return true;
+  FsFile file;
+  if (openByDirScan(path, O_RDONLY, file)) {
+    file.close();
+    return true;
+  }
+  return false;
+}
+
+bool SDCardManager::openByDirScan(const char* path, oflag_t oflag, FsFile& file) {
+  if (!path || path[0] == '\0') return false;
+
+  // Find the last '/' to split into parent dir + filename
+  const char* lastSlash = strrchr(path, '/');
+  if (!lastSlash) return false;
+
+  const char* filename = lastSlash + 1;
+  // Fast path: only scan when filename starts with a space
+  if (filename[0] != ' ') return false;
+
+  // Build parent directory path
+  char parentDir[512];
+  size_t parentLen = static_cast<size_t>(lastSlash - path);
+  if (parentLen == 0) {
+    parentDir[0] = '/';
+    parentDir[1] = '\0';
+  } else {
+    if (parentLen >= sizeof(parentDir)) return false;
+    memcpy(parentDir, path, parentLen);
+    parentDir[parentLen] = '\0';
+  }
+
+  FsFile dir = sd.open(parentDir);
+  if (!dir || !dir.isDirectory()) {
+    if (dir) dir.close();
+    return false;
+  }
+
+  char name[256];
+  FsFile entry;
+  while ((entry = dir.openNextFile(oflag))) {
+    entry.getName(name, sizeof(name));
+    if (strcmp(name, filename) == 0) {
+      file = std::move(entry);
+      dir.close();
+      return true;
+    }
+    entry.close();
+  }
+
+  dir.close();
+  return false;
+}
+
 bool SDCardManager::openFileForRead(const char* moduleName, const char* path, FsFile& file) {
   // SdFat's directory cache occasionally returns false-negatives under memory
   // pressure — observed moments after a successful write. Drop the redundant
@@ -239,6 +304,7 @@ bool SDCardManager::openFileForRead(const char* moduleName, const char* path, Fs
       return true;
     }
   }
+  if (openByDirScan(path, O_RDONLY, file)) return true;
   LOG_DBG(moduleName, "File does not exist: %s", path);
   return false;
 }

@@ -28,9 +28,9 @@ class SDCardManager {
   // Ensure a directory exists, creating it if necessary. Returns true on success.
   bool ensureDirectoryExists(const char* path);
 
-  FsFile open(const char* path, const oflag_t oflag = O_RDONLY) { return sd.open(path, oflag); }
+  FsFile open(const char* path, oflag_t oflag = O_RDONLY);
   bool mkdir(const char* path, const bool pFlag = true) { return sd.mkdir(path, pFlag); }
-  bool exists(const char* path) { return sd.exists(path); }
+  bool exists(const char* path);
   bool remove(const char* path) { return sd.remove(path); }
   bool rmdir(const char* path) { return sd.rmdir(path); }
   bool rename(const char* path, const char* newPath) { return sd.rename(path, newPath); }
@@ -47,6 +47,12 @@ class SDCardManager {
   static SDCardManager& getInstance() { return instance; }
 
  private:
+  // Fallback for files whose names start with whitespace.
+  // SdFat's parsePathName() strips leading spaces, so sd.open() can't find them.
+  // This method opens the parent directory and scans entries with openNext()/getName()
+  // which bypass parsePathName() and match the exact LFN on disk.
+  bool openByDirScan(const char* path, oflag_t oflag, FsFile& file);
+
   static SDCardManager instance;
 
   bool initialized = false;

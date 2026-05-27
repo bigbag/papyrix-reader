@@ -109,6 +109,17 @@ int main() {
   runner.expectEq(uint8_t(papyrix::ContentType::None),
                   uint8_t(papyrix::detectContentType("/books/v2.0/chapter.1/book")), "no ext after dotted dirs");
 
+  // === Leading whitespace in filenames (Issue #135) ===
+
+  runner.expectEq(uint8_t(papyrix::ContentType::Txt), uint8_t(papyrix::detectContentType("/ book.txt")),
+                  "leading space: txt detected");
+  runner.expectEq(uint8_t(papyrix::ContentType::Epub), uint8_t(papyrix::detectContentType("/Books/ novel.epub")),
+                  "leading space: epub detected");
+  runner.expectEq(uint8_t(papyrix::ContentType::Fb2), uint8_t(papyrix::detectContentType("/  story.fb2")),
+                  "multiple leading spaces: fb2 detected");
+  runner.expectEq(uint8_t(papyrix::ContentType::Markdown), uint8_t(papyrix::detectContentType("/ notes.md")),
+                  "leading space: md detected");
+
   runner.printSummary();
   return runner.allPassed() ? 0 : 1;
 }
