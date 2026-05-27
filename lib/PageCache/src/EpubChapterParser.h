@@ -50,6 +50,7 @@ class EpubChapterParser : public ContentParser {
   int currentSubSection_ = 0;
   int totalSubSections_ = 0;
   int subSectionPageOffset_ = 0;
+  uint16_t currentSubSectionPages_ = 0;
 
   void cleanupTempFiles();
 
