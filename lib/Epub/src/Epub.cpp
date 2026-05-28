@@ -549,8 +549,8 @@ bool Epub::splitSingleSpineItem(int spineIndex, uint8_t* decompressBuffer) {
   const std::string idxPath = sectionsDir + "/" + std::to_string(spineIndex) + ".idx";
   SdMan.rename(tmpPath.c_str(), bodyPath.c_str());
 
-  int sectionCount =
-      html5::scanSectionIndex(bodyPath, idxPath, bodyStart, bodyEnd, MAX_SECTION_SIZE, headHtml, decompressBuffer, 32768);
+  int sectionCount = html5::scanSectionIndex(bodyPath, idxPath, bodyStart, bodyEnd, MAX_SECTION_SIZE, headHtml,
+                                             decompressBuffer, 32768);
   LOG_INF(TAG, "Spine %d: indexed %d sections (single body file)", spineIndex, sectionCount);
   if (ownsDictBuf) free(decompressBuffer);
   return true;

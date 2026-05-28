@@ -42,7 +42,10 @@ SleepState::SleepState(GfxRenderer& renderer) : renderer_(renderer) {}
 void SleepState::enter(Core& core) {
   LOG_INF(TAG, "SleepState::enter - rendering sleep screen");
 
-  // Show immediate feedback before rendering sleep screen
+  // Black-then-white clearing sequence to fully erase previous screen content
+  // (prevents ghost artifacts like "Indexing" text or book content on sleep screen)
+  renderer_.clearScreen(0x00);
+  renderer_.displayBuffer(EInkDisplay::FAST_REFRESH);
   renderer_.clearScreen(0xFF);
   renderer_.drawCenteredText(THEME.uiFontId, renderer_.getScreenHeight() / 2, tr(SLEEPING), true);
   renderer_.displayBuffer(EInkDisplay::FAST_REFRESH);

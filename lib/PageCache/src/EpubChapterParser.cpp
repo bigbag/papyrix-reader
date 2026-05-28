@@ -269,9 +269,9 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
         const auto& entry = sectionIndex.sections[static_cast<size_t>(currentSubSection_)];
 
         // Tag stack from PREVIOUS section's end = tags to reopen at THIS section's start
-        const auto& openTags =
-            (currentSubSection_ > 0) ? sectionIndex.sections[static_cast<size_t>(currentSubSection_ - 1)].tagStack
-                                     : std::vector<std::string>();
+        const auto& openTags = (currentSubSection_ > 0)
+                                   ? sectionIndex.sections[static_cast<size_t>(currentSubSection_ - 1)].tagStack
+                                   : std::vector<std::string>();
 
         std::string prologue =
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"

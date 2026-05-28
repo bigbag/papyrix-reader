@@ -225,6 +225,15 @@ StateTransition HomeState::update(Core& core) {
 }
 
 void HomeState::render(Core& core) {
+  // Battery-only update: redraw just the battery region and partial-refresh it
+  if (!view_.needsRender && view_.batteryNeedsRender) {
+    const auto region = ui::renderBatteryOnly(renderer_, THEME, view_);
+    renderer_.displayWindow(region.x, region.y, region.width, region.height);
+    view_.batteryNeedsRender = false;
+    core.display.markDirty();
+    return;
+  }
+
   if (!view_.needsRender) {
     return;
   }
@@ -268,6 +277,7 @@ void HomeState::render(Core& core) {
 
   renderer_.displayBuffer();
   view_.needsRender = false;
+  view_.batteryNeedsRender = false;
   core.display.markDirty();
 }
 

@@ -351,7 +351,10 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
     while (remaining > 0) {
       uint32_t toRead = remaining < kCopyBuf ? remaining : kCopyBuf;
       file_.seek(srcPos);
-      if (file_.read(copyBuf, toRead) != toRead) { copyOk = false; break; }
+      if (file_.read(copyBuf, toRead) != toRead) {
+        copyOk = false;
+        break;
+      }
       file_.seek(dstPos);
       file_.write(copyBuf, toRead);
       srcPos += toRead;

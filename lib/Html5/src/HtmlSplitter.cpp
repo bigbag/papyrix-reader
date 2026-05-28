@@ -26,7 +26,7 @@ static bool isVoidElement(const char* name, size_t len) {
     size_t len;
   };
   static const Entry voids[] = {
-      {"br", 2},  {"hr", 2},  {"img", 3},    {"input", 5}, {"meta", 4},   {"link", 4},   {"area", 4},
+      {"br", 2},   {"hr", 2},  {"img", 3},   {"input", 5}, {"meta", 4},   {"link", 4},  {"area", 4},
       {"base", 4}, {"col", 3}, {"embed", 5}, {"param", 5}, {"source", 6}, {"track", 5}, {"wbr", 3},
   };
   for (const auto& v : voids) {
@@ -345,8 +345,7 @@ static void writeStr(FsFile& out, const std::string& s) {
   if (!s.empty()) out.write(reinterpret_cast<const uint8_t*>(s.c_str()), s.size());
 }
 
-static std::string sectionPath(const std::string& dir, const std::string& prefix, int idx,
-                               const std::string& suffix) {
+static std::string sectionPath(const std::string& dir, const std::string& prefix, int idx, const std::string& suffix) {
   return dir + "/" + prefix + "_" + std::to_string(idx) + suffix;
 }
 
@@ -354,11 +353,10 @@ static std::string sectionPath(const std::string& dir, const std::string& prefix
 // splitByByteOffset — main splitting function
 // ============================================================================
 
-SplitResult splitByByteOffset(const std::string& inputPath, const std::string& outputDir,
-                              const std::string& filePrefix, const std::string& fileSuffix,
-                              const std::string& prologue, const std::string& epilogue, size_t bodyStartOffset,
-                              size_t maxBodyEndOffset, size_t maxSectionSize, uint8_t* ioBuf, size_t ioBufSize,
-                              bool skipNormalize) {
+SplitResult splitByByteOffset(const std::string& inputPath, const std::string& outputDir, const std::string& filePrefix,
+                              const std::string& fileSuffix, const std::string& prologue, const std::string& epilogue,
+                              size_t bodyStartOffset, size_t maxBodyEndOffset, size_t maxSectionSize, uint8_t* ioBuf,
+                              size_t ioBufSize, bool skipNormalize) {
   SplitResult result;
 
   FsFile inFile;
@@ -482,8 +480,7 @@ SplitResult splitByByteOffset(const std::string& inputPath, const std::string& o
 
       if (sectionBytes >= maxSectionSize) needSplit = true;
 
-      if (needSplit && tracker.inNormalState() &&
-          (b == ' ' || b == '\t' || b == '\n' || b == '\r' || b == '>')) {
+      if (needSplit && tracker.inNormalState() && (b == ' ' || b == '\t' || b == '\n' || b == '\r' || b == '>')) {
         flushWr();
         closeSection(outFile);
 

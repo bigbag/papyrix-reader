@@ -2030,7 +2030,10 @@ bool ReaderState::isFullyIndexed(Core& core) {
     for (int i = 0; i < spineCount; ++i) {
       const auto cachePath = epubSectionCachePath(provider->getEpub()->getCachePath(), i);
       const auto probe = PageCache::probe(cachePath, config);
-      if (!probe.valid) { anyMissing = true; break; }
+      if (!probe.valid) {
+        anyMissing = true;
+        break;
+      }
     }
     if (!anyMissing) {
       if (!marker.empty()) {
@@ -2057,7 +2060,10 @@ bool ReaderState::isFullyIndexed(Core& core) {
     for (int i = 0; i < sectionCount; ++i) {
       const auto cachePath = fb2Provider->getSectionCachePath(i);
       const auto probe = PageCache::probe(cachePath, config);
-      if (!probe.valid) { anyMissing = true; break; }
+      if (!probe.valid) {
+        anyMissing = true;
+        break;
+      }
     }
     if (!anyMissing) {
       if (!marker.empty()) {

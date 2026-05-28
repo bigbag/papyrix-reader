@@ -102,6 +102,19 @@ void render(const GfxRenderer& r, const Theme& t, const HomeView& v) {
   // after rendering the cover image on top of the card area
 }
 
+BatteryRegion renderBatteryOnly(const GfxRenderer& r, const Theme& t, const HomeView& v) {
+  const int pageWidth = r.getScreenWidth();
+  const int x = pageWidth - 90;
+  constexpr int y = 6;
+  constexpr int w = 90;
+  constexpr int h = 24;
+
+  r.clearArea(x, y, w, h, t.backgroundColor);
+  battery(r, t, x, 10, v.batteryPercent, v.batteryCharging);
+
+  return {x, y, w, h};
+}
+
 void render(const GfxRenderer& r, const Theme& t, const FileListView& v) {
   r.clearScreen(t.backgroundColor);
 

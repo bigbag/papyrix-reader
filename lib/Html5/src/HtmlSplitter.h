@@ -25,8 +25,8 @@ struct SectionIndex {
 // Does NOT create section files — just writes a compact .idx file.
 // Returns section count (0 on failure).
 int scanSectionIndex(const std::string& bodyPath, const std::string& indexPath, size_t bodyStartOffset,
-                     size_t bodyEndOffset, size_t maxSectionSize, const std::string& headHtml,
-                     uint8_t* ioBuf = nullptr, size_t ioBufSize = 0);
+                     size_t bodyEndOffset, size_t maxSectionSize, const std::string& headHtml, uint8_t* ioBuf = nullptr,
+                     size_t ioBufSize = 0);
 
 // Read a section index file. Returns true if valid.
 bool readSectionIndex(const std::string& indexPath, SectionIndex& index);
@@ -44,11 +44,9 @@ bool findHtmlHeadAndBody(const std::string& htmlPath, std::string& headHtml, siz
 // Splits only at whitespace or tag boundaries — never mid-word.
 // Section files are written to outputDir/{filePrefix}_{index}{fileSuffix}, each normalized.
 // Returns the number of sections created (0 if file couldn't be opened).
-SplitResult splitByByteOffset(const std::string& inputPath, const std::string& outputDir,
-                              const std::string& filePrefix, const std::string& fileSuffix,
-                              const std::string& prologue, const std::string& epilogue,
+SplitResult splitByByteOffset(const std::string& inputPath, const std::string& outputDir, const std::string& filePrefix,
+                              const std::string& fileSuffix, const std::string& prologue, const std::string& epilogue,
                               size_t bodyStartOffset, size_t bodyEndOffset, size_t maxSectionSize,
-                              uint8_t* ioBuf = nullptr, size_t ioBufSize = 0,
-                              bool skipNormalize = false);
+                              uint8_t* ioBuf = nullptr, size_t ioBufSize = 0, bool skipNormalize = false);
 
 }  // namespace html5

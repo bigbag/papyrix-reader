@@ -64,6 +64,7 @@ struct HomeView {
   int8_t batteryPercent = 100;
   bool batteryCharging = false;
   bool needsRender = true;
+  bool batteryNeedsRender = false;
 
   void setBook(const char* title, const char* author, const char* path) {
     copyUtf8Safe(bookTitle, title, MAX_TITLE_LEN);
@@ -125,14 +126,14 @@ struct HomeView {
   void setBattery(int percent) {
     if (batteryPercent != percent) {
       batteryPercent = static_cast<int8_t>(percent);
-      needsRender = true;
+      batteryNeedsRender = true;
     }
   }
 
   void setBatteryCharging(bool charging) {
     if (batteryCharging != charging) {
       batteryCharging = charging;
-      needsRender = true;
+      batteryNeedsRender = true;
     }
   }
 
@@ -140,10 +141,16 @@ struct HomeView {
     clearBook();
     batteryPercent = 100;
     batteryCharging = false;
+    batteryNeedsRender = false;
   }
 };
 
 void render(const GfxRenderer& r, const Theme& t, const HomeView& v);
+
+struct BatteryRegion {
+  int x, y, width, height;
+};
+BatteryRegion renderBatteryOnly(const GfxRenderer& r, const Theme& t, const HomeView& v);
 
 // ============================================================================
 // FileListView - Paginated file browser
