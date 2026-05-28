@@ -122,7 +122,7 @@ The device uses a resistor ladder connected to two ADC pins plus a dedicated pow
 
 ### Input Settings
 
-- **Debounce delay** — 5 ms
+- **Debounce delay** — 20 ms
 - **ADC attenuation** — 11 dB
 - **ADC resolution** — 12-bit
 - **Power button** — Active LOW with pullup

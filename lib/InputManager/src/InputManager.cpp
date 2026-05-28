@@ -47,6 +47,10 @@ int InputManager::getButtonFromADC(const int adcValue, const int ranges[], const
 uint8_t InputManager::getState() {
   uint8_t state = 0;
 
+  // Discard first sample to flush SAR ADC sample-and-hold charge from
+  // the previous channel (battery monitor on GPIO0 shares ADC1).
+  (void)analogRead(BUTTON_ADC_PIN_1);
+
   // Read GPIO1 buttons
   const int adcValue1 = analogRead(BUTTON_ADC_PIN_1);
   const int button1 = getButtonFromADC(adcValue1, ADC_RANGES_1, NUM_BUTTONS_1);
@@ -54,7 +58,8 @@ uint8_t InputManager::getState() {
     state |= (1 << button1);
   }
 
-  // Read GPIO2 buttons
+  // Read GPIO2 buttons (discard first sample — same S&H crosstalk from PIN_1)
+  (void)analogRead(BUTTON_ADC_PIN_2);
   const int adcValue2 = analogRead(BUTTON_ADC_PIN_2);
   const int button2 = getButtonFromADC(adcValue2, ADC_RANGES_2, NUM_BUTTONS_2);
   if (button2 >= 0) {

@@ -101,7 +101,7 @@ class InputManager {
   static const int ADC_RANGES_2[];
 
   static constexpr int ADC_NO_BUTTON = 3900;
-  static constexpr unsigned long DEBOUNCE_DELAY = 5;
+  static constexpr unsigned long DEBOUNCE_DELAY = 20;
 
   static const char* BUTTON_NAMES[];
 };
