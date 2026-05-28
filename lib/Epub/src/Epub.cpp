@@ -514,28 +514,18 @@ bool Epub::splitSingleSpineItem(int spineIndex, uint8_t* decompressBuffer) {
     }
   }
 
-  // Normalize the entire file once (instead of normalizing each section separately)
+  // Normalize the entire file once
   const std::string normPath = tmpPath + ".norm";
   if (html5::normalizeHtmlForXml(tmpPath, normPath)) {
     SdMan.remove(tmpPath.c_str());
     SdMan.rename(normPath.c_str(), tmpPath.c_str());
   }
 
-  // Find head/body structure for section wrapping
+  // Find head/body structure
   std::string headHtml;
   size_t bodyStart = 0;
   size_t bodyEnd = 0;
   html5::findHtmlHeadAndBody(tmpPath, headHtml, bodyStart, bodyEnd);
-
-  std::string prologue =
-      "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-      "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n";
-  if (!headHtml.empty()) {
-    prologue += headHtml;
-    prologue += "\n";
-  }
-  prologue += "<body><div>\n";
-  const std::string epilogue = "\n</div></body>\n</html>\n";
 
   const std::string sectionsDir = cachePath + "/sections";
   SdMan.mkdir(sectionsDir.c_str());
@@ -554,16 +544,27 @@ bool Epub::splitSingleSpineItem(int spineIndex, uint8_t* decompressBuffer) {
     }
   }
 
-  auto result = html5::splitByByteOffset(tmpPath, sectionsDir, std::to_string(spineIndex), ".html", prologue, epilogue,
-                                         bodyStart, bodyEnd, MAX_SECTION_SIZE, decompressBuffer, 32768, true);
-  LOG_INF(TAG, "Spine %d: byte-offset split into %d sections", spineIndex, result.sectionCount);
+  // Keep normalized file as .body, produce .idx with section boundaries
+  const std::string bodyPath = sectionsDir + "/" + std::to_string(spineIndex) + ".body";
+  const std::string idxPath = sectionsDir + "/" + std::to_string(spineIndex) + ".idx";
+  SdMan.rename(tmpPath.c_str(), bodyPath.c_str());
 
-  SdMan.remove(tmpPath.c_str());
+  int sectionCount =
+      html5::scanSectionIndex(bodyPath, idxPath, bodyStart, bodyEnd, MAX_SECTION_SIZE, headHtml, decompressBuffer, 32768);
+  LOG_INF(TAG, "Spine %d: indexed %d sections (single body file)", spineIndex, sectionCount);
   if (ownsDictBuf) free(decompressBuffer);
   return true;
 }
 
 int Epub::getVirtualSectionCount(int spineIndex) const {
+  const std::string idxPath = cachePath + "/sections/" + std::to_string(spineIndex) + ".idx";
+  if (SdMan.exists(idxPath.c_str())) {
+    html5::SectionIndex index;
+    if (html5::readSectionIndex(idxPath, index)) {
+      return static_cast<int>(index.sections.size());
+    }
+  }
+
   const std::string firstSection = sectionFilePath(spineIndex, 0);
   if (!SdMan.exists(firstSection.c_str())) return 0;
 
@@ -575,7 +576,14 @@ int Epub::getVirtualSectionCount(int spineIndex) const {
 }
 
 std::string Epub::getVirtualSectionPath(int spineIndex, int sectionIndex) const {
+  const std::string bodyPath = cachePath + "/sections/" + std::to_string(spineIndex) + ".body";
+  if (SdMan.exists(bodyPath.c_str())) return bodyPath;
+
   return sectionFilePath(spineIndex, sectionIndex);
+}
+
+std::string Epub::getSectionIndexPath(int spineIndex) const {
+  return cachePath + "/sections/" + std::to_string(spineIndex) + ".idx";
 }
 
 bool Epub::clearCache() const {

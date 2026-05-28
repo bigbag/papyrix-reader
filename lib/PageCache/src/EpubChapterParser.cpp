@@ -3,6 +3,7 @@
 #include <Epub/parsers/ChapterHtmlSlimParser.h>
 #include <GfxRenderer.h>
 #include <Html5Normalizer.h>
+#include <HtmlSplitter.h>
 #include <Hyphenation.h>
 #include <Logging.h>
 #include <Page.h>
@@ -155,9 +156,12 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
         size_t sectionsPos = localPath.rfind("/sections/");
         if (sectionsPos != std::string::npos) {
           size_t nameStart = sectionsPos + 10;
+          // Extract spine index from "27_0.html" or "27.body"
           size_t underscore = localPath.find('_', nameStart);
-          if (underscore != std::string::npos) {
-            std::string origIdx = localPath.substr(nameStart, underscore - nameStart);
+          size_t dot = localPath.find('.', nameStart);
+          size_t nameEnd = (underscore != std::string::npos && underscore < dot) ? underscore : dot;
+          if (nameEnd != std::string::npos) {
+            std::string origIdx = localPath.substr(nameStart, nameEnd - nameStart);
             const std::string bpFile = epub_->getCachePath() + "/sections/" + origIdx + ".base";
             FsFile bp;
             if (SdMan.openFileForRead("ECP", bpFile, bp)) {
@@ -254,6 +258,47 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
     liveParser_.reset(new ChapterHtmlSlimParser(parseHtmlPath_, renderer_, config_, wrappedCallback, nullptr,
                                                 chapterBasePath_, imageCachePath_, readItemFn, epub_->getCssParser(),
                                                 shouldAbort));
+
+    // Index-based byte-range mode: read section from .body file using .idx metadata
+    if (totalSubSections_ > 0 && parseHtmlPath_.size() > 5 &&
+        parseHtmlPath_.compare(parseHtmlPath_.size() - 5, 5, ".body") == 0) {
+      const std::string idxPath = epub_->getSectionIndexPath(spineIndex_);
+      html5::SectionIndex sectionIndex;
+      if (html5::readSectionIndex(idxPath, sectionIndex) &&
+          currentSubSection_ < static_cast<int>(sectionIndex.sections.size())) {
+        const auto& entry = sectionIndex.sections[static_cast<size_t>(currentSubSection_)];
+
+        // Tag stack from PREVIOUS section's end = tags to reopen at THIS section's start
+        const auto& openTags =
+            (currentSubSection_ > 0) ? sectionIndex.sections[static_cast<size_t>(currentSubSection_ - 1)].tagStack
+                                     : std::vector<std::string>();
+
+        std::string prologue =
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+            "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n";
+        if (!sectionIndex.headHtml.empty()) {
+          prologue += sectionIndex.headHtml;
+          prologue += "\n";
+        }
+        prologue += "<body><div>\n";
+        for (const auto& tag : openTags) {
+          prologue += tag;
+        }
+
+        std::string epilogue;
+        for (int t = static_cast<int>(openTags.size()) - 1; t >= 0; t--) {
+          const auto& tag = openTags[static_cast<size_t>(t)];
+          size_t nameEnd = 1;
+          while (nameEnd < tag.size() && tag[nameEnd] != ' ' && tag[nameEnd] != '>' && tag[nameEnd] != '/') nameEnd++;
+          epilogue += "</";
+          epilogue += tag.substr(1, nameEnd - 1);
+          epilogue += ">";
+        }
+        epilogue += "\n</div></body>\n</html>\n";
+
+        liveParser_->setByteRange(entry.bodyOffset, entry.bodyLength, prologue, epilogue);
+      }
+    }
 
     bool success = liveParser_->parseAndBuildPages();
     initialized_ = true;

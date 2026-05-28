@@ -125,6 +125,13 @@ class ChapterHtmlSlimParser {
   bool suspended_ = false;  // True when parser is suspended mid-parse (can resume)
   bool xmlDone_ = false;    // XML parser finished but content remains to flush
 
+  // Byte-range mode: read from a subrange of a larger file with virtual prologue/epilogue
+  uint32_t rangeOffset_ = 0;
+  uint32_t rangeLength_ = 0;
+  std::string prologueXml_;
+  std::string epilogueXml_;
+  bool byteRangeMode_ = false;
+
   bool initParser();
   bool parseLoop();
   void cleanupParser();
@@ -148,6 +155,15 @@ class ChapterHtmlSlimParser {
         cssParser_(cssParser),
         externalAbortCallback_(externalAbortCallback) {}
   ~ChapterHtmlSlimParser();
+
+  void setByteRange(uint32_t offset, uint32_t length, const std::string& prologue, const std::string& epilogue) {
+    byteRangeMode_ = true;
+    rangeOffset_ = offset;
+    rangeLength_ = length;
+    prologueXml_ = prologue;
+    epilogueXml_ = epilogue;
+  }
+
   bool parseAndBuildPages();
   bool resumeParsing();
   bool isSuspended() const { return suspended_; }

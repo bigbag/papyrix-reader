@@ -642,7 +642,12 @@ bool ChapterHtmlSlimParser::initParser() {
     return false;
   }
 
-  totalSize_ = file_.size();
+  if (byteRangeMode_) {
+    file_.seek(rangeOffset_);
+    totalSize_ = rangeLength_;
+  } else {
+    totalSize_ = file_.size();
+  }
   bytesRead_ = 0;
   lastProgress_ = -1;
   pagesCreated_ = 0;
@@ -665,6 +670,17 @@ bool ChapterHtmlSlimParser::initParser() {
 bool ChapterHtmlSlimParser::parseLoop() {
   int done;
 
+  // Byte-range mode: feed virtual prologue to Expat before body content
+  if (byteRangeMode_ && !prologueXml_.empty() && bytesRead_ == 0) {
+    if (XML_Parse(xmlParser_, prologueXml_.c_str(), static_cast<int>(prologueXml_.size()), 0) == XML_STATUS_ERROR) {
+      LOG_ERR(TAG, "Prologue parse error: %s", XML_ErrorString(XML_GetErrorCode(xmlParser_)));
+      cleanupParser();
+      return false;
+    }
+  }
+
+  const size_t bodyLimit = byteRangeMode_ ? rangeLength_ : 0;
+
   do {
     // Periodic safety check and yield
     if (++loopCounter_ % YIELD_CHECK_INTERVAL == 0) {
@@ -677,7 +693,7 @@ bool ChapterHtmlSlimParser::parseLoop() {
     }
 
     constexpr size_t kReadChunkSize = 4096;
-    constexpr size_t kDataUriPrefixSize = 10;  // max partial saved by DataUriStripper: "src=\"data:"
+    constexpr size_t kDataUriPrefixSize = 10;
     void* const buf = XML_GetBuffer(xmlParser_, kReadChunkSize + kDataUriPrefixSize);
     if (!buf) {
       LOG_ERR(TAG, "Couldn't allocate memory for buffer");
@@ -685,21 +701,24 @@ bool ChapterHtmlSlimParser::parseLoop() {
       return false;
     }
 
-    size_t len = file_.read(static_cast<uint8_t*>(buf), kReadChunkSize);
+    size_t maxRead = kReadChunkSize;
+    if (byteRangeMode_ && bodyLimit > 0) {
+      size_t remaining = bodyLimit - bytesRead_;
+      if (remaining < maxRead) maxRead = remaining;
+    }
+
+    size_t len = file_.read(static_cast<uint8_t*>(buf), maxRead);
 
     if (len == 0) {
+      if (byteRangeMode_) break;
       LOG_ERR(TAG, "File read error");
       cleanupParser();
       return false;
     }
 
-    // Strip data URIs BEFORE expat parses the buffer to prevent OOM on large embedded images.
-    // This replaces src="data:image/..." with src="#" so expat never sees the huge base64 string.
     const size_t originalLen = len;
     len = dataUriStripper_.strip(static_cast<char*>(buf), len, kReadChunkSize + kDataUriPrefixSize);
 
-    // Update progress (call every 10% change to avoid too frequent updates)
-    // Only show progress for larger chapters where rendering overhead is worth it
     bytesRead_ += originalLen;
     if (progressFn && totalSize_ >= MIN_SIZE_FOR_PROGRESS) {
       const int progress = static_cast<int>((bytesRead_ * 100) / totalSize_);
@@ -709,9 +728,13 @@ bool ChapterHtmlSlimParser::parseLoop() {
       }
     }
 
-    done = file_.available() == 0;
+    if (byteRangeMode_) {
+      done = (bytesRead_ >= bodyLimit) ? 1 : 0;
+    } else {
+      done = file_.available() == 0;
+    }
 
-    const auto status = XML_ParseBuffer(xmlParser_, static_cast<int>(len), done);
+    const auto status = XML_ParseBuffer(xmlParser_, static_cast<int>(len), done && epilogueXml_.empty());
     if (status == XML_STATUS_ERROR) {
       LOG_ERR(TAG, "Parse error at line %lu: %s", XML_GetCurrentLineNumber(xmlParser_),
               XML_ErrorString(XML_GetErrorCode(xmlParser_)));
@@ -746,6 +769,11 @@ bool ChapterHtmlSlimParser::parseLoop() {
       }
     }
   } while (!done);
+
+  // Byte-range mode: feed virtual epilogue to close the XML document
+  if (byteRangeMode_ && !epilogueXml_.empty() && !aborted_) {
+    XML_Parse(xmlParser_, epilogueXml_.c_str(), static_cast<int>(epilogueXml_.size()), 1);
+  }
 
   // Reached end of file or aborted — finalize
   // Process last page if there is still text
@@ -814,7 +842,7 @@ bool ChapterHtmlSlimParser::resumeParsing() {
     cleanupParser();
     return false;
   }
-  file_.seek(bytesRead_);
+  file_.seek(byteRangeMode_ ? (rangeOffset_ + bytesRead_) : bytesRead_);
 
   // Reset per-extend state
   parseStartTime_ = millis();

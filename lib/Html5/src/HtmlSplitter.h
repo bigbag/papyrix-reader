@@ -2,12 +2,34 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace html5 {
 
 struct SplitResult {
   int sectionCount = 0;
 };
+
+struct SectionEntry {
+  uint32_t bodyOffset = 0;
+  uint32_t bodyLength = 0;
+  std::vector<std::string> tagStack;
+};
+
+struct SectionIndex {
+  std::string headHtml;
+  std::vector<SectionEntry> sections;
+};
+
+// Scan a body file and produce a section index (split points + tag stacks).
+// Does NOT create section files — just writes a compact .idx file.
+// Returns section count (0 on failure).
+int scanSectionIndex(const std::string& bodyPath, const std::string& indexPath, size_t bodyStartOffset,
+                     size_t bodyEndOffset, size_t maxSectionSize, const std::string& headHtml,
+                     uint8_t* ioBuf = nullptr, size_t ioBufSize = 0);
+
+// Read a section index file. Returns true if valid.
+bool readSectionIndex(const std::string& indexPath, SectionIndex& index);
 
 // Scan an HTML file for <head>...</head> content and <body...> start offset.
 // headHtml receives the raw bytes from <head...> to </head> (inclusive).

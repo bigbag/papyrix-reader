@@ -66,6 +66,7 @@ class Epub {
   bool splitSingleSpineItem(int spineIndex, uint8_t* decompressBuffer = nullptr);
   int getVirtualSectionCount(int spineIndex) const;
   std::string getVirtualSectionPath(int spineIndex, int sectionIndex) const;
+  std::string getSectionIndexPath(int spineIndex) const;
   bool clearCache() const;
   void setupCacheDir() const;
   const std::string& getCachePath() const;

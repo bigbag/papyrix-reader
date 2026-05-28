@@ -510,4 +510,172 @@ SplitResult splitByByteOffset(const std::string& inputPath, const std::string& o
   return result;
 }
 
+// ============================================================================
+// scanSectionIndex — produce index file instead of 125 section files
+// ============================================================================
+
+static constexpr uint8_t kIndexVersion = 1;
+
+int scanSectionIndex(const std::string& bodyPath, const std::string& indexPath, size_t bodyStartOffset,
+                     size_t bodyEndOffset, size_t maxSectionSize, const std::string& headHtml, uint8_t* ioBuf,
+                     size_t ioBufSize) {
+  FsFile inFile;
+  if (!SdMan.openFileForRead("HSPLIT", bodyPath, inFile)) return 0;
+
+  const size_t fileSize = inFile.size();
+  if (bodyStartOffset >= fileSize) {
+    inFile.close();
+    return 0;
+  }
+
+  inFile.seek(static_cast<uint32_t>(bodyStartOffset));
+  const size_t endOffset = (bodyEndOffset > bodyStartOffset) ? bodyEndOffset : fileSize;
+  const size_t bodySize = endOffset - bodyStartOffset;
+
+  TagTracker tracker;
+  std::vector<SectionEntry> sections;
+  SectionEntry current;
+  current.bodyOffset = static_cast<uint32_t>(bodyStartOffset);
+
+  size_t sectionBytes = 0;
+  bool needSplit = false;
+
+  constexpr size_t kDefaultBufSize = 512;
+  const size_t kBufSize = (ioBuf && ioBufSize > 0) ? ioBufSize : kDefaultBufSize;
+  uint8_t stackBuf[kDefaultBufSize];
+  uint8_t* buf = (ioBuf && ioBufSize > 0) ? ioBuf : stackBuf;
+
+  size_t inputRemaining = bodySize;
+  size_t yieldCounter = 0;
+  size_t absPos = bodyStartOffset;
+
+  while (inputRemaining > 0) {
+    const size_t toRead = inputRemaining < kBufSize ? inputRemaining : kBufSize;
+    const size_t n = inFile.read(buf, toRead);
+    if (n == 0) break;
+    inputRemaining -= n;
+    if (++yieldCounter % 64 == 0) SPLIT_YIELD();
+
+    for (size_t i = 0; i < n; i++) {
+      const uint8_t b = buf[i];
+      tracker.processByte(b);
+      sectionBytes++;
+      absPos++;
+
+      if (sectionBytes >= maxSectionSize) needSplit = true;
+
+      if (needSplit && tracker.inNormalState() && (b == ' ' || b == '\t' || b == '\n' || b == '\r' || b == '>')) {
+        current.bodyLength = static_cast<uint32_t>(absPos - current.bodyOffset);
+        current.tagStack.clear();
+        for (const auto& tag : tracker.stack) {
+          current.tagStack.push_back(tag);
+        }
+        sections.push_back(std::move(current));
+
+        current = SectionEntry();
+        current.bodyOffset = static_cast<uint32_t>(absPos);
+        sectionBytes = 0;
+        needSplit = false;
+      }
+    }
+  }
+
+  // Final section
+  current.bodyLength = static_cast<uint32_t>(absPos - current.bodyOffset);
+  current.tagStack.clear();
+  sections.push_back(std::move(current));
+  inFile.close();
+
+  // Write index file
+  FsFile idx;
+  if (!SdMan.openFileForWrite("HSPLIT", indexPath, idx)) return 0;
+
+  idx.write(&kIndexVersion, 1);
+  if (sections.size() > UINT16_MAX) sections.resize(UINT16_MAX);
+  uint16_t count = static_cast<uint16_t>(sections.size());
+  idx.write(reinterpret_cast<const uint8_t*>(&count), 2);
+  uint16_t headLen = static_cast<uint16_t>(headHtml.size());
+  idx.write(reinterpret_cast<const uint8_t*>(&headLen), 2);
+  if (headLen > 0) {
+    idx.write(reinterpret_cast<const uint8_t*>(headHtml.c_str()), headLen);
+  }
+
+  for (const auto& s : sections) {
+    idx.write(reinterpret_cast<const uint8_t*>(&s.bodyOffset), 4);
+    idx.write(reinterpret_cast<const uint8_t*>(&s.bodyLength), 4);
+    uint8_t tagCount = static_cast<uint8_t>(s.tagStack.size());
+    idx.write(&tagCount, 1);
+    for (const auto& tag : s.tagStack) {
+      uint16_t tagLen = static_cast<uint16_t>(tag.size());
+      idx.write(reinterpret_cast<const uint8_t*>(&tagLen), 2);
+      idx.write(reinterpret_cast<const uint8_t*>(tag.c_str()), tagLen);
+    }
+  }
+
+  idx.close();
+  return static_cast<int>(sections.size());
+}
+
+// ============================================================================
+// readSectionIndex — load index from .idx file
+// ============================================================================
+
+bool readSectionIndex(const std::string& indexPath, SectionIndex& index) {
+  FsFile file;
+  if (!SdMan.openFileForRead("HSPLIT", indexPath, file)) return false;
+
+  uint8_t version;
+  if (file.read(&version, 1) != 1 || version != kIndexVersion) {
+    file.close();
+    return false;
+  }
+
+  uint16_t count;
+  if (file.read(reinterpret_cast<uint8_t*>(&count), 2) != 2) {
+    file.close();
+    return false;
+  }
+
+  uint16_t headLen;
+  if (file.read(reinterpret_cast<uint8_t*>(&headLen), 2) != 2) {
+    file.close();
+    return false;
+  }
+  if (headLen > 0) {
+    index.headHtml.resize(headLen);
+    file.read(reinterpret_cast<uint8_t*>(&index.headHtml[0]), headLen);
+  }
+
+  index.sections.resize(count);
+  for (uint16_t i = 0; i < count; i++) {
+    auto& s = index.sections[i];
+    if (file.read(reinterpret_cast<uint8_t*>(&s.bodyOffset), 4) != 4 ||
+        file.read(reinterpret_cast<uint8_t*>(&s.bodyLength), 4) != 4) {
+      file.close();
+      return false;
+    }
+    uint8_t tagCount;
+    if (file.read(&tagCount, 1) != 1) {
+      file.close();
+      return false;
+    }
+    s.tagStack.resize(tagCount);
+    for (uint8_t j = 0; j < tagCount; j++) {
+      uint16_t tagLen;
+      if (file.read(reinterpret_cast<uint8_t*>(&tagLen), 2) != 2) {
+        file.close();
+        return false;
+      }
+      s.tagStack[j].resize(tagLen);
+      if (tagLen > 0 && file.read(reinterpret_cast<uint8_t*>(&s.tagStack[j][0]), tagLen) != tagLen) {
+        file.close();
+        return false;
+      }
+    }
+  }
+
+  file.close();
+  return true;
+}
+
 }  // namespace html5
