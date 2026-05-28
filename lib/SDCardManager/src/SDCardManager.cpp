@@ -278,12 +278,18 @@ bool SDCardManager::openByDirScan(const char* path, oflag_t oflag, FsFile& file)
 
   char name[256];
   FsFile entry;
-  while ((entry = dir.openNextFile(oflag))) {
+  while (entry.openNext(&dir, O_RDONLY)) {
     entry.getName(name, sizeof(name));
     if (strcmp(name, filename) == 0) {
-      file = std::move(entry);
+      if (oflag == O_RDONLY) {
+        file = std::move(entry);
+      } else {
+        uint32_t idx = entry.dirIndex();
+        entry.close();
+        file.open(&dir, idx, oflag);
+      }
       dir.close();
-      return true;
+      return file.isOpen();
     }
     entry.close();
   }
@@ -327,6 +333,7 @@ bool SDCardManager::openFileForWrite(const char* moduleName, const char* path, F
       return true;
     }
   }
+  if (openByDirScan(path, O_RDWR | O_CREAT | O_TRUNC, file)) return true;
   LOG_ERR(moduleName, "Failed to open file for writing: %s", path);
   return false;
 }

@@ -957,12 +957,15 @@ StateTransition ReaderState::update(Core& core) {
       processIndexingChunk(core);
 
       if (millis() - batchStart >= kIndexingBatchMs) break;
-      if (indexingCache_ && indexingCache_->isPartial()) break;
       if (!indexingInProgress_ || indexingCancelled_ || indexingFailed_) break;
     }
 
     suppressRender_ = false;
-    needsRender_ = true;
+    uint32_t now = millis();
+    if (!indexingInProgress_ || now - indexingLastRenderMs_ >= 10000) {
+      needsRender_ = true;
+      indexingLastRenderMs_ = now;
+    }
 
     if (indexingCancelled_) {
       indexingCancelled_ = false;
@@ -1991,7 +1994,22 @@ void ReaderState::stopBackgroundCaching() {
 // Full Book Pre-Processing
 // ============================================================================
 
+static std::string indexedMarkerPath(Core& core) {
+  const ContentType type = core.content.metadata().type;
+  if (type == ContentType::Epub) {
+    auto* provider = core.content.asEpub();
+    if (provider && provider->getEpub()) return provider->getEpub()->getCachePath() + "/sections/.indexed";
+  } else if (type == ContentType::Fb2) {
+    auto* fb2Provider = core.content.asFb2();
+    if (fb2Provider && fb2Provider->getFb2()) return fb2Provider->getFb2()->getCachePath() + "/.indexed";
+  }
+  return "";
+}
+
 bool ReaderState::isFullyIndexed(Core& core) {
+  const std::string marker = indexedMarkerPath(core);
+  if (!marker.empty() && SdMan.exists(marker.c_str())) return true;
+
   const ContentType type = core.content.metadata().type;
   const Theme& theme = THEME_MANAGER.current();
   const auto vp = getReaderViewport(core.settings.statusBar != 0);
@@ -2008,12 +2026,20 @@ bool ReaderState::isFullyIndexed(Core& core) {
       return std::all_of(entries.begin(), entries.end(), [](const MetricsEntry& e) { return e.exact; });
     }
 
+    bool anyMissing = false;
     for (int i = 0; i < spineCount; ++i) {
       const auto cachePath = epubSectionCachePath(provider->getEpub()->getCachePath(), i);
       const auto probe = PageCache::probe(cachePath, config);
-      if (!probe.valid || probe.partial) return false;
+      if (!probe.valid) { anyMissing = true; break; }
     }
-    return true;
+    if (!anyMissing) {
+      if (!marker.empty()) {
+        FsFile f;
+        if (SdMan.openFileForWrite("READER", marker, f)) f.close();
+      }
+      return true;
+    }
+    return false;
   }
 
   if (type == ContentType::Fb2) {
@@ -2027,12 +2053,20 @@ bool ReaderState::isFullyIndexed(Core& core) {
       return std::all_of(entries.begin(), entries.end(), [](const MetricsEntry& e) { return e.exact; });
     }
 
+    bool anyMissing = false;
     for (int i = 0; i < sectionCount; ++i) {
       const auto cachePath = fb2Provider->getSectionCachePath(i);
       const auto probe = PageCache::probe(cachePath, config);
-      if (!probe.valid || probe.partial) return false;
+      if (!probe.valid) { anyMissing = true; break; }
     }
-    return true;
+    if (!anyMissing) {
+      if (!marker.empty()) {
+        FsFile f;
+        if (SdMan.openFileForWrite("READER", marker, f)) f.close();
+      }
+      return true;
+    }
+    return false;
   }
 
   if (type == ContentType::Txt || type == ContentType::Markdown || type == ContentType::Html) {
@@ -2101,9 +2135,12 @@ void ReaderState::startFullBookIndexing(Core& core) {
     indexingTotalSpines_ = 1;
   }
 
+  indexingLastRenderMs_ = 0;
   needsRender_ = true;
   LOG_INF(TAG, "Starting full book indexing: %d/%d spines", indexingSpine_, indexingTotalSpines_);
 }
+
+static constexpr uint16_t kIndexingChunk = 50;
 
 void ReaderState::processIndexingChunk(Core& core) {
   core.input.resetIdleTimer();
@@ -2144,6 +2181,11 @@ void ReaderState::processIndexingChunk(Core& core) {
     LOG_INF(TAG, "Full book indexing complete");
     deleteMetricsIndex(core);
     invalidateGlobalPageMetrics();
+    const std::string marker = indexedMarkerPath(core);
+    if (!marker.empty()) {
+      FsFile f;
+      if (SdMan.openFileForWrite("READER", marker, f)) f.close();
+    }
     startBackgroundCaching(core);
     renderer_.clearScreen(theme.backgroundColor);
     renderer_.displayBuffer(EInkDisplay::HALF_REFRESH);
@@ -2155,21 +2197,29 @@ void ReaderState::processIndexingChunk(Core& core) {
   if (indexingCache_) {
     size_t freeHeap = heap_caps_get_free_size(MALLOC_CAP_8BIT);
     size_t largestBlock = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
-    if (freeHeap < 15 * 1024 || largestBlock < 6 * 1024) {
-      LOG_ERR(TAG, "Indexing: heap too low for extend (free=%zu largest=%zu)", freeHeap, largestBlock);
-      stopIndexing();
+    if (freeHeap < 40 * 1024 || largestBlock < 32 * 1024) {
+      LOG_WRN(TAG, "Indexing: heap too low for spine %d (free=%zu largest=%zu), skipping", indexingSpine_, freeHeap,
+              largestBlock);
+      indexingCache_.reset();
+      indexingParser_.reset();
+      renderer_.clearWidthCache();
+      indexingSpine_++;
       needsRender_ = true;
       return;
     }
 
-    if (!indexingCache_->extend(*indexingParser_, PageCache::DEFAULT_CACHE_CHUNK, shouldAbort)) {
+    if (!indexingCache_->extend(*indexingParser_, kIndexingChunk, shouldAbort)) {
       if (indexingCancelled_) {
         indexingInProgress_ = false;
         indexingCache_.reset();
         indexingParser_.reset();
         LOG_INF(TAG, "Indexing cancelled by user at spine %d", indexingSpine_);
       } else {
-        stopIndexing();
+        LOG_WRN(TAG, "Indexing: extend failed for spine %d, skipping", indexingSpine_);
+        indexingCache_.reset();
+        indexingParser_.reset();
+        renderer_.clearWidthCache();
+        indexingSpine_++;
       }
       needsRender_ = true;
       return;
@@ -2184,6 +2234,8 @@ void ReaderState::processIndexingChunk(Core& core) {
       indexingParser_.reset();
       renderer_.clearWidthCache();
       indexingSpine_++;
+    } else {
+      indexingParser_->clearAnchorMap();
     }
 
     if (!suppressRender_) {
@@ -2320,7 +2372,7 @@ void ReaderState::processIndexingChunk(Core& core) {
     return;
   }
 
-  uint16_t maxPages = PageCache::DEFAULT_CACHE_CHUNK;
+  uint16_t maxPages = kIndexingChunk;
 
   if (type == ContentType::Fb2) {
     const auto* fb2Provider = core.content.asFb2();

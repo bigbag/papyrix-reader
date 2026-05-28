@@ -229,21 +229,31 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
                        const AbortCallback& shouldAbort) {
   const unsigned long startMs = millis();
 
+  // For extends with existing pages, track old LUT position for disk-to-disk copy
+  uint32_t oldLutOffset = 0;
+  uint16_t oldPageCount = 0;
   std::vector<uint32_t> lut;
 
   if (skipPages > 0) {
-    // Extending: load existing LUT
-    if (!loadLut(lut)) {
-      LOG_ERR(TAG, "Failed to load existing LUT for extend");
-      return false;
+    // Read LUT position from header (no vector allocation)
+    {
+      FsFile hdr;
+      if (!SdMan.openFileForRead("CACHE", cachePath_, hdr)) {
+        LOG_ERR(TAG, "Failed to read header for extend");
+        return false;
+      }
+      hdr.seek(kLutOffsetOffset);
+      serialization::readPod(hdr, oldLutOffset);
+      hdr.seek(kPageCountOffset);
+      serialization::readPod(hdr, oldPageCount);
+      hdr.close();
     }
 
-    // Append new pages AFTER old LUT (crash-safe: old LUT remains valid until header update)
     if (!file_.open(cachePath_.c_str(), O_RDWR)) {
       LOG_ERR(TAG, "Failed to open cache file for append");
       return false;
     }
-    file_.seekEnd();  // Append after old LUT
+    file_.seekEnd();
   } else {
     // Fresh create
     if (!SdMan.openFileForWrite("CACHE", cachePath_, file_)) {
@@ -329,11 +339,45 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
   bytesConsumed_ = parser.bytesConsumed();
   totalBytes_ = parser.totalBytes();
 
-  if (!writeLut(lut)) {
+  if (skipPages > 0 && oldPageCount > 0) {
+    // Disk-to-disk LUT copy for cold extend: copy old entries then append new
+    const uint32_t newLutOffset = file_.position();
+    constexpr size_t kCopyBuf = 256;
+    uint8_t copyBuf[kCopyBuf];
+    uint32_t remaining = oldPageCount * static_cast<uint32_t>(sizeof(uint32_t));
+    uint32_t srcPos = oldLutOffset;
+    uint32_t dstPos = newLutOffset;
+    bool copyOk = true;
+    while (remaining > 0) {
+      uint32_t toRead = remaining < kCopyBuf ? remaining : kCopyBuf;
+      file_.seek(srcPos);
+      if (file_.read(copyBuf, toRead) != toRead) { copyOk = false; break; }
+      file_.seek(dstPos);
+      file_.write(copyBuf, toRead);
+      srcPos += toRead;
+      dstPos += toRead;
+      remaining -= toRead;
+    }
+    if (!copyOk) {
+      file_.close();
+      pageCount_ = skipPages;
+      SdMan.remove(cachePath_.c_str());
+      return false;
+    }
+    // Append new entries
+    for (const uint32_t pos : lut) {
+      serialization::writePod(file_, pos);
+    }
+    // Update header
+    file_.seek(kPageCountOffset);
+    serialization::writePod(file_, pageCount_);
+    serialization::writePod(file_, static_cast<uint8_t>(isPartial_ ? 1 : 0));
+    serialization::writePod(file_, newLutOffset);
+    serialization::writePod(file_, bytesConsumed_);
+    serialization::writePod(file_, totalBytes_);
+    lutOffset_ = newLutOffset;
+  } else if (!writeLut(lut)) {
     file_.close();
-    // Roll back in-memory state to match what's actually on disk.  pageCount_
-    // was already incremented during parsing; leaving it past the on-disk
-    // LUT makes loadPage() read garbage positions from the file.
     if (skipPages == 0) {
       pageCount_ = 0;
       isPartial_ = false;
@@ -364,10 +408,9 @@ bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const Ab
   if (parser.canResume()) {
     // HOT PATH: Parser has live session from previous extend, just append new pages.
     // No re-parsing — O(chunk) work instead of O(totalPages).
+    // Uses disk-to-disk LUT copy with small buffer to avoid large heap allocations
+    // that fragment memory on spines with thousands of pages.
     LOG_INF(TAG, "Hot extend from %d pages (+%d)", currentPages, chunk);
-
-    std::vector<uint32_t> lut;
-    if (!loadLut(lut)) return false;
 
     bool opened = false;
     for (int attempt = 0; attempt < 3; attempt++) {
@@ -381,13 +424,22 @@ bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const Ab
       LOG_ERR(TAG, "Failed to open cache file for hot extend");
       return false;
     }
+
+    // Read current LUT position from header
+    file_.seek(kLutOffsetOffset);
+    uint32_t oldLutOffset = 0;
+    serialization::readPod(file_, oldLutOffset);
+
     file_.seekEnd();
 
     const uint16_t pagesBefore = pageCount_;
+    const uint16_t oldPageCount = pageCount_;
+    uint32_t newOffsets[50];
+    uint16_t newCount = 0;
     bool hitMaxPages = false;
     bool parseOk = parser.parsePages(
-        [this, &lut, &hitMaxPages](std::unique_ptr<Page> page) {
-          if (hitMaxPages) return;
+        [this, &newOffsets, &newCount, &hitMaxPages](std::unique_ptr<Page> page) {
+          if (hitMaxPages || newCount >= 50) return;
           const uint32_t position = file_.position();
 #ifndef ARDUINO
           if (failSerializeInterval_ > 0 && ++failSerializeCounter_ % failSerializeInterval_ == 0) {
@@ -401,7 +453,7 @@ bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const Ab
             hitMaxPages = true;
             return;
           }
-          lut.push_back(position);
+          newOffsets[newCount++] = position;
           pageCount_++;
         },
         chunk, shouldAbort);
@@ -416,16 +468,47 @@ bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const Ab
       return false;
     }
 
-    if (!writeLut(lut)) {
-      file_.close();
-      // writeLut failed before updating the on-disk header; the file still
-      // references the pre-extend LUT.  Restore pageCount_ so the in-memory
-      // view matches what's actually on disk — otherwise loadPage(N) reads
-      // past the end of the old LUT.
-      pageCount_ = pagesBefore;
-      SdMan.remove(cachePath_.c_str());
-      return false;
+    // Copy old LUT entries to after the new pages using a small buffer (no heap alloc)
+    const uint32_t newLutOffset = file_.position();
+    {
+      constexpr size_t kCopyBuf = 256;
+      uint8_t buf[kCopyBuf];
+      uint32_t remaining = oldPageCount * static_cast<uint32_t>(sizeof(uint32_t));
+      uint32_t srcPos = oldLutOffset;
+      uint32_t dstPos = newLutOffset;
+      while (remaining > 0) {
+        uint32_t toRead = remaining < kCopyBuf ? remaining : kCopyBuf;
+        file_.seek(srcPos);
+        size_t n = file_.read(buf, toRead);
+        if (n != toRead) {
+          LOG_ERR(TAG, "LUT copy read failed at %u", srcPos);
+          pageCount_ = pagesBefore;
+          file_.close();
+          SdMan.remove(cachePath_.c_str());
+          return false;
+        }
+        file_.seek(dstPos);
+        file_.write(buf, n);
+        srcPos += static_cast<uint32_t>(n);
+        dstPos += static_cast<uint32_t>(n);
+        remaining -= static_cast<uint32_t>(n);
+      }
     }
+
+    // Append new LUT entries
+    file_.seek(newLutOffset + oldPageCount * static_cast<uint32_t>(sizeof(uint32_t)));
+    for (uint16_t i = 0; i < newCount; i++) {
+      serialization::writePod(file_, newOffsets[i]);
+    }
+
+    // Update header
+    lutOffset_ = newLutOffset;
+    file_.seek(kPageCountOffset);
+    serialization::writePod(file_, pageCount_);
+    serialization::writePod(file_, static_cast<uint8_t>(isPartial_ ? 1 : 0));
+    serialization::writePod(file_, newLutOffset);
+    serialization::writePod(file_, bytesConsumed_);
+    serialization::writePod(file_, totalBytes_);
 
     file_.sync();
     file_.close();
@@ -434,6 +517,13 @@ bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const Ab
   }
 
   // COLD PATH: Fresh parser (after exit/reboot) — re-parse from start, skip cached pages.
+  // For large caches, cold re-parsing thousands of skipped pages fragments the heap.
+  // Skip the cold extend and let on-demand caching handle the rest.
+  if (pageCount_ >= 1000) {
+    LOG_INF(TAG, "Skipping cold extend at %d pages (too expensive), deferring to on-demand", pageCount_);
+    isPartial_ = false;
+    return true;
+  }
   const uint16_t targetPages = pageCount_ + chunk;
   LOG_INF(TAG, "Cold extend from %d to %d pages", currentPages, targetPages);
 

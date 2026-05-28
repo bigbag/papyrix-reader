@@ -273,7 +273,8 @@ int main(int argc, char* argv[]) {
       fprintf(stderr, "Failed to load EPUB: %s\n", filepath.c_str());
       return 1;
     }
-    epub->splitLargeSpineItems();
+    // Use on-demand byte-offset splitting (splitSingleSpineItem) instead of batch Expat splitting
+    // epub->splitLargeSpineItems();
     printf("EPUB: \"%s\" by %s, %d spine items\n", epub->getTitle().c_str(), epub->getAuthor().c_str(),
            epub->getSpineItemsCount());
 

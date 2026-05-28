@@ -65,4 +65,5 @@ class EpubChapterParser : public ContentParser {
   bool canResume() const override { return initialized_ && liveParser_ != nullptr; }
   void reset() override;
   const std::vector<std::pair<std::string, uint16_t>>& getAnchorMap() const override;
+  void clearAnchorMap() override { anchorMap_.clear(); anchorMap_.shrink_to_fit(); }
 };

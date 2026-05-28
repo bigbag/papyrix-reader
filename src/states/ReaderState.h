@@ -236,6 +236,7 @@ class ReaderState : public State {
   int indexingTotalSpines_ = 0;
   std::unique_ptr<PageCache> indexingCache_;
   std::unique_ptr<ContentParser> indexingParser_;
+  uint32_t indexingLastRenderMs_ = 0;
 
   void startFullBookIndexing(Core& core);
   void processIndexingChunk(Core& core);

@@ -3,6 +3,7 @@
 #include <CoverHelpers.h>
 #include <FsHelpers.h>
 #include <Html5Normalizer.h>
+#include <HtmlSplitter.h>
 #include <ImageConverter.h>
 #include <Logging.h>
 #include <SDCardManager.h>
@@ -513,95 +514,49 @@ bool Epub::splitSingleSpineItem(int spineIndex, uint8_t* decompressBuffer) {
     }
   }
 
-  SpineSplit split;
-  split.originalSpineIndex = spineIndex;
-  split.originalHref = entry.href;
+  // Normalize the entire file once (instead of normalizing each section separately)
+  const std::string normPath = tmpPath + ".norm";
+  if (html5::normalizeHtmlForXml(tmpPath, normPath)) {
+    SdMan.remove(tmpPath.c_str());
+    SdMan.rename(normPath.c_str(), tmpPath.c_str());
+  }
+
+  // Find head/body structure for section wrapping
+  std::string headHtml;
+  size_t bodyStart = 0;
+  size_t bodyEnd = 0;
+  html5::findHtmlHeadAndBody(tmpPath, headHtml, bodyStart, bodyEnd);
+
+  std::string prologue =
+      "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+      "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n";
+  if (!headHtml.empty()) {
+    prologue += headHtml;
+    prologue += "\n";
+  }
+  prologue += "<body><div>\n";
+  const std::string epilogue = "\n</div></body>\n</html>\n";
+
+  const std::string sectionsDir = cachePath + "/sections";
+  SdMan.mkdir(sectionsDir.c_str());
+
+  // Write base path sidecar for image resolution
   {
     size_t lastSlash = entry.href.rfind('/');
     if (lastSlash != std::string::npos) {
-      split.chapterBasePath = entry.href.substr(0, lastSlash + 1);
-    }
-  }
-
-  std::vector<SectionRange> bestGrouped;
-
-  for (int scanLevel = 0; scanLevel <= 1; scanLevel++) {
-    split.sections.clear();
-    split.anchorByteOffsets.clear();
-    if (!scanSectionBoundaries(tmpPath, split, scanLevel, decompressBuffer) || split.sections.empty()) break;
-
-    std::vector<SectionRange> grouped;
-    uint32_t sectionStart = 0;
-    uint32_t cumulativeSize = 0;
-    bool firstElement = true;
-
-    for (size_t j = 0; j < split.sections.size(); j++) {
-      const bool hasHeading = (split.sections[j].startOffset & 0x80000000u) != 0;
-      const uint32_t elemStart = split.sections[j].startOffset & 0x7FFFFFFFu;
-      const uint32_t elemEnd = split.sections[j].endOffset;
-      const uint32_t elemSize = elemEnd - elemStart;
-
-      if (firstElement) {
-        sectionStart = elemStart;
-        cumulativeSize = elemSize;
-        firstElement = false;
-        continue;
-      }
-
-      bool shouldSplit = false;
-      if (hasHeading && cumulativeSize >= MIN_SECTION_SIZE) shouldSplit = true;
-      if (cumulativeSize + elemSize > MAX_SECTION_SIZE && cumulativeSize >= MIN_SECTION_SIZE) shouldSplit = true;
-
-      if (shouldSplit) {
-        SectionRange range;
-        range.startOffset = sectionStart;
-        range.endOffset = elemStart;
-        grouped.push_back(range);
-        sectionStart = elemStart;
-        cumulativeSize = elemSize;
-      } else {
-        cumulativeSize += elemSize;
+      const std::string basePath = entry.href.substr(0, lastSlash + 1);
+      const std::string baseFile = sectionsDir + "/" + std::to_string(spineIndex) + ".base";
+      FsFile bpFile;
+      if (SdMan.openFileForWrite("EPUB", baseFile, bpFile)) {
+        bpFile.write(reinterpret_cast<const uint8_t*>(basePath.c_str()), basePath.size());
+        bpFile.close();
       }
     }
-
-    if (!firstElement) {
-      SectionRange range;
-      range.startOffset = sectionStart;
-      range.endOffset = split.sections.back().endOffset;
-      grouped.push_back(range);
-    }
-
-    if (grouped.size() > bestGrouped.size()) {
-      bestGrouped = grouped;
-    }
-
-    bool anyOversized = false;
-    for (const auto& s : grouped) {
-      if (s.endOffset - s.startOffset > MAX_SECTION_SIZE) {
-        anyOversized = true;
-        break;
-      }
-    }
-
-    if (!anyOversized) break;
-    LOG_INF(TAG, "Spine %d: oversized at level %d (%zu sections), rescanning", spineIndex, scanLevel, grouped.size());
   }
 
-  if (bestGrouped.size() <= 1) {
-    LOG_INF(TAG, "Spine %d: only 1 section after grouping, skipping", spineIndex);
-    SdMan.remove(tmpPath.c_str());
-    if (ownsDictBuf) free(decompressBuffer);
-    return true;
-  }
-
-  LOG_INF(TAG, "Spine %d: split into %u sections", spineIndex, static_cast<unsigned>(bestGrouped.size()));
-  split.sections = std::move(bestGrouped);
-
-  if (!extractSections(tmpPath, split, decompressBuffer)) {
-    SdMan.remove(tmpPath.c_str());
-    if (ownsDictBuf) free(decompressBuffer);
-    return false;
-  }
+  auto result = html5::splitByByteOffset(tmpPath, sectionsDir, std::to_string(spineIndex), ".html", prologue, epilogue,
+                                         bodyStart, bodyEnd, MAX_SECTION_SIZE, decompressBuffer, 32768, true);
+  LOG_INF(TAG, "Spine %d: byte-offset split into %d sections", spineIndex, result.sectionCount);
 
   SdMan.remove(tmpPath.c_str());
   if (ownsDictBuf) free(decompressBuffer);

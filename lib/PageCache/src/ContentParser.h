@@ -63,6 +63,8 @@ class ContentParser {
     return empty;
   }
 
+  virtual void clearAnchorMap() {}
+
   /**
    * Bytes consumed from the source by the parser so far. Used to extrapolate
    * total page count while the cache is still partial. Returns 0 when not

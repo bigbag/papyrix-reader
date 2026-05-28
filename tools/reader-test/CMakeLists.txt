@@ -58,6 +58,7 @@ add_executable(reader-test
 
   # Support
   ${PROJECT_ROOT}/lib/Html5/src/Html5Normalizer.cpp
+  ${PROJECT_ROOT}/lib/Html5/src/HtmlSplitter.cpp
   ${PROJECT_ROOT}/lib/ZipFile/src/ZipFile.cpp
   ${PROJECT_ROOT}/lib/InflateReader/src/InflateReader.cpp
   ${PROJECT_ROOT}/lib/uzlib/src/tinflate.c
