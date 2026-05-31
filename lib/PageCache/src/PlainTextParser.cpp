@@ -9,6 +9,8 @@
 
 #define TAG "TXT_PARSE"
 
+#include <memory>
+#include <new>
 #include <utility>
 
 namespace {
@@ -51,7 +53,15 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
   const int lineHeight = static_cast<int>(renderer_.getEffectiveLineHeight(config_.fontId) * config_.lineCompression);
   const int maxLinesPerPage = config_.viewportHeight / lineHeight;
 
-  uint8_t buffer[READ_CHUNK_SIZE + 1];
+  // Keep the 4 KB read buffer off the stack: the foreground "page not cached"
+  // render runs this whole parse -> layout -> font-render chain on the 8 KB
+  // loopTask stack, where an on-stack buffer this size overflows it (Issue #137).
+  auto buffer = std::unique_ptr<uint8_t[]>(new (std::nothrow) uint8_t[READ_CHUNK_SIZE + 1]);
+  if (!buffer) {
+    LOG_ERR(TAG, "Failed to allocate read buffer");
+    file.close();
+    return false;
+  }
   std::unique_ptr<ParsedText> currentBlock;
   std::unique_ptr<Page> currentPage;
   int16_t currentPageY = 0;
@@ -112,11 +122,32 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
     return continueProcessing;
   };
 
+  // Lay out the current block as a soft (mid-paragraph) break, used to bound the
+  // per-block working set. Returns true if the batch filled up — resume state is
+  // persisted and the caller must return; returns false if the block was fully
+  // laid out and parsing can continue with a fresh block.
+  auto softFlushAtCap = [&](size_t resumeOffset) -> bool {
+    if (flushBlock()) {
+      return false;
+    }
+    pendingBlock_ = std::move(currentBlock);
+    pendingPartialWord_ = std::move(partialWord);
+    pendingSawNewline_ = sawNewline;
+    currentOffset_ = resumeOffset;
+    hasMore_ = true;
+    if (currentPage && !currentPage->elements.empty()) {
+      pendingPage_ = std::move(currentPage);
+      pendingPageY_ = currentPageY;
+    }
+    file.close();
+    return true;
+  };
+
   if (currentOffset_ == 0) {
-    size_t peekBytes = file.read(buffer, READ_CHUNK_SIZE);
+    size_t peekBytes = file.read(buffer.get(), READ_CHUNK_SIZE);
     if (peekBytes > 0) {
       buffer[peekBytes] = '\0';
-      detectedEncoding_ = detectEncoding(buffer, peekBytes, bomSkipBytes_);
+      detectedEncoding_ = detectEncoding(buffer.get(), peekBytes, bomSkipBytes_);
       encodingTable_ = getEncodingTable(detectedEncoding_);
     }
     file.seekSet(bomSkipBytes_);
@@ -176,12 +207,24 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
       return false;
     }
 
-    size_t bytesRead = file.read(buffer, READ_CHUNK_SIZE);
+    size_t bytesRead = file.read(buffer.get(), READ_CHUNK_SIZE);
     if (bytesRead == 0) break;
 
     buffer[bytesRead] = '\0';
 
     for (size_t i = 0; i < bytesRead; i++) {
+      // Bound the working set: split an over-long paragraph mid-stream instead of
+      // accumulating thousands of words into one block (Issue #137).
+      if (currentBlock && currentBlock->size() >= ParsedText::kMaxWordsPerBlock) {
+        if (softFlushAtCap(file.position() - (bytesRead - i))) {
+          return true;
+        }
+        if (!currentBlock) {
+          currentBlock.reset(new ParsedText(static_cast<TextBlock::BLOCK_STYLE>(config_.paragraphAlignment),
+                                            config_.indentLevel, config_.hyphenation, true, isRtl_));
+        }
+      }
+
       char c = static_cast<char>(buffer[i]);
 
       if (c == '\r') continue;
@@ -305,7 +348,20 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
     partialWord.resize(utf8NormalizeNfc(&partialWord[0], partialWord.size()));
     addWordWithRtlCheck(partialWord, EpdFontFamily::REGULAR);
   }
-  flushBlock();
+  if (!flushBlock()) {
+    // The trailing block exceeded this batch — all bytes are consumed, but the
+    // remaining lines must be emitted on a later call from the preserved block.
+    pendingBlock_ = std::move(currentBlock);
+    pendingSawNewline_ = sawNewline;
+    if (currentPage && !currentPage->elements.empty()) {
+      pendingPage_ = std::move(currentPage);
+      pendingPageY_ = currentPageY;
+    }
+    currentOffset_ = fileSize_;
+    hasMore_ = true;
+    file.close();
+    return true;
+  }
 
   // Complete final page
   if (currentPage && !currentPage->elements.empty()) {

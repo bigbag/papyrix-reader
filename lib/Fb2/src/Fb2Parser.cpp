@@ -17,6 +17,8 @@
 #define TAG "FB2_PARSE"
 
 #include <cstring>
+#include <memory>
+#include <new>
 #include <utility>
 
 namespace {
@@ -103,6 +105,15 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
 
   Hyphenation::setLanguage(language_);
 
+  // Keep the 4 KB read buffer off the stack: the foreground "page not cached"
+  // render runs this whole parse -> layout -> font-render chain on the 8 KB
+  // loopTask stack, where an on-stack buffer this size overflows it (Issue #137).
+  auto buffer = std::unique_ptr<uint8_t[]>(new (std::nothrow) uint8_t[READ_CHUNK_SIZE + 1]);
+  if (!buffer) {
+    LOG_ERR(TAG, "Failed to allocate read buffer");
+    return false;
+  }
+
   // RESUME PATH: parser suspended from previous maxPages stop
   if (xmlParser_ && resumeFile_) {
     LOG_DBG(TAG, "Resuming parse from previous position");
@@ -137,13 +148,12 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
 
     fileSize_ = resumeFile_.size();
 
-    uint8_t peekBuffer[READ_CHUNK_SIZE + 1];
-    size_t peekBytes = resumeFile_.read(peekBuffer, READ_CHUNK_SIZE);
+    size_t peekBytes = resumeFile_.read(buffer.get(), READ_CHUNK_SIZE);
     const char* explicitEncoding = nullptr;
     bomSkip_ = 0;
     if (peekBytes > 0) {
-      peekBuffer[peekBytes] = '\0';
-      if (detectEncoding(peekBuffer, peekBytes, bomSkip_) == Encoding::Utf8) {
+      buffer[peekBytes] = '\0';
+      if (detectEncoding(buffer.get(), peekBytes, bomSkip_) == Encoding::Utf8) {
         explicitEncoding = "UTF-8";
       }
     }
@@ -164,7 +174,6 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
     startNewPage();
   }
 
-  uint8_t buffer[READ_CHUNK_SIZE + 1];
   uint16_t abortCheckCounter = 0;
 
   while (resumeFile_.available() > 0) {
@@ -183,11 +192,11 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
       return false;
     }
 
-    size_t bytesRead = resumeFile_.read(buffer, READ_CHUNK_SIZE);
+    size_t bytesRead = resumeFile_.read(buffer.get(), READ_CHUNK_SIZE);
     if (bytesRead == 0) break;
 
     int done = (resumeFile_.available() == 0) ? 1 : 0;
-    auto status = XML_Parse(xmlParser_, reinterpret_cast<const char*>(buffer), static_cast<int>(bytesRead), done);
+    auto status = XML_Parse(xmlParser_, reinterpret_cast<const char*>(buffer.get()), static_cast<int>(bytesRead), done);
     if (status == XML_STATUS_ERROR) {
       LOG_ERR(TAG, "Parse error at line %lu: %s", XML_GetCurrentLineNumber(xmlParser_),
               XML_ErrorString(XML_GetErrorCode(xmlParser_)));

@@ -43,8 +43,19 @@ class ParsedText {
   std::vector<uint16_t> calculateWordWidths(const GfxRenderer& renderer, int fontId);
   bool preSplitOversizedWords(const GfxRenderer& renderer, int fontId, int pageWidth,
                               const AbortCallback& shouldAbort = nullptr);
+  bool layoutInWindows(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
+                       const std::function<void(std::shared_ptr<TextBlock>)>& processLine, bool includeLastLine,
+                       const AbortCallback& shouldAbort);
 
  public:
+  // Upper bound on the words laid out in a single pass. A paragraph larger than
+  // this is split into chunks so the transient heap (word/style lists, their
+  // pre-split duplicate, width and break vectors) stays bounded. Without it a
+  // pathological "paragraph" — e.g. a source/patch file where hundreds of
+  // non-blank lines join into one paragraph — exhausts the device heap and
+  // reboots it (Issue #137).
+  static constexpr size_t kMaxWordsPerBlock = 512;
+
   explicit ParsedText(const TextBlock::BLOCK_STYLE style, const uint8_t indentLevel,
                       const bool hyphenationEnabled = true, const bool useGreedy = true, const bool rtl = false)
       : style(style),

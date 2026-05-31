@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <memory>
+#include <new>
 
 namespace html5 {
 
@@ -69,13 +71,20 @@ bool normalizeHtmlForXml(const std::string& inputPath, const std::string& output
   size_t attrNameLen = 0;
   bool inAttrName = false;
 
-  uint8_t readBuffer[BUFFER_SIZE];
-  uint8_t writeBuffer[BUFFER_SIZE + 128];
+  // Keep these ~2 KB scratch buffers off the stack: normalization runs on the
+  // foreground loopTask (8 KB stack) when an HTML/EPUB page isn't cached (Issue #137).
+  auto readBuffer = std::unique_ptr<uint8_t[]>(new (std::nothrow) uint8_t[BUFFER_SIZE]);
+  auto writeBuffer = std::unique_ptr<uint8_t[]>(new (std::nothrow) uint8_t[BUFFER_SIZE + 128]);
+  if (!readBuffer || !writeBuffer) {
+    inFile.close();
+    outFile.close();
+    return false;
+  }
   size_t writePos = 0;
 
   auto flushWrite = [&]() -> bool {
     if (writePos > 0) {
-      if (outFile.write(writeBuffer, writePos) != writePos) {
+      if (outFile.write(writeBuffer.get(), writePos) != writePos) {
         return false;
       }
       writePos = 0;
@@ -121,7 +130,7 @@ bool normalizeHtmlForXml(const std::string& inputPath, const std::string& output
   };
 
   while (inFile.available()) {
-    int bytesRead = inFile.read(readBuffer, BUFFER_SIZE);
+    int bytesRead = inFile.read(readBuffer.get(), BUFFER_SIZE);
     if (bytesRead <= 0) break;
 
     for (int i = 0; i < bytesRead; i++) {

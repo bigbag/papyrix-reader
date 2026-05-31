@@ -17,6 +17,8 @@
 #include <blocks/TextBlock.h>
 #include <esp_heap_caps.h>
 
+#include <memory>
+#include <new>
 #include <utility>
 
 #include "md_parser.h"
@@ -388,11 +390,17 @@ bool MarkdownParser::parsePages(const std::function<void(std::unique_ptr<Page>)>
   file.seekSet(currentOffset_);
 
   if (currentOffset_ == 0) {
-    uint8_t peekBuf[513];
-    size_t peekBytes = file.read(peekBuf, 512);
+    // Keep the 512 B peek off the stack to respect the 8 KB foreground loopTask budget (Issue #137).
+    auto peekBuf = std::unique_ptr<uint8_t[]>(new (std::nothrow) uint8_t[513]);
+    if (!peekBuf) {
+      LOG_ERR(TAG, "Failed to allocate peek buffer");
+      file.close();
+      return false;
+    }
+    size_t peekBytes = file.read(peekBuf.get(), 512);
     if (peekBytes > 0) {
       peekBuf[peekBytes] = '\0';
-      detectedEncoding_ = detectEncoding(peekBuf, peekBytes, bomSkipBytes_);
+      detectedEncoding_ = detectEncoding(peekBuf.get(), peekBytes, bomSkipBytes_);
       encodingTable_ = getEncodingTable(detectedEncoding_);
     }
     file.seekSet(currentOffset_ + bomSkipBytes_);
@@ -498,19 +506,24 @@ bool MarkdownParser::parsePages(const std::function<void(std::unique_ptr<Page>)>
 
     prevLineBlank = false;
 
-    // Periodic memory check
+    // Bound the working set: a paragraph of hundreds of non-blank lines joins into
+    // one block of thousands of words and exhausts the heap (Issue #137). At this
+    // line boundary — a safe resume point — flush the block once it reaches the
+    // word cap (or under memory pressure) and continue the paragraph in a fresh
+    // block of the same style.
     if (!ctx.hitMaxPages && ctx.textBlock && ctx.textBlock->size() > 300) {
-      const size_t freeBlock = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
-      if (freeBlock < 25000) {
-        LOG_ERR(TAG, "Low memory (%zu free), flushing early", freeBlock);
-        ctx.textBlock->layoutAndExtractLines(
-            renderer_, config_.fontId, config_.viewportWidth,
-            [this, &ctx](const std::shared_ptr<TextBlock>& textBlock) {
-              if (!ctx.hitMaxPages) {
-                addLineToPage(ctx, textBlock);
-              }
-            },
-            false, [&ctx]() -> bool { return ctx.hitMaxPages || (ctx.shouldAbort && ctx.shouldAbort()); });
+      const bool atWordCap = ctx.textBlock->size() >= ParsedText::kMaxWordsPerBlock;
+      if (atWordCap || heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < 25000) {
+        const auto blockStyle = ctx.textBlock->getStyle();
+        flushTextBlock(ctx);
+        if (!ctx.hitMaxPages) {
+          startNewTextBlock(ctx, blockStyle);
+        } else {
+          // The batch filled while draining. This line's words are already in the
+          // preserved block (pendingTextBlock_), so advance past it — otherwise the
+          // resume re-reads the line and duplicates those words.
+          bytesProcessed = file.position() - currentOffset_;
+        }
       }
     }
 

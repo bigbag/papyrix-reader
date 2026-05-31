@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <iterator>
 #include <vector>
 
 // Knuth-Plass algorithm constants
@@ -263,6 +264,14 @@ bool ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     }
   }
 
+  // Bound the working set: lay out an over-long block in cap-sized windows so the
+  // transient heap (pre-split duplicate, width/break vectors) stays O(cap), not
+  // O(block). Done after the rejoin pass so no soft-hyphen split straddles a
+  // window boundary (Issue #137).
+  if (words.size() > kMaxWordsPerBlock) {
+    return layoutInWindows(renderer, fontId, viewportWidth, processLine, includeLastLine, shouldAbort);
+  }
+
   // Pre-split oversized words at soft hyphen positions
   if (hyphenationEnabled) {
     if (!preSplitOversizedWords(renderer, fontId, pageWidth, shouldAbort)) {
@@ -287,6 +296,53 @@ bool ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
       return false;
     }
     extractLine(i, pageWidth, spaceWidth, wordWidths, lineBreakIndices, processLine);
+  }
+  return true;
+}
+
+bool ParsedText::layoutInWindows(const GfxRenderer& renderer, const int fontId, const uint16_t viewportWidth,
+                                 const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
+                                 const bool includeLastLine, const AbortCallback& shouldAbort) {
+  while (!words.empty()) {
+    if (shouldAbort && shouldAbort()) {
+      return false;
+    }
+
+    const size_t windowSize = std::min(kMaxWordsPerBlock, words.size());
+    auto wordEnd = words.begin();
+    std::advance(wordEnd, windowSize);
+    auto styleEnd = wordStyles.begin();
+    std::advance(styleEnd, windowSize);
+
+    ParsedText sub(style, indentLevel, hyphenationEnabled, useGreedyBreaking, isRtl);
+    sub.indentApplied = indentApplied;
+    sub.words.splice(sub.words.end(), words, words.begin(), wordEnd);
+    sub.wordStyles.splice(sub.wordStyles.end(), wordStyles, wordStyles.begin(), styleEnd);
+
+    // Only the final window honours includeLastLine; earlier windows must emit
+    // their last line, or a mid-paragraph line would be silently dropped.
+    const bool finalWindow = words.empty();
+    const bool inc = finalWindow ? includeLastLine : true;
+    const bool ok = sub.layoutAndExtractLines(renderer, fontId, viewportWidth, processLine, inc, shouldAbort);
+
+    // Propagate whether the indent was actually consumed (it may not have been if
+    // the sub-block aborted before laying out its first line).
+    indentApplied = sub.indentApplied;
+
+    // Reclaim any words the window did not consume (abort, or a deferred last line).
+    if (!sub.words.empty()) {
+      wordStyles.splice(wordStyles.begin(), sub.wordStyles);
+      words.splice(words.begin(), sub.words);
+    }
+
+    if (!ok) {
+      return false;
+    }
+    // The final window's deferred last line (includeLastLine=false) stays in
+    // `words` for the caller; stop here rather than re-processing it forever.
+    if (finalWindow) {
+      return true;
+    }
   }
   return true;
 }
