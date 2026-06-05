@@ -186,6 +186,14 @@ void ReaderState::deleteMetricsIndex(Core& core) {
   if (SdMan.exists(path.c_str())) {
     SdMan.remove(path.c_str());
   }
+
+  // Sweep the obsolete ".indexed" marker left by 1.24.0-dev builds. That marker could
+  // not represent a skipped/partial spine, so it pinned such books to an approximate
+  // total; completeness is now derived from metrics.bin / section probes instead.
+  const std::string marker = sectionsDir + "/.indexed";
+  if (SdMan.exists(marker.c_str())) {
+    SdMan.remove(marker.c_str());
+  }
 }
 
 void ReaderState::saveAnchorMap(const ContentParser& parser, const std::string& cachePath) {
@@ -1994,22 +2002,7 @@ void ReaderState::stopBackgroundCaching() {
 // Full Book Pre-Processing
 // ============================================================================
 
-static std::string indexedMarkerPath(Core& core) {
-  const ContentType type = core.content.metadata().type;
-  if (type == ContentType::Epub) {
-    auto* provider = core.content.asEpub();
-    if (provider && provider->getEpub()) return provider->getEpub()->getCachePath() + "/sections/.indexed";
-  } else if (type == ContentType::Fb2) {
-    auto* fb2Provider = core.content.asFb2();
-    if (fb2Provider && fb2Provider->getFb2()) return fb2Provider->getFb2()->getCachePath() + "/.indexed";
-  }
-  return "";
-}
-
 bool ReaderState::isFullyIndexed(Core& core) {
-  const std::string marker = indexedMarkerPath(core);
-  if (!marker.empty() && SdMan.exists(marker.c_str())) return true;
-
   const ContentType type = core.content.metadata().type;
   const Theme& theme = THEME_MANAGER.current();
   const auto vp = getReaderViewport(core.settings.statusBar != 0);
@@ -2026,23 +2019,12 @@ bool ReaderState::isFullyIndexed(Core& core) {
       return std::all_of(entries.begin(), entries.end(), [](const MetricsEntry& e) { return e.exact; });
     }
 
-    bool anyMissing = false;
     for (int i = 0; i < spineCount; ++i) {
       const auto cachePath = epubSectionCachePath(provider->getEpub()->getCachePath(), i);
       const auto probe = PageCache::probe(cachePath, config);
-      if (!probe.valid) {
-        anyMissing = true;
-        break;
-      }
+      if (!probe.valid || probe.partial) return false;
     }
-    if (!anyMissing) {
-      if (!marker.empty()) {
-        FsFile f;
-        if (SdMan.openFileForWrite("READER", marker, f)) f.close();
-      }
-      return true;
-    }
-    return false;
+    return true;
   }
 
   if (type == ContentType::Fb2) {
@@ -2056,23 +2038,12 @@ bool ReaderState::isFullyIndexed(Core& core) {
       return std::all_of(entries.begin(), entries.end(), [](const MetricsEntry& e) { return e.exact; });
     }
 
-    bool anyMissing = false;
     for (int i = 0; i < sectionCount; ++i) {
       const auto cachePath = fb2Provider->getSectionCachePath(i);
       const auto probe = PageCache::probe(cachePath, config);
-      if (!probe.valid) {
-        anyMissing = true;
-        break;
-      }
+      if (!probe.valid || probe.partial) return false;
     }
-    if (!anyMissing) {
-      if (!marker.empty()) {
-        FsFile f;
-        if (SdMan.openFileForWrite("READER", marker, f)) f.close();
-      }
-      return true;
-    }
-    return false;
+    return true;
   }
 
   if (type == ContentType::Txt || type == ContentType::Markdown || type == ContentType::Html) {
@@ -2187,11 +2158,6 @@ void ReaderState::processIndexingChunk(Core& core) {
     LOG_INF(TAG, "Full book indexing complete");
     deleteMetricsIndex(core);
     invalidateGlobalPageMetrics();
-    const std::string marker = indexedMarkerPath(core);
-    if (!marker.empty()) {
-      FsFile f;
-      if (SdMan.openFileForWrite("READER", marker, f)) f.close();
-    }
     startBackgroundCaching(core);
     renderer_.clearScreen(theme.backgroundColor);
     renderer_.displayBuffer(EInkDisplay::HALF_REFRESH);
@@ -2203,7 +2169,11 @@ void ReaderState::processIndexingChunk(Core& core) {
   if (indexingCache_) {
     size_t freeHeap = heap_caps_get_free_size(MALLOC_CAP_8BIT);
     size_t largestBlock = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
-    if (freeHeap < 40 * 1024 || largestBlock < 32 * 1024) {
+    // Hot-extend reuses the open parser/cache and copies the LUT disk-to-disk via a
+    // small buffer, so it needs no more heap than the create path. Gate it at the same
+    // threshold; a higher bar here would needlessly skip spines on a fragmented heap and
+    // leave them partial (a partial spine keeps the whole-book count approximate).
+    if (freeHeap < 28 * 1024 || largestBlock < 10 * 1024) {
       LOG_WRN(TAG, "Indexing: heap too low for spine %d (free=%zu largest=%zu), skipping", indexingSpine_, freeHeap,
               largestBlock);
       indexingCache_.reset();
