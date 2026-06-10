@@ -50,9 +50,15 @@ bool renderCoverFromBmp(GfxRenderer& renderer, const std::string& bmpPath, int m
   const int viewportWidth = renderer.getScreenWidth() - marginLeft - marginRight;
   const int viewportHeight = renderer.getScreenHeight() - marginTop - marginBottom;
 
-  // Center image in viewport
-  auto rect = calculateCenteredRect(bitmap.getWidth(), bitmap.getHeight(), marginLeft, marginTop, viewportWidth,
+ 
+  bool imageAspectFit = true;
+  CoverHelpers::CenteredRect rect;
+  if (imageAspectFit){
+    rect =  CoverHelpers::calculateAspectFitRect(bitmap,renderer.getScreenWidth(),renderer.getScreenHeight(), 0, 0, renderer.getScreenWidth(), renderer.getScreenHeight());
+  }else{
+    rect =  CoverHelpers::calculateCenteredRect(bitmap.getWidth(), bitmap.getHeight(), marginLeft, marginTop, viewportWidth,
                                     viewportHeight);
+  }
 
   renderer.clearScreen(0xFF);
   renderer.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height);

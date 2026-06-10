@@ -466,6 +466,16 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
     isScaled = true;
   }
 
+  if (maxWidth > 0 && bitmap.getWidth() < maxWidth) {
+    scale = static_cast<float>(maxWidth) / static_cast<float>(bitmap.getWidth());
+    isScaled = true;
+  }
+
+  if (maxHeight > 0 && bitmap.getHeight() < maxHeight) {
+    scale = std::min(scale, static_cast<float>(maxHeight) / static_cast<float>(bitmap.getHeight()));;
+    isScaled = true;
+  }
+
   const size_t outputRowSize = static_cast<size_t>((bitmap.getWidth() + 3) / 4);
   const size_t rowBytesSize = static_cast<size_t>(bitmap.getRowBytes());
 

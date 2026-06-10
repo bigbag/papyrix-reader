@@ -1,6 +1,7 @@
 #pragma once
 
 #include <FsHelpers.h>
+#include "Bitmap.h"
 
 #include <string>
 
@@ -24,6 +25,40 @@ inline CenteredRect calculateCenteredRect(int imageWidth, int imageHeight, int v
   result.width = viewportWidth;
   result.height = viewportHeight;
 
+  if (imageWidth > viewportWidth || imageHeight > viewportHeight) {
+    const float imgRatio = static_cast<float>(imageWidth) / static_cast<float>(imageHeight);
+    const float vpRatio = static_cast<float>(viewportWidth) / static_cast<float>(viewportHeight);
+
+    if (imgRatio > vpRatio) {
+      result.x = viewportX;
+      result.y = viewportY + (viewportHeight - static_cast<int>(viewportWidth / imgRatio)) / 2;
+    } else {
+      result.x = viewportX + (viewportWidth - static_cast<int>(viewportHeight * imgRatio)) / 2;
+      result.y = viewportY;
+    }
+  } else {
+    result.x = viewportX + (viewportWidth - imageWidth) / 2;
+    result.y = viewportY + (viewportHeight - imageHeight) / 2;
+  }
+
+  return result;
+}
+
+// Calculate the center position while maintaining the aspect ratio
+// The image is scaled to fit the screen
+inline CenteredRect calculateAspectFitRect(const Bitmap& bitmap,int imageWidth, int imageHeight, int viewportX, int viewportY,
+                                          int viewportWidth, int viewportHeight) {
+
+                                         
+  float scale = static_cast<float>(imageWidth) / static_cast<float>(bitmap.getWidth());
+  scale = std::min(scale, static_cast<float>(imageHeight) / static_cast<float>(bitmap.getHeight()));
+  CenteredRect result;
+  result.width = static_cast<int>(bitmap.getWidth()*scale);
+  result.height = static_cast<int>(bitmap.getHeight()*scale);
+
+  imageWidth = result.width;
+  imageHeight = result.height;
+  
   if (imageWidth > viewportWidth || imageHeight > viewportHeight) {
     const float imgRatio = static_cast<float>(imageWidth) / static_cast<float>(imageHeight);
     const float vpRatio = static_cast<float>(viewportWidth) / static_cast<float>(viewportHeight);
