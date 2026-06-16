@@ -50,16 +50,15 @@ bool renderCoverFromBmp(GfxRenderer& renderer, const std::string& bmpPath, int m
   const int viewportWidth = renderer.getScreenWidth() - marginLeft - marginRight;
   const int viewportHeight = renderer.getScreenHeight() - marginTop - marginBottom;
 
-  bool imageAspectFit = isAspectFit;
   CoverHelpers::CenteredRect rect;
-  if (imageAspectFit){
+  if (isAspectFit){
     rect =  CoverHelpers::calculateAspectFitRect(bitmap,renderer.getScreenWidth(),renderer.getScreenHeight(), 0, 0, renderer.getScreenWidth(), renderer.getScreenHeight());
   }else{
     rect =  CoverHelpers::calculateCenteredRect(bitmap.getWidth(), bitmap.getHeight(), marginLeft, marginTop, viewportWidth,viewportHeight);
   }
 
   renderer.clearScreen(0xFF);
-  renderer.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height);
+  renderer.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height,isAspectFit);
 
   if (pagesPerRefreshValue == 0) {
     renderer.displayBuffer(EInkDisplay::FAST_REFRESH, turnOffScreen);
@@ -76,13 +75,13 @@ bool renderCoverFromBmp(GfxRenderer& renderer, const std::string& bmpPath, int m
     bitmap.rewindToData();
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
-    renderer.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height);
+    renderer.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height,isAspectFit);
     renderer.copyGrayscaleLsbBuffers();
 
     bitmap.rewindToData();
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
-    renderer.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height);
+    renderer.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height,isAspectFit);
     renderer.copyGrayscaleMsbBuffers();
 
     renderer.displayGrayBuffer(turnOffScreen);

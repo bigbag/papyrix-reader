@@ -454,7 +454,7 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
 }
 
 void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth,
-                             const int maxHeight) const {
+                             const int maxHeight,const bool isAspectFit) const {
   float scale = 1.0f;
   bool isScaled = false;
   if (maxWidth > 0 && bitmap.getWidth() > maxWidth) {
@@ -466,14 +466,16 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
     isScaled = true;
   }
 
-  if (maxWidth > 0 && bitmap.getWidth() < maxWidth) {
-    scale = static_cast<float>(maxWidth) / static_cast<float>(bitmap.getWidth());
-    isScaled = true;
-  }
+  if (isAspectFit) {
+    if (maxWidth > 0 && maxWidth > bitmap.getWidth()) {
+      scale = static_cast<float>(maxWidth) / static_cast<float>(bitmap.getWidth());
+      isScaled = true;
+    }
 
-  if (maxHeight > 0 && bitmap.getHeight() < maxHeight) {
-    scale = std::min(scale, static_cast<float>(maxHeight) / static_cast<float>(bitmap.getHeight()));;
-    isScaled = true;
+    if (maxHeight > 0 && maxHeight > bitmap.getHeight()) {
+      scale = std::min(scale, static_cast<float>(maxHeight) / static_cast<float>(bitmap.getHeight()));
+      isScaled = true;
+    }
   }
 
   const size_t outputRowSize = static_cast<size_t>((bitmap.getWidth() + 3) / 4);

@@ -254,17 +254,17 @@ void SleepState::renderBitmapSleepScreen(const Bitmap& bitmap) const {
   const auto pageWidth = renderer_.getScreenWidth();
   const auto pageHeight = renderer_.getScreenHeight();
 
-  bool imageAspectFit = true;
   Settings settings;
   CoverHelpers::CenteredRect rect;
-  if (settings.fillingImageOnScreen == Settings::FillingImageOnScreen::AspectFit){
+  bool isAspectFit = settings.fillingImageOnScreen == Settings::FillingImageOnScreen::AspectFit?true:false;
+  if (isAspectFit){
     rect = CoverHelpers::calculateAspectFitRect(bitmap,pageWidth,pageHeight, 0, 0, pageWidth, pageHeight);
   }else{
     rect = CoverHelpers::calculateCenteredRect(bitmap.getWidth(), bitmap.getHeight(), 0, 0, pageWidth, pageHeight);
   }
 
   renderer_.clearScreen();
-  renderer_.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height);
+  renderer_.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height,isAspectFit);
   renderer_.displayBuffer(EInkDisplay::HALF_REFRESH);
 
   if (bitmap.hasGreyscale()) {
