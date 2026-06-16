@@ -13,7 +13,7 @@
 namespace ui {
 
 // ============================================================================
-// NetworkModeView - WiFi mode selection (Join/Hotspot)
+// NetworkModeView - WiFi mode selection (Recent / Join / Hotspot)
 // ============================================================================
 
 struct NetworkModeView {

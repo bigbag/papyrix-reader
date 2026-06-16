@@ -125,7 +125,7 @@ test: test-build test-run ## Build and run all unit tests
 
 test-build: ## Build unit tests
 	@mkdir -p test/build
-	@cd test/build && cmake .. -DCMAKE_BUILD_TYPE=Debug && cmake --build . --parallel $$(( $$(nproc) / 2 ))
+	@cd test/build && cmake .. -DCMAKE_BUILD_TYPE=Debug && cmake --build . --parallel $(shell nproc | awk '{print ($$1 > 1 ? int($$1 / 2) : 1)}')
 
 test-run: ## Run unit tests (build first if needed)
 	@if [ ! -d test/build/bin ]; then $(MAKE) test-build; fi
@@ -141,7 +141,7 @@ fontconvert-bin: ## Build Go fontconvert-bin tool (CJK .bin font converter)
 
 reader-test: ## Build desktop reader-test tool (process books without flashing)
 	@mkdir -p tools/reader-test/build
-	@cd tools/reader-test/build && cmake .. && cmake --build . --parallel $$(( $$(nproc) / 2 ))
+	@cd tools/reader-test/build && cmake .. && cmake --build . --parallel $(shell nproc | awk '{print ($$1 > 1 ? int($$1 / 2) : 1)}')
 	@echo "Built: tools/reader-test/build/reader-test"
 ifdef FILE
 	@tools/reader-test/build/reader-test $(FILE) $(OUTPUT)

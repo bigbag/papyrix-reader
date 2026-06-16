@@ -524,6 +524,7 @@ void NetworkState::connectToNetwork(Core& core, const char* ssid, const char* pa
 
 void NetworkState::tryAutoConnect(Core& core) {
   LOG_INF(TAG, "Auto-connect: trying %d saved credentials", WIFI_STORE.getCount());
+  passwordJustEntered_ = false;
 
   const auto* creds = WIFI_STORE.getCredentials();
   int count = WIFI_STORE.getCount();
@@ -549,7 +550,16 @@ void NetworkState::tryAutoConnect(Core& core) {
       strncpy(selectedSSID_, creds[i].ssid, sizeof(selectedSSID_) - 1);
       selectedSSID_[sizeof(selectedSSID_) - 1] = '\0';
 
-      startWebServer(core);
+      // Route to the correct next screen based on why NetworkState was entered
+      if (core.pendingSync == SyncMode::WifiSetup) {
+        goBack_ = true;
+      } else if (core.pendingSync == SyncMode::CalibreWireless) {
+        goCalibreSync_ = true;
+      } else if (core.pendingSync == SyncMode::NtpSync) {
+        goApp_ = true;
+      } else {
+        startWebServer(core);
+      }
       return;
     }
 
