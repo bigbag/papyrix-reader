@@ -255,8 +255,15 @@ void SleepState::renderBitmapSleepScreen(const Bitmap& bitmap) const {
   const auto pageHeight = renderer_.getScreenHeight();
 
   Settings settings;
+  settings.loadFromFile();
   CoverHelpers::CenteredRect rect;
-  bool isAspectFit = settings.fillingImageOnScreen == Settings::FillingImageOnScreen::AspectFit?true:false;
+  bool isAspectFit ;
+  if (settings.fillingImageOnScreen == Settings::FillingImageOnScreen::AspectFit){
+    isAspectFit = true;
+  }else{
+    isAspectFit = false;
+  }
+
   if (isAspectFit){
     rect = CoverHelpers::calculateAspectFitRect(bitmap,pageWidth,pageHeight, 0, 0, pageWidth, pageHeight);
   }else{
