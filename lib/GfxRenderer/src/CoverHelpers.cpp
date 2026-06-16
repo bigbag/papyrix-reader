@@ -15,24 +15,24 @@ namespace CoverHelpers {
 
 bool renderCoverWithFallback(GfxRenderer& renderer, const std::string& coverPath, const std::string& previewPath,
                              int marginTop, int marginRight, int marginBottom, int marginLeft,
-                             int& pagesUntilFullRefresh, int pagesPerRefreshValue, bool turnOffScreen) {
+                             int& pagesUntilFullRefresh, int pagesPerRefreshValue, bool turnOffScreen,bool isAspectFit) {
   // Prefer full cover if available
   if (SdMan.exists(coverPath.c_str())) {
     return renderCoverFromBmp(renderer, coverPath, marginTop, marginRight, marginBottom, marginLeft,
-                              pagesUntilFullRefresh, pagesPerRefreshValue, turnOffScreen);
+                              pagesUntilFullRefresh, pagesPerRefreshValue, turnOffScreen,isAspectFit);
   }
   // Fall back to preview
   if (SdMan.exists(previewPath.c_str())) {
     LOG_DBG(TAG, "Using preview cover (full cover not ready)");
     return renderCoverFromBmp(renderer, previewPath, marginTop, marginRight, marginBottom, marginLeft,
-                              pagesUntilFullRefresh, pagesPerRefreshValue, turnOffScreen);
+                              pagesUntilFullRefresh, pagesPerRefreshValue, turnOffScreen,isAspectFit);
   }
   return false;
 }
 
 bool renderCoverFromBmp(GfxRenderer& renderer, const std::string& bmpPath, int marginTop, int marginRight,
                         int marginBottom, int marginLeft, int& pagesUntilFullRefresh, int pagesPerRefreshValue,
-                        bool turnOffScreen) {
+                        bool turnOffScreen,bool isAspectFit) {
   FsFile coverFile;
   if (!SdMan.openFileForRead("CVR", bmpPath, coverFile)) {
     LOG_ERR(TAG, "Failed to open cover BMP: %s", bmpPath.c_str());
@@ -50,8 +50,7 @@ bool renderCoverFromBmp(GfxRenderer& renderer, const std::string& bmpPath, int m
   const int viewportWidth = renderer.getScreenWidth() - marginLeft - marginRight;
   const int viewportHeight = renderer.getScreenHeight() - marginTop - marginBottom;
 
- 
-  bool imageAspectFit = true;
+  bool imageAspectFit = isAspectFit;
   CoverHelpers::CenteredRect rect;
   if (imageAspectFit){
     rect =  CoverHelpers::calculateAspectFitRect(bitmap,renderer.getScreenWidth(),renderer.getScreenHeight(), 0, 0, renderer.getScreenWidth(), renderer.getScreenHeight());

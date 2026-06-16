@@ -23,7 +23,7 @@ constexpr uint8_t MIN_SETTINGS_VERSION = 3;
 // Version 11: Increased path buffer sizes (lastBookPath 256→512, fileListDir 256→512, fileListSelectedName 128→256)
 constexpr uint8_t SETTINGS_FILE_VERSION = 11;
 // Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 26;
+constexpr uint8_t SETTINGS_COUNT = 27;
 }  // namespace
 
 Result<void> Settings::save(drivers::Storage& storage) const {
@@ -70,6 +70,7 @@ Result<void> Settings::save(drivers::Storage& storage) const {
   serialization::writePod(outputFile, fileListSelectedIndex);
   serialization::writePod(outputFile, frontButtonLayout);
   serialization::writePod(outputFile, fullBookProcess);
+  serialization::writePod(outputFile, fillingImageOnScreen);
   outputFile.sync();
   outputFile.close();
 
@@ -187,6 +188,8 @@ Result<void> Settings::load(drivers::Storage& storage) {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, fullBookProcess, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
+     serialization::readPodValidated(inputFile, fillingImageOnScreen, uint8_t(2));
+    if (++settingsRead >= fileSettingsCount) break;
   } while (false);
 
   if (version < 8) {
@@ -276,6 +279,7 @@ bool Settings::saveToFile() const {
   serialization::writePod(outputFile, fileListSelectedIndex);
   serialization::writePod(outputFile, frontButtonLayout);
   serialization::writePod(outputFile, fullBookProcess);
+  serialization::writePod(outputFile, fillingImageOnScreen);
   outputFile.sync();
   outputFile.close();
 
@@ -388,6 +392,8 @@ bool Settings::loadFromFile() {
     serialization::readPodValidated(inputFile, frontButtonLayout, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, fullBookProcess, uint8_t(2));
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPodValidated(inputFile, fillingImageOnScreen, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
   } while (false);
 

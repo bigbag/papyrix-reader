@@ -1845,10 +1845,16 @@ bool ReaderState::renderCoverPage(Core& core) {
   const auto vp = getReaderViewport(core.settings.statusBar != 0);
   int pagesUntilRefresh = pagesUntilFullRefresh_;
   const bool turnOffScreen = core.settings.sunlightFadingFix != 0;
+  bool isAspectFit;
+  if (core.settings.fillingImageOnScreen == Settings::FillingImageOnScreen::AspectFit){
+   isAspectFit = true;
+  }else{
+   isAspectFit = false;
+  }
 
   bool rendered = CoverHelpers::renderCoverFromBmp(renderer_, coverPath, vp.marginTop, vp.marginRight, vp.marginBottom,
                                                    vp.marginLeft, pagesUntilRefresh,
-                                                   core.settings.getPagesPerRefreshValue(), turnOffScreen);
+                                                   core.settings.getPagesPerRefreshValue(), turnOffScreen,isAspectFit);
 
   forceDoubleRefresh_ = true;
   return rendered;

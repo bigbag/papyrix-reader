@@ -70,6 +70,7 @@ enum class StrId : uint8_t {
   STR_FRONT_BUTTONS,
   STR_SIDE_BUTTONS,
   STR_FULL_BOOK_PROCESS,
+  STR_FILING_IMAGES_ON_SCREEN,
 
   // Settings enum values
   STR_ON,
@@ -109,6 +110,8 @@ enum class StrId : uint8_t {
   STR_NEXT_PREV,
   STR_FRONT_BCLR,
   STR_FRONT_LRBC,
+  STR_ORIGINAL_SIZE,
+  STR_ASPECT_FIT,
 
   // Cleanup
   STR_CLEAR_BOOK_CACHE,

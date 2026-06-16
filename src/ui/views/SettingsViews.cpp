@@ -14,6 +14,7 @@ void ReaderSettingsView::initDefs() {
   static const char* alignmentValues[4];
   static const char* statusBarValues[3];
   static const char* orientationValues[4];
+  static const char* fillingiImageValues[2];
 
   fontSizeValues[0] = tr(XSMALL);
   fontSizeValues[1] = tr(SMALL);
@@ -37,6 +38,9 @@ void ReaderSettingsView::initDefs() {
   orientationValues[1] = tr(LANDSCAPE_CW);
   orientationValues[2] = tr(INVERTED);
   orientationValues[3] = tr(LANDSCAPE_CCW);
+  
+  fillingiImageValues[0] = tr(ORIGINAL_SIZE);
+  fillingiImageValues[1] = tr(ASPECT_FIT);
 
   DEFS[0] = {tr(THEME), SettingType::ThemeSelect, nullptr, 0};
   DEFS[1] = {tr(FONT_SIZE), SettingType::Enum, fontSizeValues, 4};
@@ -49,6 +53,7 @@ void ReaderSettingsView::initDefs() {
   DEFS[8] = {tr(STATUS_BAR), SettingType::Enum, statusBarValues, 3};
   DEFS[9] = {tr(READING_ORIENTATION), SettingType::Enum, orientationValues, 4};
   DEFS[10] = {tr(FULL_BOOK_PROCESS), SettingType::Toggle, nullptr, 0};
+  DEFS[11] = {tr(FILING_IMAGES_ON_SCREEN), SettingType::Enum, fillingiImageValues, 2};
 }
 
 // DeviceSettingsView runtime initialization

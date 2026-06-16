@@ -72,7 +72,8 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "Sunlight Fading Fix",    // SUNLIGHT_FADING_FIX
     "Front Buttons",          // FRONT_BUTTONS
     "Side Buttons",           // SIDE_BUTTONS
-    "Full Book Process",      // FULL_BOOK_PROCESS
+    "Full Book Process",      // FULL_BOOK_PROCESS 
+    "Fill Image",             // Fill Image
 
     // Settings enum values
     "ON",                     // ON
@@ -112,6 +113,8 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "Next/Prev",              // NEXT_PREV
     "B/C/L/R",                // FRONT_BCLR
     "L/R/B/C",                // FRONT_LRBC
+    "Original Size",          // ORIGINAL SIZE
+    "Aspect Fit",             // ASPECT FIT
 
     // Cleanup
     "Clear Book Cache",       // CLEAR_BOOK_CACHE

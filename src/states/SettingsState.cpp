@@ -580,6 +580,9 @@ void SettingsState::loadReaderSettings() {
 
   // Index 10: Full Book Process (toggle)
   readerView_.values[10] = settings.fullBookProcess;
+
+  // Index 11: Filling Image
+  readerView_.values[11] = settings.fillingImageOnScreen;
 }
 
 void SettingsState::saveReaderSettings() {
@@ -626,6 +629,9 @@ void SettingsState::saveReaderSettings() {
 
   // Index 10: Full Book Process
   settings.fullBookProcess = readerView_.values[10];
+
+  // Index 11: Filling Image
+  settings.fillingImageOnScreen = readerView_.values[11];
 }
 
 void SettingsState::loadDeviceSettings() {

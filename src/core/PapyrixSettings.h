@@ -59,6 +59,9 @@ struct Settings {
   // Startup behavior
   enum StartupBehavior : uint8_t { StartupLastDocument = 0, StartupHome = 1 };
 
+  //Filling in the Image on the screen
+  enum FillingImageOnScreen : uint8_t {  OriginalSize = 0, AspectFit  = 1 };
+
   // Settings fields (same order as CrossPointSettings for binary compatibility)
   uint8_t sleepScreen = SleepDark;
   uint8_t statusBar = StatusShow;
@@ -86,6 +89,7 @@ struct Settings {
   uint16_t fileListSelectedIndex = 0;   // FileListState: last selected index
   uint8_t frontButtonLayout = FrontBCLR;
   uint8_t fullBookProcess = 0;
+  uint8_t fillingImageOnScreen = OriginalSize;
 
   // Persistence (using drivers::Storage wrapper)
   Result<void> load(drivers::Storage& storage);

@@ -85,7 +85,7 @@ inline CenteredRect calculateAspectFitRect(const Bitmap& bitmap,int imageWidth, 
 // turnOffScreen: power down display after refresh (sunlight fading fix)
 bool renderCoverFromBmp(GfxRenderer& renderer, const std::string& bmpPath, int marginTop, int marginRight,
                         int marginBottom, int marginLeft, int& pagesUntilFullRefresh, int pagesPerRefreshValue,
-                        bool turnOffScreen = false);
+                        bool turnOffScreen = false,bool isAspectFit=false);
 
 // Render cover with automatic fallback to preview if full cover not available
 // previewPath: fast-generated preview (simple threshold, no dithering)
@@ -93,7 +93,7 @@ bool renderCoverFromBmp(GfxRenderer& renderer, const std::string& bmpPath, int m
 // Prefers coverPath when available, falls back to previewPath
 bool renderCoverWithFallback(GfxRenderer& renderer, const std::string& coverPath, const std::string& previewPath,
                              int marginTop, int marginRight, int marginBottom, int marginLeft,
-                             int& pagesUntilFullRefresh, int pagesPerRefreshValue, bool turnOffScreen = false);
+                             int& pagesUntilFullRefresh, int pagesPerRefreshValue, bool turnOffScreen = false,bool isAspectFit=false);
 
 // Find a cover image file in the given directory
 // Looks for: baseName.jpg, baseName.jpeg, baseName.png, baseName.bmp, cover.jpg, etc.
