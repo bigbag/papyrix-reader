@@ -42,18 +42,27 @@ void render(const GfxRenderer& r, const Theme& t, const NetworkModeView& v) {
 
   title(r, t, t.screenMarginTop, tr(NETWORK_MODE));
 
-  const char* items[] = {tr(JOIN_NETWORK), tr(CREATE_HOTSPOT)};
+  const int joinIdx = v.itemCount - 2;
+  const int hotspotIdx = v.itemCount - 1;
+
   const int startY = 100;
-  for (int i = 0; i < NetworkModeView::ITEM_COUNT; i++) {
+  for (int i = 0; i < v.itemCount; i++) {
     const int y = startY + i * (t.itemHeight + 20);
-    menuItem(r, t, y, items[i], i == v.selected);
+    const char* label;
+    if (i < joinIdx)
+      label = tr(RECENT_NETWORK);
+    else if (i == joinIdx)
+      label = tr(JOIN_NETWORK);
+    else
+      label = tr(CREATE_HOTSPOT);
+    menuItem(r, t, y, label, i == v.selected);
   }
 
-  const int descY = startY + 2 * (t.itemHeight + 20) + 40;
-  if (v.selected == 0) {
-    centeredText(r, t, descY, tr(CONNECT_WIFI));
-  } else {
+  const int descY = startY + v.itemCount * (t.itemHeight + 20) + 40;
+  if (v.selected == hotspotIdx) {
     centeredText(r, t, descY, tr(CREATE_WIFI_HOTSPOT));
+  } else {
+    centeredText(r, t, descY, tr(CONNECT_WIFI));
   }
 
   ButtonBar btns{tr(BACK), tr(SELECT), "", ""};

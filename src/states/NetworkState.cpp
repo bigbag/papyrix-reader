@@ -56,8 +56,11 @@ void NetworkState::enter(Core& core) {
   scanRetryAt_ = 0;
   selectedSSID_[0] = '\0';
 
+  returnState_ = StateId::AppLauncher;
+
   // Load saved credentials
   WIFI_STORE.loadFromFile();
+  modeView_.itemCount = WIFI_STORE.getCount() > 0 ? 3 : 2;
 
   // NtpSync: skip mode select, go straight to WiFi scan (hotspot is useless for NTP)
   if (core.pendingSync == SyncMode::NtpSync) {
@@ -161,7 +164,7 @@ StateTransition NetworkState::update(Core& core) {
 
   if (goBack_) {
     goBack_ = false;
-    return StateTransition::to(StateId::AppLauncher);
+    return StateTransition::to(returnState_);
   }
 
   if (goCalibreSync_) {
@@ -246,15 +249,21 @@ void NetworkState::handleModeSelect(Core& core, Button button) {
       needsRender_ = true;
       break;
 
-    case Button::Center:
-      if (modeView_.selected == 0) {
+    case Button::Center: {
+      const int joinIdx = modeView_.itemCount - 2;
+      const int hotspotIdx = modeView_.itemCount - 1;
+
+      if (modeView_.selected < joinIdx) {
+        tryAutoConnect(core);
+      } else if (modeView_.selected == joinIdx) {
         startWifiScan(core);
         currentScreen_ = NetworkScreen::WifiList;
         needsRender_ = true;
-      } else {
+      } else if (modeView_.selected == hotspotIdx) {
         startHotspot(core);
       }
       break;
+    }
 
     case Button::Back:
       goBack_ = true;
@@ -510,6 +519,48 @@ void NetworkState::connectToNetwork(Core& core, const char* ssid, const char* pa
     LOG_ERR(TAG, "Connection failed");
   }
 
+  needsRender_ = true;
+}
+
+void NetworkState::tryAutoConnect(Core& core) {
+  LOG_INF(TAG, "Auto-connect: trying %d saved credentials", WIFI_STORE.getCount());
+
+  const auto* creds = WIFI_STORE.getCredentials();
+  int count = WIFI_STORE.getCount();
+
+  for (int i = 0; i < count; i++) {
+    LOG_INF(TAG, "Auto-connect: trying %s", creds[i].ssid);
+
+    connectingView_.setSsid(creds[i].ssid);
+    connectingView_.setConnecting();
+    currentScreen_ = NetworkScreen::Connecting;
+
+    ui::render(renderer_, THEME, connectingView_);
+    core.display.markDirty();
+
+    auto result = core.network.connect(creds[i].ssid, creds[i].password);
+
+    if (result.ok()) {
+      char ip[46];
+      core.network.getIpAddress(ip, sizeof(ip));
+      connectingView_.setConnected(ip);
+      LOG_INF(TAG, "Auto-connected to %s, IP: %s", creds[i].ssid, ip);
+
+      strncpy(selectedSSID_, creds[i].ssid, sizeof(selectedSSID_) - 1);
+      selectedSSID_[sizeof(selectedSSID_) - 1] = '\0';
+
+      startWebServer(core);
+      return;
+    }
+
+    LOG_INF(TAG, "Auto-connect failed: %s", creds[i].ssid);
+    core.network.shutdown();
+  }
+
+  LOG_INF(TAG, "Auto-connect: all credentials failed, falling back to ModeSelect");
+  currentScreen_ = NetworkScreen::ModeSelect;
+  modeView_.selected = modeView_.itemCount - 2;
+  modeView_.needsRender = true;
   needsRender_ = true;
 }
 

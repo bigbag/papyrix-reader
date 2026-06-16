@@ -17,10 +17,9 @@ namespace ui {
 // ============================================================================
 
 struct NetworkModeView {
-  static constexpr int ITEM_COUNT = 2;
-
   ButtonBar buttons;
   int8_t selected = 0;
+  int8_t itemCount = 2;
   bool needsRender = true;
 
   void moveUp() {
@@ -31,7 +30,7 @@ struct NetworkModeView {
   }
 
   void moveDown() {
-    if (selected < ITEM_COUNT - 1) {
+    if (selected < itemCount - 1) {
       selected++;
       needsRender = true;
     }

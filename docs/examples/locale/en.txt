@@ -223,3 +223,4 @@ NO_FIRMWARE_FILE=No firmware file found on SD card
 VALIDATING_FIRMWARE=Validating...
 BOOKMARK_VAL=Bookmark
 BOOKMARK_ADDED=Bookmark added
+RECENT_NETWORK=Recent

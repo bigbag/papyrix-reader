@@ -204,6 +204,7 @@ static constexpr KeyMapping KEY_MAP[] = {
     {"VALIDATING_FIRMWARE", StrId::STR_VALIDATING_FIRMWARE},
     {"BOOKMARK_VAL", StrId::STR_BOOKMARK_VAL},
     {"BOOKMARK_ADDED", StrId::STR_BOOKMARK_ADDED},
+    {"RECENT_NETWORK", StrId::STR_RECENT_NETWORK},
 };
 // clang-format on
 

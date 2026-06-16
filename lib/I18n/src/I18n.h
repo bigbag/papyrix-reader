@@ -227,6 +227,8 @@ enum class StrId : uint8_t {
   STR_BOOKMARK_VAL,
   STR_BOOKMARK_ADDED,
 
+  STR_RECENT_NETWORK,
+
   STR__COUNT
 };
 

@@ -55,6 +55,7 @@ class NetworkState : public State {
   bool passwordJustEntered_;
   bool goCalibreSync_;
   bool goApp_;
+  StateId returnState_ = StateId::AppLauncher;
   uint8_t scanRetryCount_ = 0;
   uint32_t scanRetryAt_ = 0;
   static constexpr uint8_t MAX_SCAN_RETRIES = 2;
@@ -70,6 +71,7 @@ class NetworkState : public State {
   // Actions
   void startWifiScan(Core& core);
   void connectToNetwork(Core& core, const char* ssid, const char* password);
+  void tryAutoConnect(Core& core);
   void startHotspot(Core& core);
   void startWebServer(Core& core);
   void stopWebServer(Core& core);

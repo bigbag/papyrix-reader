@@ -227,6 +227,7 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "Validating...",        // VALIDATING_FIRMWARE
     "Bookmark",             // BOOKMARK_VAL
     "Bookmark added",       // BOOKMARK_ADDED
+    "Recent",               // RECENT_NETWORK
 };
 // clang-format on
 

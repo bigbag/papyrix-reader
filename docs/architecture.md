@@ -36,7 +36,7 @@ Papyrix uses a finite state machine (FSM) with pre-allocated state instances. Th
 - **FileList** — File browser for book selection
 - **Reader** — Unified reader for all formats
 - **Settings** — User preferences and device settings
-- **Network** — WiFi network selection and connection
+- **Network** — WiFi connection and file transfer (auto-connect to saved networks, manual network selection, hotspot mode)
 - **CalibreSync** — Calibre wireless device sync
 - **AppLauncher** — Mini-apps, WiFi transfer, and Calibre sync
 - **Error** — Error display and recovery

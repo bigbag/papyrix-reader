@@ -223,3 +223,4 @@ NO_FIRMWARE_FILE=Файл прошивки на SD-карті не знайде�
 VALIDATING_FIRMWARE=Перевірка...
 BOOKMARK_VAL=Закладка
 BOOKMARK_ADDED=Закладку додано
+RECENT_NETWORK=Остання

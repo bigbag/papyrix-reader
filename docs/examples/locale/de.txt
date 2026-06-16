@@ -223,3 +223,4 @@ NO_FIRMWARE_FILE=Keine Firmware-Datei auf SD-Karte gefunden
 VALIDATING_FIRMWARE=Überprüfung...
 BOOKMARK_VAL=Lesezeichen
 BOOKMARK_ADDED=Lesezeichen hinzugefügt
+RECENT_NETWORK=Zuletzt
