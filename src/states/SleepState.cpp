@@ -257,36 +257,50 @@ void SleepState::renderBitmapSleepScreen(const Bitmap& bitmap) const {
   Settings settings;
   settings.loadFromFile();
   CoverHelpers::CenteredRect rect;
+
   bool isAspectFit ;
   if (settings.fillingImageOnScreen == Settings::FillingImageOnScreen::AspectFit){
     isAspectFit = true;
   }else{
     isAspectFit = false;
   }
+  
+  renderer_.clearScreen();
 
-  if (isAspectFit){
-    rect = CoverHelpers::calculateAspectFitRect(bitmap,pageWidth,pageHeight, 0, 0, pageWidth, pageHeight);
-  }else{
+  if (isAspectFit) {
+    rect = CoverHelpers::calculateAspectFitRect(bitmap, pageWidth, pageHeight, 0, 0, pageWidth, pageHeight);
+    renderer_.drawBitmapBySize(bitmap, rect.x, rect.y, rect.width, rect.height);
+  } else {
     rect = CoverHelpers::calculateCenteredRect(bitmap.getWidth(), bitmap.getHeight(), 0, 0, pageWidth, pageHeight);
+    renderer_.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height);
   }
 
-  renderer_.clearScreen();
-  renderer_.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height,isAspectFit);
   renderer_.displayBuffer(EInkDisplay::HALF_REFRESH);
 
   if (bitmap.hasGreyscale()) {
     bitmap.rewindToData();
     renderer_.clearScreen(0x00);
     renderer_.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
-    renderer_.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height);
+    if (isAspectFit) {
+      rect = CoverHelpers::calculateAspectFitRect(bitmap, pageWidth, pageHeight, 0, 0, pageWidth, pageHeight);
+      renderer_.drawBitmapBySize(bitmap, rect.x, rect.y, rect.width, rect.height);
+    } else {
+      rect = CoverHelpers::calculateCenteredRect(bitmap.getWidth(), bitmap.getHeight(), 0, 0, pageWidth, pageHeight);
+      renderer_.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height);
+    }
     renderer_.copyGrayscaleLsbBuffers();
 
     bitmap.rewindToData();
     renderer_.clearScreen(0x00);
     renderer_.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
-    renderer_.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height);
+    if (isAspectFit) {
+      rect = CoverHelpers::calculateAspectFitRect(bitmap, pageWidth, pageHeight, 0, 0, pageWidth, pageHeight);
+      renderer_.drawBitmapBySize(bitmap, rect.x, rect.y, rect.width, rect.height);
+    } else {
+      rect = CoverHelpers::calculateCenteredRect(bitmap.getWidth(), bitmap.getHeight(), 0, 0, pageWidth, pageHeight);
+      renderer_.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height);
+    }
     renderer_.copyGrayscaleMsbBuffers();
-
     renderer_.displayGrayBuffer();
     renderer_.setRenderMode(GfxRenderer::BW);
 

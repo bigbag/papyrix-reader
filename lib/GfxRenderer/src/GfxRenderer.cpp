@@ -454,7 +454,7 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
 }
 
 void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth,
-                             const int maxHeight,const bool isAspectFit) const {
+                             const int maxHeight) const {
   float scale = 1.0f;
   bool isScaled = false;
   if (maxWidth > 0 && bitmap.getWidth() > maxWidth) {
@@ -464,18 +464,6 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   if (maxHeight > 0 && bitmap.getHeight() > maxHeight) {
     scale = std::min(scale, static_cast<float>(maxHeight) / static_cast<float>(bitmap.getHeight()));
     isScaled = true;
-  }
-
-  if (isAspectFit) {
-    if (maxWidth > 0 && maxWidth > bitmap.getWidth()) {
-      scale = static_cast<float>(maxWidth) / static_cast<float>(bitmap.getWidth());
-      isScaled = true;
-    }
-
-    if (maxHeight > 0 && maxHeight > bitmap.getHeight()) {
-      scale = std::min(scale, static_cast<float>(maxHeight) / static_cast<float>(bitmap.getHeight()));
-      isScaled = true;
-    }
   }
 
   const size_t outputRowSize = static_cast<size_t>((bitmap.getWidth() + 3) / 4);
@@ -544,6 +532,87 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
     }
   }
 }
+
+void GfxRenderer::drawBitmapBySize(const Bitmap& bitmap, int x, int y, int Width, int Height) const{
+  float scale = 1.0f;
+  bool isScaled = false;
+
+  if (Width > 0 && (bitmap.getWidth() > Width || Width > bitmap.getWidth())) {
+    scale = static_cast<float>(Width) / static_cast<float>(bitmap.getWidth());
+    isScaled = true;
+  }
+  if (Height > 0 && (bitmap.getHeight() > Height ||  Height > bitmap.getHeight())) {
+    scale = std::min(scale, static_cast<float>(Height) / static_cast<float>(bitmap.getHeight()));
+    isScaled = true;
+  }
+
+  const size_t outputRowSize = static_cast<size_t>((bitmap.getWidth() + 3) / 4);
+  const size_t rowBytesSize = static_cast<size_t>(bitmap.getRowBytes());
+
+  if (!ensureBitmapRowBuffers()) {
+    return;
+  }
+
+  if (outputRowSize > BITMAP_OUTPUT_ROW_SIZE || rowBytesSize > BITMAP_ROW_BYTES_SIZE) {
+    LOG_ERR(TAG, "!! Bitmap too large for pre-allocated buffers (%zu > %zu or %zu > %zu)", outputRowSize,
+            BITMAP_OUTPUT_ROW_SIZE, rowBytesSize, BITMAP_ROW_BYTES_SIZE);
+    return;
+  }
+
+  const int destWidth = isScaled ? static_cast<int>(bitmap.getWidth() * scale) : bitmap.getWidth();
+  const int destHeight = isScaled ? static_cast<int>(bitmap.getHeight() * scale) : bitmap.getHeight();
+  const uint32_t invScale_fp = isScaled ? static_cast<uint32_t>((1.0f / scale) * 65536.0f + 0.5f) : 65536U;
+
+  const int screenW = getScreenWidth();
+  const int screenH = getScreenHeight();
+  const int dxStart = std::max(0, -x);
+  const int dxEnd = std::min(destWidth, screenW - x);
+  if (dxStart >= dxEnd) return;
+
+  const int panelW = einkDisplay.getDisplayWidth();
+  const int panelH = einkDisplay.getDisplayHeight();
+  const int stride = einkDisplay.getDisplayWidthBytes();
+  const int bmpW = bitmap.getWidth();
+
+  const bool preloaded = bitmap.preloadAllRows();
+  const bool fastDirect = preloaded && bitmap.isIdentityPalette();
+
+  int lastSrcY = -1;
+  const uint8_t* srcRow = nullptr;
+  for (int destY = 0; destY < destHeight; destY++) {
+    const int screenY = bitmap.isTopDown() ? (y + destY) : (y + destHeight - 1 - destY);
+    if (screenY < 0 || screenY >= screenH) continue;
+
+    int srcY = isScaled ? static_cast<int>((uint32_t(destY) * invScale_fp) >> 16) : destY;
+    if (srcY >= bitmap.getHeight()) srcY = bitmap.getHeight() - 1;
+
+    if (fastDirect) {
+      srcRow = bitmap.preloadedRow(srcY);
+    } else if (srcY != lastSrcY) {
+      if (bitmap.readRow(bitmapOutputRow_, bitmapRowBytes_, srcY) != BmpReaderError::Ok) {
+        LOG_ERR(TAG, "Failed to read row %d from bitmap", srcY);
+        return;
+      }
+      lastSrcY = srcY;
+      srcRow = bitmapOutputRow_;
+    }
+
+    for (int dx = dxStart; dx < dxEnd; dx++) {
+      int bmpX = isScaled ? static_cast<int>((uint32_t(dx) * invScale_fp) >> 16) : dx;
+      if (bmpX >= bmpW) bmpX = bmpW - 1;
+      const uint8_t val = (srcRow[bmpX >> 2] >> (6 - ((bmpX & 3) << 1))) & 0x3;
+      const int sX = x + dx;
+      if (renderMode == BW && val < 3) {
+        orientedWriteFB(frameBuffer, stride, sX, screenY, orientation, panelW, panelH, true);
+      } else if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
+        orientedWriteFB(frameBuffer, stride, sX, screenY, orientation, panelW, panelH, false);
+      } else if (renderMode == GRAYSCALE_LSB && val == 1) {
+        orientedWriteFB(frameBuffer, stride, sX, screenY, orientation, panelW, panelH, false);
+      }
+    }
+  }
+
+ }
 
 static unsigned long renderStartMs = 0;
 
