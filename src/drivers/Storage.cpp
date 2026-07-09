@@ -67,6 +67,19 @@ Result<void> Storage::remove(const char* path) {
   return Ok();
 }
 
+Result<void> Storage::commitFile(const char* tmpPath, const char* finalPath) {
+  if (!mounted_) {
+    return ErrVoid(Error::SdCardNotFound);
+  }
+  if (!tmpPath || !finalPath || tmpPath[0] == '\0' || finalPath[0] == '\0') {
+    return ErrVoid(Error::InvalidOperation);
+  }
+  if (!SdMan.commitFile(tmpPath, finalPath)) {
+    return ErrVoid(Error::IOError);
+  }
+  return Ok();
+}
+
 Result<void> Storage::mkdir(const char* path) {
   if (!mounted_) {
     return ErrVoid(Error::SdCardNotFound);

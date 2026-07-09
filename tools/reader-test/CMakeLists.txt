@@ -47,6 +47,7 @@ add_executable(reader-test
   # Font support
   ${PROJECT_ROOT}/lib/EpdFont/src/EpdFont.cpp
   ${PROJECT_ROOT}/lib/EpdFont/src/EpdFontFamily.cpp
+  ${PROJECT_ROOT}/lib/EpdFont/src/EpdFontLoader.cpp
   ${PROJECT_ROOT}/lib/ExternalFont/src/ExternalFont.cpp
 
   # Hyphenation

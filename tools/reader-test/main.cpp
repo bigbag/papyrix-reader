@@ -10,6 +10,7 @@
 
 #include <EInkDisplay.h>
 #include <EpdFont.h>
+#include <EpdFontLoader.h>
 #include <ExternalFont.h>
 #include <Epub.h>
 #include <EpubChapterParser.h>
@@ -151,13 +152,14 @@ static void dumpCacheDir(const std::string& dir, const GfxRenderer& gfx, int fon
 }
 
 static void usage() {
-  fprintf(stderr, "Usage: reader-test [--dump] [--batch N] [--cold-extend] [--no-statusbar] [--cjk-font PATH] <file.epub|.md|.txt|.fb2|.html|.htm> [output_dir]\n");
+  fprintf(stderr, "Usage: reader-test [--dump] [--batch N] [--cold-extend] [--no-statusbar] [--font DIR] [--cjk-font PATH] <file.epub|.md|.txt|.fb2|.html|.htm> [output_dir]\n");
   fprintf(stderr, "       reader-test --cache-dump <cache_dir>\n");
   fprintf(stderr, "  --dump           Print parsed text content of each page\n");
   fprintf(stderr, "  --batch N        Cache N pages per batch (default: 5, matching device)\n");
   fprintf(stderr, "                   Use 0 for unlimited (no suspend/resume)\n");
   fprintf(stderr, "  --cold-extend    Destroy parser between batches (simulates device cold extend)\n");
   fprintf(stderr, "  --no-statusbar   Use full viewport height (no status bar margin)\n");
+  fprintf(stderr, "  --font DIR          Load .epdfont font family from DIR (regular.epdfont, bold.epdfont, italic.epdfont)\n");
   fprintf(stderr, "  --cjk-font PATH     Load external CJK font (.bin) for text width measurement\n");
   fprintf(stderr, "  --cache-dump        Dump text from existing device cache directory\n");
   fprintf(stderr, "  --fail-serialize N  Simulate serialize failure every N pages\n");
@@ -176,6 +178,7 @@ int main(int argc, char* argv[]) {
   bool coldExtend = false;
   uint16_t batchSize = 5;
   std::string cjkFontPath;
+  std::string fontDir;
   int argIdx = 1;
   while (argIdx < argc && argv[argIdx][0] == '-') {
     if (strcmp(argv[argIdx], "--dump") == 0) {
@@ -189,6 +192,9 @@ int main(int argc, char* argv[]) {
       argIdx++;
     } else if (strcmp(argv[argIdx], "--batch") == 0 && argIdx + 1 < argc) {
       batchSize = static_cast<uint16_t>(atoi(argv[argIdx + 1]));
+      argIdx += 2;
+    } else if (strcmp(argv[argIdx], "--font") == 0 && argIdx + 1 < argc) {
+      fontDir = argv[argIdx + 1];
       argIdx += 2;
     } else if (strcmp(argv[argIdx], "--cjk-font") == 0 && argIdx + 1 < argc) {
       cjkFontPath = argv[argIdx + 1];
@@ -212,10 +218,52 @@ int main(int argc, char* argv[]) {
   GfxRenderer gfx(display);
   gfx.begin();
 
-  EpdFont readerFont(&reader_2b);
-  EpdFont readerBoldFont(&reader_bold_2b);
-  EpdFont readerItalicFont(&reader_italic_2b);
-  EpdFontFamily readerFontFamily(&readerFont, &readerBoldFont, &readerItalicFont, &readerBoldFont);
+  // External font data (must outlive gfx)
+  EpdFontLoader::LoadResult extRegular = {}, extBold = {}, extItalic = {};
+  std::unique_ptr<EpdFont> extRegularFont, extBoldFont, extItalicFont;
+
+  EpdFont builtinRegular(&reader_2b);
+  EpdFont builtinBold(&reader_bold_2b);
+  EpdFont builtinItalic(&reader_italic_2b);
+
+  EpdFont* regularPtr = &builtinRegular;
+  EpdFont* boldPtr = &builtinBold;
+  EpdFont* italicPtr = &builtinItalic;
+
+  if (!fontDir.empty()) {
+    std::string regPath = fontDir + "/regular.epdfont";
+    extRegular = EpdFontLoader::loadFromFile(regPath.c_str());
+    if (!extRegular.success) {
+      fprintf(stderr, "Failed to load font: %s\n", regPath.c_str());
+      return 1;
+    }
+    extRegularFont = std::make_unique<EpdFont>(extRegular.fontData);
+    regularPtr = extRegularFont.get();
+
+    std::string boldPath = fontDir + "/bold.epdfont";
+    extBold = EpdFontLoader::loadFromFile(boldPath.c_str());
+    if (extBold.success) {
+      extBoldFont = std::make_unique<EpdFont>(extBold.fontData);
+      boldPtr = extBoldFont.get();
+    } else {
+      boldPtr = regularPtr;
+    }
+
+    std::string italicPath = fontDir + "/italic.epdfont";
+    extItalic = EpdFontLoader::loadFromFile(italicPath.c_str());
+    if (extItalic.success) {
+      extItalicFont = std::make_unique<EpdFont>(extItalic.fontData);
+      italicPtr = extItalicFont.get();
+    } else {
+      italicPtr = regularPtr;
+    }
+
+    fprintf(stderr, "Font: %s (regular=%zu bold=%zu italic=%zu bytes)\n", fontDir.c_str(),
+            extRegular.totalSize(), extBold.success ? extBold.totalSize() : 0,
+            extItalic.success ? extItalic.totalSize() : 0);
+  }
+
+  EpdFontFamily readerFontFamily(regularPtr, boldPtr, italicPtr, boldPtr);
   constexpr int FONT_ID = 1818981670;
   gfx.insertFont(FONT_ID, readerFontFamily);  // READER_FONT_ID
 
@@ -394,6 +442,10 @@ int main(int argc, char* argv[]) {
     printf("TXT: %d pages -> %s\n", cache.pageCount(), cachePath.c_str());
     if (dump) dumpPages(cache, gfx, FONT_ID);
   }
+
+  if (extRegular.success) EpdFontLoader::freeLoadResult(extRegular);
+  if (extBold.success) EpdFontLoader::freeLoadResult(extBold);
+  if (extItalic.success) EpdFontLoader::freeLoadResult(extItalic);
 
   return 0;
 }

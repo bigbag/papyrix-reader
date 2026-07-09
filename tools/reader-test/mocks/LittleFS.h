@@ -10,6 +10,7 @@ class File {
   operator bool() const { return false; }
   void close() {}
   size_t size() const { return 0; }
+  int read(uint8_t*, size_t) { return -1; }
 };
 
 class MockLittleFS {

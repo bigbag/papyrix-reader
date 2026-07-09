@@ -1,6 +1,7 @@
 #include "BitmapHelpers.h"
 
 #include <cstdint>
+#include <new>
 
 // Precomputed RGB to grayscale lookup tables (BT.601 coefficients)
 // gray = LUT_R[r] + LUT_G[g] + LUT_B[b] instead of (77*r + 150*g + 29*b) >> 8
@@ -242,9 +243,15 @@ static inline uint8_t palette1bitToGray(uint8_t index) { return (index & 0x01) ?
 class RawAtkinson1BitDitherer {
  public:
   explicit RawAtkinson1BitDitherer(int width) : width(width) {
-    errorRow0 = new int16_t[width + 4]();
-    errorRow1 = new int16_t[width + 4]();
-    errorRow2 = new int16_t[width + 4]();
+    errorRow0 = new (std::nothrow) int16_t[width + 4]();
+    errorRow1 = new (std::nothrow) int16_t[width + 4]();
+    errorRow2 = new (std::nothrow) int16_t[width + 4]();
+    if (!errorRow0 || !errorRow1 || !errorRow2) {
+      delete[] errorRow0;
+      delete[] errorRow1;
+      delete[] errorRow2;
+      errorRow0 = errorRow1 = errorRow2 = nullptr;
+    }
   }
 
   ~RawAtkinson1BitDitherer() {
@@ -253,11 +260,14 @@ class RawAtkinson1BitDitherer {
     delete[] errorRow2;
   }
 
+  bool valid() const { return errorRow0 != nullptr; }
+
   RawAtkinson1BitDitherer(const RawAtkinson1BitDitherer&) = delete;
   RawAtkinson1BitDitherer& operator=(const RawAtkinson1BitDitherer&) = delete;
 
   uint8_t processPixel(int gray, int x) {
     // NO adjustPixel() call - source is already contrast-enhanced
+    if (!valid()) return gray >= 128 ? 1 : 0;
     int adjusted = gray + errorRow0[x + 2];
     if (adjusted < 0) adjusted = 0;
     if (adjusted > 255) adjusted = 255;
@@ -284,6 +294,7 @@ class RawAtkinson1BitDitherer {
   }
 
   void nextRow() {
+    if (!valid()) return;
     int16_t* temp = errorRow0;
     errorRow0 = errorRow1;
     errorRow1 = errorRow2;
@@ -324,6 +335,14 @@ bool bmpTo1BitBmpScaled(const char* srcPath, const char* dstPath, int targetMaxW
 
   const int srcWidth = static_cast<int32_t>(readLE32(srcFile));
   const int32_t rawHeight = static_cast<int32_t>(readLE32(srcFile));
+
+  // Reject corrupt/truncated headers before size math (div0 / overflow / INT32_MIN UB).
+  static constexpr int kMaxBmpDim = 8192;
+  if (srcWidth <= 0 || srcWidth > kMaxBmpDim || rawHeight < -kMaxBmpDim) {
+    LOG_ERR(TAG, "Implausible BMP dimensions: w=%d h=%d", srcWidth, static_cast<int>(rawHeight));
+    srcFile.close();
+    return false;
+  }
 
   // Negative height = top-down BMP (rows stored top to bottom)
   // Positive height = bottom-up BMP (rows stored bottom to top)
@@ -398,8 +417,10 @@ bool bmpTo1BitBmpScaled(const char* srcPath, const char* dstPath, int targetMaxW
 
   writeBmpHeader1bit(dstFile, outWidth, outHeight);
 
-  // Create 1-bit ditherer (raw version - no contrast adjustment since source is already processed)
+  // Create 1-bit ditherer (raw version - no contrast adjustment since source is already processed).
+  // On OOM fall back to simple threshold so thumbnail generation still succeeds.
   RawAtkinson1BitDitherer ditherer(outWidth);
+  const bool useDither = ditherer.valid();
 
   // Seek to pixel data
   if (!srcFile.seek(pixelOffset)) {
@@ -484,7 +505,7 @@ bool bmpTo1BitBmpScaled(const char* srcPath, const char* dstPath, int targetMaxW
       }
 
       const uint8_t gray = (count > 0) ? (sum / count) : 0;
-      const uint8_t bit = ditherer.processPixel(gray, outX);
+      const uint8_t bit = useDither ? ditherer.processPixel(gray, outX) : (gray >= 128 ? 1 : 0);
 
       // Pack 1-bit value (MSB first, 8 pixels per byte)
       const int byteIdx = outX / 8;
@@ -492,7 +513,7 @@ bool bmpTo1BitBmpScaled(const char* srcPath, const char* dstPath, int targetMaxW
       outRow[byteIdx] |= (bit << bitOffset);
     }
 
-    ditherer.nextRow();
+    if (useDither) ditherer.nextRow();
     dstFile.write(outRow, outRowBytes);
   }
 

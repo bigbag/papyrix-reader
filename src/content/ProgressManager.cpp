@@ -20,11 +20,13 @@ bool ProgressManager::save(Core& core, const char* cacheDir, ContentType type, c
 
   char progressPath[280];
   snprintf(progressPath, sizeof(progressPath), "%s/progress.bin", cacheDir);
+  char tmpPath[288];
+  snprintf(tmpPath, sizeof(tmpPath), "%s.tmp", progressPath);
 
   FsFile file;
-  auto result = core.storage.openWrite(progressPath, file);
+  auto result = core.storage.openWrite(tmpPath, file);
   if (!result.ok()) {
-    LOG_ERR(TAG, "Failed to save progress to %s", progressPath);
+    LOG_ERR(TAG, "Failed to open tmp progress %s", tmpPath);
     return false;
   }
 
@@ -57,7 +59,19 @@ bool ProgressManager::save(Core& core, const char* cacheDir, ContentType type, c
     LOG_DBG(TAG, "Saved text: page %d", progress.sectionPage);
   }
 
+  file.sync();
+  const uint32_t writtenBytes = file.size();
   file.close();
+  if (writtenBytes != 4) {
+    LOG_ERR(TAG, "Bad progress write size %u/4; discarding tmp", static_cast<unsigned>(writtenBytes));
+    core.storage.remove(tmpPath);
+    return false;
+  }
+  if (!core.storage.commitFile(tmpPath, progressPath).ok()) {
+    LOG_ERR(TAG, "Failed to commit progress file %s", progressPath);
+    core.storage.remove(tmpPath);
+    return false;
+  }
   return true;
 }
 

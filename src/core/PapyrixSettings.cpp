@@ -24,6 +24,29 @@ constexpr uint8_t MIN_SETTINGS_VERSION = 3;
 constexpr uint8_t SETTINGS_FILE_VERSION = 11;
 // Increment this when adding new persisted settings fields
 constexpr uint8_t SETTINGS_COUNT = 26;
+
+static constexpr char kSettingsTmp[] = PAPYRIX_SETTINGS_FILE ".tmp";
+
+// Reject smaller tmp writes so a truncated file never renames over a good
+// settings.bin. Each term mirrors the matching writePod()/write() call in
+// save()/saveToFile(); referencing the actual Settings members (via a constexpr
+// default instance) makes a field removal or type change a compile error here,
+// so this can't silently drift and falsely reject valid saves.
+constexpr Settings kSizeProbe{};
+constexpr uint32_t kMinSettingsBytes =
+    sizeof(uint32_t) +  // SETTINGS_MAGIC
+    sizeof(uint8_t) +   // SETTINGS_FILE_VERSION
+    sizeof(uint8_t) +   // SETTINGS_COUNT
+    sizeof(kSizeProbe.sleepScreen) + sizeof(kSizeProbe.textLayout) + sizeof(kSizeProbe.shortPwrBtn) +
+    sizeof(kSizeProbe.statusBar) + sizeof(kSizeProbe.orientation) + sizeof(kSizeProbe.fontSize) +
+    sizeof(kSizeProbe.pagesPerRefresh) + sizeof(kSizeProbe.sideButtonLayout) + sizeof(kSizeProbe.autoSleepMinutes) +
+    sizeof(kSizeProbe.paragraphAlignment) + sizeof(kSizeProbe.hyphenation) + sizeof(kSizeProbe.textAntiAliasing) +
+    sizeof(kSizeProbe.showImages) + sizeof(kSizeProbe.startupBehavior) + sizeof(kSizeProbe._reserved) +
+    sizeof(kSizeProbe.lineSpacing) + sizeof(kSizeProbe.themeName) + sizeof(kSizeProbe.lastBookPath) +
+    sizeof(kSizeProbe.pendingTransition) + sizeof(kSizeProbe.transitionReturnTo) +
+    sizeof(kSizeProbe.sunlightFadingFix) + sizeof(kSizeProbe.fileListDir) + sizeof(kSizeProbe.fileListSelectedName) +
+    sizeof(kSizeProbe.fileListSelectedIndex) + sizeof(kSizeProbe.frontButtonLayout) +
+    sizeof(kSizeProbe.fullBookProcess);
 }  // namespace
 
 Result<void> Settings::save(drivers::Storage& storage) const {
@@ -34,8 +57,10 @@ Result<void> Settings::save(drivers::Storage& storage) const {
   // doesn't load X4-shaped page layouts on the X3 panel. No-op on X4 (path matches above).
   storage.mkdir(drivers::Device::instance().cacheDir());
 
+  // Publish via temp so readers never see a partial write. SdFat can't rename
+  // over an existing file, so commitFile removes the stale final first.
   FsFile outputFile;
-  auto result = storage.openWrite(PAPYRIX_SETTINGS_FILE, outputFile);
+  auto result = storage.openWrite(kSettingsTmp, outputFile);
   if (!result.ok()) {
     return result;
   }
@@ -71,7 +96,20 @@ Result<void> Settings::save(drivers::Storage& storage) const {
   serialization::writePod(outputFile, frontButtonLayout);
   serialization::writePod(outputFile, fullBookProcess);
   outputFile.sync();
+  const uint32_t writtenBytes = outputFile.size();
   outputFile.close();
+
+  if (writtenBytes < kMinSettingsBytes) {
+    LOG_ERR(TAG, "Short settings write %u/%u; discarding tmp", static_cast<unsigned>(writtenBytes),
+            static_cast<unsigned>(kMinSettingsBytes));
+    storage.remove(kSettingsTmp);
+    return ErrVoid(Error::IOError);
+  }
+  if (!storage.commitFile(kSettingsTmp, PAPYRIX_SETTINGS_FILE).ok()) {
+    LOG_ERR(TAG, "Failed to commit settings file");
+    storage.remove(kSettingsTmp);
+    return ErrVoid(Error::IOError);
+  }
 
   LOG_INF(TAG, "Settings saved to file");
   return Ok();
@@ -243,7 +281,7 @@ bool Settings::saveToFile() const {
   SdMan.mkdir(drivers::Device::instance().cacheDir());
 
   FsFile outputFile;
-  if (!SdMan.openFileForWrite("SET", PAPYRIX_SETTINGS_FILE, outputFile)) {
+  if (!SdMan.openFileForWrite("SET", kSettingsTmp, outputFile)) {
     return false;
   }
 
@@ -277,7 +315,20 @@ bool Settings::saveToFile() const {
   serialization::writePod(outputFile, frontButtonLayout);
   serialization::writePod(outputFile, fullBookProcess);
   outputFile.sync();
+  const uint32_t writtenBytes = outputFile.size();
   outputFile.close();
+
+  if (writtenBytes < kMinSettingsBytes) {
+    LOG_ERR(TAG, "Short settings write %u/%u; discarding tmp", static_cast<unsigned>(writtenBytes),
+            static_cast<unsigned>(kMinSettingsBytes));
+    SdMan.remove(kSettingsTmp);
+    return false;
+  }
+  if (!SdMan.commitFile(kSettingsTmp, PAPYRIX_SETTINGS_FILE)) {
+    LOG_ERR(TAG, "Failed to commit settings file");
+    SdMan.remove(kSettingsTmp);
+    return false;
+  }
 
   LOG_INF(TAG, "Settings saved to file");
   return true;

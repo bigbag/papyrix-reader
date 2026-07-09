@@ -1,6 +1,7 @@
 #include "Utf8Nfc.h"
 
 #include <cstring>
+#include <new>
 
 #include "Utf8NfcTable.h"
 
@@ -118,10 +119,12 @@ size_t utf8NormalizeNfc(char* buf, size_t len) {
   if (allAscii) return len;
 
   // Decode to codepoints (max codepoints = len, since each UTF-8 char >= 1 byte)
-  // Use stack buffer for small strings, heap for large ones
+  // Use stack buffer for small strings, heap for large ones.
+  // NFC is cosmetic: on OOM leave valid UTF-8 untouched rather than abort.
   constexpr size_t STACK_SIZE = 256;
   uint32_t stackBuf[STACK_SIZE];
-  uint32_t* cps = (len <= STACK_SIZE) ? stackBuf : new uint32_t[len];
+  uint32_t* cps = (len <= STACK_SIZE) ? stackBuf : new (std::nothrow) uint32_t[len];
+  if (cps == nullptr) return len;
 
   size_t cpCount = 0;
   size_t pos = 0;

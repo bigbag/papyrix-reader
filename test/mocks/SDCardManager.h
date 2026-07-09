@@ -153,6 +153,11 @@ class SDCardManager {
     return true;
   }
 
+  bool commitFile(const char* tmpPath, const char* finalPath) {
+    remove(finalPath);
+    return rename(tmpPath, finalPath);
+  }
+
   bool mkdir(const char*) { return true; }
   bool removeDir(const char*) { return true; }
 

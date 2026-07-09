@@ -42,9 +42,19 @@ class BackgroundTask {
   BackgroundTask& operator=(const BackgroundTask&) = delete;
 
   bool start(const char* name, uint32_t stackSize, TaskFunction func, int priority) {
-    if (isRunning()) return false;
+    // Mirrors firmware BackgroundTask::start CAS loop: allow IDLE/COMPLETE/ERROR,
+    // and retry on compare_exchange_weak spurious failure.
+    State expected = state_.load(std::memory_order_acquire);
+    while (true) {
+      if (expected != State::IDLE && expected != State::COMPLETE && expected != State::ERROR) {
+        return false;
+      }
+      if (state_.compare_exchange_weak(expected, State::STARTING, std::memory_order_acq_rel,
+                                       std::memory_order_acquire)) {
+        break;
+      }
+    }
 
-    state_.store(State::STARTING, std::memory_order_release);
     stopRequested_.store(false, std::memory_order_release);
     xEventGroupClearBits(eventGroup_, EVENT_EXITED);
 
@@ -182,6 +192,38 @@ int main() {
     bool secondStart = task.start("test2", 4096, []() {}, 1);
     runner.expectFalse(secondStart, "Second start() returns false when running");
 
+    task.stop(1000);
+  }
+
+  // Test 3b: Restart after COMPLETE (CAS allows COMPLETE → STARTING)
+  {
+    cleanupMockTasks();
+    BackgroundTask task;
+
+    bool first = task.start(
+        "test", 4096,
+        [&]() {
+          while (!task.shouldStop()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+          }
+        },
+        1);
+    runner.expectTrue(first, "first start() returns true");
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    task.stop(1000);
+    runner.expectTrue(task.getState() == BackgroundTask::State::COMPLETE, "State is COMPLETE after first stop");
+
+    bool second = task.start(
+        "test2", 4096,
+        [&]() {
+          while (!task.shouldStop()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+          }
+        },
+        1);
+    runner.expectTrue(second, "start() after COMPLETE returns true");
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    runner.expectTrue(task.isRunning(), "Task is running after restart");
     task.stop(1000);
   }
 

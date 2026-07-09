@@ -35,6 +35,15 @@ class SDCardManager {
   bool rmdir(const char* path) { return sd.rmdir(path); }
   bool rename(const char* path, const char* newPath) { return sd.rename(path, newPath); }
 
+  // Replace finalPath with tmpPath's contents. SdFat's rename() opens the
+  // destination with O_EXCL and fails if it exists, so the target is removed
+  // first. A power loss between remove and rename leaves no file rather than a
+  // partial one, so readers see a complete file or none (defaults on load).
+  bool commitFile(const char* tmpPath, const char* finalPath) {
+    remove(finalPath);  // ignore failure: target may not exist on first write
+    return rename(tmpPath, finalPath);
+  }
+
   bool openFileForRead(const char* moduleName, const char* path, FsFile& file);
   bool openFileForRead(const char* moduleName, const std::string& path, FsFile& file);
   bool openFileForRead(const char* moduleName, const String& path, FsFile& file);

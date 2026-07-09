@@ -24,18 +24,21 @@ BackgroundTask::~BackgroundTask() {
 }
 
 bool BackgroundTask::start(const char* name, uint32_t stackSize, TaskFunction func, int priority) {
-  // Use CAS loop to safely transition from IDLE, COMPLETE, or ERROR to STARTING
-  State expected = State::IDLE;
-  while (
-      !state_.compare_exchange_weak(expected, State::STARTING, std::memory_order_acq_rel, std::memory_order_acquire)) {
-    // Allow restart after COMPLETE or ERROR
-    if (expected == State::COMPLETE || expected == State::ERROR) {
-      // Try again with new expected value
-      continue;
+  // Transition from any of {IDLE, COMPLETE, ERROR} to STARTING.
+  // compare_exchange_weak can fail spuriously even when state_ == expected;
+  // always re-check the observed state before deciding (spurious IDLE fail
+  // used to log "already running (state=0)" and refuse to start).
+  State expected = state_.load(std::memory_order_acquire);
+  while (true) {
+    if (expected != State::IDLE && expected != State::COMPLETE && expected != State::ERROR) {
+      LOG_ERR(TAG, "%s: already running (state=%d)", name, static_cast<int>(expected));
+      return false;
     }
-    // Task is currently running or starting
-    LOG_ERR(TAG, "%s: already running (state=%d)", name, static_cast<int>(expected));
-    return false;
+    if (state_.compare_exchange_weak(expected, State::STARTING, std::memory_order_acq_rel,
+                                     std::memory_order_acquire)) {
+      break;
+    }
+    // CAS failed — expected now holds the latest observed state; loop again.
   }
 
   if (!eventGroup_) {

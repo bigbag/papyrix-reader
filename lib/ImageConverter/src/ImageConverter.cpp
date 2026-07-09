@@ -97,10 +97,14 @@ bool ImageConverterFactory::convertToBmp(const std::string& inputPath, const std
     return false;
   }
 
+  // Atomic publish: convert to .part then rename so readers never see a half-written BMP.
+  const std::string partPath = outputPath + ".part";
+  SdMan.remove(partPath.c_str());
+
   FsFile outputFile;
-  if (!SdMan.openFileForWrite(config.logTag, outputPath, outputFile)) {
+  if (!SdMan.openFileForWrite(config.logTag, partPath, outputFile)) {
     inputFile.close();
-    LOG_ERR(config.logTag, "Failed to create output file: %s", outputPath.c_str());
+    LOG_ERR(config.logTag, "Failed to create output file: %s", partPath.c_str());
     return false;
   }
 
@@ -109,14 +113,22 @@ bool ImageConverterFactory::convertToBmp(const std::string& inputPath, const std
   inputFile.close();
   outputFile.close();
 
-  if (success) {
-    LOG_INF(config.logTag, "Converted %s to BMP: %s", converter->formatName(), outputPath.c_str());
-  } else {
+  if (!success) {
     LOG_ERR(config.logTag, "Failed to convert %s to BMP", converter->formatName());
-    SdMan.remove(outputPath.c_str());
+    SdMan.remove(partPath.c_str());
+    return false;
   }
 
-  return success;
+  // Publish the completed BMP (commitFile removes a stale output first because
+  // SdFat can't rename over an existing file).
+  if (!SdMan.commitFile(partPath.c_str(), outputPath.c_str())) {
+    LOG_ERR(config.logTag, "Failed to commit %s -> %s", partPath.c_str(), outputPath.c_str());
+    SdMan.remove(partPath.c_str());
+    return false;
+  }
+
+  LOG_INF(config.logTag, "Converted %s to BMP: %s", converter->formatName(), outputPath.c_str());
+  return true;
 }
 
 bool ImageConverterFactory::isSupported(const std::string& filePath) { return FsHelpers::isImageFile(filePath); }

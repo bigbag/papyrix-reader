@@ -19,11 +19,13 @@ bool BookmarkManager::save(Core& core, const char* cacheDir, ContentType type, c
 
   char path[280];
   snprintf(path, sizeof(path), "%s/bookmarks.bin", cacheDir);
+  char tmpPath[288];
+  snprintf(tmpPath, sizeof(tmpPath), "%s.tmp", path);
 
   FsFile file;
-  auto result = core.storage.openWrite(path, file);
+  auto result = core.storage.openWrite(tmpPath, file);
   if (!result.ok()) {
-    LOG_ERR(TAG, "Failed to save bookmarks to %s", path);
+    LOG_ERR(TAG, "Failed to open tmp bookmarks %s", tmpPath);
     return false;
   }
 
@@ -32,9 +34,24 @@ bool BookmarkManager::save(Core& core, const char* cacheDir, ContentType type, c
   if (count > 0) {
     file.write(reinterpret_cast<const uint8_t*>(bookmarks), static_cast<size_t>(count) * sizeof(Bookmark));
   }
+  file.sync();
+  const uint32_t expectedBytes = sizeof(uint8_t) + static_cast<uint32_t>(count) * sizeof(Bookmark);
+  const uint32_t actualBytes = file.size();
   file.close();
+  if (actualBytes != expectedBytes) {
+    LOG_ERR(TAG, "Short bookmarks write %u/%u; discarding tmp", static_cast<unsigned>(actualBytes),
+            static_cast<unsigned>(expectedBytes));
+    core.storage.remove(tmpPath);
+    return false;
+  }
+  if (!core.storage.commitFile(tmpPath, path).ok()) {
+    LOG_ERR(TAG, "Failed to commit bookmarks file %s", path);
+    core.storage.remove(tmpPath);
+    return false;
+  }
   LOG_DBG(TAG, "Saved %d bookmarks", count);
 
+  // Human-readable export is non-critical; direct write is acceptable.
   snprintf(path, sizeof(path), "%s/bookmarks.txt", cacheDir);
   result = core.storage.openWrite(path, file);
   if (!result.ok()) {

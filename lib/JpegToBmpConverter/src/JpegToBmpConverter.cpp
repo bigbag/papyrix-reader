@@ -375,30 +375,24 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
 
   if (!quickMode) {
     if (oneBit) {
-      // For 1-bit output, use Atkinson dithering for better quality
+      // Fall back to simple threshold if object or row buffers fail to allocate.
       atkinson1BitDitherer = new (std::nothrow) Atkinson1BitDitherer(outWidth);
-      if (!atkinson1BitDitherer) {
-        LOG_ERR(TAG, "Failed to allocate 1-bit ditherer");
-        free(mcuRowBuffer);
-        free(rowBuffer);
-        return false;
+      if (atkinson1BitDitherer && !atkinson1BitDitherer->valid()) {
+        delete atkinson1BitDitherer;
+        atkinson1BitDitherer = nullptr;
       }
     } else if (!USE_8BIT_OUTPUT) {
       if (USE_ATKINSON) {
         atkinsonDitherer = new (std::nothrow) AtkinsonDitherer(outWidth);
-        if (!atkinsonDitherer) {
-          LOG_ERR(TAG, "Failed to allocate Atkinson ditherer");
-          free(mcuRowBuffer);
-          free(rowBuffer);
-          return false;
+        if (atkinsonDitherer && !atkinsonDitherer->valid()) {
+          delete atkinsonDitherer;
+          atkinsonDitherer = nullptr;
         }
       } else if (USE_FLOYD_STEINBERG) {
         fsDitherer = new (std::nothrow) FloydSteinbergDitherer(outWidth);
-        if (!fsDitherer) {
-          LOG_ERR(TAG, "Failed to allocate Floyd-Steinberg ditherer");
-          free(mcuRowBuffer);
-          free(rowBuffer);
-          return false;
+        if (fsDitherer && !fsDitherer->valid()) {
+          delete fsDitherer;
+          fsDitherer = nullptr;
         }
       }
     }

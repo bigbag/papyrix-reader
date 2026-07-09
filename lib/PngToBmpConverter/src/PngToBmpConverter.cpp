@@ -272,21 +272,14 @@ void pngInitCallback(pngle_t* pngle, uint32_t w, uint32_t h) {
     ctx->nextOutY_srcStart = ctx->scaleY_fp;
   }
 
-  // Skip ditherer allocation in quickMode for faster preview
+  // Skip ditherer allocation in quickMode for faster preview.
+  // On OOM (object or row buffers), leave ditherer null and fall back to
+  // non-dithered quantize — same degrade path as JPEG/Bitmap.
   if (!ctx->quickMode) {
     ctx->ditherer = new (std::nothrow) AtkinsonDitherer(ctx->outWidth);
-    if (!ctx->ditherer) {
-      LOG_ERR(TAG, "Failed to allocate ditherer");
-      free(ctx->srcRowBuffer);
-      free(ctx->outRowBuffer);
-      delete[] ctx->rowAccum;
-      delete[] ctx->rowCount;
-      ctx->srcRowBuffer = nullptr;
-      ctx->outRowBuffer = nullptr;
-      ctx->rowAccum = nullptr;
-      ctx->rowCount = nullptr;
-      ctx->initFailed = true;
-      return;
+    if (ctx->ditherer && !ctx->ditherer->valid()) {
+      delete ctx->ditherer;
+      ctx->ditherer = nullptr;
     }
   }
   ctx->currentSrcY = 0;

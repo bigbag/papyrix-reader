@@ -124,10 +124,19 @@ BmpReaderError Bitmap::parseHeaders() {
   fsDitherer = nullptr;
 
   if (bpp > 2 && dithering) {
+    // OOM-safe: fall back to non-dithered output if row buffers can't be allocated.
     if (USE_ATKINSON) {
-      atkinsonDitherer = new AtkinsonDitherer(width);
+      atkinsonDitherer = new (std::nothrow) AtkinsonDitherer(width);
+      if (atkinsonDitherer && !atkinsonDitherer->valid()) {
+        delete atkinsonDitherer;
+        atkinsonDitherer = nullptr;
+      }
     } else {
-      fsDitherer = new FloydSteinbergDitherer(width);
+      fsDitherer = new (std::nothrow) FloydSteinbergDitherer(width);
+      if (fsDitherer && !fsDitherer->valid()) {
+        delete fsDitherer;
+        fsDitherer = nullptr;
+      }
     }
   }
 
