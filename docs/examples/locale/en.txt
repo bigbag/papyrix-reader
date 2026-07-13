@@ -95,6 +95,7 @@ DARK=Dark
 LIGHT=Light
 CUSTOM=Custom
 COVER=Cover
+KEEP_PAGE=Keep Page
 LAST_DOCUMENT=Last Document
 IGNORE=Ignore
 SLEEP_VAL=Sleep

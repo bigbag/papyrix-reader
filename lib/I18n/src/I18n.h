@@ -96,6 +96,7 @@ enum class StrId : uint8_t {
   STR_LIGHT,
   STR_CUSTOM,
   STR_COVER,
+  STR_KEEP_PAGE,
   STR_LAST_DOCUMENT,
   STR_IGNORE,
   STR_SLEEP_VAL,

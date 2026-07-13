@@ -95,6 +95,7 @@ DARK=Темна
 LIGHT=Світла
 CUSTOM=Власна
 COVER=Обкладинка
+KEEP_PAGE=Зберегти сторінку
 LAST_DOCUMENT=Остання книга
 IGNORE=Ігнорувати
 SLEEP_VAL=Сон

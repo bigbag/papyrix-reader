@@ -19,8 +19,10 @@
 #include <Txt.h>
 #include <Xtc.h>
 #include <driver/gpio.h>
+#include <esp_heap_caps.h>
 #include <esp_sleep.h>
 
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -40,27 +42,73 @@ namespace papyrix {
 SleepState::SleepState(GfxRenderer& renderer) : renderer_(renderer) {}
 
 void SleepState::enter(Core& core) {
-  LOG_INF(TAG, "SleepState::enter - rendering sleep screen");
+  // Keep Page only applies in READER mode (book page is on screen). In UI mode
+  // it falls back to the Light sleep screen so menus/home are never frozen.
+  // Effective mode is local only — never mutate the saved setting.
+  const bool keepPageRequested = (core.settings.sleepScreen == Settings::SleepKeepPage);
+  const bool keepPage = keepPageRequested && (core.bootMode == BootMode::READER);
+  const uint8_t effectiveSleepScreen =
+      (keepPageRequested && !keepPage) ? Settings::SleepLight : core.settings.sleepScreen;
 
-  // Black-then-white clearing sequence to fully erase previous screen content
-  // (prevents ghost artifacts like "Indexing" text or book content on sleep screen)
-  renderer_.clearScreen(0x00);
-  renderer_.displayBuffer(EInkDisplay::FAST_REFRESH);
-  renderer_.clearScreen(0xFF);
-  renderer_.drawCenteredText(THEME.uiFontId, renderer_.getScreenHeight() / 2, tr(SLEEPING), true);
-  renderer_.displayBuffer(EInkDisplay::FAST_REFRESH);
+  if (keepPage) {
+    // Standard "going to sleep" feedback (SLEEPING wipe), then restore the book
+    // page so deep sleep freezes the page — not the intermediate SLEEPING screen.
+    LOG_INF(TAG, "SleepState::enter - Keep Page (READER): SLEEPING then restore page");
 
-  // Render the appropriate sleep screen based on settings
-  switch (core.settings.sleepScreen) {
-    case Settings::SleepCustom:
-      renderCustomSleepScreen(core);
-      break;
-    case Settings::SleepCover:
-      renderCoverSleepScreen(core);
-      break;
-    default:
-      renderDefaultSleepScreen(core);
-      break;
+    const size_t bufSize = renderer_.getBufferSize();
+    uint8_t* pageSnap = nullptr;
+    if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) >= bufSize) {
+      pageSnap = static_cast<uint8_t*>(malloc(bufSize));
+    }
+
+    if (pageSnap) {
+      memcpy(pageSnap, renderer_.getFrameBuffer(), bufSize);
+
+      // Same black→white + SLEEPING cue as the normal sleep path
+      renderer_.clearScreen(0x00);
+      renderer_.displayBuffer(EInkDisplay::FAST_REFRESH);
+      renderer_.clearScreen(0xFF);
+      renderer_.drawCenteredText(THEME.uiFontId, renderer_.getScreenHeight() / 2, tr(SLEEPING), true);
+      renderer_.displayBuffer(EInkDisplay::FAST_REFRESH);
+
+      // Restore book page into the active framebuffer and lock it for deep sleep
+      memcpy(renderer_.getFrameBuffer(), pageSnap, bufSize);
+      free(pageSnap);
+      pageSnap = nullptr;
+      renderer_.displayBuffer(EInkDisplay::HALF_REFRESH);
+    } else {
+      // OOM: skip intermediate SLEEPING and lock whatever is already on screen
+      LOG_WRN(TAG, "Keep Page: no RAM for page snapshot (%u bytes), locking current buffer",
+              static_cast<unsigned>(bufSize));
+      renderer_.displayBuffer(EInkDisplay::HALF_REFRESH);
+    }
+  } else {
+    if (keepPageRequested) {
+      LOG_INF(TAG, "SleepState::enter - Keep Page outside READER mode, using Light");
+    } else {
+      LOG_INF(TAG, "SleepState::enter - rendering sleep screen");
+    }
+
+    // Black-then-white clearing sequence to fully erase previous screen content
+    // (prevents ghost artifacts like "Indexing" text or book content on sleep screen)
+    renderer_.clearScreen(0x00);
+    renderer_.displayBuffer(EInkDisplay::FAST_REFRESH);
+    renderer_.clearScreen(0xFF);
+    renderer_.drawCenteredText(THEME.uiFontId, renderer_.getScreenHeight() / 2, tr(SLEEPING), true);
+    renderer_.displayBuffer(EInkDisplay::FAST_REFRESH);
+
+    // Render the appropriate sleep screen based on settings
+    switch (effectiveSleepScreen) {
+      case Settings::SleepCustom:
+        renderCustomSleepScreen(core);
+        break;
+      case Settings::SleepCover:
+        renderCoverSleepScreen(core);
+        break;
+      default:
+        renderDefaultSleepScreen(effectiveSleepScreen);
+        break;
+    }
   }
 
   // Save power button duration to RTC memory for wake-up verification
@@ -104,7 +152,7 @@ StateTransition SleepState::update(Core& core) {
   return StateTransition::stay(StateId::Sleep);
 }
 
-void SleepState::renderDefaultSleepScreen(const Core& core) const {
+void SleepState::renderDefaultSleepScreen(uint8_t sleepMode) const {
   const auto pageWidth = renderer_.getScreenWidth();
   const auto pageHeight = renderer_.getScreenHeight();
 
@@ -115,8 +163,8 @@ void SleepState::renderDefaultSleepScreen(const Core& core) const {
   renderer_.drawCenteredText(THEME.uiFontId, pageHeight / 2 + 70, tr(PAPYRIX), true, BOLD);
   renderer_.drawCenteredText(THEME.smallFontId, pageHeight / 2 + 110, tr(SLEEPING), true);
 
-  // Make sleep screen dark unless light is selected in settings
-  if (core.settings.sleepScreen != Settings::SleepLight) {
+  // Make sleep screen dark unless light is selected
+  if (sleepMode != Settings::SleepLight) {
     renderer_.invertScreen();
   }
 
@@ -188,12 +236,12 @@ void SleepState::renderCustomSleepScreen(const Core& core) const {
     }
   }
 
-  renderDefaultSleepScreen(core);
+  renderDefaultSleepScreen(core.settings.sleepScreen);
 }
 
 void SleepState::renderCoverSleepScreen(Core& core) const {
   if (core.settings.lastBookPath[0] == '\0') {
-    return renderDefaultSleepScreen(core);
+    return renderDefaultSleepScreen(core.settings.sleepScreen);
   }
 
   std::string coverBmpPath;
@@ -235,7 +283,7 @@ void SleepState::renderCoverSleepScreen(Core& core) const {
 
   if (coverBmpPath.empty()) {
     LOG_DBG(TAG, "No cover BMP available");
-    return renderDefaultSleepScreen(core);
+    return renderDefaultSleepScreen(core.settings.sleepScreen);
   }
 
   FsFile file;
@@ -247,7 +295,7 @@ void SleepState::renderCoverSleepScreen(Core& core) const {
     }
   }
 
-  renderDefaultSleepScreen(core);
+  renderDefaultSleepScreen(core.settings.sleepScreen);
 }
 
 void SleepState::renderBitmapSleepScreen(const Bitmap& bitmap) const {

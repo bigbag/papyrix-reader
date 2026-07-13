@@ -97,6 +97,7 @@ static constexpr KeyMapping KEY_MAP[] = {
     {"LIGHT", StrId::STR_LIGHT},
     {"CUSTOM", StrId::STR_CUSTOM},
     {"COVER", StrId::STR_COVER},
+    {"KEEP_PAGE", StrId::STR_KEEP_PAGE},
     {"LAST_DOCUMENT", StrId::STR_LAST_DOCUMENT},
     {"IGNORE", StrId::STR_IGNORE},
     {"SLEEP_VAL", StrId::STR_SLEEP_VAL},

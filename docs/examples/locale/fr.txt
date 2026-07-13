@@ -95,6 +95,7 @@ DARK=Sombre
 LIGHT=Clair
 CUSTOM=Personnalisé
 COVER=Couverture
+KEEP_PAGE=Garder la page
 LAST_DOCUMENT=Dernier livre
 IGNORE=Ignorer
 SLEEP_VAL=Veille

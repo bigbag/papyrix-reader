@@ -153,7 +153,7 @@ Result<void> Settings::load(drivers::Storage& storage) {
   // readPodValidated keeps default value if read value >= maxValue
   uint8_t settingsRead = 0;
   do {
-    serialization::readPodValidated(inputFile, sleepScreen, uint8_t(4));
+    serialization::readPodValidated(inputFile, sleepScreen, uint8_t(5));
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, textLayout, uint8_t(3));
     if (++settingsRead >= fileSettingsCount) break;
@@ -369,7 +369,7 @@ bool Settings::loadFromFile() {
 
   uint8_t settingsRead = 0;
   do {
-    serialization::readPodValidated(inputFile, sleepScreen, uint8_t(4));
+    serialization::readPodValidated(inputFile, sleepScreen, uint8_t(5));
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, textLayout, uint8_t(3));
     if (++settingsRead >= fileSettingsCount) break;

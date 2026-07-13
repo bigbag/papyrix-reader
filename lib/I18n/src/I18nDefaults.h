@@ -99,6 +99,7 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "Light",                  // LIGHT
     "Custom",                 // CUSTOM
     "Cover",                  // COVER
+    "Keep Page",              // KEEP_PAGE
     "Last Document",          // LAST_DOCUMENT
     "Ignore",                 // IGNORE
     "Sleep",                  // SLEEP_VAL

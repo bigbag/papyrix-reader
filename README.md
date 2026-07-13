@@ -86,7 +86,7 @@ on each panel.
 ### Customization
 - [x] Custom themes from SD card (`/config/themes/`)
 - [x] Custom fonts from SD card (`/config/fonts/`, .epdfont format)
-- [x] Custom sleep screens (Dark/Light/Custom/Cover modes)
+- [x] Custom sleep screens (Dark/Light/Custom/Cover/Keep Page modes)
 - [x] Button remapping (side and front buttons)
 - [x] Power button actions (page turn, bookmark, or sleep on short press)
 

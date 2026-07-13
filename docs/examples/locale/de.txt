@@ -95,6 +95,7 @@ DARK=Dunkel
 LIGHT=Hell
 CUSTOM=Eigenes
 COVER=Cover
+KEEP_PAGE=Seite behalten
 LAST_DOCUMENT=Letztes Buch
 IGNORE=Ignorieren
 SLEEP_VAL=Schlafen

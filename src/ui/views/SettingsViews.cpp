@@ -56,7 +56,7 @@ DeviceSettingsView::SettingDef DeviceSettingsView::DEFS[SETTING_COUNT] = {};
 
 void DeviceSettingsView::initDefs() {
   static const char* sleepTimeoutValues[5];
-  static const char* sleepScreenValues[4];
+  static const char* sleepScreenValues[5];
   static const char* startupValues[2];
   static const char* shortPwrValues[4];
   static const char* pagesRefreshValues[6];
@@ -73,6 +73,7 @@ void DeviceSettingsView::initDefs() {
   sleepScreenValues[1] = tr(LIGHT);
   sleepScreenValues[2] = tr(CUSTOM);
   sleepScreenValues[3] = tr(COVER);
+  sleepScreenValues[4] = tr(KEEP_PAGE);
   startupValues[0] = tr(LAST_DOCUMENT);
   startupValues[1] = tr(HOME);
   shortPwrValues[0] = tr(IGNORE);
@@ -93,7 +94,7 @@ void DeviceSettingsView::initDefs() {
   sideButtonValues[1] = tr(NEXT_PREV);
 
   DEFS[0] = {tr(AUTO_SLEEP_TIMEOUT), sleepTimeoutValues, 5};
-  DEFS[1] = {tr(SLEEP_SCREEN), sleepScreenValues, 4};
+  DEFS[1] = {tr(SLEEP_SCREEN), sleepScreenValues, 5};
   DEFS[2] = {tr(STARTUP_BEHAVIOR), startupValues, 2};
   DEFS[3] = {tr(SHORT_POWER_BUTTON), shortPwrValues, 4};
   DEFS[4] = {tr(PAGES_PER_REFRESH), pagesRefreshValues, 6};

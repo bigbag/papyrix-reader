@@ -207,7 +207,7 @@ Power and device behavior settings:
   - Time of inactivity before the device automatically sleeps
 
 - **Sleep Screen** (default: Dark)
-  - Options: Dark, Light, Custom, Cover
+  - Options: Dark, Light, Custom, Cover, Keep Page
   - Which image to display when the device sleeps
 
 - **Startup Behavior** (default: Last Document)
@@ -352,6 +352,9 @@ You can customize the sleep screen by placing custom images in specific location
 Cover mode:
 
 ![Sleep Screen: Cover](images/sleep-screen-cover.jpg)
+
+> [!TIP]
+> The **Keep Page** sleep screen option keeps the current book page visible while the device sleeps, instead of showing a sleep screen. It is only available while reading — outside a book it falls back to the Light sleep screen.
 
 ---
 

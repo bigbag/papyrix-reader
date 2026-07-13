@@ -95,6 +95,7 @@ DARK=Oscuro
 LIGHT=Claro
 CUSTOM=Personal.
 COVER=Portada
+KEEP_PAGE=Mantener página
 LAST_DOCUMENT=Último libro
 IGNORE=Ignorar
 SLEEP_VAL=Suspender
