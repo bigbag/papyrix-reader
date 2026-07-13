@@ -61,6 +61,7 @@ on each panel.
 - [x] Markdown (.md, .markdown) file support with formatting
 - [x] Plain text (.txt, .text) file support
 - [x] Saved reading position
+- [x] Recently opened books (Books screen) for quick resume
 - [x] Bookmarks (up to 20 per book, persisted to SD card)
 - [x] Book cover display (JPG/JPEG/PNG/BMP, case-insensitive)
 - [x] Table of contents navigation

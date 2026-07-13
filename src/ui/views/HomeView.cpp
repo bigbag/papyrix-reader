@@ -89,13 +89,13 @@ void render(const GfxRenderer& r, const Theme& t, const HomeView& v) {
     const int noBookX = cardX + (cardWidth - noBookWidth) / 2;
     r.drawText(t.uiFontId, noBookX, centerY - lineHeight, noBookText, t.primaryTextBlack);
 
-    const char* hintText = tr(PRESS_FILE_TO_EXPLORE);
+    const char* hintText = tr(v.showRecents ? PRESS_FILE_TO_EXPLORE : PRESS_FILES_TO_EXPLORE);
     const int hintWidth = r.getTextWidth(t.uiFontId, hintText);
     const int hintX = cardX + (cardWidth - hintWidth) / 2;
     r.drawText(t.uiFontId, hintX, centerY + lineHeight / 2, hintText, t.secondaryTextBlack);
   }
 
-  ButtonBar btns{v.hasBook ? tr(READ) : "", tr(FILE), tr(APPS), tr(SETTINGS)};
+  ButtonBar btns{v.hasBook ? tr(READ) : "", v.showRecents ? tr(BOOKS) : tr(FILES), tr(APPS), tr(SETTINGS)};
   buttonBar(r, t, btns);
 
   // Note: displayBuffer() is NOT called here; HomeState will call it

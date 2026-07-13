@@ -14,6 +14,7 @@
 #include <cctype>
 #include <cstring>
 
+#include "../content/RecentBooksStore.h"
 #include "../core/BootMode.h"
 #include "../core/Core.h"
 #include "../ui/Elements.h"
@@ -29,7 +30,7 @@ FileListState::FileListState(GfxRenderer& renderer)
       selectedIndex_(0),
       needsRender_(true),
       hasSelection_(false),
-      goHome_(false),
+      goRecent_(false),
       firstRender_(true),
       currentScreen_(Screen::Browse),
       confirmView_{} {
@@ -63,7 +64,7 @@ void FileListState::enter(Core& core) {
 
   needsRender_ = true;
   hasSelection_ = false;
-  goHome_ = false;
+  goRecent_ = false;
   firstRender_ = true;
   currentScreen_ = Screen::Browse;
   selectedPath_[0] = '\0';
@@ -247,6 +248,10 @@ StateTransition FileListState::update(Core& core) {
 
                   Result<void> result = entry.isDir ? core.storage.rmdir(pathBuf) : core.storage.remove(pathBuf);
 
+                  if (result.ok()) {
+                    RecentBooksStore::instance().remove(pathBuf);
+                  }
+
                   const char* msg = result.ok() ? tr(DELETED) : tr(DELETE_FAILED);
                   ui::centeredMessage(renderer_, THEME, THEME.uiFontId, msg);
                   vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -309,11 +314,11 @@ StateTransition FileListState::update(Core& core) {
     return StateTransition::to(StateId::Reader);
   }
 
-  // Return to home if requested
-  if (goHome_) {
-    goHome_ = false;
+  // Return to Recent (parent of Files) if requested
+  if (goRecent_) {
+    goRecent_ = false;
     strcpy(currentDir_, "/");  // Reset for next entry
-    return StateTransition::to(StateId::Home);
+    return StateTransition::to(core.settings.showRecents ? StateId::Recent : StateId::Home);
   }
 
   return StateTransition::stay(StateId::FileList);
@@ -339,9 +344,9 @@ void FileListState::render(Core& core) {
   // Title with page indicator
   char title[48];
   if (getTotalPages() > 1) {
-    snprintf(title, sizeof(title), "%s (%d/%d)", tr(BOOKS), getCurrentPage(), getTotalPages());
+    snprintf(title, sizeof(title), "%s (%d/%d)", tr(FILES), getCurrentPage(), getTotalPages());
   } else {
-    strncpy(title, tr(BOOKS), sizeof(title) - 1);
+    strncpy(title, tr(FILES), sizeof(title) - 1);
     title[sizeof(title) - 1] = '\0';
   }
   renderer_.drawCenteredText(theme.readerFontId, 10, title, theme.primaryTextBlack, BOLD);
@@ -368,7 +373,7 @@ void FileListState::render(Core& core) {
                   static_cast<size_t>(i) == selectedIndex_);
   }
 
-  const char* backLabel = isAtRoot() ? tr(HOME) : tr(BACK);
+  const char* backLabel = isAtRoot() ? (core.settings.showRecents ? tr(BOOKS) : tr(HOME)) : tr(BACK);
   ui::buttonBar(renderer_, theme, backLabel, tr(OPEN), "", tr(DELETE_BTN));
 
   if (firstRender_) {
@@ -449,10 +454,10 @@ void FileListState::openSelected(Core& core) {
 }
 
 void FileListState::goBack(Core& core) {
-  // Navigate to parent directory or go home if at root
+  // Navigate to parent directory or return to Recent if at root
   if (strcmp(currentDir_, "/") == 0) {
-    // At root - go back to Home
-    goHome_ = true;
+    // At root - go back to Recent
+    goRecent_ = true;
     return;
   }
 

@@ -23,9 +23,8 @@ This is the fastest and most convenient way to transfer books if you already use
 
 ## Step 1: Enable Wireless Device in Papyrix
 
-1. From the Home screen, press the **Left** button to access **Sync**
-2. Select **Calibre Wireless**
-3. Connect to your WiFi network when prompted
+1. From the Home screen, open **Apps** and select **Calibre Wireless**
+2. Connect to your WiFi network when prompted
 4. Once connected, the screen displays:
    - **IP Address and Port** (e.g., `192.168.1.42:9090`)
    - **Device Name** (e.g., "Papyrix Reader")

@@ -21,9 +21,9 @@ constexpr uint32_t SETTINGS_MAGIC = 0x53585050;
 // Minimum version we can read (allows backward compatibility)
 constexpr uint8_t MIN_SETTINGS_VERSION = 3;
 // Version 11: Increased path buffer sizes (lastBookPath 256→512, fileListDir 256→512, fileListSelectedName 128→256)
-constexpr uint8_t SETTINGS_FILE_VERSION = 11;
+constexpr uint8_t SETTINGS_FILE_VERSION = 12;
 // Increment this when adding new persisted settings fields
-constexpr uint8_t SETTINGS_COUNT = 26;
+constexpr uint8_t SETTINGS_COUNT = 27;
 
 static constexpr char kSettingsTmp[] = PAPYRIX_SETTINGS_FILE ".tmp";
 
@@ -46,7 +46,7 @@ constexpr uint32_t kMinSettingsBytes =
     sizeof(kSizeProbe.pendingTransition) + sizeof(kSizeProbe.transitionReturnTo) +
     sizeof(kSizeProbe.sunlightFadingFix) + sizeof(kSizeProbe.fileListDir) + sizeof(kSizeProbe.fileListSelectedName) +
     sizeof(kSizeProbe.fileListSelectedIndex) + sizeof(kSizeProbe.frontButtonLayout) +
-    sizeof(kSizeProbe.fullBookProcess);
+    sizeof(kSizeProbe.fullBookProcess) + sizeof(kSizeProbe.showRecents);
 }  // namespace
 
 Result<void> Settings::save(drivers::Storage& storage) const {
@@ -95,6 +95,7 @@ Result<void> Settings::save(drivers::Storage& storage) const {
   serialization::writePod(outputFile, fileListSelectedIndex);
   serialization::writePod(outputFile, frontButtonLayout);
   serialization::writePod(outputFile, fullBookProcess);
+  serialization::writePod(outputFile, showRecents);
   outputFile.sync();
   const uint32_t writtenBytes = outputFile.size();
   outputFile.close();
@@ -199,7 +200,7 @@ Result<void> Settings::load(drivers::Storage& storage) {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, pendingTransition, uint8_t(3));
     if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPodValidated(inputFile, transitionReturnTo, uint8_t(2));
+    serialization::readPodValidated(inputFile, transitionReturnTo, uint8_t(3));
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, sunlightFadingFix, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
@@ -224,6 +225,8 @@ Result<void> Settings::load(drivers::Storage& storage) {
     serialization::readPodValidated(inputFile, frontButtonLayout, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, fullBookProcess, uint8_t(2));
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPodValidated(inputFile, showRecents, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
   } while (false);
 
@@ -314,6 +317,7 @@ bool Settings::saveToFile() const {
   serialization::writePod(outputFile, fileListSelectedIndex);
   serialization::writePod(outputFile, frontButtonLayout);
   serialization::writePod(outputFile, fullBookProcess);
+  serialization::writePod(outputFile, showRecents);
   outputFile.sync();
   const uint32_t writtenBytes = outputFile.size();
   outputFile.close();
@@ -414,7 +418,7 @@ bool Settings::loadFromFile() {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, pendingTransition, uint8_t(3));
     if (++settingsRead >= fileSettingsCount) break;
-    serialization::readPodValidated(inputFile, transitionReturnTo, uint8_t(2));
+    serialization::readPodValidated(inputFile, transitionReturnTo, uint8_t(3));
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, sunlightFadingFix, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
@@ -439,6 +443,8 @@ bool Settings::loadFromFile() {
     serialization::readPodValidated(inputFile, frontButtonLayout, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPodValidated(inputFile, fullBookProcess, uint8_t(2));
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPodValidated(inputFile, showRecents, uint8_t(2));
     if (++settingsRead >= fileSettingsCount) break;
   } while (false);
 

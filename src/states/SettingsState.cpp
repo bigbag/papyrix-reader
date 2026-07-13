@@ -654,6 +654,9 @@ void SettingsState::loadDeviceSettings() {
 
   // Index 7: Side Buttons (Prev/Next=0, Next/Prev=1)
   deviceView_.values[7] = settings.sideButtonLayout;
+
+  // Index 8: Show Recents (Off=0, On=1)
+  deviceView_.values[8] = settings.showRecents;
 }
 
 void SettingsState::saveDeviceSettings() {
@@ -676,6 +679,9 @@ void SettingsState::saveDeviceSettings() {
 
   // Index 5: Sunlight Fading Fix
   settings.sunlightFadingFix = deviceView_.values[5];
+
+  // Index 8: Show Recents
+  settings.showRecents = deviceView_.values[8];
 
   // Index 6: Front Buttons - deferred to goBack() on screen exit.
   // Changing layout while navigating causes ghost button events because the

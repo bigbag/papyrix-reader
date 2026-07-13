@@ -67,6 +67,7 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "Auto Sleep Timeout",     // AUTO_SLEEP_TIMEOUT
     "Sleep Screen",           // SLEEP_SCREEN
     "Startup Behavior",       // STARTUP_BEHAVIOR
+    "Show Recents",          // SHOW_RECENTS
     "Short Power Button",     // SHORT_POWER_BUTTON
     "Pages Per Refresh",      // PAGES_PER_REFRESH
     "Sunlight Fading Fix",    // SUNLIGHT_FADING_FIX
@@ -145,7 +146,8 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "Opening book...",        // OPENING_BOOK
     "Deleting...",            // DELETING
     "No book open",           // NO_BOOK_OPEN
-    "Press \"File\" to explore",           // PRESS_FILE_TO_EXPLORE
+    "Press \"Books\" to explore",           // PRESS_FILE_TO_EXPLORE
+    "Press \"Files\" to explore",           // PRESS_FILES_TO_EXPLORE
     "No books found",         // NO_BOOKS_FOUND
     "End of book",            // END_OF_BOOK
     "Failed to load page",    // FAILED_TO_LOAD_PAGE
@@ -203,6 +205,9 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "Add",                    // ADD
     "No bookmarks yet",       // NO_BOOKMARKS
     "Books",                  // BOOKS
+    "Recent",                 // RECENT_BOOKS
+    "No recent books",        // NO_RECENT_BOOKS
+    "Remove from recent?",    // REMOVE_FROM_RECENT_Q
     "Delete this file?",      // DELETE_FILE_Q
     "Delete this folder?",    // DELETE_FOLDER_Q
     "Enter Password",         // ENTER_PASSWORD

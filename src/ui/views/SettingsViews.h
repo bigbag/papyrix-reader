@@ -187,7 +187,7 @@ struct DeviceSettingsView {
     uint8_t valueCount;
   };
 
-  static constexpr int SETTING_COUNT = 8;
+  static constexpr int SETTING_COUNT = 9;
   static SettingDef DEFS[SETTING_COUNT];
   static void initDefs();
 

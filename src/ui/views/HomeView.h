@@ -48,6 +48,7 @@ struct HomeView {
   char bookAuthor[MAX_AUTHOR_LEN] = {0};
   char bookPath[MAX_PATH_LEN] = {0};
   bool hasBook = false;
+  bool showRecents = true;  // home entry: Books (Recent) when true, Files when false
 
   // Cover image (external pointer - not owned)
   const uint8_t* coverData = nullptr;

@@ -191,8 +191,8 @@ StateTransition HomeState::update(Core& core) {
             break;
 
           case Button::Center:
-            // btn2: File
-            return StateTransition::to(StateId::FileList);
+            // btn2: Books (Recent) or Files, per Show Recents setting
+            return StateTransition::to(core.settings.showRecents ? StateId::Recent : StateId::FileList);
 
           case Button::Left:
             // btn3: Apps
@@ -273,6 +273,7 @@ void HomeState::render(Core& core) {
                           : theme.uiFontId;
 
   // Render rest of UI (text boxes will draw on top of cover)
+  view_.showRecents = core.settings.showRecents;
   ui::render(renderer_, theme, view_);
 
   renderer_.displayBuffer();

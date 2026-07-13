@@ -12,8 +12,9 @@ enum class BootMode : uint8_t {
 
 // Where to return when exiting reader mode
 enum class ReturnTo : uint8_t {
-  HOME,         // Return to HomeState
-  FILE_MANAGER  // Return to FileListState
+  HOME,          // Return to HomeState
+  FILE_MANAGER,  // Return to FileListState
+  RECENT         // Return to RecentState (Books screen)
 };
 
 // RTC memory structure for mode transitions (persists across restart)

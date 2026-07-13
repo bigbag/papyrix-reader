@@ -57,6 +57,7 @@
 #include "states/HomeState.h"
 #include "states/NetworkState.h"
 #include "states/ReaderState.h"
+#include "states/RecentState.h"
 #include "states/SettingsState.h"
 #include "states/SleepState.h"
 #include "states/StartupState.h"
@@ -96,6 +97,7 @@ Core core;
 static papyrix::StartupState startupState;
 static papyrix::HomeState homeState(renderer);
 static papyrix::FileListState fileListState(renderer);
+static papyrix::RecentState recentState(renderer);
 static papyrix::ReaderState readerState(renderer);
 static papyrix::SettingsState settingsState(renderer);
 static papyrix::NetworkState networkState(renderer);
@@ -453,6 +455,7 @@ void initUIMode() {
   stateMachine.registerState(&startupState);
   stateMachine.registerState(&homeState);
   stateMachine.registerState(&fileListState);
+  stateMachine.registerState(&recentState);
   stateMachine.registerState(&readerState);
   stateMachine.registerState(&settingsState);
   stateMachine.registerState(&networkState);
@@ -480,6 +483,9 @@ void initUIMode() {
   if (transition.returnTo == papyrix::ReturnTo::FILE_MANAGER) {
     initialState = papyrix::StateId::FileList;
     LOG_INF(TAG, "Returning to FileList from Reader");
+  } else if (transition.returnTo == papyrix::ReturnTo::RECENT) {
+    initialState = papyrix::StateId::Recent;
+    LOG_INF(TAG, "Returning to Recent from Reader");
   } else {
     LOG_INF(TAG, "Starting at Home");
   }

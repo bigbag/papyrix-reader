@@ -13,6 +13,7 @@
 
 #include "../IniParser.h"
 #include "../config.h"
+#include "../content/RecentBooksStore.h"
 #include "html/AppPageHtml.generated.h"
 
 #define TAG "WEBSERVER"
@@ -428,6 +429,7 @@ void PapyrixWebServer::handleDelete() {
   }
 
   if (success) {
+    RecentBooksStore::instance().remove(itemPath.c_str());
     LOG_INF(TAG, "Deleted: %s", itemPath.c_str());
     server_->send(200, "text/plain", "Deleted");
   } else {

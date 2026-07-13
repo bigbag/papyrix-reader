@@ -32,6 +32,7 @@ enum class StateId : uint8_t {
   Startup,
   Home,
   FileList,
+  Recent,
   Reader,
   Settings,
   Network,

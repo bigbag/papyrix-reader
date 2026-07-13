@@ -101,6 +101,7 @@ void DeviceSettingsView::initDefs() {
   DEFS[5] = {tr(SUNLIGHT_FADING_FIX), toggleValues, 2};
   DEFS[6] = {tr(FRONT_BUTTONS), frontButtonValues, 2};
   DEFS[7] = {tr(SIDE_BUTTONS), sideButtonValues, 2};
+  DEFS[8] = {tr(SHOW_RECENTS), toggleValues, 2};
 }
 
 // Render functions

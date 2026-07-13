@@ -55,15 +55,31 @@ The center of the screen shows the cover of the currently open book, with the bo
 #### Bottom Bar
 Four buttons at the bottom of the screen:
 - **Read** — Continue reading the current book
-- **Files** — Browse and select books from the SD card
-- **Sync** — File transfer over WiFi or Calibre wireless sync
+- **Books** — Open the Books screen (recently opened books, with access to the file browser)
+- **Apps** — Launcher for file transfer (WiFi/Calibre sync) and other apps
 - **Settings** — Device settings
 
 **Navigation:**
 * Use **Left/Right** or **Volume Up/Down** to move between buttons
 * Press **Confirm** to select
 
-### 3.2 Book Selection (Files)
+### 3.2 Books (Recent) & File Selection
+
+From the Home screen, press **Books** to open the Books screen.
+
+#### Books (Recent)
+
+The Books screen lists your recently opened books (title and author) so you can resume reading
+without browsing the whole SD card. The list is capped to what fits on one screen and is ordered
+most-recent-first.
+
+- **Open:** Press **Confirm** to resume the selected book at its saved reading position.
+- **Files:** Press the **Files** button to open the file browser (below).
+- **Delete:** Press the **Right** button to remove the selected book from the list (the file itself
+  is **not** deleted — use the file browser for that). Confirm with **Yes**.
+- After reading a book you opened from here, you return to the Books screen.
+
+#### File Browser
 
 ![File Browser](images/file-browser.jpg)
 
@@ -112,7 +128,7 @@ See [4. Reading Mode](#4-reading-mode) below for more information.
 
 ### 3.4 File Transfer (Sync)
 
-File transfer is accessible from the Home screen by pressing the **Left** button (or from the file browser, select **Sync**). This allows you to upload new e-books to the device over WiFi or connect to Calibre.
+File transfer is accessible from the Home screen by opening **Apps** and selecting **File Transfer**. This allows you to upload new e-books to the device over WiFi or connect to Calibre.
 
 When you enter the screen, you'll be prompted to choose a network mode:
 
@@ -242,6 +258,11 @@ Power and device behavior settings:
   - **Prev/Next:** Volume Up = previous page, Volume Down = next page
   - **Next/Prev:** Volume Up = next page, Volume Down = previous page
 
+- **Show Recents** (default: ON)
+  - Options: OFF, ON
+  - **ON:** The Home screen shows a **Books** button that opens your recently opened books (with a **Files** button to browse the SD card).
+  - **OFF:** The Home screen shows a **Files** button that opens the file browser directly (the pre-#141 behavior). Recently opened books are still recorded in the background, so switching back to ON shows full history.
+
 #### Cleanup
 
 Maintenance actions for the device:
@@ -278,7 +299,7 @@ Calibre Wireless allows you to send books directly from **Calibre** (the popular
 
 #### Connecting to Calibre
 
-1. From the Home screen, press **Left** to access **Sync**, then select **Calibre Wireless**
+1. From the Home screen, open **Apps** and select **Calibre Wireless**
 2. Connect to your WiFi network (same as your computer)
 3. The device will show its IP address and port (e.g., `192.168.1.42:9090`)
 4. The screen displays "Waiting for Calibre..."

@@ -30,6 +30,7 @@
 #include "../content/BookmarkManager.h"
 #include "../content/ProgressManager.h"
 #include "../content/ReaderNavigation.h"
+#include "../content/RecentBooksStore.h"
 #include "../core/BootMode.h"
 #include "../core/Core.h"
 #include "../drivers/Device.h"
@@ -807,6 +808,14 @@ void ReaderState::enter(Core& core) {
   strncpy(core.settings.lastBookPath, contentPath_, sizeof(core.settings.lastBookPath) - 1);
   core.settings.lastBookPath[sizeof(core.settings.lastBookPath) - 1] = '\0';
   core.settings.save(core.storage);
+
+  // Record in recent books list (snapshot title/author from opened provider)
+  {
+    const auto& meta = core.content.metadata();
+    const int rowPitch = RecentBooksStore::rowHeight(renderer_.getLineHeight(THEME_MANAGER.current().uiFontId));
+    RecentBooksStore::instance().add(contentPath_, meta.title, meta.author,
+                                     RecentBooksStore::maxRecent(renderer_.getScreenHeight(), rowPitch));
+  }
 
   // Setup cache directories for all content types
   // Reset state for new book
