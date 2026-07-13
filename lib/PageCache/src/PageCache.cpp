@@ -20,7 +20,7 @@ uint16_t PageCache::failSerializeCounter_ = 0;
 #endif
 
 namespace {
-constexpr uint8_t CACHE_FILE_VERSION = 19;  // v19: + bytesConsumed/totalBytes for partial-cache page-total estimate
+constexpr uint8_t CACHE_FILE_VERSION = 20;  // v20: CSS block-level margins/padding change page layout
 
 // Header layout (offsets are absolute from start of file):
 // - version (1 byte)        @ 0

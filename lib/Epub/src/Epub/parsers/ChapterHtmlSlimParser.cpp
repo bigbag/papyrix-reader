@@ -42,6 +42,58 @@ constexpr int NUM_SKIP_TAGS = sizeof(SKIP_TAGS) / sizeof(SKIP_TAGS[0]);
 
 bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
 
+// paragraphAlignment is the user setting. When CSS sets text-align, CSS wins
+// (same as pre-margin parser); otherwise the user setting is used.
+BlockStyle blockStyleFromCss(const CssStyle& cssStyle, const float emSize, const uint8_t paragraphAlignment,
+                             const uint16_t viewportWidth) {
+  BlockStyle bs;
+  const float vw = viewportWidth;
+  const auto maxHorizontalPx = static_cast<int16_t>(emSize * BlockStyle::MAX_HORIZONTAL_INSET_EM);
+  const auto maxVerticalPx = static_cast<int16_t>(emSize * 4.0f);
+
+  bs.marginTop = std::clamp(cssStyle.marginTop.toPixelsInt16(emSize, vw), static_cast<int16_t>(0), maxVerticalPx);
+  bs.marginBottom = std::clamp(cssStyle.marginBottom.toPixelsInt16(emSize, vw), static_cast<int16_t>(0), maxVerticalPx);
+  bs.marginLeft = std::clamp(cssStyle.marginLeft.toPixelsInt16(emSize, vw), static_cast<int16_t>(0), maxHorizontalPx);
+  bs.marginRight = std::clamp(cssStyle.marginRight.toPixelsInt16(emSize, vw), static_cast<int16_t>(0), maxHorizontalPx);
+
+  bs.paddingTop = std::clamp(cssStyle.paddingTop.toPixelsInt16(emSize, vw), static_cast<int16_t>(0), maxVerticalPx);
+  bs.paddingBottom =
+      std::clamp(cssStyle.paddingBottom.toPixelsInt16(emSize, vw), static_cast<int16_t>(0), maxVerticalPx);
+  bs.paddingLeft = std::clamp(cssStyle.paddingLeft.toPixelsInt16(emSize, vw), static_cast<int16_t>(0), maxHorizontalPx);
+  bs.paddingRight =
+      std::clamp(cssStyle.paddingRight.toPixelsInt16(emSize, vw), static_cast<int16_t>(0), maxHorizontalPx);
+
+  bs.textAlignDefined = cssStyle.hasTextAlign();
+  if (bs.textAlignDefined) {
+    switch (cssStyle.textAlign) {
+      case TextAlign::Left:
+        bs.alignment = TextBlock::LEFT_ALIGN;
+        break;
+      case TextAlign::Right:
+        bs.alignment = TextBlock::RIGHT_ALIGN;
+        break;
+      case TextAlign::Center:
+        bs.alignment = TextBlock::CENTER_ALIGN;
+        break;
+      case TextAlign::Justify:
+        bs.alignment = TextBlock::JUSTIFIED;
+        break;
+      default:
+        bs.alignment = static_cast<TextBlock::BLOCK_STYLE>(paragraphAlignment);
+        break;
+    }
+  } else {
+    bs.alignment = static_cast<TextBlock::BLOCK_STYLE>(paragraphAlignment);
+  }
+
+  if (cssStyle.hasDirection()) {
+    bs.isRtl = (cssStyle.direction == TextDirection::Rtl);
+    bs.directionDefined = true;
+  }
+
+  return bs;
+}
+
 // given the start and end of a tag, check to see if it matches a known tag
 bool matches(const char* tag_name, const char* possible_tags[], const int possible_tag_count) {
   for (int i = 0; i < possible_tag_count; i++) {
@@ -78,6 +130,22 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
 }
 
 // start a new text block if needed
+void ChapterHtmlSlimParser::reapplyContinuationInsets() {
+  // After makePages() resets currentBlockStyle_, mid-block continuations need the
+  // current stack's horizontal insets. Vertical spacing was already spent.
+  if (blockStyleStack_.empty()) return;
+  BlockStyle cont = blockStyleStack_.back();
+  cont.marginTop = 0;
+  cont.paddingTop = 0;
+  cont.marginBottom = 0;
+  cont.paddingBottom = 0;
+  if (pendingNewTextBlock_) {
+    pendingBlockStyleFull_ = cont;
+  } else {
+    currentBlockStyle_ = cont;
+  }
+}
+
 void ChapterHtmlSlimParser::startNewTextBlock(const TextBlock::BLOCK_STYLE style) {
   if (currentTextBlock) {
     // already have a text block running and it is empty - just reuse it
@@ -277,84 +345,108 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   }
   // Inline styles override stylesheet rules (static method, no instance needed)
   if (!styleAttr.empty()) {
-    cssStyle.merge(CssParser::parseInlineStyle(styleAttr));
+    cssStyle.applyOver(CssParser::parseInlineStyle(styleAttr));
   }
   // HTML dir attribute overrides CSS direction (case-insensitive per HTML spec)
   if (!dirAttr.empty() && strcasecmp(dirAttr.c_str(), "rtl") == 0) {
     cssStyle.direction = TextDirection::Rtl;
-    cssStyle.hasDirection = true;
+    cssStyle.defined.direction = 1;
   } else if (!dirAttr.empty() && strcasecmp(dirAttr.c_str(), "ltr") == 0) {
     cssStyle.direction = TextDirection::Ltr;
-    cssStyle.hasDirection = true;
+    cssStyle.defined.direction = 1;
+  }
+
+  // Skip elements with display:none
+  if (cssStyle.hasDisplay() && cssStyle.display == CssDisplay::None) {
+    self->skipUntilDepth = self->depth;
+    self->depth += 1;
+    return;
   }
 
   // Apply CSS font-weight and font-style
-  if ((cssStyle.hasFontWeight && cssStyle.fontWeight == CssFontWeight::Bold) ||
-      (cssStyle.hasFontStyle && cssStyle.fontStyle == CssFontStyle::Italic)) {
+  if ((cssStyle.hasFontWeight() && cssStyle.fontWeight == CssFontWeight::Bold) ||
+      (cssStyle.hasFontStyle() && cssStyle.fontStyle == CssFontStyle::Italic)) {
     self->flushPartWordBuffer();
   }
-  if (cssStyle.hasFontWeight && cssStyle.fontWeight == CssFontWeight::Bold) {
+  if (cssStyle.hasFontWeight() && cssStyle.fontWeight == CssFontWeight::Bold) {
     self->cssBoldUntilDepth = min(self->cssBoldUntilDepth, self->depth);
   }
-  if (cssStyle.hasFontStyle && cssStyle.fontStyle == CssFontStyle::Italic) {
+  if (cssStyle.hasFontStyle() && cssStyle.fontStyle == CssFontStyle::Italic) {
     self->cssItalicUntilDepth = min(self->cssItalicUntilDepth, self->depth);
   }
 
   // Track direction for next text block creation
-  if (cssStyle.hasDirection) {
+  if (cssStyle.hasDirection()) {
     self->pendingRtl_ = (cssStyle.direction == TextDirection::Rtl);
     self->rtlUntilDepth_ = min(self->rtlUntilDepth_, self->depth);
   }
 
+  // Capture whether the current text block is empty BEFORE startNewTextBlock may flush it.
+  // When empty (e.g. <p> opens inside <blockquote> before any text), the parent's vertical
+  // margins must be preserved through CSS margin collapsing.
+  const bool collapseVertical = self->currentTextBlock && self->currentTextBlock->isEmpty();
+
+  // Helper: apply new block style immediately, or stash it if the old block was
+  // suspended mid-layout (pendingNewTextBlock_). Without this, resumeParsing would
+  // lay out the old block's remaining words with the new block's margins/width.
+  auto applyOrStashBlockStyle = [self, collapseVertical](const BlockStyle& accumulated) {
+    auto newStyle = accumulated.withoutBottom();
+    if (collapseVertical) {
+      newStyle = self->currentBlockStyle_.getCombinedBlockStyle(newStyle, BlockStyle::CombineAxis::Vertical);
+    }
+    if (self->pendingNewTextBlock_) {
+      self->pendingBlockStyleFull_ = newStyle;
+    } else {
+      self->currentBlockStyle_ = newStyle;
+    }
+  };
+
   if (matches(name, HEADER_TAGS, NUM_HEADER_TAGS)) {
-    self->startNewTextBlock(TextBlock::CENTER_ALIGN);
-    self->alignStack_.push_back({self->depth, TextBlock::CENTER_ALIGN});
+    const float emSize = static_cast<float>(self->renderer.getEffectiveLineHeight(self->config.fontId));
+    auto headerBlockStyle =
+        blockStyleFromCss(cssStyle, emSize, self->config.paragraphAlignment, self->config.viewportWidth);
+    headerBlockStyle.textAlignDefined = true;
+    if (!cssStyle.hasTextAlign()) {
+      headerBlockStyle.alignment = TextBlock::CENTER_ALIGN;
+    }
+    const auto accumulated =
+        self->blockStyleStack_.back().getCombinedBlockStyle(headerBlockStyle, BlockStyle::CombineAxis::Horizontal);
+    self->blockStyleStack_.push_back(accumulated);
+    self->startNewTextBlock(accumulated.alignment);
+    applyOrStashBlockStyle(accumulated);
     self->boldUntilDepth = min(self->boldUntilDepth, self->depth);
   } else if (matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS)) {
     if (strcmp(name, "br") == 0) {
       self->flushPartWordBuffer();
+      const bool hadContent = self->currentTextBlock && !self->currentTextBlock->isEmpty();
       const auto style = self->currentTextBlock ? self->currentTextBlock->getStyle()
                                                 : static_cast<TextBlock::BLOCK_STYLE>(self->config.paragraphAlignment);
+      // Mid-block flush: suppress inter-paragraph spacing and restore insets after makePages()
+      if (hadContent) self->skipParagraphSpacing_ = true;
       self->startNewTextBlock(style);
+      if (hadContent) self->reapplyContinuationInsets();
     } else if (strcmp(name, "pre") == 0) {
-      // Force LEFT_ALIGN (justify would misalign code) and enter preformatted mode so
-      // characterData() preserves newlines and runs of spaces.
       self->preformattedUntilDepth = min(self->preformattedUntilDepth, self->depth);
       self->preWsPending = 0;
+      const float emSize = static_cast<float>(self->renderer.getEffectiveLineHeight(self->config.fontId));
+      auto preBlockStyle =
+          blockStyleFromCss(cssStyle, emSize, self->config.paragraphAlignment, self->config.viewportWidth);
+      preBlockStyle.alignment = TextBlock::LEFT_ALIGN;
+      preBlockStyle.textAlignDefined = true;
+      const auto accumulated =
+          self->blockStyleStack_.back().getCombinedBlockStyle(preBlockStyle, BlockStyle::CombineAxis::Horizontal);
+      self->blockStyleStack_.push_back(accumulated);
       self->startNewTextBlock(TextBlock::LEFT_ALIGN);
+      applyOrStashBlockStyle(accumulated);
     } else {
-      // Determine block style: CSS text-align takes precedence, then inheritance, then default
-      TextBlock::BLOCK_STYLE blockStyle = static_cast<TextBlock::BLOCK_STYLE>(self->config.paragraphAlignment);
-      bool hasExplicitAlign = false;
-      if (cssStyle.hasTextAlign) {
-        hasExplicitAlign = true;
-        switch (cssStyle.textAlign) {
-          case TextAlign::Left:
-            blockStyle = TextBlock::LEFT_ALIGN;
-            break;
-          case TextAlign::Right:
-            blockStyle = TextBlock::RIGHT_ALIGN;
-            break;
-          case TextAlign::Center:
-            blockStyle = TextBlock::CENTER_ALIGN;
-            break;
-          case TextAlign::Justify:
-            blockStyle = TextBlock::JUSTIFIED;
-            break;
-          default:
-            hasExplicitAlign = false;
-            break;
-        }
-      }
-      // CSS text-align is inherited: use parent's alignment if no explicit value
-      if (!hasExplicitAlign && !self->alignStack_.empty()) {
-        blockStyle = self->alignStack_.back().style;
-      }
-      // Push to inheritance stack if this element sets an explicit alignment
-      if (hasExplicitAlign) {
-        self->alignStack_.push_back({self->depth, blockStyle});
-      }
-      self->startNewTextBlock(blockStyle);
+      const float emSize = static_cast<float>(self->renderer.getEffectiveLineHeight(self->config.fontId));
+      const auto resolvedBlockStyle =
+          blockStyleFromCss(cssStyle, emSize, self->config.paragraphAlignment, self->config.viewportWidth);
+      const auto accumulated =
+          self->blockStyleStack_.back().getCombinedBlockStyle(resolvedBlockStyle, BlockStyle::CombineAxis::Horizontal);
+      self->blockStyleStack_.push_back(accumulated);
+      self->startNewTextBlock(accumulated.alignment);
+      applyOrStashBlockStyle(accumulated);
 
       if (strcmp(name, "li") == 0 && !self->listStack_.empty()) {
         auto& listEntry = self->listStack_.back();
@@ -410,7 +502,10 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       if (c == '\n') {
         if (self->partWordBufferIndex > 0) self->flushPartWordBuffer();
         self->preWsPending = 0;
+        const bool hadContent = self->currentTextBlock && !self->currentTextBlock->isEmpty();
+        if (hadContent) self->skipParagraphSpacing_ = true;
         self->startNewTextBlock(TextBlock::LEFT_ALIGN);
+        if (hadContent) self->reapplyContinuationInsets();
         continue;
       }
       if (c == ' ' || c == '\t') {
@@ -515,6 +610,16 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 
   self->depth -= 1;
 
+  // Inside or exiting a skip region (display:none, <head>, <table>, aria-hidden).
+  // startElement returned before pushing blockStyleStack_ or setting style depths,
+  // so do not pop/addBottom or clear *UntilDepth here — that would corrupt parent state.
+  if (self->skipUntilDepth <= self->depth) {
+    if (self->skipUntilDepth == self->depth) {
+      self->skipUntilDepth = INT_MAX;
+    }
+    return;
+  }
+
   const bool headerOrBlockTag =
       matches(name, HEADER_TAGS, NUM_HEADER_TAGS) || matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS);
 
@@ -522,9 +627,6 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->currentTextBlock->setStyle(static_cast<TextBlock::BLOCK_STYLE>(self->config.paragraphAlignment));
   }
 
-  if (self->skipUntilDepth == self->depth) {
-    self->skipUntilDepth = INT_MAX;
-  }
   if (self->boldUntilDepth == self->depth) {
     self->boldUntilDepth = INT_MAX;
   }
@@ -545,8 +647,11 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->rtlUntilDepth_ = INT_MAX;
     self->pendingRtl_ = false;
   }
-  while (!self->alignStack_.empty() && self->alignStack_.back().depth >= self->depth) {
-    self->alignStack_.pop_back();
+  if (headerOrBlockTag && strcmp(name, "br") != 0) {
+    if (self->blockStyleStack_.size() > 1) {
+      self->currentBlockStyle_ = self->currentBlockStyle_.addBottom(self->blockStyleStack_.back());
+      self->blockStyleStack_.pop_back();
+    }
   }
   while (!self->listStack_.empty() && self->listStack_.back().depth >= self->depth) {
     self->listStack_.pop_back();
@@ -622,7 +727,16 @@ bool ChapterHtmlSlimParser::initParser() {
   stopRequested_ = false;
   suspended_ = false;
   xmlDone_ = false;
-  alignStack_.clear();
+  blockStyleStack_.clear();
+  blockStyleStack_.reserve(8);
+  BlockStyle rootBlockStyle;
+  rootBlockStyle.alignment = static_cast<TextBlock::BLOCK_STYLE>(config.paragraphAlignment);
+  rootBlockStyle.textAlignDefined = true;
+  blockStyleStack_.push_back(rootBlockStyle);
+  currentBlockStyle_ = BlockStyle{};
+  pendingBlockStyleFull_ = BlockStyle{};
+  skipParagraphSpacing_ = false;
+  currentLeftInset_ = 0;
   listStack_.clear();
   pendingListMarker_[0] = '\0';
   dataUriStripper_.reset();
@@ -762,8 +876,12 @@ bool ChapterHtmlSlimParser::parseLoop() {
         pendingEmergencySplit_ = false;
         LOG_DBG(TAG, "Text block too long (%zu words), splitting", currentTextBlock->size());
         currentTextBlock->setUseGreedyBreaking(true);
+        const int inset = currentBlockStyle_.totalHorizontalInset();
+        const uint16_t splitWidth =
+            (inset < config.viewportWidth) ? static_cast<uint16_t>(config.viewportWidth - inset) : config.viewportWidth;
+        currentLeftInset_ = currentBlockStyle_.leftInset();
         currentTextBlock->layoutAndExtractLines(
-            renderer, config.fontId, config.viewportWidth,
+            renderer, config.fontId, splitWidth,
             [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); }, true,
             [this]() -> bool { return stopRequested_ || shouldAbort(); });
       }
@@ -874,6 +992,7 @@ bool ChapterHtmlSlimParser::resumeParsing() {
   // would be appended to the old (now empty) text block with wrong style/no break.
   if (pendingNewTextBlock_) {
     pendingNewTextBlock_ = false;
+    currentBlockStyle_ = pendingBlockStyleFull_;
     currentTextBlock.reset(
         new ParsedText(pendingBlockStyle_, config.indentLevel, config.hyphenation, true, pendingRtl_));
     if (pendingListMarker_[0] != '\0') {
@@ -940,7 +1059,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
       // extracted from the text block and would be lost otherwise
       currentPage.reset(new Page());
       currentPageNextY = 0;
-      currentPage->elements.push_back(std::make_shared<PageLine>(line, 0, currentPageNextY));
+      currentPage->elements.push_back(std::make_shared<PageLine>(line, currentLeftInset_, currentPageNextY));
       currentPageNextY += lineHeight;
       stopRequested_ = true;
       if (xmlParser_) {
@@ -953,7 +1072,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
     currentPageNextY = 0;
   }
 
-  currentPage->elements.push_back(std::make_shared<PageLine>(line, 0, currentPageNextY));
+  currentPage->elements.push_back(std::make_shared<PageLine>(line, currentLeftInset_, currentPageNextY));
   currentPageNextY += lineHeight;
 }
 
@@ -980,30 +1099,65 @@ void ChapterHtmlSlimParser::makePages() {
   }
 
   const int lineHeight = renderer.getEffectiveLineHeight(config.fontId) * config.lineCompression;
+
+  // Apply top spacing from CSS block style (only once — cleared after to avoid double-applying on resume)
+  if (currentBlockStyle_.topInset() > 0) {
+    currentPageNextY += currentBlockStyle_.topInset();
+    currentBlockStyle_.marginTop = 0;
+    currentBlockStyle_.paddingTop = 0;
+  }
+
+  // Calculate effective width accounting for horizontal margins/padding
+  const int horizontalInset = currentBlockStyle_.totalHorizontalInset();
+  const uint16_t effectiveWidth = (horizontalInset < config.viewportWidth)
+                                      ? static_cast<uint16_t>(config.viewportWidth - horizontalInset)
+                                      : config.viewportWidth;
+  currentLeftInset_ = currentBlockStyle_.leftInset();
+
   currentTextBlock->layoutAndExtractLines(
-      renderer, config.fontId, config.viewportWidth,
+      renderer, config.fontId, effectiveWidth,
       [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); }, true,
       [this]() -> bool { return stopRequested_; });
-  // Extra paragraph spacing based on spacingLevel (0=none, 1=small, 3=large)
-  // Skip if aborted mid-block — spacing between paragraphs, not mid-paragraph
+
+  // Apply bottom spacing from CSS block style
+  if (!stopRequested_ && currentBlockStyle_.bottomInset() > 0) {
+    currentPageNextY += currentBlockStyle_.bottomInset();
+  }
+
+  // Extra paragraph spacing based on spacingLevel (0=none, 1=small, 3=large).
+  // Skip when aborted mid-block, or for mid-block continuations (<br>, pre newlines).
+  const bool applyParagraphSpacing = !skipParagraphSpacing_;
   if (!stopRequested_) {
-    switch (config.spacingLevel) {
-      case 1:
-        currentPageNextY += lineHeight / 4;
-        break;
-      case 3:
-        currentPageNextY += lineHeight;
-        break;
+    if (applyParagraphSpacing) {
+      switch (config.spacingLevel) {
+        case 1:
+          currentPageNextY += lineHeight / 4;
+          break;
+        case 3:
+          currentPageNextY += lineHeight;
+          break;
+      }
     }
+    skipParagraphSpacing_ = false;
   } else if (currentTextBlock->isEmpty()) {
-    switch (config.spacingLevel) {
-      case 1:
-        pendingSpacing_ = lineHeight / 4;
-        break;
-      case 3:
-        pendingSpacing_ = lineHeight;
-        break;
+    if (applyParagraphSpacing) {
+      switch (config.spacingLevel) {
+        case 1:
+          pendingSpacing_ = lineHeight / 4;
+          break;
+        case 3:
+          pendingSpacing_ = lineHeight;
+          break;
+      }
     }
+    skipParagraphSpacing_ = false;
+  }
+  // If stopRequested_ with remaining words, keep skipParagraphSpacing_ for resume.
+
+  // Reset only when fully drained — suspended blocks keep their style for resumeParsing().
+  // Mid-block continuations (<br>, pre newlines) re-apply horizontal insets after this.
+  if (!stopRequested_) {
+    currentBlockStyle_ = BlockStyle{};
   }
 }
 

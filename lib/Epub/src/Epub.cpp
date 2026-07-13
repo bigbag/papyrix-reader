@@ -282,9 +282,8 @@ bool Epub::parseCssFiles() {
   cssParser_.reset(new CssParser());
 
   // Skip CSS that would risk OOM during parsing or that exceeds the parser's cap.
-  // 64 KB heap headroom matches what CSS parsing peaks at (style map + expat workspace).
-  // 64 KB size cap mirrors CssParser::MAX_CSS_FILE_SIZE so both checks agree.
-  constexpr size_t MIN_HEAP_FOR_CSS_PARSING = 64 * 1024;
+  // Style map can reach ~78KB at 512 rules (84 bytes/CssStyle + map overhead).
+  constexpr size_t MIN_HEAP_FOR_CSS_PARSING = 96 * 1024;
   constexpr size_t MAX_CSS_FILE_SIZE = 64 * 1024;
 
   for (const auto& cssHref : cssFiles_) {

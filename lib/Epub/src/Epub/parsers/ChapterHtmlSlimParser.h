@@ -2,6 +2,7 @@
 
 #include <ParsedText.h>
 #include <RenderConfig.h>
+#include <blocks/BlockStyle.h>
 #include <blocks/ImageBlock.h>
 #include <blocks/TextBlock.h>
 #include <expat.h>
@@ -61,16 +62,17 @@ class ChapterHtmlSlimParser {
   bool pendingEmergencySplit_ = false;
   bool pendingNewTextBlock_ = false;
   TextBlock::BLOCK_STYLE pendingBlockStyle_ = TextBlock::LEFT_ALIGN;
+  BlockStyle pendingBlockStyleFull_;
   int16_t pendingSpacing_ = 0;
   bool pendingRtl_ = false;
   int rtlUntilDepth_ = INT_MAX;
+  int16_t currentLeftInset_ = 0;
+  BlockStyle currentBlockStyle_;
+  // Skip spacingLevel after mid-block flushes (<br>, pre newlines)
+  bool skipParagraphSpacing_ = false;
 
-  // CSS text-align inheritance stack (text-align is an inherited property in CSS)
-  struct AlignEntry {
-    int depth;
-    TextBlock::BLOCK_STYLE style;
-  };
-  std::vector<AlignEntry> alignStack_;
+  // Block style stack for CSS margin/padding/alignment inheritance
+  std::vector<BlockStyle> blockStyleStack_;
 
   struct ListEntry {
     int depth;
@@ -108,6 +110,7 @@ class ChapterHtmlSlimParser {
 
   void startNewTextBlock(TextBlock::BLOCK_STYLE style);
   void flushPartWordBuffer();
+  void reapplyContinuationInsets();
   void makePages();
   std::string cacheImage(const std::string& src);
   void addImageToPage(std::shared_ptr<ImageBlock> image);

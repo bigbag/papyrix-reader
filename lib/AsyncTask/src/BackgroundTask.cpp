@@ -34,8 +34,7 @@ bool BackgroundTask::start(const char* name, uint32_t stackSize, TaskFunction fu
       LOG_ERR(TAG, "%s: already running (state=%d)", name, static_cast<int>(expected));
       return false;
     }
-    if (state_.compare_exchange_weak(expected, State::STARTING, std::memory_order_acq_rel,
-                                     std::memory_order_acquire)) {
+    if (state_.compare_exchange_weak(expected, State::STARTING, std::memory_order_acq_rel, std::memory_order_acquire)) {
       break;
     }
     // CAS failed — expected now holds the latest observed state; loop again.

@@ -34,6 +34,20 @@ std::string toLower(const std::string& str) {
   return result;
 }
 
+// Split a whitespace-separated string into up to maxParts parts
+int splitWhitespace(const std::string& str, std::string parts[], int maxParts) {
+  int count = 0;
+  size_t i = 0;
+  while (i < str.size() && count < maxParts) {
+    while (i < str.size() && std::isspace(static_cast<unsigned char>(str[i]))) ++i;
+    if (i >= str.size()) break;
+    size_t start = i;
+    while (i < str.size() && !std::isspace(static_cast<unsigned char>(str[i]))) ++i;
+    parts[count++] = str.substr(start, i - start);
+  }
+  return count;
+}
+
 }  // namespace
 
 CssParser::CssParser() {}
@@ -202,7 +216,7 @@ CssStyle CssParser::getTagStyle(const std::string& tagName) const {
   CssStyle combined;
   const CssStyle* style = getStyleForClass(tagName);
   if (style) {
-    combined.merge(*style);
+    combined.applyOver(*style);
   }
   return combined;
 }
@@ -213,7 +227,7 @@ CssStyle CssParser::getCombinedStyle(const std::string& tagName, const std::stri
   // First apply tag-level styles
   const CssStyle* tagStyle = getStyleForClass(tagName);
   if (tagStyle) {
-    combined.merge(*tagStyle);
+    combined.applyOver(*tagStyle);
   }
 
   // Split class names by whitespace and apply each
@@ -239,13 +253,13 @@ CssStyle CssParser::getCombinedStyle(const std::string& tagName, const std::stri
       // Try class-only selector (.classname)
       const CssStyle* classOnly = getStyleForClass("." + className);
       if (classOnly) {
-        combined.merge(*classOnly);
+        combined.applyOver(*classOnly);
       }
 
       // Try tag.class selector (p.classname)
       const CssStyle* tagAndClass = getStyleForClass(tagName + "." + className);
       if (tagAndClass) {
-        combined.merge(*tagAndClass);
+        combined.applyOver(*tagAndClass);
       }
     }
 
@@ -299,11 +313,10 @@ void CssParser::parseRule(const std::string& selector, const std::string& proper
         propStart = propEnd + 1;
       }
 
-      // Store style if it has any supported properties
-      if (style.hasTextAlign || style.hasFontStyle || style.hasFontWeight || style.hasDirection) {
+      if (style.defined.anySet()) {
         auto it = styleMap_.find(singleSelector);
         if (it != styleMap_.end()) {
-          it->second.merge(style);
+          it->second.applyOver(style);
         } else if (styleMap_.size() < MAX_CSS_RULES) {
           styleMap_[singleSelector] = style;
         }
@@ -314,28 +327,64 @@ void CssParser::parseRule(const std::string& selector, const std::string& proper
   }
 }
 
-void CssParser::parseProperty(const std::string& name, const std::string& value, CssStyle& style) {
+void CssParser::parseProperty(const std::string& name, const std::string& rawValue, CssStyle& style) {
+  std::string value = toLower(trim(rawValue));
+  size_t imp = value.find("!important");
+  if (imp != std::string::npos) value = trim(value.substr(0, imp));
+
   if (name == "text-align") {
     std::string v = toLower(trim(value));
     if (v != "inherit") {
       style.textAlign = parseTextAlign(v);
-      style.hasTextAlign = true;
+      style.defined.textAlign = 1;
     }
   } else if (name == "font-style") {
     style.fontStyle = parseFontStyle(value);
-    style.hasFontStyle = true;
+    style.defined.fontStyle = 1;
   } else if (name == "font-weight") {
     style.fontWeight = parseFontWeight(value);
-    style.hasFontWeight = true;
+    style.defined.fontWeight = 1;
   } else if (name == "direction") {
     std::string v = toLower(trim(value));
     if (v == "rtl") {
       style.direction = TextDirection::Rtl;
-      style.hasDirection = true;
+      style.defined.direction = 1;
     } else if (v == "ltr") {
       style.direction = TextDirection::Ltr;
-      style.hasDirection = true;
+      style.defined.direction = 1;
     }
+  } else if (name == "margin-top") {
+    style.marginTop = parseCssLength(value);
+    style.defined.marginTop = 1;
+  } else if (name == "margin-bottom") {
+    style.marginBottom = parseCssLength(value);
+    style.defined.marginBottom = 1;
+  } else if (name == "margin-left") {
+    style.marginLeft = parseCssLength(value);
+    style.defined.marginLeft = 1;
+  } else if (name == "margin-right") {
+    style.marginRight = parseCssLength(value);
+    style.defined.marginRight = 1;
+  } else if (name == "margin") {
+    parseMarginShorthand(value, style);
+  } else if (name == "padding-top") {
+    style.paddingTop = parseCssLength(value);
+    style.defined.paddingTop = 1;
+  } else if (name == "padding-bottom") {
+    style.paddingBottom = parseCssLength(value);
+    style.defined.paddingBottom = 1;
+  } else if (name == "padding-left") {
+    style.paddingLeft = parseCssLength(value);
+    style.defined.paddingLeft = 1;
+  } else if (name == "padding-right") {
+    style.paddingRight = parseCssLength(value);
+    style.defined.paddingRight = 1;
+  } else if (name == "padding") {
+    parsePaddingShorthand(value, style);
+  } else if (name == "display") {
+    std::string v = toLower(trim(value));
+    style.display = (v == "none") ? CssDisplay::None : CssDisplay::Block;
+    style.defined.display = 1;
   }
 }
 
@@ -373,6 +422,102 @@ CssFontWeight CssParser::parseFontWeight(const std::string& value) {
   }
 
   return CssFontWeight::Normal;
+}
+
+CssLength CssParser::parseCssLength(const std::string& value) {
+  std::string v = toLower(trim(value));
+  if (v.empty() || v == "auto" || v == "inherit" || v == "initial") {
+    return CssLength{};
+  }
+
+  char* endPtr = nullptr;
+  float numVal = std::strtof(v.c_str(), &endPtr);
+  if (endPtr == v.c_str()) {
+    return CssLength{};
+  }
+
+  std::string unitStr = trim(std::string(endPtr));
+
+  if (unitStr == "em") {
+    return CssLength{numVal, CssUnit::Em};
+  } else if (unitStr == "rem") {
+    return CssLength{numVal, CssUnit::Rem};
+  } else if (unitStr == "pt") {
+    return CssLength{numVal, CssUnit::Points};
+  } else if (unitStr == "%") {
+    return CssLength{numVal, CssUnit::Percent};
+  }
+
+  return CssLength{numVal, CssUnit::Pixels};
+}
+
+void CssParser::parseMarginShorthand(const std::string& value, CssStyle& style) {
+  std::string parts[4];
+  int count = splitWhitespace(toLower(trim(value)), parts, 4);
+  if (count == 0) return;
+
+  CssLength values[4];
+  for (int i = 0; i < count; ++i) {
+    values[i] = parseCssLength(parts[i]);
+  }
+
+  // CSS margin shorthand: 1=all, 2=TB LR, 3=T LR B, 4=T R B L
+  switch (count) {
+    case 1:
+      style.marginTop = style.marginRight = style.marginBottom = style.marginLeft = values[0];
+      break;
+    case 2:
+      style.marginTop = style.marginBottom = values[0];
+      style.marginRight = style.marginLeft = values[1];
+      break;
+    case 3:
+      style.marginTop = values[0];
+      style.marginRight = style.marginLeft = values[1];
+      style.marginBottom = values[2];
+      break;
+    default:
+      style.marginTop = values[0];
+      style.marginRight = values[1];
+      style.marginBottom = values[2];
+      style.marginLeft = values[3];
+      break;
+  }
+  style.defined.marginTop = style.defined.marginRight = 1;
+  style.defined.marginBottom = style.defined.marginLeft = 1;
+}
+
+void CssParser::parsePaddingShorthand(const std::string& value, CssStyle& style) {
+  std::string parts[4];
+  int count = splitWhitespace(toLower(trim(value)), parts, 4);
+  if (count == 0) return;
+
+  CssLength values[4];
+  for (int i = 0; i < count; ++i) {
+    values[i] = parseCssLength(parts[i]);
+  }
+
+  switch (count) {
+    case 1:
+      style.paddingTop = style.paddingRight = style.paddingBottom = style.paddingLeft = values[0];
+      break;
+    case 2:
+      style.paddingTop = style.paddingBottom = values[0];
+      style.paddingRight = style.paddingLeft = values[1];
+      break;
+    case 3:
+      style.paddingTop = values[0];
+      style.paddingRight = style.paddingLeft = values[1];
+      style.paddingBottom = values[2];
+      break;
+    default:
+      style.paddingTop = values[0];
+      style.paddingRight = values[1];
+      style.paddingBottom = values[2];
+      style.paddingLeft = values[3];
+      break;
+  }
+  style.defined.paddingTop = style.defined.paddingRight = 1;
+  style.defined.paddingBottom = style.defined.paddingLeft = 1;
 }
 
 CssStyle CssParser::parseInlineStyle(const std::string& styleAttr) {

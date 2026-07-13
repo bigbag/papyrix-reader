@@ -164,7 +164,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/Markdown/src/md_parser.c
       ${TEST_HELPERS}
     )
-  elseif(TEST_NAME STREQUAL "CssParserClassTest")
+  elseif(TEST_NAME STREQUAL "CssParserTest" OR TEST_NAME STREQUAL "CssParserClassTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
       ${PROJECT_ROOT}/lib/Epub/src/Epub/css/CssParser.cpp

@@ -66,6 +66,9 @@ class CssParser {
   static TextAlign parseTextAlign(const std::string& value);
   static CssFontStyle parseFontStyle(const std::string& value);
   static CssFontWeight parseFontWeight(const std::string& value);
+  static CssLength parseCssLength(const std::string& value);
+  static void parseMarginShorthand(const std::string& value, CssStyle& style);
+  static void parsePaddingShorthand(const std::string& value, CssStyle& style);
 
   static constexpr size_t MAX_CSS_RULES = 512;
   static constexpr size_t MAX_CSS_SELECTOR_LENGTH = 256;

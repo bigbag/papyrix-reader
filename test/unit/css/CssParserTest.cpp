@@ -3,260 +3,86 @@
 #include <map>
 #include <string>
 
-// Include mock dependencies
 #include "HardwareSerial.h"
 
-// CssStyle enum and struct definitions
-enum class TextAlign {
-  None,
-  Left,
-  Right,
-  Center,
-  Justify
-};
-
-enum class CssFontStyle {
-  Normal,
-  Italic
-};
-
-enum class CssFontWeight {
-  Normal,
-  Bold
-};
-
-enum class TextDirection {
-  Ltr,
-  Rtl
-};
-
-struct CssStyle {
-  TextAlign textAlign = TextAlign::None;
-  bool hasTextAlign = false;
-
-  CssFontStyle fontStyle = CssFontStyle::Normal;
-  bool hasFontStyle = false;
-
-  CssFontWeight fontWeight = CssFontWeight::Normal;
-  bool hasFontWeight = false;
-
-  TextDirection direction = TextDirection::Ltr;
-  bool hasDirection = false;
-
-  void merge(const CssStyle& other) {
-    if (other.hasTextAlign) {
-      textAlign = other.textAlign;
-      hasTextAlign = true;
-    }
-    if (other.hasFontStyle) {
-      fontStyle = other.fontStyle;
-      hasFontStyle = true;
-    }
-    if (other.hasFontWeight) {
-      fontWeight = other.fontWeight;
-      hasFontWeight = true;
-    }
-    if (other.hasDirection) {
-      direction = other.direction;
-      hasDirection = true;
-    }
-  }
-
-  void reset() {
-    textAlign = TextAlign::None;
-    hasTextAlign = false;
-    fontStyle = CssFontStyle::Normal;
-    hasFontStyle = false;
-    fontWeight = CssFontWeight::Normal;
-    hasFontWeight = false;
-    direction = TextDirection::Ltr;
-    hasDirection = false;
-  }
-};
-
-// Minimal CssParser implementation for testing (without file I/O)
-namespace {
-
-std::string trim(const std::string& str) {
-  size_t start = 0;
-  while (start < str.size() && std::isspace(static_cast<unsigned char>(str[start]))) {
-    ++start;
-  }
-  if (start == str.size()) return "";
-
-  size_t end = str.size() - 1;
-  while (end > start && std::isspace(static_cast<unsigned char>(str[end]))) {
-    --end;
-  }
-  return str.substr(start, end - start + 1);
-}
-
-std::string toLower(const std::string& str) {
-  std::string result = str;
-  for (char& c : result) {
-    if (c >= 'A' && c <= 'Z') {
-      c = c - 'A' + 'a';
-    }
-  }
-  return result;
-}
-
-TextAlign parseTextAlign(const std::string& value) {
-  std::string v = toLower(trim(value));
-
-  if (v == "left" || v == "start") {
-    return TextAlign::Left;
-  } else if (v == "right" || v == "end") {
-    return TextAlign::Right;
-  } else if (v == "center") {
-    return TextAlign::Center;
-  } else if (v == "justify") {
-    return TextAlign::Justify;
-  }
-
-  return TextAlign::Left;
-}
-
-CssFontStyle parseFontStyle(const std::string& value) {
-  std::string v = toLower(trim(value));
-
-  if (v == "italic" || v == "oblique") {
-    return CssFontStyle::Italic;
-  }
-
-  return CssFontStyle::Normal;
-}
-
-CssFontWeight parseFontWeight(const std::string& value) {
-  std::string v = toLower(trim(value));
-
-  if (v == "bold" || v == "bolder" || v == "700" || v == "800" || v == "900") {
-    return CssFontWeight::Bold;
-  }
-
-  return CssFontWeight::Normal;
-}
-
-void parseProperty(const std::string& name, const std::string& value, CssStyle& style) {
-  if (name == "text-align") {
-    std::string v = toLower(trim(value));
-    if (v != "inherit") {
-      style.textAlign = parseTextAlign(v);
-      style.hasTextAlign = true;
-    }
-  } else if (name == "font-style") {
-    style.fontStyle = parseFontStyle(value);
-    style.hasFontStyle = true;
-  } else if (name == "font-weight") {
-    style.fontWeight = parseFontWeight(value);
-    style.hasFontWeight = true;
-  } else if (name == "direction") {
-    std::string v = toLower(trim(value));
-    if (v == "rtl") {
-      style.direction = TextDirection::Rtl;
-      style.hasDirection = true;
-    } else if (v == "ltr") {
-      style.direction = TextDirection::Ltr;
-      style.hasDirection = true;
-    }
-  }
-}
-
-CssStyle parseInlineStyle(const std::string& styleAttr) {
-  CssStyle style;
-
-  if (styleAttr.empty()) {
-    return style;
-  }
-
-  size_t propStart = 0;
-  size_t propLen = styleAttr.length();
-
-  while (propStart < propLen) {
-    size_t propEnd = styleAttr.find(';', propStart);
-    if (propEnd == std::string::npos) propEnd = propLen;
-
-    std::string prop = trim(styleAttr.substr(propStart, propEnd - propStart));
-
-    if (!prop.empty()) {
-      size_t colonPos = prop.find(':');
-      if (colonPos != std::string::npos && colonPos > 0) {
-        std::string propName = trim(prop.substr(0, colonPos));
-        std::string propValue = trim(prop.substr(colonPos + 1));
-        propName = toLower(propName);
-        parseProperty(propName, propValue, style);
-      }
-    }
-
-    propStart = propEnd + 1;
-  }
-
-  return style;
-}
-
-}  // namespace
+#include <CssParser.h>
 
 int main() {
   TestUtils::TestRunner runner("CSS Parser");
 
   // ============================================
-  // parseTextAlign() tests
+  // parseTextAlign via parseInlineStyle
   // ============================================
 
   // Test 1: Standard values
-  runner.expectTrue(parseTextAlign("left") == TextAlign::Left, "parseTextAlign: 'left'");
-  runner.expectTrue(parseTextAlign("right") == TextAlign::Right, "parseTextAlign: 'right'");
-  runner.expectTrue(parseTextAlign("center") == TextAlign::Center, "parseTextAlign: 'center'");
-  runner.expectTrue(parseTextAlign("justify") == TextAlign::Justify, "parseTextAlign: 'justify'");
+  runner.expectTrue(CssParser::parseInlineStyle("text-align: left").textAlign == TextAlign::Left,
+                    "parseTextAlign: 'left'");
+  runner.expectTrue(CssParser::parseInlineStyle("text-align: right").textAlign == TextAlign::Right,
+                    "parseTextAlign: 'right'");
+  runner.expectTrue(CssParser::parseInlineStyle("text-align: center").textAlign == TextAlign::Center,
+                    "parseTextAlign: 'center'");
+  runner.expectTrue(CssParser::parseInlineStyle("text-align: justify").textAlign == TextAlign::Justify,
+                    "parseTextAlign: 'justify'");
 
   // Test 2: Logical values
-  runner.expectTrue(parseTextAlign("start") == TextAlign::Left, "parseTextAlign: 'start' maps to Left");
-  runner.expectTrue(parseTextAlign("end") == TextAlign::Right, "parseTextAlign: 'end' maps to Right");
+  runner.expectTrue(CssParser::parseInlineStyle("text-align: start").textAlign == TextAlign::Left,
+                    "parseTextAlign: 'start' maps to Left");
+  runner.expectTrue(CssParser::parseInlineStyle("text-align: end").textAlign == TextAlign::Right,
+                    "parseTextAlign: 'end' maps to Right");
 
   // Test 3: Case insensitivity
-  runner.expectTrue(parseTextAlign("LEFT") == TextAlign::Left, "parseTextAlign: 'LEFT' (uppercase)");
-  runner.expectTrue(parseTextAlign("Center") == TextAlign::Center, "parseTextAlign: 'Center' (mixed case)");
+  runner.expectTrue(CssParser::parseInlineStyle("text-align: LEFT").textAlign == TextAlign::Left,
+                    "parseTextAlign: 'LEFT' (uppercase)");
+  runner.expectTrue(CssParser::parseInlineStyle("text-align: Center").textAlign == TextAlign::Center,
+                    "parseTextAlign: 'Center' (mixed case)");
 
   // Test 4: Whitespace trimming
-  runner.expectTrue(parseTextAlign("  center  ") == TextAlign::Center, "parseTextAlign: '  center  ' (whitespace)");
-
-  // Test 5: Unknown value defaults to Left
-  runner.expectTrue(parseTextAlign("invalid") == TextAlign::Left, "parseTextAlign: unknown defaults to Left");
-  runner.expectTrue(parseTextAlign("") == TextAlign::Left, "parseTextAlign: empty defaults to Left");
+  runner.expectTrue(CssParser::parseInlineStyle("text-align:   center  ").textAlign == TextAlign::Center,
+                    "parseTextAlign: whitespace trimmed");
 
   // ============================================
-  // parseFontStyle() tests
+  // parseFontStyle via parseInlineStyle
   // ============================================
 
   // Test 6: Standard values
-  runner.expectTrue(parseFontStyle("normal") == CssFontStyle::Normal, "parseFontStyle: 'normal'");
-  runner.expectTrue(parseFontStyle("italic") == CssFontStyle::Italic, "parseFontStyle: 'italic'");
-  runner.expectTrue(parseFontStyle("oblique") == CssFontStyle::Italic, "parseFontStyle: 'oblique' maps to Italic");
+  runner.expectTrue(CssParser::parseInlineStyle("font-style: normal").fontStyle == CssFontStyle::Normal,
+                    "parseFontStyle: 'normal'");
+  runner.expectTrue(CssParser::parseInlineStyle("font-style: italic").fontStyle == CssFontStyle::Italic,
+                    "parseFontStyle: 'italic'");
+  runner.expectTrue(CssParser::parseInlineStyle("font-style: oblique").fontStyle == CssFontStyle::Italic,
+                    "parseFontStyle: 'oblique' maps to Italic");
 
   // Test 7: Case insensitivity
-  runner.expectTrue(parseFontStyle("ITALIC") == CssFontStyle::Italic, "parseFontStyle: 'ITALIC' (uppercase)");
-
-  // Test 8: Unknown defaults to Normal
-  runner.expectTrue(parseFontStyle("invalid") == CssFontStyle::Normal, "parseFontStyle: unknown defaults to Normal");
+  runner.expectTrue(CssParser::parseInlineStyle("font-style: ITALIC").fontStyle == CssFontStyle::Italic,
+                    "parseFontStyle: 'ITALIC' (uppercase)");
 
   // ============================================
-  // parseFontWeight() tests
+  // parseFontWeight via parseInlineStyle
   // ============================================
 
   // Test 9: Keyword values
-  runner.expectTrue(parseFontWeight("normal") == CssFontWeight::Normal, "parseFontWeight: 'normal'");
-  runner.expectTrue(parseFontWeight("bold") == CssFontWeight::Bold, "parseFontWeight: 'bold'");
-  runner.expectTrue(parseFontWeight("bolder") == CssFontWeight::Bold, "parseFontWeight: 'bolder'");
+  runner.expectTrue(CssParser::parseInlineStyle("font-weight: normal").fontWeight == CssFontWeight::Normal,
+                    "parseFontWeight: 'normal'");
+  runner.expectTrue(CssParser::parseInlineStyle("font-weight: bold").fontWeight == CssFontWeight::Bold,
+                    "parseFontWeight: 'bold'");
+  runner.expectTrue(CssParser::parseInlineStyle("font-weight: bolder").fontWeight == CssFontWeight::Bold,
+                    "parseFontWeight: 'bolder'");
 
   // Test 10: Numeric values
-  runner.expectTrue(parseFontWeight("400") == CssFontWeight::Normal, "parseFontWeight: '400' is Normal");
-  runner.expectTrue(parseFontWeight("700") == CssFontWeight::Bold, "parseFontWeight: '700' is Bold");
-  runner.expectTrue(parseFontWeight("800") == CssFontWeight::Bold, "parseFontWeight: '800' is Bold");
-  runner.expectTrue(parseFontWeight("900") == CssFontWeight::Bold, "parseFontWeight: '900' is Bold");
+  runner.expectTrue(CssParser::parseInlineStyle("font-weight: 400").fontWeight == CssFontWeight::Normal,
+                    "parseFontWeight: '400' is Normal");
+  runner.expectTrue(CssParser::parseInlineStyle("font-weight: 700").fontWeight == CssFontWeight::Bold,
+                    "parseFontWeight: '700' is Bold");
+  runner.expectTrue(CssParser::parseInlineStyle("font-weight: 800").fontWeight == CssFontWeight::Bold,
+                    "parseFontWeight: '800' is Bold");
+  runner.expectTrue(CssParser::parseInlineStyle("font-weight: 900").fontWeight == CssFontWeight::Bold,
+                    "parseFontWeight: '900' is Bold");
 
   // Test 11: Values below 700 are normal
-  runner.expectTrue(parseFontWeight("500") == CssFontWeight::Normal, "parseFontWeight: '500' is Normal");
-  runner.expectTrue(parseFontWeight("600") == CssFontWeight::Normal, "parseFontWeight: '600' is Normal");
+  runner.expectTrue(CssParser::parseInlineStyle("font-weight: 500").fontWeight == CssFontWeight::Normal,
+                    "parseFontWeight: '500' is Normal");
+  runner.expectTrue(CssParser::parseInlineStyle("font-weight: 600").fontWeight == CssFontWeight::Normal,
+                    "parseFontWeight: '600' is Normal");
 
   // ============================================
   // parseInlineStyle() tests
@@ -264,59 +90,58 @@ int main() {
 
   // Test 22: Single property
   {
-    CssStyle style = parseInlineStyle("text-align: center");
-    runner.expectTrue(style.hasTextAlign, "parseInlineStyle: single prop has text-align");
+    CssStyle style = CssParser::parseInlineStyle("text-align: center");
+    runner.expectTrue(style.hasTextAlign(), "parseInlineStyle: single prop has text-align");
     runner.expectTrue(style.textAlign == TextAlign::Center, "parseInlineStyle: text-align is center");
   }
 
   // Test 23: Multiple properties
   {
-    CssStyle style = parseInlineStyle("text-align: center; font-weight: bold");
-    runner.expectTrue(style.hasTextAlign, "parseInlineStyle: multi-prop has text-align");
-    runner.expectTrue(style.hasFontWeight, "parseInlineStyle: multi-prop has font-weight");
+    CssStyle style = CssParser::parseInlineStyle("text-align: center; font-weight: bold");
+    runner.expectTrue(style.hasTextAlign(), "parseInlineStyle: multi-prop has text-align");
+    runner.expectTrue(style.hasFontWeight(), "parseInlineStyle: multi-prop has font-weight");
     runner.expectTrue(style.textAlign == TextAlign::Center, "parseInlineStyle: multi-prop text-align");
     runner.expectTrue(style.fontWeight == CssFontWeight::Bold, "parseInlineStyle: multi-prop font-weight");
   }
 
   // Test 24: With extra whitespace
   {
-    CssStyle style = parseInlineStyle("  font-style :  italic  ;  font-weight : bold  ");
-    runner.expectTrue(style.hasFontStyle, "parseInlineStyle: whitespace font-style");
+    CssStyle style = CssParser::parseInlineStyle("  font-style :  italic  ;  font-weight : bold  ");
+    runner.expectTrue(style.hasFontStyle(), "parseInlineStyle: whitespace font-style");
     runner.expectTrue(style.fontStyle == CssFontStyle::Italic, "parseInlineStyle: whitespace font-style value");
-    runner.expectTrue(style.hasFontWeight, "parseInlineStyle: whitespace font-weight");
+    runner.expectTrue(style.hasFontWeight(), "parseInlineStyle: whitespace font-weight");
     runner.expectTrue(style.fontWeight == CssFontWeight::Bold, "parseInlineStyle: whitespace font-weight value");
   }
 
   // Test 25: Empty string
   {
-    CssStyle style = parseInlineStyle("");
-    runner.expectFalse(style.hasTextAlign, "parseInlineStyle: empty has no properties");
-    runner.expectFalse(style.hasFontStyle, "parseInlineStyle: empty has no font-style");
+    CssStyle style = CssParser::parseInlineStyle("");
+    runner.expectFalse(style.hasTextAlign(), "parseInlineStyle: empty has no properties");
+    runner.expectFalse(style.hasFontStyle(), "parseInlineStyle: empty has no font-style");
   }
 
   // Test 26: Missing semicolons (last property)
   {
-    CssStyle style = parseInlineStyle("text-align: right");
+    CssStyle style = CssParser::parseInlineStyle("text-align: right");
     runner.expectTrue(style.textAlign == TextAlign::Right, "parseInlineStyle: no trailing semicolon");
   }
 
   // Test 27: Missing colon (property ignored)
   {
-    CssStyle style = parseInlineStyle("text-align center; font-weight: bold");
-    runner.expectFalse(style.hasTextAlign, "parseInlineStyle: missing colon ignored");
-    runner.expectTrue(style.hasFontWeight, "parseInlineStyle: valid prop after invalid");
+    CssStyle style = CssParser::parseInlineStyle("text-align center; font-weight: bold");
+    runner.expectFalse(style.hasTextAlign(), "parseInlineStyle: missing colon ignored");
+    runner.expectTrue(style.hasFontWeight(), "parseInlineStyle: valid prop after invalid");
   }
 
-  // Test 28: Unknown properties ignored
+  // Test 28: Unknown properties ignored (color is unknown)
   {
-    CssStyle style = parseInlineStyle("color: red; text-align: left; display: none");
-    runner.expectTrue(style.hasTextAlign, "parseInlineStyle: known prop parsed");
-    runner.expectFalse(style.hasFontWeight, "parseInlineStyle: unknown 'color' ignored");
+    CssStyle style = CssParser::parseInlineStyle("color: red; text-align: left");
+    runner.expectTrue(style.hasTextAlign(), "parseInlineStyle: known prop parsed");
   }
 
   // Test 29: Case insensitivity for property names
   {
-    CssStyle style = parseInlineStyle("TEXT-ALIGN: center; FONT-WEIGHT: bold");
+    CssStyle style = CssParser::parseInlineStyle("TEXT-ALIGN: center; FONT-WEIGHT: bold");
     runner.expectTrue(style.textAlign == TextAlign::Center, "parseInlineStyle: uppercase prop name");
     runner.expectTrue(style.fontWeight == CssFontWeight::Bold, "parseInlineStyle: uppercase prop name 2");
   }
@@ -325,168 +150,321 @@ int main() {
   // text-align: inherit tests
   // ============================================
 
-  // Test: text-align: inherit does not set hasTextAlign
   {
-    CssStyle style = parseInlineStyle("text-align: inherit");
-    runner.expectFalse(style.hasTextAlign, "text-align_inherit: hasTextAlign not set");
+    CssStyle style = CssParser::parseInlineStyle("text-align: inherit");
+    runner.expectFalse(style.hasTextAlign(), "text-align_inherit: hasTextAlign not set");
   }
 
-  // Test: text-align: inherit case-insensitive
   {
-    CssStyle style = parseInlineStyle("text-align: Inherit");
-    runner.expectFalse(style.hasTextAlign, "text-align_Inherit: case insensitive");
+    CssStyle style = CssParser::parseInlineStyle("text-align: Inherit");
+    runner.expectFalse(style.hasTextAlign(), "text-align_Inherit: case insensitive");
   }
 
-  // Test: text-align: inherit with whitespace
   {
-    CssStyle style = parseInlineStyle("text-align:  INHERIT ");
-    runner.expectFalse(style.hasTextAlign, "text-align_INHERIT: whitespace + uppercase");
+    CssStyle style = CssParser::parseInlineStyle("text-align:  INHERIT ");
+    runner.expectFalse(style.hasTextAlign(), "text-align_INHERIT: whitespace + uppercase");
   }
 
-  // Test: text-align: inherit combined with other properties
   {
-    CssStyle style = parseInlineStyle("text-align: inherit; font-weight: bold");
-    runner.expectFalse(style.hasTextAlign, "text-align_inherit_combo: hasTextAlign not set");
-    runner.expectTrue(style.hasFontWeight, "text-align_inherit_combo: other props still parsed");
+    CssStyle style = CssParser::parseInlineStyle("text-align: inherit; font-weight: bold");
+    runner.expectFalse(style.hasTextAlign(), "text-align_inherit_combo: hasTextAlign not set");
+    runner.expectTrue(style.hasFontWeight(), "text-align_inherit_combo: other props still parsed");
     runner.expectTrue(style.fontWeight == CssFontWeight::Bold, "text-align_inherit_combo: font-weight correct");
   }
 
   // ============================================
-  // CssStyle::merge() tests
+  // CssStyle::applyOver() tests
   // ============================================
 
-  // Test 30: Merge overrides
+  // Test 30: applyOver overrides
   {
     CssStyle base;
     base.textAlign = TextAlign::Left;
-    base.hasTextAlign = true;
+    base.defined.textAlign = 1;
 
-    CssStyle override;
-    override.textAlign = TextAlign::Center;
-    override.hasTextAlign = true;
-    override.fontWeight = CssFontWeight::Bold;
-    override.hasFontWeight = true;
+    CssStyle other;
+    other.textAlign = TextAlign::Center;
+    other.defined.textAlign = 1;
+    other.fontWeight = CssFontWeight::Bold;
+    other.defined.fontWeight = 1;
 
-    base.merge(override);
+    base.applyOver(other);
 
-    runner.expectTrue(base.textAlign == TextAlign::Center, "merge: override takes precedence");
-    runner.expectTrue(base.fontWeight == CssFontWeight::Bold, "merge: new property added");
+    runner.expectTrue(base.textAlign == TextAlign::Center, "applyOver: override takes precedence");
+    runner.expectTrue(base.fontWeight == CssFontWeight::Bold, "applyOver: new property added");
   }
 
-  // Test 31: Merge preserves unset properties
+  // Test 31: applyOver preserves unset properties
   {
     CssStyle base;
     base.textAlign = TextAlign::Right;
-    base.hasTextAlign = true;
+    base.defined.textAlign = 1;
     base.fontStyle = CssFontStyle::Italic;
-    base.hasFontStyle = true;
+    base.defined.fontStyle = 1;
 
-    CssStyle override;
-    override.fontWeight = CssFontWeight::Bold;
-    override.hasFontWeight = true;
-    // override.hasTextAlign is false
+    CssStyle other;
+    other.fontWeight = CssFontWeight::Bold;
+    other.defined.fontWeight = 1;
 
-    base.merge(override);
+    base.applyOver(other);
 
-    runner.expectTrue(base.textAlign == TextAlign::Right, "merge: unset property preserved");
-    runner.expectTrue(base.fontStyle == CssFontStyle::Italic, "merge: unset property preserved 2");
-    runner.expectTrue(base.fontWeight == CssFontWeight::Bold, "merge: new property added");
+    runner.expectTrue(base.textAlign == TextAlign::Right, "applyOver: unset property preserved");
+    runner.expectTrue(base.fontStyle == CssFontStyle::Italic, "applyOver: unset property preserved 2");
+    runner.expectTrue(base.fontWeight == CssFontWeight::Bold, "applyOver: new property added");
   }
 
   // ============================================
   // CssStyle::reset() tests
   // ============================================
 
-  // Test 32: Reset clears all properties
   {
     CssStyle style;
     style.textAlign = TextAlign::Center;
-    style.hasTextAlign = true;
+    style.defined.textAlign = 1;
     style.fontWeight = CssFontWeight::Bold;
-    style.hasFontWeight = true;
+    style.defined.fontWeight = 1;
     style.fontStyle = CssFontStyle::Italic;
-    style.hasFontStyle = true;
+    style.defined.fontStyle = 1;
     style.direction = TextDirection::Rtl;
-    style.hasDirection = true;
+    style.defined.direction = 1;
 
     style.reset();
 
     runner.expectTrue(style.textAlign == TextAlign::None, "reset: textAlign to None");
-    runner.expectFalse(style.hasTextAlign, "reset: hasTextAlign false");
+    runner.expectFalse(style.hasTextAlign(), "reset: hasTextAlign false");
     runner.expectTrue(style.fontWeight == CssFontWeight::Normal, "reset: fontWeight to Normal");
-    runner.expectFalse(style.hasFontWeight, "reset: hasFontWeight false");
+    runner.expectFalse(style.hasFontWeight(), "reset: hasFontWeight false");
     runner.expectTrue(style.fontStyle == CssFontStyle::Normal, "reset: fontStyle to Normal");
-    runner.expectFalse(style.hasFontStyle, "reset: hasFontStyle false");
+    runner.expectFalse(style.hasFontStyle(), "reset: hasFontStyle false");
     runner.expectTrue(style.direction == TextDirection::Ltr, "reset: direction to Ltr");
-    runner.expectFalse(style.hasDirection, "reset: hasDirection false");
+    runner.expectFalse(style.hasDirection(), "reset: hasDirection false");
   }
 
   // ============================================
   // Direction property tests
   // ============================================
 
-  // Test 33: Parse direction RTL
   {
-    CssStyle style = parseInlineStyle("direction: rtl");
-    runner.expectTrue(style.hasDirection, "direction: rtl sets hasDirection");
+    CssStyle style = CssParser::parseInlineStyle("direction: rtl");
+    runner.expectTrue(style.hasDirection(), "direction: rtl sets hasDirection");
     runner.expectTrue(style.direction == TextDirection::Rtl, "direction: rtl value");
   }
 
-  // Test 34: Parse direction LTR
   {
-    CssStyle style = parseInlineStyle("direction: ltr");
-    runner.expectTrue(style.hasDirection, "direction: ltr sets hasDirection");
+    CssStyle style = CssParser::parseInlineStyle("direction: ltr");
+    runner.expectTrue(style.hasDirection(), "direction: ltr sets hasDirection");
     runner.expectTrue(style.direction == TextDirection::Ltr, "direction: ltr value");
   }
 
-  // Test 35: Direction case insensitive
   {
-    CssStyle style = parseInlineStyle("direction: RTL");
-    runner.expectTrue(style.hasDirection, "direction: RTL uppercase");
+    CssStyle style = CssParser::parseInlineStyle("direction: RTL");
+    runner.expectTrue(style.hasDirection(), "direction: RTL uppercase");
     runner.expectTrue(style.direction == TextDirection::Rtl, "direction: RTL uppercase value");
   }
 
-  // Test 36: Unknown direction value ignored
   {
-    CssStyle style = parseInlineStyle("direction: auto");
-    runner.expectFalse(style.hasDirection, "direction: unknown value not set");
+    CssStyle style = CssParser::parseInlineStyle("direction: auto");
+    runner.expectFalse(style.hasDirection(), "direction: unknown value not set");
   }
 
-  // Test 37: Direction combined with other properties
   {
-    CssStyle style = parseInlineStyle("text-align: right; direction: rtl; font-weight: bold");
-    runner.expectTrue(style.hasDirection, "direction: combined has direction");
+    CssStyle style = CssParser::parseInlineStyle("text-align: right; direction: rtl; font-weight: bold");
+    runner.expectTrue(style.hasDirection(), "direction: combined has direction");
     runner.expectTrue(style.direction == TextDirection::Rtl, "direction: combined rtl value");
-    runner.expectTrue(style.hasTextAlign, "direction: combined has text-align");
-    runner.expectTrue(style.hasFontWeight, "direction: combined has font-weight");
+    runner.expectTrue(style.hasTextAlign(), "direction: combined has text-align");
+    runner.expectTrue(style.hasFontWeight(), "direction: combined has font-weight");
   }
 
-  // Test 38: Merge direction
+  // Merge direction
   {
     CssStyle base;
-    base.direction = TextDirection::Ltr;
-    base.hasDirection = false;
+    CssStyle other;
+    other.direction = TextDirection::Rtl;
+    other.defined.direction = 1;
 
-    CssStyle override_;
-    override_.direction = TextDirection::Rtl;
-    override_.hasDirection = true;
-
-    base.merge(override_);
-    runner.expectTrue(base.hasDirection, "merge direction: override sets hasDirection");
-    runner.expectTrue(base.direction == TextDirection::Rtl, "merge direction: override value");
+    base.applyOver(other);
+    runner.expectTrue(base.hasDirection(), "applyOver direction: sets hasDirection");
+    runner.expectTrue(base.direction == TextDirection::Rtl, "applyOver direction: rtl value");
   }
 
-  // Test 39: Merge preserves direction when not overridden
   {
     CssStyle base;
     base.direction = TextDirection::Rtl;
-    base.hasDirection = true;
+    base.defined.direction = 1;
 
-    CssStyle override_;
-    // hasDirection is false
+    CssStyle other;
+    base.applyOver(other);
+    runner.expectTrue(base.direction == TextDirection::Rtl, "applyOver direction: preserved when not overridden");
+  }
 
-    base.merge(override_);
-    runner.expectTrue(base.direction == TextDirection::Rtl, "merge direction: preserved when not overridden");
+  // ============================================
+  // New CSS properties: margin, padding, display
+  // ============================================
+
+  // CssLength parsing via margin-top
+  {
+    CssStyle style = CssParser::parseInlineStyle("margin-top: 10px");
+    runner.expectTrue(style.hasMarginTop(), "margin-top: px parsed");
+    runner.expectTrue(style.marginTop.value == 10.0f, "margin-top: px value");
+    runner.expectTrue(style.marginTop.unit == CssUnit::Pixels, "margin-top: px unit");
+  }
+
+  {
+    CssStyle style = CssParser::parseInlineStyle("margin-top: 1.5em");
+    runner.expectTrue(style.hasMarginTop(), "margin-top: em parsed");
+    runner.expectTrue(style.marginTop.value == 1.5f, "margin-top: em value");
+    runner.expectTrue(style.marginTop.unit == CssUnit::Em, "margin-top: em unit");
+  }
+
+  {
+    CssStyle style = CssParser::parseInlineStyle("margin-bottom: 2rem");
+    runner.expectTrue(style.hasMarginBottom(), "margin-bottom: rem parsed");
+    runner.expectTrue(style.marginBottom.unit == CssUnit::Rem, "margin-bottom: rem unit");
+  }
+
+  {
+    CssStyle style = CssParser::parseInlineStyle("margin-left: 12pt");
+    runner.expectTrue(style.hasMarginLeft(), "margin-left: pt parsed");
+    runner.expectTrue(style.marginLeft.unit == CssUnit::Points, "margin-left: pt unit");
+  }
+
+  {
+    CssStyle style = CssParser::parseInlineStyle("margin-right: 50%");
+    runner.expectTrue(style.hasMarginRight(), "margin-right: % parsed");
+    runner.expectTrue(style.marginRight.value == 50.0f, "margin-right: % value");
+    runner.expectTrue(style.marginRight.unit == CssUnit::Percent, "margin-right: % unit");
+  }
+
+  // Bare number → pixels
+  {
+    CssStyle style = CssParser::parseInlineStyle("margin-top: 5");
+    runner.expectTrue(style.marginTop.value == 5.0f, "margin-top: bare number value");
+    runner.expectTrue(style.marginTop.unit == CssUnit::Pixels, "margin-top: bare number is pixels");
+  }
+
+  // auto/inherit → zero
+  {
+    CssStyle style = CssParser::parseInlineStyle("margin-top: auto");
+    runner.expectTrue(style.marginTop.value == 0.0f, "margin-top: auto → zero");
+  }
+
+  // Margin shorthand - 1 value
+  {
+    CssStyle style = CssParser::parseInlineStyle("margin: 10px");
+    runner.expectTrue(style.hasMarginTop(), "margin shorthand 1: top defined");
+    runner.expectTrue(style.marginTop.value == 10.0f, "margin shorthand 1: all sides 10px");
+    runner.expectTrue(style.marginBottom.value == 10.0f, "margin shorthand 1: bottom");
+    runner.expectTrue(style.marginLeft.value == 10.0f, "margin shorthand 1: left");
+    runner.expectTrue(style.marginRight.value == 10.0f, "margin shorthand 1: right");
+  }
+
+  // Margin shorthand - 2 values (TB LR)
+  {
+    CssStyle style = CssParser::parseInlineStyle("margin: 1em 2em");
+    runner.expectTrue(style.marginTop.value == 1.0f, "margin shorthand 2: top");
+    runner.expectTrue(style.marginBottom.value == 1.0f, "margin shorthand 2: bottom");
+    runner.expectTrue(style.marginLeft.value == 2.0f, "margin shorthand 2: left");
+    runner.expectTrue(style.marginRight.value == 2.0f, "margin shorthand 2: right");
+  }
+
+  // Margin shorthand - 3 values (T LR B)
+  {
+    CssStyle style = CssParser::parseInlineStyle("margin: 1em 2em 3em");
+    runner.expectTrue(style.marginTop.value == 1.0f, "margin shorthand 3: top");
+    runner.expectTrue(style.marginRight.value == 2.0f, "margin shorthand 3: right");
+    runner.expectTrue(style.marginLeft.value == 2.0f, "margin shorthand 3: left");
+    runner.expectTrue(style.marginBottom.value == 3.0f, "margin shorthand 3: bottom");
+  }
+
+  // Margin shorthand - 4 values (T R B L)
+  {
+    CssStyle style = CssParser::parseInlineStyle("margin: 1px 2px 3px 4px");
+    runner.expectTrue(style.marginTop.value == 1.0f, "margin shorthand 4: top");
+    runner.expectTrue(style.marginRight.value == 2.0f, "margin shorthand 4: right");
+    runner.expectTrue(style.marginBottom.value == 3.0f, "margin shorthand 4: bottom");
+    runner.expectTrue(style.marginLeft.value == 4.0f, "margin shorthand 4: left");
+  }
+
+  // Padding individual
+  {
+    CssStyle style = CssParser::parseInlineStyle("padding-top: 5px; padding-bottom: 10px");
+    runner.expectTrue(style.hasPaddingTop(), "padding-top parsed");
+    runner.expectTrue(style.paddingTop.value == 5.0f, "padding-top value");
+    runner.expectTrue(style.hasPaddingBottom(), "padding-bottom parsed");
+    runner.expectTrue(style.paddingBottom.value == 10.0f, "padding-bottom value");
+  }
+
+  // Padding shorthand
+  {
+    CssStyle style = CssParser::parseInlineStyle("padding: 1em 0");
+    runner.expectTrue(style.paddingTop.value == 1.0f, "padding shorthand: top");
+    runner.expectTrue(style.paddingBottom.value == 1.0f, "padding shorthand: bottom");
+    runner.expectTrue(style.paddingLeft.value == 0.0f, "padding shorthand: left");
+    runner.expectTrue(style.paddingRight.value == 0.0f, "padding shorthand: right");
+  }
+
+  // Display
+  {
+    CssStyle style = CssParser::parseInlineStyle("display: none");
+    runner.expectTrue(style.hasDisplay(), "display: none parsed");
+    runner.expectTrue(style.display == CssDisplay::None, "display: none value");
+  }
+
+  {
+    CssStyle style = CssParser::parseInlineStyle("display: block");
+    runner.expectTrue(style.hasDisplay(), "display: block parsed");
+    runner.expectTrue(style.display == CssDisplay::Block, "display: block value");
+  }
+
+  {
+    CssStyle style = CssParser::parseInlineStyle("display: inline");
+    runner.expectTrue(style.display == CssDisplay::Block, "display: inline → Block");
+  }
+
+  // Display with !important
+  {
+    CssStyle style = CssParser::parseInlineStyle("display: none !important");
+    runner.expectTrue(style.display == CssDisplay::None, "display: none !important");
+  }
+
+  // CssLength resolution
+  {
+    CssLength em(1.5f, CssUnit::Em);
+    runner.expectTrue(em.toPixels(20.0f) == 30.0f, "CssLength: 1.5em * 20px = 30px");
+
+    CssLength pt(12.0f, CssUnit::Points);
+    float ptPx = pt.toPixels(0);
+    runner.expectTrue(ptPx > 15.9f && ptPx < 16.0f, "CssLength: 12pt ≈ 15.96px");
+
+    CssLength pct(50.0f, CssUnit::Percent);
+    runner.expectTrue(pct.toPixels(0, 400.0f) == 200.0f, "CssLength: 50% of 400 = 200");
+  }
+
+  // CssPropertyFlags
+  {
+    CssPropertyFlags flags;
+    runner.expectFalse(flags.anySet(), "CssPropertyFlags: default none set");
+    flags.marginTop = 1;
+    runner.expectTrue(flags.anySet(), "CssPropertyFlags: marginTop set");
+    flags.clearAll();
+    runner.expectFalse(flags.anySet(), "CssPropertyFlags: cleared");
+  }
+
+  // applyOver with new properties
+  {
+    CssStyle base;
+    base.marginTop = CssLength{10.0f, CssUnit::Pixels};
+    base.defined.marginTop = 1;
+
+    CssStyle other;
+    other.marginBottom = CssLength{20.0f, CssUnit::Pixels};
+    other.defined.marginBottom = 1;
+
+    base.applyOver(other);
+    runner.expectTrue(base.hasMarginTop(), "applyOver: preserves marginTop");
+    runner.expectTrue(base.marginTop.value == 10.0f, "applyOver: marginTop value preserved");
+    runner.expectTrue(base.hasMarginBottom(), "applyOver: adds marginBottom");
+    runner.expectTrue(base.marginBottom.value == 20.0f, "applyOver: marginBottom value");
   }
 
   return runner.allPassed() ? 0 : 1;

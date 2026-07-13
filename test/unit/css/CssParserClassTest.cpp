@@ -29,7 +29,7 @@ int main() {
     runner.expectTrue(parser.hasStyles(), "parseFile: has styles");
 
     CssStyle style = parser.getTagStyle("p");
-    runner.expectTrue(style.hasTextAlign, "parseFile: p has text-align");
+    runner.expectTrue(style.hasTextAlign(), "parseFile: p has text-align");
     runner.expectTrue(style.textAlign == TextAlign::Center, "parseFile: p text-align is center");
   }
 
@@ -47,8 +47,8 @@ int main() {
     runner.expectEq(static_cast<size_t>(3), parser.getStyleCount(), "parseFile multi: 3 rules");
 
     CssStyle h1 = parser.getTagStyle("h1");
-    runner.expectTrue(h1.hasFontWeight && h1.fontWeight == CssFontWeight::Bold, "parseFile multi: h1 bold");
-    runner.expectTrue(h1.hasTextAlign && h1.textAlign == TextAlign::Center, "parseFile multi: h1 center");
+    runner.expectTrue(h1.hasFontWeight() && h1.fontWeight == CssFontWeight::Bold, "parseFile multi: h1 bold");
+    runner.expectTrue(h1.hasTextAlign() && h1.textAlign == TextAlign::Center, "parseFile multi: h1 center");
   }
 
   // Test 3: getCombinedStyle merges tag + class
@@ -63,10 +63,10 @@ int main() {
     parser.parseFile("/combined.css");
 
     CssStyle style = parser.getCombinedStyle("p", "italic special");
-    runner.expectTrue(style.hasTextAlign, "getCombinedStyle: has tag style");
-    runner.expectTrue(style.hasFontStyle && style.fontStyle == CssFontStyle::Italic,
+    runner.expectTrue(style.hasTextAlign(), "getCombinedStyle: has tag style");
+    runner.expectTrue(style.hasFontStyle() && style.fontStyle == CssFontStyle::Italic,
                       "getCombinedStyle: has class style");
-    runner.expectTrue(style.hasFontWeight && style.fontWeight == CssFontWeight::Bold,
+    runner.expectTrue(style.hasFontWeight() && style.fontWeight == CssFontWeight::Bold,
                       "getCombinedStyle: has tag.class style");
   }
 
@@ -164,8 +164,8 @@ int main() {
 
     // .cls0 should have merged properties
     CssStyle style = parser.getCombinedStyle("div", "cls0");
-    runner.expectTrue(style.hasTextAlign, "merge at limit: cls0 has text-align");
-    runner.expectTrue(style.hasFontWeight && style.fontWeight == CssFontWeight::Bold,
+    runner.expectTrue(style.hasTextAlign(), "merge at limit: cls0 has text-align");
+    runner.expectTrue(style.hasFontWeight() && style.fontWeight == CssFontWeight::Bold,
                       "merge at limit: cls0 merged bold");
 
     // .new_rule should not exist
@@ -191,7 +191,7 @@ int main() {
     runner.expectTrue(ok, "long selector: parses without crash");
     // The p rule should still be parsed correctly
     CssStyle pStyle = parser.getTagStyle("p");
-    runner.expectTrue(pStyle.hasFontWeight && pStyle.fontWeight == CssFontWeight::Bold,
+    runner.expectTrue(pStyle.hasFontWeight() && pStyle.fontWeight == CssFontWeight::Bold,
                       "long selector: subsequent rules still parsed");
   }
 
@@ -237,7 +237,7 @@ int main() {
     parser.parseFile("/at_rules.css");
     // Only the p rule should be parsed (media block content is skipped)
     CssStyle style = parser.getTagStyle("p");
-    runner.expectTrue(style.hasTextAlign && style.textAlign == TextAlign::Center,
+    runner.expectTrue(style.hasTextAlign() && style.textAlign == TextAlign::Center,
                       "at-rules: p rule parsed after @-rules");
   }
 
@@ -251,7 +251,7 @@ int main() {
     runner.expectEq(static_cast<size_t>(3), parser.getStyleCount(), "comma selectors: 3 rules from 1 declaration");
 
     CssStyle h2 = parser.getTagStyle("h2");
-    runner.expectTrue(h2.hasFontWeight && h2.fontWeight == CssFontWeight::Bold, "comma selectors: h2 is bold");
+    runner.expectTrue(h2.hasFontWeight() && h2.fontWeight == CssFontWeight::Bold, "comma selectors: h2 is bold");
   }
 
   // Test 15: clear() resets state
@@ -270,9 +270,9 @@ int main() {
   // Test 16: parseInlineStyle (static method)
   {
     CssStyle style = CssParser::parseInlineStyle("text-align: right; font-style: italic");
-    runner.expectTrue(style.hasTextAlign && style.textAlign == TextAlign::Right,
+    runner.expectTrue(style.hasTextAlign() && style.textAlign == TextAlign::Right,
                       "parseInlineStyle: text-align right");
-    runner.expectTrue(style.hasFontStyle && style.fontStyle == CssFontStyle::Italic,
+    runner.expectTrue(style.hasFontStyle() && style.fontStyle == CssFontStyle::Italic,
                       "parseInlineStyle: font-style italic");
   }
 
@@ -305,12 +305,12 @@ int main() {
     runner.expectEq(static_cast<size_t>(2), parser.getStyleCount(), "selector filter: only p and .note kept");
 
     CssStyle p = parser.getTagStyle("p");
-    runner.expectTrue(p.hasTextAlign && p.textAlign == TextAlign::Center,
+    runner.expectTrue(p.hasTextAlign() && p.textAlign == TextAlign::Center,
                       "selector filter: simple tag rule preserved");
-    runner.expectFalse(p.hasFontWeight, "selector filter: combinator rules did not bleed into p");
+    runner.expectFalse(p.hasFontWeight(), "selector filter: combinator rules did not bleed into p");
 
     const CssStyle* note = parser.getStyleForClass(".note");
-    runner.expectTrue(note != nullptr && note->hasFontStyle && note->fontStyle == CssFontStyle::Italic,
+    runner.expectTrue(note != nullptr && note->hasFontStyle() && note->fontStyle == CssFontStyle::Italic,
                       "selector filter: simple class rule preserved");
   }
 
@@ -325,10 +325,10 @@ int main() {
     runner.expectEq(static_cast<size_t>(2), parser.getStyleCount(), "selector filter: comma list keeps 2 of 4");
 
     CssStyle p = parser.getTagStyle("p");
-    runner.expectTrue(p.hasTextAlign && p.textAlign == TextAlign::Right,
+    runner.expectTrue(p.hasTextAlign() && p.textAlign == TextAlign::Right,
                       "selector filter: p kept from comma list");
     const CssStyle* keep = parser.getStyleForClass(".keep");
-    runner.expectTrue(keep != nullptr && keep->hasTextAlign && keep->textAlign == TextAlign::Right,
+    runner.expectTrue(keep != nullptr && keep->hasTextAlign() && keep->textAlign == TextAlign::Right,
                       "selector filter: .keep kept from comma list");
   }
 
