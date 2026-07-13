@@ -7,6 +7,8 @@
 #define TAG "IMG_CONV"
 #include <PngToBmpConverter.h>
 #include <SDCardManager.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 namespace {
 
@@ -91,6 +93,19 @@ bool ImageConverterFactory::convertToBmp(const std::string& inputPath, const std
     return false;
   }
 
+  // Stack safety gate: PNG/JPEG decode (pngle + zlib/tinflate) is the deepest call chain in
+  // the reader and can overflow a constrained task stack, panicking the whole device. If the
+  // current task's free stack is below the safety floor, skip this image gracefully instead —
+  // the caller writes a .failed marker and session-blacklists the hash, so the page renders
+  // without the image rather than rebooting. The 12 KB loopTask (see ARDUINO_LOOP_STACK_SIZE)
+  // keeps this gate from triggering in normal use; it only fires when the stack is genuinely
+  // tight (deeper-than-expected nesting, huge image), which is exactly when a skip beats a crash.
+  constexpr size_t kMinImageStackBytes = 4096;
+  if (uxTaskGetStackHighWaterMark(nullptr) * sizeof(StackType_t) < kMinImageStackBytes) {
+    LOG_WRN(config.logTag, "Skip image convert (low stack): %s", inputPath.c_str());
+    return false;
+  }
+
   FsFile inputFile;
   if (!SdMan.openFileForRead(config.logTag, inputPath, inputFile)) {
     LOG_ERR(config.logTag, "Failed to open input file: %s", inputPath.c_str());
@@ -128,6 +143,13 @@ bool ImageConverterFactory::convertToBmp(const std::string& inputPath, const std
   }
 
   LOG_INF(config.logTag, "Converted %s to BMP: %s", converter->formatName(), outputPath.c_str());
+
+  // Stack headroom probe: image conversion (PNG/JPEG decode) is the deepest call chain
+  // run on loopTask. Report remaining stack so a future regression shows up as a shrinking
+  // high-water mark instead of a mystery "Stack protection fault" crash. Everything is a
+  // LOG_DBG argument, so it compiles to nothing at LOG_LEVEL<2 (release).
+  LOG_DBG(config.logTag, "Stack headroom: %u bytes (%s)",
+          static_cast<unsigned>(uxTaskGetStackHighWaterMark(nullptr) * sizeof(StackType_t)), pcTaskGetName(nullptr));
   return true;
 }
 

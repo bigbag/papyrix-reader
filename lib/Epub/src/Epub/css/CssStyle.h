@@ -73,8 +73,8 @@ struct CssPropertyFlags {
         display(0) {}
 
   bool anySet() const {
-    return textAlign || fontStyle || fontWeight || direction || marginTop || marginBottom || marginLeft || marginRight ||
-           paddingTop || paddingBottom || paddingLeft || paddingRight || display;
+    return textAlign || fontStyle || fontWeight || direction || marginTop || marginBottom || marginLeft ||
+           marginRight || paddingTop || paddingBottom || paddingLeft || paddingRight || display;
   }
 
   void clearAll() {
