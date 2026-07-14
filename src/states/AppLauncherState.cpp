@@ -102,6 +102,7 @@ StateTransition AppLauncherState::update(Core& core) {
         break;
 
       case Mode::App:
+        if (e.type == EventType::ButtonRepeat) break;
         switch (e.button) {
           case Button::Back:
             stopApp(core);
@@ -119,6 +120,7 @@ StateTransition AppLauncherState::update(Core& core) {
         break;
 
       case Mode::Overlay:
+        if (e.type == EventType::ButtonRepeat) break;
         switch (e.button) {
           case Button::Back:
             hideOverlay();
