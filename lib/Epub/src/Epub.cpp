@@ -381,8 +381,8 @@ bool Epub::load(const bool buildIfMissing) {
     cssFiles_.swap(tmp);
   }
 
-  // TOC Pass - skip if heap is too low for the spine href index + inflate + expat
-  constexpr size_t MIN_HEAP_FOR_TOC = 80 * 1024;
+  // TOC Pass - skip if heap is too low for inflate + expat
+  constexpr size_t MIN_HEAP_FOR_TOC = 20 * 1024;
   const size_t freeHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
 
   if (freeHeap < MIN_HEAP_FOR_TOC) {

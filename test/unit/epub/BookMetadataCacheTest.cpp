@@ -17,7 +17,7 @@
 
 namespace {
 
-constexpr uint8_t BOOK_CACHE_VERSION = 6;
+constexpr uint8_t BOOK_CACHE_VERSION = 7;
 
 struct TestBookData {
   BookMetadataCache::BookMetadata metadata;

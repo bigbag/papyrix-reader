@@ -8,7 +8,7 @@
 #define TAG "META_CACHE"
 
 namespace {
-constexpr uint8_t BOOK_CACHE_VERSION = 6;
+constexpr uint8_t BOOK_CACHE_VERSION = 7;
 constexpr char bookBinFile[] = "/book.bin";
 constexpr char tmpSpineBinFile[] = "/spine.bin.tmp";
 constexpr char tmpTocBinFile[] = "/toc.bin.tmp";
@@ -48,26 +48,12 @@ bool BookMetadataCache::beginTocPass() {
     return false;
   }
 
-  // Pre-load spine hrefs for O(1) lookup during TOC entry creation
-  spineHrefIndex.clear();
-  spineHrefIndex.reserve(spineCount);
-  spineFile.seek(0);
-  for (int i = 0; i < spineCount; i++) {
-    auto entry = readSpineEntry(spineFile);
-    spineHrefIndex[entry.href] = i;
-  }
-  LOG_DBG(TAG, "Cached %d spine hrefs for fast lookup", spineCount);
-
   return true;
 }
 
 bool BookMetadataCache::endTocPass() {
   tocFile.close();
   spineFile.close();
-
-  // Free cached spine hrefs memory - swap idiom to release bucket memory
-  std::unordered_map<std::string, int>().swap(spineHrefIndex);
-
   return true;
 }
 
@@ -378,11 +364,14 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
     return;
   }
 
-  // O(1) lookup using cached spine href index
   int spineIndex = -1;
-  auto it = spineHrefIndex.find(href);
-  if (it != spineHrefIndex.end()) {
-    spineIndex = it->second;
+  spineFile.seek(0);
+  for (int i = 0; i < spineCount; i++) {
+    auto entry = readSpineEntry(spineFile);
+    if (entry.href == href) {
+      spineIndex = i;
+      break;
+    }
   }
 
   if (spineIndex == -1) {
