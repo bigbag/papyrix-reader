@@ -207,12 +207,35 @@ static bool renderImage() {
   auto rect = CoverHelpers::calculateCenteredRect(bitmap.getWidth(), bitmap.getHeight(), 0, 0, screenW, viewportH);
   renderer.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height);
 
-  file.close();
-
   ui::ButtonBar buttons("Back", "Menu", "<", ">");
   ui::buttonBar(renderer, theme, buttons);
+  renderer.displayBuffer();
 
-  return false;
+  if (bitmap.hasGreyscale()) {
+    bitmap.rewindToData();
+    renderer.clearScreen(0x00);
+    renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
+    renderer.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height);
+    renderer.copyGrayscaleLsbBuffers();
+
+    bitmap.rewindToData();
+    renderer.clearScreen(0x00);
+    renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
+    renderer.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height);
+    renderer.copyGrayscaleMsbBuffers();
+
+    renderer.displayGrayBuffer();
+    renderer.setRenderMode(GfxRenderer::BW);
+
+    bitmap.rewindToData();
+    renderer.clearScreen(theme.backgroundColor);
+    renderer.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height);
+    ui::buttonBar(renderer, theme, buttons);
+    renderer.cleanupGrayscaleWithFrameBuffer();
+  }
+
+  file.close();
+  return true;
 }
 
 void enter(Core& core) {
