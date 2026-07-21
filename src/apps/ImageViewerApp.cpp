@@ -209,9 +209,12 @@ static bool renderImage() {
 
   ui::ButtonBar buttons("Back", "Menu", "<", ">");
   ui::buttonBar(renderer, theme, buttons);
-  renderer.displayBuffer();
 
-  if (bitmap.hasGreyscale()) {
+  if (!bitmap.hasGreyscale()) {
+    renderer.displayBuffer();
+  } else {
+    renderer.displayBuffer(EInkDisplay::HALF_REFRESH);
+
     bitmap.rewindToData();
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
