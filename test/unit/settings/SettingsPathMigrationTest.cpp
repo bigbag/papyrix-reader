@@ -6,6 +6,7 @@
 #include "HardwareSerial.h"
 #include "SdFat.h"
 #include "Serialization.h"
+#include "Types.h"
 
 namespace {
 
@@ -16,9 +17,14 @@ constexpr size_t OLD_LAST_BOOK_PATH_SIZE = 256;
 constexpr size_t OLD_FILE_LIST_DIR_SIZE = 256;
 constexpr size_t OLD_FILE_LIST_SELECTED_NAME_SIZE = 128;
 
-// New sizes (version >= 11)
-constexpr size_t NEW_LAST_BOOK_PATH_SIZE = 512;
-constexpr size_t NEW_FILE_LIST_DIR_SIZE = 512;
+// Version 11–12 sizes
+constexpr size_t V12_LAST_BOOK_PATH_SIZE = 512;
+constexpr size_t V12_FILE_LIST_DIR_SIZE = 512;
+constexpr size_t V12_FILE_LIST_SELECTED_NAME_SIZE = 256;
+
+// Current sizes (version >= 13)
+constexpr size_t NEW_LAST_BOOK_PATH_SIZE = papyrix::BufferSize::FilePath;
+constexpr size_t NEW_FILE_LIST_DIR_SIZE = papyrix::BufferSize::TrashPath;
 constexpr size_t NEW_FILE_LIST_SELECTED_NAME_SIZE = 256;
 
 struct SettingsV10 {
@@ -102,6 +108,9 @@ bool loadPathFields(FsFile& file, uint8_t version, uint8_t fileSettingsCount, ui
   if (version <= 10) {
     file.read(reinterpret_cast<uint8_t*>(out.lastBookPath), 256);
     memset(out.lastBookPath + 256, 0, sizeof(out.lastBookPath) - 256);
+  } else if (version <= 12) {
+    file.read(reinterpret_cast<uint8_t*>(out.lastBookPath), V12_LAST_BOOK_PATH_SIZE);
+    memset(out.lastBookPath + V12_LAST_BOOK_PATH_SIZE, 0, sizeof(out.lastBookPath) - V12_LAST_BOOK_PATH_SIZE);
   } else {
     file.read(reinterpret_cast<uint8_t*>(out.lastBookPath), sizeof(out.lastBookPath));
   }
@@ -118,6 +127,9 @@ bool loadPathFields(FsFile& file, uint8_t version, uint8_t fileSettingsCount, ui
   if (version <= 10) {
     file.read(reinterpret_cast<uint8_t*>(out.fileListDir), 256);
     memset(out.fileListDir + 256, 0, sizeof(out.fileListDir) - 256);
+  } else if (version <= 12) {
+    file.read(reinterpret_cast<uint8_t*>(out.fileListDir), V12_FILE_LIST_DIR_SIZE);
+    memset(out.fileListDir + V12_FILE_LIST_DIR_SIZE, 0, sizeof(out.fileListDir) - V12_FILE_LIST_DIR_SIZE);
   } else {
     file.read(reinterpret_cast<uint8_t*>(out.fileListDir), sizeof(out.fileListDir));
   }
@@ -273,7 +285,7 @@ int main() {
     runner.expectEq(uint16_t(42), loaded.fileListSelectedIndex, "v10 no-bleed fileListSelectedIndex");
   }
 
-  // === V11 roundtrip with paths > 256 bytes ===
+  // === V12 roundtrip with paths > 256 bytes ===
 
   {
     // Build a long path (300 bytes) that only fits in v11 buffers
@@ -293,11 +305,11 @@ int main() {
     for (int i = 0; i < 190; i++) longName[i] = 'n';
     strncpy(longName + 190, ".fb2", 5);
 
-    // Write as v11 format
+    // Write as v12 format
     FsFile file;
     file.setBuffer("");
 
-    uint8_t version = 11;
+    uint8_t version = 12;
     uint8_t count = 26;
     serialization::writePod(file, SETTINGS_MAGIC);
     serialization::writePod(file, version);
@@ -308,21 +320,21 @@ int main() {
     char theme[32] = "dark";
     file.write(reinterpret_cast<const uint8_t*>(theme), 32);
     // lastBookPath[512]
-    char pathBuf[NEW_LAST_BOOK_PATH_SIZE] = {};
+    char pathBuf[V12_LAST_BOOK_PATH_SIZE] = {};
     strncpy(pathBuf, longPath, sizeof(pathBuf) - 1);
-    file.write(reinterpret_cast<const uint8_t*>(pathBuf), NEW_LAST_BOOK_PATH_SIZE);
+    file.write(reinterpret_cast<const uint8_t*>(pathBuf), V12_LAST_BOOK_PATH_SIZE);
     // pendingTransition, transitionReturnTo, sunlightFadingFix
     serialization::writePod(file, uint8_t(0));
     serialization::writePod(file, uint8_t(0));
     serialization::writePod(file, uint8_t(0));
     // fileListDir[512]
-    char dirBuf[NEW_FILE_LIST_DIR_SIZE] = {};
+    char dirBuf[V12_FILE_LIST_DIR_SIZE] = {};
     strncpy(dirBuf, longDir, sizeof(dirBuf) - 1);
-    file.write(reinterpret_cast<const uint8_t*>(dirBuf), NEW_FILE_LIST_DIR_SIZE);
+    file.write(reinterpret_cast<const uint8_t*>(dirBuf), V12_FILE_LIST_DIR_SIZE);
     // fileListSelectedName[256]
-    char nameBuf[NEW_FILE_LIST_SELECTED_NAME_SIZE] = {};
+    char nameBuf[V12_FILE_LIST_SELECTED_NAME_SIZE] = {};
     strncpy(nameBuf, longName, sizeof(nameBuf) - 1);
-    file.write(reinterpret_cast<const uint8_t*>(nameBuf), NEW_FILE_LIST_SELECTED_NAME_SIZE);
+    file.write(reinterpret_cast<const uint8_t*>(nameBuf), V12_FILE_LIST_SELECTED_NAME_SIZE);
     // fileListSelectedIndex
     serialization::writePod(file, uint16_t(99));
     serialization::writePod(file, uint8_t(1));
@@ -346,16 +358,18 @@ int main() {
     LoadedPaths loaded;
     loadPathFields(file, version, count, settingsRead, loaded);
 
-    runner.expectEqual(longPath, loaded.lastBookPath, "v11 long lastBookPath (300 bytes)");
-    runner.expectEqual(longDir, loaded.fileListDir, "v11 long fileListDir (350 bytes)");
-    runner.expectEqual(longName, loaded.fileListSelectedName, "v11 long selectedName (194 bytes)");
-    runner.expectEq(uint16_t(99), loaded.fileListSelectedIndex, "v11 long path selectedIndex");
+    runner.expectEqual(longPath, loaded.lastBookPath, "v12 long lastBookPath (300 bytes)");
+    runner.expectEqual(longDir, loaded.fileListDir, "v12 long fileListDir (350 bytes)");
+    runner.expectEqual(longName, loaded.fileListSelectedName, "v12 long selectedName (194 bytes)");
+    runner.expectEq(uint16_t(99), loaded.fileListSelectedIndex, "v12 long path selectedIndex");
+    runner.expectEq(char(0), loaded.lastBookPath[V12_LAST_BOOK_PATH_SIZE], "v12 path is zero-extended");
+    runner.expectEq(char(0), loaded.fileListDir[V12_FILE_LIST_DIR_SIZE], "v12 directory is zero-extended");
   }
 
   // === Buffer size constants are correct ===
 
-  runner.expectEq(size_t(512), NEW_LAST_BOOK_PATH_SIZE, "lastBookPath buffer is 512");
-  runner.expectEq(size_t(512), NEW_FILE_LIST_DIR_SIZE, "fileListDir buffer is 512");
+  runner.expectEq(size_t(1024), NEW_LAST_BOOK_PATH_SIZE, "lastBookPath buffer is 1024");
+  runner.expectEq(size_t(1037), NEW_FILE_LIST_DIR_SIZE, "fileListDir buffer is 1037");
   runner.expectEq(size_t(256), NEW_FILE_LIST_SELECTED_NAME_SIZE, "fileListSelectedName buffer is 256");
 
   runner.printSummary();

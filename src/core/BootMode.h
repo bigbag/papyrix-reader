@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+#include "Types.h"
+
 namespace papyrix {
 
 // Boot modes for memory optimization
@@ -19,10 +21,10 @@ enum class ReturnTo : uint8_t {
 
 // RTC memory structure for mode transitions (persists across restart)
 struct ModeTransition {
-  uint32_t magic;      // 0xB007MODE - validation marker
-  BootMode mode;       // Target boot mode
-  ReturnTo returnTo;   // Where to return when exiting reader
-  char bookPath[512];  // Path to open in reader mode
+  uint32_t magic;                       // 0xB007MODE - validation marker
+  BootMode mode;                        // Target boot mode
+  ReturnTo returnTo;                    // Where to return when exiting reader
+  char bookPath[BufferSize::FilePath];  // Path to open in reader mode
 
   static constexpr uint32_t MAGIC = 0xB007BADE;  // "BOOT BADE" validation marker
 

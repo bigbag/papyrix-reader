@@ -54,7 +54,8 @@ enum class SyncMode : uint8_t {
 // Common buffer sizes
 namespace BufferSize {
 constexpr size_t Path = 256;
-constexpr size_t FilePath = 512;
+constexpr size_t FilePath = 1024;
+constexpr size_t TrashPath = FilePath + (sizeof("/trash") - 1) + (sizeof(" (9999)") - 1);
 constexpr size_t Text = 512;
 constexpr size_t Decompress = 8192;
 constexpr size_t Title = 128;

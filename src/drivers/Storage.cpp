@@ -55,6 +55,23 @@ Result<bool> Storage::exists(const char* path) {
   return Ok(SdMan.exists(path));
 }
 
+Result<bool> Storage::isDirectory(const char* path) {
+  if (!mounted_) {
+    return Err<bool>(Error::SdCardNotFound);
+  }
+  if (!path || path[0] == '\0') {
+    return Err<bool>(Error::InvalidOperation);
+  }
+
+  FsFile entry = SdMan.open(path);
+  if (!entry) {
+    return Err<bool>(Error::FileNotFound);
+  }
+  const bool directory = entry.isDirectory();
+  entry.close();
+  return Ok(directory);
+}
+
 Result<void> Storage::remove(const char* path) {
   if (!mounted_) {
     return ErrVoid(Error::SdCardNotFound);
@@ -64,6 +81,32 @@ Result<void> Storage::remove(const char* path) {
     return ErrVoid(Error::FileNotFound);
   }
 
+  return Ok();
+}
+
+Result<void> Storage::rename(const char* oldPath, const char* newPath) {
+  if (!mounted_) {
+    return ErrVoid(Error::SdCardNotFound);
+  }
+  if (!oldPath || !newPath || oldPath[0] == '\0' || newPath[0] == '\0') {
+    return ErrVoid(Error::InvalidOperation);
+  }
+  if (!SdMan.rename(oldPath, newPath)) {
+    return ErrVoid(Error::IOError);
+  }
+  return Ok();
+}
+
+Result<void> Storage::rmdirEmpty(const char* path) {
+  if (!mounted_) {
+    return ErrVoid(Error::SdCardNotFound);
+  }
+  if (!path || path[0] == '\0') {
+    return ErrVoid(Error::InvalidOperation);
+  }
+  if (!SdMan.rmdir(path)) {
+    return ErrVoid(Error::IOError);
+  }
   return Ok();
 }
 

@@ -234,6 +234,28 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "Bookmark",             // BOOKMARK_VAL
     "Bookmark added",       // BOOKMARK_ADDED
     "Recent",               // RECENT_NETWORK
+
+    // Recycle bin
+    "Restore",                         // RESTORE
+    "Empty Trash",                     // EMPTY_TRASH
+    "Empty Trash?",                    // EMPTY_TRASH_Q
+    "This permanently deletes",        // EMPTY_TRASH_MSG1
+    "all trashed books.",              // EMPTY_TRASH_MSG2
+    "Emptying trash...",               // EMPTYING_TRASH
+    "Trash emptied",                   // TRASH_EMPTIED
+    "No trash to empty",               // NO_TRASH_TO_EMPTY
+    "Moving to trash...",              // MOVING_TO_TRASH
+    "Moved to trash",                  // MOVED_TO_TRASH
+    "Could not move to trash",         // MOVE_TO_TRASH_FAILED
+    "Restoring...",                    // RESTORING
+    "Restored",                        // RESTORED
+    "Could not restore",               // RESTORE_FAILED
+    "Confirm Move",                    // CONFIRM_TRASH
+    "Confirm Restore",                 // CONFIRM_RESTORE
+    "Move this file to trash?",        // MOVE_TO_TRASH_Q
+    "Restore to original folder?",     // RESTORE_FILE_Q
+    "Delete this file permanently?",   // DELETE_PERMANENTLY_Q
+    "Cannot delete the trash folder",  // CANNOT_DELETE_TRASH
 };
 // clang-format on
 

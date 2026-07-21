@@ -144,10 +144,31 @@ int main() {
     runner.expectTrue(pathLen < 512, "full chain path < 512 bytes");
   }
 
+  // === Maximum supported path survives every reader handoff ===
+
+  {
+    constexpr size_t kTargetPathCapacity = 1024;
+    const std::string maxPath = "/" + std::string(kTargetPathCapacity - 7, 'p') + ".epub";
+    char selectedPath[papyrix::BufferSize::FilePath] = {};
+    char lastBookPath[papyrix::BufferSize::FilePath] = {};
+    char bookPath[papyrix::BufferSize::FilePath] = {};
+    char bufPath[papyrix::BufferSize::FilePath] = {};
+    char contentPath[papyrix::BufferSize::FilePath] = {};
+
+    strncpy(selectedPath, maxPath.c_str(), sizeof(selectedPath) - 1);
+    strncpy(lastBookPath, selectedPath, sizeof(lastBookPath) - 1);
+    strncpy(bookPath, lastBookPath, sizeof(bookPath) - 1);
+    strncpy(bufPath, bookPath, sizeof(bufPath) - 1);
+    strncpy(contentPath, bufPath, sizeof(contentPath) - 1);
+
+    runner.expectEq(kTargetPathCapacity - 1, maxPath.size(), "maximum path has 1023 bytes");
+    runner.expectEqual(maxPath, std::string(contentPath), "maximum path survives full chain");
+  }
+
   // === Buffer sizes match Types.h constants ===
 
   {
-    runner.expectEq(size_t(papyrix::BufferSize::FilePath), size_t(512), "FilePath buffer size is 512");
+    runner.expectEq(size_t(papyrix::BufferSize::FilePath), size_t(1024), "FilePath buffer size is 1024");
     runner.expectEq(size_t(papyrix::BufferSize::Path), size_t(256), "Path buffer size is 256 (for cache paths)");
   }
 

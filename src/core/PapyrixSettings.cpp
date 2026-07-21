@@ -20,8 +20,8 @@ namespace {
 constexpr uint32_t SETTINGS_MAGIC = 0x53585050;
 // Minimum version we can read (allows backward compatibility)
 constexpr uint8_t MIN_SETTINGS_VERSION = 3;
-// Version 11: Increased path buffer sizes (lastBookPath 256→512, fileListDir 256→512, fileListSelectedName 128→256)
-constexpr uint8_t SETTINGS_FILE_VERSION = 12;
+// Version 13: Increased path buffer sizes (lastBookPath 512→1024, fileListDir 512→1037).
+constexpr uint8_t SETTINGS_FILE_VERSION = 13;
 // Increment this when adding new persisted settings fields
 constexpr uint8_t SETTINGS_COUNT = 27;
 
@@ -193,6 +193,9 @@ Result<void> Settings::load(drivers::Storage& storage) {
     if (version <= 10) {
       inputFile.read(reinterpret_cast<uint8_t*>(lastBookPath), 256);
       memset(lastBookPath + 256, 0, sizeof(lastBookPath) - 256);
+    } else if (version <= 12) {
+      inputFile.read(reinterpret_cast<uint8_t*>(lastBookPath), 512);
+      memset(lastBookPath + 512, 0, sizeof(lastBookPath) - 512);
     } else {
       inputFile.read(reinterpret_cast<uint8_t*>(lastBookPath), sizeof(lastBookPath));
     }
@@ -207,6 +210,9 @@ Result<void> Settings::load(drivers::Storage& storage) {
     if (version <= 10) {
       inputFile.read(reinterpret_cast<uint8_t*>(fileListDir), 256);
       memset(fileListDir + 256, 0, sizeof(fileListDir) - 256);
+    } else if (version <= 12) {
+      inputFile.read(reinterpret_cast<uint8_t*>(fileListDir), 512);
+      memset(fileListDir + 512, 0, sizeof(fileListDir) - 512);
     } else {
       inputFile.read(reinterpret_cast<uint8_t*>(fileListDir), sizeof(fileListDir));
     }
@@ -411,6 +417,9 @@ bool Settings::loadFromFile() {
     if (version <= 10) {
       inputFile.read(reinterpret_cast<uint8_t*>(lastBookPath), 256);
       memset(lastBookPath + 256, 0, sizeof(lastBookPath) - 256);
+    } else if (version <= 12) {
+      inputFile.read(reinterpret_cast<uint8_t*>(lastBookPath), 512);
+      memset(lastBookPath + 512, 0, sizeof(lastBookPath) - 512);
     } else {
       inputFile.read(reinterpret_cast<uint8_t*>(lastBookPath), sizeof(lastBookPath));
     }
@@ -425,6 +434,9 @@ bool Settings::loadFromFile() {
     if (version <= 10) {
       inputFile.read(reinterpret_cast<uint8_t*>(fileListDir), 256);
       memset(fileListDir + 256, 0, sizeof(fileListDir) - 256);
+    } else if (version <= 12) {
+      inputFile.read(reinterpret_cast<uint8_t*>(fileListDir), 512);
+      memset(fileListDir + 512, 0, sizeof(fileListDir) - 512);
     } else {
       inputFile.read(reinterpret_cast<uint8_t*>(fileListDir), sizeof(fileListDir));
     }

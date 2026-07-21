@@ -70,6 +70,7 @@ PAGES_PER_REFRESH=Pages/rafraîch.
 SUNLIGHT_FADING_FIX=Anti-décoloration
 FRONT_BUTTONS=Boutons avant
 SIDE_BUTTONS=Boutons latéraux
+FULL_BOOK_PROCESS=Traiter le livre
 
 # Settings enum values
 ON=OUI
@@ -230,3 +231,25 @@ VALIDATING_FIRMWARE=Validation...
 BOOKMARK_VAL=Signet
 BOOKMARK_ADDED=Signet ajouté
 RECENT_NETWORK=Récent
+
+# Recycle bin
+RESTORE=Restaurer
+EMPTY_TRASH=Vider la corbeille
+EMPTY_TRASH_Q=Vider la corbeille ?
+EMPTY_TRASH_MSG1=Ceci supprime définitivement
+EMPTY_TRASH_MSG2=tous les livres de la corbeille.
+EMPTYING_TRASH=Vidage de la corbeille...
+TRASH_EMPTIED=Corbeille vidée
+NO_TRASH_TO_EMPTY=Corbeille déjà vide
+MOVING_TO_TRASH=Déplacement vers la corbeille...
+MOVED_TO_TRASH=Déplacé vers la corbeille
+MOVE_TO_TRASH_FAILED=Échec du déplacement
+RESTORING=Restauration...
+RESTORED=Restauré
+RESTORE_FAILED=Échec de la restauration
+CONFIRM_TRASH=Confirmer le déplacement
+CONFIRM_RESTORE=Confirmer la restauration
+MOVE_TO_TRASH_Q=Déplacer ce fichier vers la corbeille ?
+RESTORE_FILE_Q=Restaurer dans le dossier d’origine ?
+DELETE_PERMANENTLY_Q=Supprimer définitivement ce fichier ?
+CANNOT_DELETE_TRASH=Impossible de supprimer le dossier corbeille

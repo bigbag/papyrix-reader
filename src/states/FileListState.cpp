@@ -17,6 +17,7 @@
 #include "../content/RecentBooksStore.h"
 #include "../core/BootMode.h"
 #include "../core/Core.h"
+#include "../core/TrashPaths.h"
 #include "../ui/Elements.h"
 #include "MappedInputManager.h"
 #include "ThemeManager.h"
@@ -203,13 +204,157 @@ bool FileListState::isSupportedFile(const char* name) const {
   return false;
 }
 
+bool FileListState::isTrashDirectory() const { return trash::isPath(currentDir_); }
+
+bool FileListState::isTrashRootEntry() const {
+  return isAtRoot() && selectedIndex_ < files_.size() && files_[selectedIndex_].isDir &&
+         trash::isDirectoryName(files_[selectedIndex_].name.c_str());
+}
+
+bool FileListState::buildSelectedPath(char* path, size_t pathSize) const {
+  if (files_.empty() || selectedIndex_ >= files_.size() || currentDir_[0] == '\0') return false;
+
+  const size_t dirLen = strlen(currentDir_);
+  const char* separator = currentDir_[dirLen - 1] == '/' ? "" : "/";
+  const int written = snprintf(path, pathSize, "%s%s%s", currentDir_, separator, files_[selectedIndex_].name.c_str());
+  return written >= 0 && static_cast<size_t>(written) < pathSize;
+}
+
+bool FileListState::findVacantPath(Core& core, const char* directory, const char* filename, char* path,
+                                   size_t pathSize) const {
+  return trash::findVacantPath(path, pathSize, directory, filename, [&](const char* candidate) {
+    auto exists = core.storage.exists(candidate);
+    if (!exists.ok()) return trash::PathProbe::Failed;
+    return *exists ? trash::PathProbe::Occupied : trash::PathProbe::Vacant;
+  });
+}
+
+void FileListState::setupFileConfirm(Screen screen, const char* title, const char* question) {
+  char line[ui::ConfirmDialogView::MAX_LINE_LEN];
+  const std::string& name = files_[selectedIndex_].name;
+  size_t length = utf8SafeCopy(line, sizeof(line) - 4, name.c_str());
+  if (length < name.size()) {
+    line[length++] = '.';
+    line[length++] = '.';
+    line[length++] = '.';
+  }
+  line[length] = '\0';
+
+  confirmView_.setup(title, question, line);
+  currentScreen_ = screen;
+  needsRender_ = true;
+}
+
+void FileListState::promptMoveToTrash() {
+  setupFileConfirm(Screen::ConfirmMoveToTrash, tr(CONFIRM_TRASH), tr(MOVE_TO_TRASH_Q));
+}
+
+void FileListState::promptRestore() {
+  setupFileConfirm(Screen::ConfirmRestore, tr(CONFIRM_RESTORE), tr(RESTORE_FILE_Q));
+}
+
+void FileListState::promptPermanentDelete() {
+  setupFileConfirm(Screen::ConfirmPermanentDelete, tr(CONFIRM_DELETE), tr(DELETE_PERMANENTLY_Q));
+}
+
+void FileListState::promptDeleteEmptyDirectory() {
+  setupFileConfirm(Screen::ConfirmDeleteEmptyDirectory, tr(CONFIRM_DELETE), tr(DELETE_FOLDER_Q));
+}
+
+void FileListState::executeConfirmedAction(Core& core) {
+  const size_t sourcePathSize = isTrashDirectory() ? BufferSize::TrashPath : BufferSize::FilePath;
+  if (!buildSelectedPath(selectedPath_, sourcePathSize)) {
+    const char* failed = tr(DELETE_FAILED);
+    if (currentScreen_ == Screen::ConfirmMoveToTrash) failed = tr(MOVE_TO_TRASH_FAILED);
+    if (currentScreen_ == Screen::ConfirmRestore) failed = tr(RESTORE_FAILED);
+    ui::centeredMessage(renderer_, THEME, THEME.uiFontId, failed);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    currentScreen_ = Screen::Browse;
+    needsRender_ = true;
+    return;
+  }
+
+  const FileEntry& entry = files_[selectedIndex_];
+  const bool destructive =
+      currentScreen_ == Screen::ConfirmMoveToTrash || currentScreen_ == Screen::ConfirmPermanentDelete;
+  if (destructive && core.settings.lastBookPath[0] != '\0' && strcmp(selectedPath_, core.settings.lastBookPath) == 0) {
+    ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(CANNOT_DELETE_ACTIVE));
+    vTaskDelay(1500 / portTICK_PERIOD_MS);
+  } else {
+    bool success = false;
+    const char* status = tr(DELETE_FAILED);
+
+    if (currentScreen_ == Screen::ConfirmMoveToTrash) {
+      bool trashReady = false;
+      if (trash::buildTrashParent(currentDir_, sizeof(currentDir_), selectedPath_)) {
+        const auto exists = core.storage.exists(currentDir_);
+        trashReady = exists.ok() && (*exists || core.storage.mkdir(currentDir_).ok());
+      }
+
+      if (trashReady &&
+          findVacantPath(core, currentDir_, entry.name.c_str(), actionDestination_, sizeof(actionDestination_))) {
+        ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(MOVING_TO_TRASH));
+        success = core.storage.rename(selectedPath_, actionDestination_).ok();
+      }
+      status = success ? tr(MOVED_TO_TRASH) : tr(MOVE_TO_TRASH_FAILED);
+      if (success) {
+        RecentBooksStore::instance().remove(selectedPath_);
+      }
+    } else if (currentScreen_ == Screen::ConfirmRestore) {
+      const bool targetFound = trash::findRestorePath(
+          actionDestination_, sizeof(actionDestination_), currentDir_, sizeof(currentDir_), selectedPath_,
+          entry.name.c_str(),
+          [&](const char* parent) {
+            if (strcmp(parent, "/") == 0) return true;
+            const auto exists = core.storage.exists(parent);
+            if (!exists.ok()) return false;
+            if (*exists) {
+              const auto directory = core.storage.isDirectory(parent);
+              return directory.ok() && *directory;
+            }
+            return core.storage.mkdir(parent).ok();
+          },
+          [&](const char* candidate) {
+            const auto exists = core.storage.exists(candidate);
+            if (!exists.ok()) return trash::PathProbe::Failed;
+            return *exists ? trash::PathProbe::Occupied : trash::PathProbe::Vacant;
+          });
+      if (targetFound) {
+        ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(RESTORING));
+        success = core.storage.rename(selectedPath_, actionDestination_).ok();
+      }
+      status = success ? tr(RESTORED) : tr(RESTORE_FAILED);
+    } else if (currentScreen_ == Screen::ConfirmPermanentDelete) {
+      ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(DELETING));
+      success = core.storage.remove(selectedPath_).ok();
+      status = success ? tr(DELETED) : tr(DELETE_FAILED);
+    } else if (currentScreen_ == Screen::ConfirmDeleteEmptyDirectory) {
+      ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(DELETING));
+      success = core.storage.rmdirEmpty(selectedPath_).ok();
+      status = success ? tr(DELETED) : tr(DELETE_FAILED);
+    }
+
+    ui::centeredMessage(renderer_, THEME, THEME.uiFontId, status);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+  }
+
+  if (!trash::buildSourceParent(currentDir_, sizeof(currentDir_), selectedPath_)) {
+    strcpy(currentDir_, "/");
+  }
+  loadFiles(core);
+  if (selectedIndex_ >= files_.size()) {
+    selectedIndex_ = files_.empty() ? 0 : files_.size() - 1;
+  }
+  currentScreen_ = Screen::Browse;
+  needsRender_ = true;
+}
+
 StateTransition FileListState::update(Core& core) {
-  // Process input events
   Event e;
   while (core.events.pop(e)) {
     switch (e.type) {
       case EventType::ButtonRepeat:
-        if (currentScreen_ != Screen::ConfirmDelete) {
+        if (currentScreen_ == Screen::Browse) {
           if (e.button == Button::Up)
             navigateUp(core);
           else if (e.button == Button::Down)
@@ -218,57 +363,22 @@ StateTransition FileListState::update(Core& core) {
         break;
 
       case EventType::ButtonPress:
-        if (currentScreen_ == Screen::ConfirmDelete) {
-          // Confirmation dialog input
+        if (currentScreen_ != Screen::Browse) {
           switch (e.button) {
             case Button::Up:
             case Button::Down:
+            case Button::Left:
+            case Button::Right:
               confirmView_.toggleSelection();
               needsRender_ = true;
               break;
             case Button::Center:
               if (confirmView_.isYesSelected()) {
-                // Execute delete inline (like SettingsState pattern)
-                const FileEntry& entry = files_[selectedIndex_];
-                char pathBuf[1024];
-                size_t dirLen = strlen(currentDir_);
-                if (currentDir_[dirLen - 1] == '/') {
-                  snprintf(pathBuf, sizeof(pathBuf), "%s%s", currentDir_, entry.name.c_str());
-                } else {
-                  snprintf(pathBuf, sizeof(pathBuf), "%s/%s", currentDir_, entry.name.c_str());
-                }
-
-                // Check if trying to delete the currently active book
-                const char* activeBook = core.settings.lastBookPath;
-                if (activeBook[0] != '\0' && strcmp(pathBuf, activeBook) == 0) {
-                  ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(CANNOT_DELETE_ACTIVE));
-                  vTaskDelay(1500 / portTICK_PERIOD_MS);
-                } else {
-                  ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(DELETING));
-
-                  Result<void> result = entry.isDir ? core.storage.rmdir(pathBuf) : core.storage.remove(pathBuf);
-
-                  if (result.ok()) {
-                    RecentBooksStore::instance().remove(pathBuf);
-                  }
-
-                  const char* msg = result.ok() ? tr(DELETED) : tr(DELETE_FAILED);
-                  ui::centeredMessage(renderer_, THEME, THEME.uiFontId, msg);
-                  vTaskDelay(1000 / portTICK_PERIOD_MS);
-
-                  loadFiles(core);
-                  if (selectedIndex_ >= files_.size()) {
-                    selectedIndex_ = files_.empty() ? 0 : files_.size() - 1;
-                  }
-                }
+                executeConfirmedAction(core);
+              } else {
+                currentScreen_ = Screen::Browse;
+                needsRender_ = true;
               }
-              currentScreen_ = Screen::Browse;
-              needsRender_ = true;
-              break;
-            case Button::Left:
-            case Button::Right:
-              confirmView_.toggleSelection();
-              needsRender_ = true;
               break;
             case Button::Back:
               currentScreen_ = Screen::Browse;
@@ -278,7 +388,6 @@ StateTransition FileListState::update(Core& core) {
               break;
           }
         } else {
-          // Normal browse mode
           switch (e.button) {
             case Button::Up:
               navigateUp(core);
@@ -289,7 +398,24 @@ StateTransition FileListState::update(Core& core) {
             case Button::Left:
               break;
             case Button::Right:
-              promptDelete(core);
+              if (files_.empty()) break;
+              if (isTrashRootEntry()) {
+                ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(CANNOT_DELETE_TRASH));
+                vTaskDelay(1000 / portTICK_PERIOD_MS);
+                needsRender_ = true;
+              } else {
+                switch (trash::deleteAction(files_[selectedIndex_].isDir, isTrashDirectory())) {
+                  case trash::DeleteAction::MoveToTrash:
+                    promptMoveToTrash();
+                    break;
+                  case trash::DeleteAction::PermanentlyDelete:
+                    promptPermanentDelete();
+                    break;
+                  case trash::DeleteAction::DeleteEmptyDirectory:
+                    promptDeleteEmptyDirectory();
+                    break;
+                }
+              }
               break;
             case Button::Center:
               openSelected(core);
@@ -308,16 +434,14 @@ StateTransition FileListState::update(Core& core) {
     }
   }
 
-  // If a file was selected, transition to reader
   if (hasSelection_) {
     hasSelection_ = false;
     return StateTransition::to(StateId::Reader);
   }
 
-  // Return to Recent (parent of Files) if requested
   if (goRecent_) {
     goRecent_ = false;
-    strcpy(currentDir_, "/");  // Reset for next entry
+    strcpy(currentDir_, "/");
     return StateTransition::to(core.settings.showRecents ? StateId::Recent : StateId::Home);
   }
 
@@ -331,7 +455,7 @@ void FileListState::render(Core& core) {
 
   Theme& theme = THEME_MANAGER.mutableCurrent();
 
-  if (currentScreen_ == Screen::ConfirmDelete) {
+  if (currentScreen_ != Screen::Browse) {
     ui::render(renderer_, theme, confirmView_);
     confirmView_.needsRender = false;
     needsRender_ = false;
@@ -374,7 +498,8 @@ void FileListState::render(Core& core) {
   }
 
   const char* backLabel = isAtRoot() ? (core.settings.showRecents ? tr(BOOKS) : tr(HOME)) : tr(BACK);
-  ui::buttonBar(renderer_, theme, backLabel, tr(OPEN), "", tr(DELETE_BTN));
+  const bool restoreSelected = isTrashDirectory() && !files_[selectedIndex_].isDir;
+  ui::buttonBar(renderer_, theme, backLabel, restoreSelected ? tr(RESTORE) : tr(OPEN), "", tr(DELETE_BTN));
 
   if (firstRender_) {
     renderer_.displayBuffer(EInkDisplay::HALF_REFRESH);
@@ -415,12 +540,9 @@ void FileListState::openSelected(Core& core) {
 
   const FileEntry& entry = files_[selectedIndex_];
 
-  // Build full path
-  size_t dirLen = strlen(currentDir_);
-  if (currentDir_[dirLen - 1] == '/') {
-    snprintf(selectedPath_, sizeof(selectedPath_), "%s%s", currentDir_, entry.name.c_str());
-  } else {
-    snprintf(selectedPath_, sizeof(selectedPath_), "%s/%s", currentDir_, entry.name.c_str());
+  const size_t pathSize = isTrashDirectory() ? BufferSize::TrashPath : BufferSize::FilePath;
+  if (!buildSelectedPath(selectedPath_, pathSize)) {
+    return;
   }
 
   if (entry.isDir) {
@@ -437,6 +559,11 @@ void FileListState::openSelected(Core& core) {
     core.settings.fileListSelectedName[0] = '\0';
     core.settings.fileListSelectedIndex = 0;
   } else {
+    if (isTrashDirectory()) {
+      promptRestore();
+      return;
+    }
+
     // Save position for return
     strncpy(core.settings.fileListDir, currentDir_, sizeof(core.settings.fileListDir) - 1);
     core.settings.fileListDir[sizeof(core.settings.fileListDir) - 1] = '\0';
@@ -471,25 +598,6 @@ void FileListState::goBack(Core& core) {
 
   selectedIndex_ = 0;
   loadFiles(core);
-  needsRender_ = true;
-}
-
-void FileListState::promptDelete(Core& core) {
-  if (files_.empty()) return;
-
-  const FileEntry& entry = files_[selectedIndex_];
-  const char* line1 = entry.isDir ? tr(DELETE_FOLDER_Q) : tr(DELETE_FILE_Q);
-
-  char line2[48];
-  if (entry.name.length() > 40) {
-    snprintf(line2, sizeof(line2), "%.37s...", entry.name.c_str());
-  } else {
-    strncpy(line2, entry.name.c_str(), sizeof(line2) - 1);
-    line2[sizeof(line2) - 1] = '\0';
-  }
-
-  confirmView_.setup(tr(CONFIRM_DELETE), line1, line2);
-  currentScreen_ = Screen::ConfirmDelete;
   needsRender_ = true;
 }
 

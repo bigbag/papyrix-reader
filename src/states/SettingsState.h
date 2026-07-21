@@ -40,8 +40,12 @@ class SettingsState : public State {
   bool themeWasChanged_;
   SettingsScreen returnScreen_;  // Screen to return to after Network mode
 
-  // Pending action for confirmation dialog
-  // 0=none, 10=Clear Book Cache, 11=Clear Device Storage, 12=Factory Reset
+  static constexpr uint8_t ACTION_NONE = 0;
+  static constexpr uint8_t ACTION_CLEAR_BOOK_CACHE = 10;
+  static constexpr uint8_t ACTION_EMPTY_TRASH = 11;
+  static constexpr uint8_t ACTION_CLEAR_DEVICE_STORAGE = 12;
+  static constexpr uint8_t ACTION_FACTORY_RESET = 13;
+
   uint8_t pendingAction_;
 
   // Views (all small structs)
@@ -70,7 +74,7 @@ class SettingsState : public State {
   void populateSystemInfo();
 
   // Actions
-  void clearCache(int type, Core& core);
+  void clearCache(int type);
 };
 
 }  // namespace papyrix

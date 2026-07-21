@@ -40,7 +40,7 @@ void render(const GfxRenderer& r, const Theme& t, const SettingsMenuView& v);
 // ============================================================================
 
 struct CleanupMenuView {
-  static constexpr int ITEM_COUNT = 3;
+  static constexpr int ITEM_COUNT = 4;
 
   ButtonBar buttons;
   int8_t selected = 0;

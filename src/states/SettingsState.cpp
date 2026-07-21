@@ -11,6 +11,7 @@
 
 #include "../Battery.h"
 #include "../core/FirmwareUpdater.h"
+#include "../core/TrashPaths.h"
 
 #define TAG "SETTINGS_UI"
 #include "../config.h"
@@ -30,7 +31,7 @@ SettingsState::SettingsState(GfxRenderer& renderer)
       goNetwork_(false),
       themeWasChanged_(false),
       returnScreen_(SettingsScreen::Menu),
-      pendingAction_(0),
+      pendingAction_(ACTION_NONE),
       menuView_{},
       readerView_{},
       deviceView_{},
@@ -70,7 +71,7 @@ void SettingsState::enter(Core& core) {
   goHome_ = false;
   goNetwork_ = false;
   themeWasChanged_ = false;
-  pendingAction_ = 0;
+  pendingAction_ = ACTION_NONE;
 }
 
 void SettingsState::exit(Core& core) {
@@ -174,7 +175,7 @@ StateTransition SettingsState::update(Core& core) {
               goHome_ = true;
             } else if (currentScreen_ == SettingsScreen::ConfirmDialog) {
               // Cancel confirmation dialog
-              pendingAction_ = 0;
+              pendingAction_ = ACTION_NONE;
               currentScreen_ = SettingsScreen::Cleanup;
               cleanupView_.needsRender = true;
               needsRender_ = true;
@@ -395,7 +396,7 @@ void SettingsState::goBack(Core& core) {
       menuView_.needsRender = true;
       break;
     case SettingsScreen::ConfirmDialog:
-      pendingAction_ = 0;
+      pendingAction_ = ACTION_NONE;
       currentScreen_ = SettingsScreen::Cleanup;
       cleanupView_.needsRender = true;
       break;
@@ -430,7 +431,7 @@ void SettingsState::handleConfirm(Core& core) {
       break;
 
     case SettingsScreen::Cleanup:
-      clearCache(cleanupView_.selected, core);
+      clearCache(cleanupView_.selected);
       break;
 
     case SettingsScreen::SystemInfo:
@@ -439,8 +440,7 @@ void SettingsState::handleConfirm(Core& core) {
 
     case SettingsScreen::ConfirmDialog:
       if (confirmView_.isYesSelected()) {
-        if (pendingAction_ == 10) {
-          // Clear Book Cache
+        if (pendingAction_ == ACTION_CLEAR_BOOK_CACHE) {
           ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(CLEARING_CACHE));
 
           int lastRendered = 0;
@@ -456,13 +456,31 @@ void SettingsState::handleConfirm(Core& core) {
           ui::centeredMessage(renderer_, THEME, THEME.uiFontId, msg);
           vTaskDelay(1500 / portTICK_PERIOD_MS);
 
-          pendingAction_ = 0;
+          pendingAction_ = ACTION_NONE;
           currentScreen_ = SettingsScreen::Cleanup;
           cleanupView_.needsRender = true;
           needsRender_ = true;
 
-        } else if (pendingAction_ == 11) {
-          // Clear Device Storage
+        } else if (pendingAction_ == ACTION_EMPTY_TRASH) {
+          const auto exists = core.storage.exists(trash::DIRECTORY);
+          if (!exists.ok() || !*exists) {
+            ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(NO_TRASH_TO_EMPTY));
+          } else {
+            ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(EMPTYING_TRASH));
+            auto result = core.storage.rmdir(trash::DIRECTORY);
+            if (result.ok()) {
+              result = core.storage.mkdir(trash::DIRECTORY);
+            }
+            ui::centeredMessage(renderer_, THEME, THEME.uiFontId, result.ok() ? tr(TRASH_EMPTIED) : tr(DELETE_FAILED));
+          }
+          vTaskDelay(1500 / portTICK_PERIOD_MS);
+
+          pendingAction_ = ACTION_NONE;
+          currentScreen_ = SettingsScreen::Cleanup;
+          cleanupView_.needsRender = true;
+          needsRender_ = true;
+
+        } else if (pendingAction_ == ACTION_CLEAR_DEVICE_STORAGE) {
           ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(CLEARING_STORAGE));
 
           LittleFS.format();
@@ -471,8 +489,7 @@ void SettingsState::handleConfirm(Core& core) {
           vTaskDelay(1000 / portTICK_PERIOD_MS);
           ESP.restart();
 
-        } else if (pendingAction_ == 12) {
-          // Factory Reset
+        } else if (pendingAction_ == ACTION_FACTORY_RESET) {
           ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(RESETTING_DEVICE));
 
           LittleFS.format();
@@ -484,7 +501,7 @@ void SettingsState::handleConfirm(Core& core) {
         }
       } else {
         // No - cancel
-        pendingAction_ = 0;
+        pendingAction_ = ACTION_NONE;
         currentScreen_ = SettingsScreen::Cleanup;
         cleanupView_.needsRender = true;
         needsRender_ = true;
@@ -742,30 +759,29 @@ void SettingsState::populateSystemInfo() {
   infoView_.addField(tr(SD_CARD), SdMan.ready() ? tr(READY) : tr(NOT_AVAILABLE));
 }
 
-void SettingsState::clearCache(int type, Core& core) {
-  // Set up confirmation dialog messages based on action type
-  if (type == 0) {
-    // Clear Book Cache - show confirmation
-    confirmView_.setup(tr(CLEAR_CACHES_Q), tr(CLEAR_CACHES_MSG1), tr(CLEAR_CACHES_MSG2));
-    pendingAction_ = 10;
-    currentScreen_ = SettingsScreen::ConfirmDialog;
-    needsRender_ = true;
-    return;
-  } else if (type == 1) {
-    // Clear Device Storage
-    confirmView_.setup(tr(CLEAR_DEVICE_Q), tr(CLEAR_DEVICE_MSG1), tr(CLEAR_DEVICE_MSG2));
-    pendingAction_ = 11;
-    currentScreen_ = SettingsScreen::ConfirmDialog;
-    needsRender_ = true;
-    return;
-  } else if (type == 2) {
-    // Factory Reset
-    confirmView_.setup(tr(FACTORY_RESET_Q), tr(FACTORY_RESET_MSG1), tr(FACTORY_RESET_MSG2));
-    pendingAction_ = 12;
-    currentScreen_ = SettingsScreen::ConfirmDialog;
-    needsRender_ = true;
-    return;
+void SettingsState::clearCache(int type) {
+  switch (type) {
+    case 0:
+      confirmView_.setup(tr(CLEAR_CACHES_Q), tr(CLEAR_CACHES_MSG1), tr(CLEAR_CACHES_MSG2));
+      pendingAction_ = ACTION_CLEAR_BOOK_CACHE;
+      break;
+    case 1:
+      confirmView_.setup(tr(EMPTY_TRASH_Q), tr(EMPTY_TRASH_MSG1), tr(EMPTY_TRASH_MSG2));
+      pendingAction_ = ACTION_EMPTY_TRASH;
+      break;
+    case 2:
+      confirmView_.setup(tr(CLEAR_DEVICE_Q), tr(CLEAR_DEVICE_MSG1), tr(CLEAR_DEVICE_MSG2));
+      pendingAction_ = ACTION_CLEAR_DEVICE_STORAGE;
+      break;
+    case 3:
+      confirmView_.setup(tr(FACTORY_RESET_Q), tr(FACTORY_RESET_MSG1), tr(FACTORY_RESET_MSG2));
+      pendingAction_ = ACTION_FACTORY_RESET;
+      break;
+    default:
+      return;
   }
+  currentScreen_ = SettingsScreen::ConfirmDialog;
+  needsRender_ = true;
 }
 
 }  // namespace papyrix

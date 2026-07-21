@@ -88,8 +88,9 @@ The Files screen acts as a folder and file browser.
 * **Navigate List:** Use **Left** (or **Volume Up**), or **Right** (or **Volume Down**) to move the selection cursor up
   and down through folders and books.
 * **Open Selection:** Press **Confirm** to open a folder or read a selected book.
-* **Delete Item:** Press the **Right** button to delete the selected file or folder. A confirmation dialog will appear;
-  select **Yes** to confirm deletion or **No** to cancel.
+* **Delete Item:** Press the **Right** button on a book to move it to the recycle bin (`/trash`) instead of deleting it permanently. A confirmation dialog appears; select **Yes** to confirm or **No** to cancel. Folders are not moved to the recycle bin — deleting a folder removes it only if it is empty.
+
+> **Note:** The recycle bin is a regular folder named `trash` at the root of the SD card. It mirrors the original folder structure of trashed books. Open its folders and press **Confirm** on a book to restore it to its original folder (or the root if that folder cannot be recreated); press **Right** to delete it permanently. The `trash` folder itself cannot be deleted from the file browser; use **Empty Trash** in the Cleanup menu to clear it.
 
 > **Note:** EPUB (.epub), FB2 (.fb2), HTML (.html, .htm), XTC (.xtc, .xtch), Markdown (.md, .markdown), and plain text (.txt, .text) file formats are supported. EPUB 2 and EPUB 3 formats are fully supported. FB2 files support metadata, TOC navigation, and text formatting (no inline images). HTML files render as standalone documents with formatting. Markdown files render with basic formatting (headers, bold, italic, lists). The device supports both FAT32 and exFAT formatted SD cards.
 
@@ -268,6 +269,7 @@ Power and device behavior settings:
 Maintenance actions for the device:
 
 - **Clear Book Cache** — Delete all cached book data and reading progress
+- **Empty Trash** — Permanently delete all books in the recycle bin (`/trash`)
 - **Clear Device Storage** — Erase internal flash storage (requires restart)
 - **Factory Reset** — Erase ALL data (caches, settings, WiFi credentials, fonts) and restart device
 
