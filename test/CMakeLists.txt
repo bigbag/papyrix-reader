@@ -191,6 +191,18 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/Xtc/src
       ${PROJECT_ROOT}/lib/Xtc/src/Xtc
     )
+  elseif(TEST_NAME STREQUAL "XtcPageRendererTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/src/rendering/XtcPageRenderer.cpp
+      ${PROJECT_ROOT}/lib/Xtc/src/Xtc/XtcParser.cpp
+      ${TEST_HELPERS}
+    )
+    target_include_directories(${TEST_NAME} PRIVATE
+      ${PROJECT_ROOT}/src/rendering
+      ${PROJECT_ROOT}/lib/Xtc/src
+      ${PROJECT_ROOT}/lib/Xtc/src/Xtc
+    )
   elseif(TEST_NAME STREQUAL "HyphenationTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}

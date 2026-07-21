@@ -157,6 +157,7 @@ class ReaderState : public State {
 
   // Display helpers
   void displayWithRefresh(Core& core);
+  void displayGrayscaleBase(const Core& core);
 
   // Viewport calculation
   struct Viewport {

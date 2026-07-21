@@ -19,7 +19,7 @@ constexpr uint16_t MAX_PAGE_HEIGHT = 2048;
 XtcPageRenderer::XtcPageRenderer(GfxRenderer& renderer) : renderer_(renderer) {}
 
 XtcPageRenderer::RenderResult XtcPageRenderer::render(xtc::XtcParser& parser, uint32_t pageNum,
-                                                      std::function<void()> refreshCallback) {
+                                                      const RefreshCallback& refreshCallback) {
   // Bounds check
   if (pageNum >= parser.getPageCount()) {
     return RenderResult::EndOfBook;
@@ -120,9 +120,6 @@ XtcPageRenderer::RenderResult XtcPageRenderer::render(xtc::XtcParser& parser, ui
   renderer_.clearScreen();
 
   if (bitDepth == 2) {
-    render2BitGrayscale(plane1Buffer, plane2Buffer, pageWidth, pageHeight);
-    refreshCallback();
-
     // Grayscale rendering requires additional passes
     const uint8_t* plane1 = plane1Buffer;
     const uint8_t* plane2 = plane2Buffer;
@@ -137,6 +134,17 @@ XtcPageRenderer::RenderResult XtcPageRenderer::render(xtc::XtcParser& parser, ui
       const uint8_t bit2 = (plane2[byteOffset] >> bitInByte) & 1;
       return (bit1 << 1) | bit2;
     };
+
+    // Pass 1: Black-and-white rendering
+    for (uint16_t y = 0; y < pageHeight; y++) {
+      for (uint16_t x = 0; x < pageWidth; x++) {
+        if (getPixelValue(x, y) >= 1) {
+          renderer_.drawPixel(x, y, true);
+        }
+      }
+      if (y % 100 == 0) esp_task_wdt_reset();
+    }
+    refreshCallback(RefreshRequest::GrayscaleBase);
 
     // Pass 2: LSB buffer - mark DARK gray (value 1)
     renderer_.clearScreen(0x00);
@@ -182,7 +190,7 @@ XtcPageRenderer::RenderResult XtcPageRenderer::render(xtc::XtcParser& parser, ui
     free(plane2Buffer);
   } else {
     render1Bit(plane1Buffer, pageWidth, pageHeight);
-    refreshCallback();
+    refreshCallback(RefreshRequest::Cadenced);
     LOG_DBG(TAG, "Rendered page %u/%u (%u-bit)", pageNum + 1, parser.getPageCount(), bitDepth);
   }
 
@@ -219,35 +227,6 @@ void XtcPageRenderer::render1Bit(const uint8_t* buffer, uint16_t width, uint16_t
         if (!((byte >> bit) & 1)) {  // XTC: 0 = black, 1 = white
           renderer_.drawPixel(x, srcY, true);
         }
-      }
-    }
-  }
-}
-
-void XtcPageRenderer::render2BitGrayscale(const uint8_t* plane1, const uint8_t* plane2, uint16_t width,
-                                          uint16_t height) {
-  // XTCH 2-bit mode: Two bit planes, column-major order
-  // - Columns scanned right to left (x = width-1 down to 0)
-  // - 8 vertical pixels per byte (MSB = topmost pixel in group)
-  // - First plane: Bit1, Second plane: Bit2
-  // - Pixel value = (bit1 << 1) | bit2
-  // - Grayscale: 0=White, 1=Dark Grey, 2=Light Grey, 3=Black
-
-  const size_t colBytes = (height + 7) / 8;
-
-  // Pass 1: BW buffer - draw all non-white pixels as black
-  for (uint16_t y = 0; y < height; y++) {
-    for (uint16_t x = 0; x < width; x++) {
-      const size_t colIndex = width - 1 - x;
-      const size_t byteInCol = y / 8;
-      const size_t bitInByte = 7 - (y % 8);
-      const size_t byteOffset = colIndex * colBytes + byteInCol;
-      const uint8_t bit1 = (plane1[byteOffset] >> bitInByte) & 1;
-      const uint8_t bit2 = (plane2[byteOffset] >> bitInByte) & 1;
-      const uint8_t pixelValue = (bit1 << 1) | bit2;
-
-      if (pixelValue >= 1) {
-        renderer_.drawPixel(x, y, true);
       }
     }
   }

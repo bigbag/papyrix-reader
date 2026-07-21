@@ -1792,13 +1792,17 @@ void ReaderState::renderXtcPage(Core& core) {
 
   const Theme& theme = THEME_MANAGER.current();
 
-  auto result = xtcRenderer_.render(provider->getParser(), currentPage_, [this, &core]() { displayWithRefresh(core); });
+  auto result =
+      xtcRenderer_.render(provider->getParser(), currentPage_, [this, &core](XtcPageRenderer::RefreshRequest request) {
+        if (request == XtcPageRenderer::RefreshRequest::GrayscaleBase) {
+          displayGrayscaleBase(core);
+        } else {
+          displayWithRefresh(core);
+        }
+      });
 
   switch (result) {
     case XtcPageRenderer::RenderResult::Success:
-      if (provider->getParser().getBitDepth() == 2) {
-        pagesUntilFullRefresh_ = 1;
-      }
       break;
     case XtcPageRenderer::RenderResult::EndOfBook:
       ui::centeredMessage(renderer_, theme, theme.uiFontId, tr(END_OF_BOOK));
@@ -1813,6 +1817,10 @@ void ReaderState::renderXtcPage(Core& core) {
       ui::centeredMessage(renderer_, theme, theme.uiFontId, tr(PAGE_LOAD_ERROR));
       break;
   }
+}
+
+void ReaderState::displayGrayscaleBase(const Core& core) {
+  renderer_.displayBuffer(EInkDisplay::HALF_REFRESH, core.settings.sunlightFadingFix != 0);
 }
 
 void ReaderState::displayWithRefresh(Core& core) {

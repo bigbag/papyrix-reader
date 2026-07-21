@@ -135,6 +135,13 @@ class GfxRenderer {
   void clearArea(int, int, int, int, uint8_t = 0xFF) const {}
   void warmCodepointsBatch(int, const uint32_t*, size_t, EpdFontFamily::Style = EpdFontFamily::REGULAR) const {}
   void drawImage(const uint8_t*, int, int, int, int) const {}
+  void clearScreen(uint8_t = 0xFF) const {}
+  void drawPixel(int, int, bool = true) const {}
+  void displayBuffer(EInkDisplay::RefreshMode = EInkDisplay::FAST_REFRESH, bool = false) const {}
+  void copyGrayscaleLsbBuffers() const {}
+  void copyGrayscaleMsbBuffers() const {}
+  void displayGrayBuffer(bool = false) const {}
+  void cleanupGrayscaleWithFrameBuffer() const {}
 
   uint8_t* getFrameBuffer() const { return frameBuffer_; }
   static size_t getBufferSize() { return EInkDisplay::BUFFER_SIZE; }
