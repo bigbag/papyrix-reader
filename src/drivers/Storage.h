@@ -23,7 +23,10 @@ class Storage {
   Result<void> openRead(const char* path, FsFile& out);
   Result<void> openWrite(const char* path, FsFile& out);
   Result<bool> exists(const char* path);
+  Result<bool> isDirectory(const char* path);
   Result<void> remove(const char* path);
+  Result<void> rename(const char* oldPath, const char* newPath);
+  Result<void> rmdirEmpty(const char* path);
   Result<void> commitFile(const char* tmpPath, const char* finalPath);
   Result<void> mkdir(const char* path);
   using RemoveDirProgress = std::function<void(int filesDeleted)>;

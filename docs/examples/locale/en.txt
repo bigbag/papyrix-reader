@@ -70,6 +70,7 @@ PAGES_PER_REFRESH=Pages Per Refresh
 SUNLIGHT_FADING_FIX=Sunlight Fading Fix
 FRONT_BUTTONS=Front Buttons
 SIDE_BUTTONS=Side Buttons
+FULL_BOOK_PROCESS=Full Book Process
 
 # Settings enum values
 ON=ON
@@ -230,3 +231,25 @@ VALIDATING_FIRMWARE=Validating...
 BOOKMARK_VAL=Bookmark
 BOOKMARK_ADDED=Bookmark added
 RECENT_NETWORK=Recent
+
+# Recycle bin
+RESTORE=Restore
+EMPTY_TRASH=Empty Trash
+EMPTY_TRASH_Q=Empty Trash?
+EMPTY_TRASH_MSG1=This permanently deletes
+EMPTY_TRASH_MSG2=all trashed books.
+EMPTYING_TRASH=Emptying trash...
+TRASH_EMPTIED=Trash emptied
+NO_TRASH_TO_EMPTY=No trash to empty
+MOVING_TO_TRASH=Moving to trash...
+MOVED_TO_TRASH=Moved to trash
+MOVE_TO_TRASH_FAILED=Could not move to trash
+RESTORING=Restoring...
+RESTORED=Restored
+RESTORE_FAILED=Could not restore
+CONFIRM_TRASH=Confirm Move
+CONFIRM_RESTORE=Confirm Restore
+MOVE_TO_TRASH_Q=Move this file to trash?
+RESTORE_FILE_Q=Restore to original folder?
+DELETE_PERMANENTLY_Q=Delete this file permanently?
+CANNOT_DELETE_TRASH=Cannot delete the trash folder

@@ -5,6 +5,11 @@
         clean format check monitor size erase build-fs upload-fs sleep-screen gh-release changelog help \
         test test-build test-run test-clean fontconvert-bin reader-test
 
+# Prefer the project environment when it provides PlatformIO.
+ifneq ($(wildcard $(CURDIR)/.venv/bin/pio),)
+export PATH := $(CURDIR)/.venv/bin:$(PATH)
+endif
+
 # Default target
 all: help
 

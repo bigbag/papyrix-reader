@@ -39,6 +39,18 @@ for test_exe in "$BIN_DIR"/*; do
     fi
 done
 
+echo "----------------------------------------"
+echo "Running: LocaleExamplesTest"
+echo "----------------------------------------"
+TOTAL=$((TOTAL + 1))
+if python3 "$SCRIPT_DIR/LocaleExamplesTest.py"; then
+    PASSED=$((PASSED + 1))
+else
+    FAILED=$((FAILED + 1))
+    echo "FAILED: LocaleExamplesTest"
+fi
+echo ""
+
 echo "========================================"
 echo "=== Test Run Summary ==="
 echo "========================================"

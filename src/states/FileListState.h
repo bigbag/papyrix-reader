@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "../core/Types.h"
 #include "../ui/views/SettingsViews.h"
 #include "State.h"
 
@@ -17,7 +18,10 @@ namespace papyrix {
 class FileListState : public State {
   enum class Screen : uint8_t {
     Browse,
-    ConfirmDelete,
+    ConfirmMoveToTrash,
+    ConfirmRestore,
+    ConfirmPermanentDelete,
+    ConfirmDeleteEmptyDirectory,
   };
 
  public:
@@ -38,8 +42,9 @@ class FileListState : public State {
 
  private:
   GfxRenderer& renderer_;
-  char currentDir_[512];
-  char selectedPath_[512];
+  char currentDir_[BufferSize::TrashPath];
+  char selectedPath_[BufferSize::TrashPath];
+  char actionDestination_[BufferSize::TrashPath] = {};
 
   // File entries - dynamic vector for unlimited files
   struct FileEntry {
@@ -57,7 +62,16 @@ class FileListState : public State {
   ui::ConfirmDialogView confirmView_;
 
   void loadFiles(Core& core);
-  void promptDelete(Core& core);
+  bool isTrashDirectory() const;
+  bool isTrashRootEntry() const;
+  bool buildSelectedPath(char* path, size_t pathSize) const;
+  bool findVacantPath(Core& core, const char* directory, const char* filename, char* path, size_t pathSize) const;
+  void setupFileConfirm(Screen screen, const char* title, const char* question);
+  void promptMoveToTrash();
+  void promptRestore();
+  void promptPermanentDelete();
+  void promptDeleteEmptyDirectory();
+  void executeConfirmedAction(Core& core);
   void navigateUp(Core& core);
   void navigateDown(Core& core);
   void openSelected(Core& core);

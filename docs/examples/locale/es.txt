@@ -70,6 +70,7 @@ PAGES_PER_REFRESH=Págs./actualización
 SUNLIGHT_FADING_FIX=Corrección luz solar
 FRONT_BUTTONS=Botones frontales
 SIDE_BUTTONS=Botones laterales
+FULL_BOOK_PROCESS=Procesar libro
 
 # Settings enum values
 ON=SÍ
@@ -230,3 +231,25 @@ VALIDATING_FIRMWARE=Validando...
 BOOKMARK_VAL=Marcador
 BOOKMARK_ADDED=Marcador añadido
 RECENT_NETWORK=Reciente
+
+# Recycle bin
+RESTORE=Restaurar
+EMPTY_TRASH=Vaciar papelera
+EMPTY_TRASH_Q=¿Vaciar papelera?
+EMPTY_TRASH_MSG1=Esto elimina permanentemente
+EMPTY_TRASH_MSG2=todos los libros de la papelera.
+EMPTYING_TRASH=Vaciando papelera...
+TRASH_EMPTIED=Papelera vaciada
+NO_TRASH_TO_EMPTY=No hay nada que vaciar
+MOVING_TO_TRASH=Moviendo a la papelera...
+MOVED_TO_TRASH=Movido a la papelera
+MOVE_TO_TRASH_FAILED=Error al mover a la papelera
+RESTORING=Restaurando...
+RESTORED=Restaurado
+RESTORE_FAILED=Error al restaurar
+CONFIRM_TRASH=Confirmar movimiento
+CONFIRM_RESTORE=Confirmar restauración
+MOVE_TO_TRASH_Q=¿Mover este archivo a la papelera?
+RESTORE_FILE_Q=¿Restaurar en la carpeta original?
+DELETE_PERMANENTLY_Q=¿Eliminar este archivo permanentemente?
+CANNOT_DELETE_TRASH=No se puede eliminar la carpeta de la papelera

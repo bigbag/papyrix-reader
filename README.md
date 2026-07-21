@@ -96,7 +96,7 @@ on each panel.
 - [x] Calibre Wireless Device - Send books from Calibre desktop
 
 ### Maintenance
-- [x] Cleanup menu (clear caches, fonts, factory reset)
+- [x] Cleanup menu (clear book cache, empty trash, clear storage, factory reset)
 - [x] Firmware updates from SD card
 - [x] System info (version, uptime, memory, storage)
 
@@ -104,6 +104,7 @@ on each panel.
 - [x] exFAT and FAT32 SD card support
 - [x] UTF-8 filenames (Cyrillic, etc.)
 - [x] File explorer with nested folders
+- [x] Recycle bin (`/trash`) - deleting a book moves it to `/trash` instead of removing it; browse to restore or permanently delete, and empty the trash from the Cleanup menu
 - [x] Hidden system folders filtering (LOST.DIR, $RECYCLE.BIN, etc.)
 
 > **Tip:** If you organise your library into deeply nested folders with Cyrillic or CJK names, format the SD card as **exFAT** rather than FAT32. Non-Latin characters use 2-4 bytes each in UTF-8, so deep folder paths can exceed FAT32's path length limit.

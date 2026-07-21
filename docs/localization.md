@@ -4,7 +4,7 @@ Papyrix includes English as the default language compiled into firmware. A diffe
 
 ## How it works
 
-1. English strings (179 keys) are compiled into firmware (Flash, zero RAM cost)
+1. English strings (217 keys) are compiled into firmware (Flash, zero RAM cost)
 2. At boot, if `/.papyrix/locale.txt` exists on SD, it overrides English defaults in RAM
 3. All `tr()` calls resolve to a single pointer dereference - no SD access after boot
 4. To change language, replace the file and restart
@@ -31,6 +31,7 @@ LOADING=Chargement...
 - UTF-8 encoding
 - Max line length: 255 characters (longer lines are truncated)
 - Override buffer: 4096 bytes total for all translated strings combined
+- Complete example locales must keep the UTF-8 byte total of all non-metadata values at or below 4096 bytes; values that exceed the limit silently retain their English defaults.
 
 ### Metadata keys
 
