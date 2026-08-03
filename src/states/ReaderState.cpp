@@ -42,6 +42,9 @@
 
 namespace papyrix {
 
+static_assert(ui::BookmarkListView::MAX_ITEMS == BookmarkManager::MAX_BOOKMARKS,
+              "Bookmark manager and view capacities must match");
+
 static constexpr int kCacheTaskStackSize = 12288;
 static constexpr int kCacheTaskStopTimeoutMs = 10000;  // 10s - generous for slow SD operations
 
@@ -2857,7 +2860,7 @@ void ReaderState::handleMenuInput(Core& core, const Event& e) {
       needsRender_ = true;
       break;
     case Button::Center:
-      handleMenuAction(core, menuView_.selected);
+      handleMenuAction(core, menuView_.selectedItem());
       break;
     case Button::Back:
       exitMenuMode();
@@ -2868,10 +2871,10 @@ void ReaderState::handleMenuInput(Core& core, const Event& e) {
   }
 }
 
-void ReaderState::handleMenuAction(Core& core, int action) {
+void ReaderState::handleMenuAction(Core& core, ui::ReaderMenuView::Item action) {
   exitMenuMode();
   switch (action) {
-    case 0:  // Chapters
+    case ui::ReaderMenuView::Item::Chapters:
       if (core.content.tocCount() > 0) {
         enterTocMode(core);
       } else {
@@ -2884,8 +2887,10 @@ void ReaderState::handleMenuAction(Core& core, int action) {
         startBackgroundCaching(core);
       }
       break;
-    case 1:  // Bookmarks
+    case ui::ReaderMenuView::Item::Bookmarks:
       enterBookmarkMode(core);
+      break;
+    case ui::ReaderMenuView::Item::Count:
       break;
   }
 }

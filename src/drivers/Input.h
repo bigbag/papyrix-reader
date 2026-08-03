@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 #include "../core/EventQueue.h"
@@ -54,12 +55,15 @@ class Input {
   uint8_t prevButtonState_ = 0;
   uint8_t currButtonState_ = 0;
 
+  static constexpr size_t BUTTON_COUNT = static_cast<size_t>(Button::Count);
+  static_assert(BUTTON_COUNT <= sizeof(uint8_t) * 8, "Button state no longer fits in uint8_t");
+
   // Track press start time for long press
-  uint32_t pressStartMs_[7] = {};  // One per Button enum value
+  uint32_t pressStartMs_[BUTTON_COUNT] = {};
 
   // Track repeat timing and long press state
-  uint32_t lastRepeatMs_[7] = {};
-  bool longPressFired_[7] = {};
+  uint32_t lastRepeatMs_[BUTTON_COUNT] = {};
+  bool longPressFired_[BUTTON_COUNT] = {};
 
   void checkButton(Button btn, uint8_t mask);
 };

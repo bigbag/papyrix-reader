@@ -4,6 +4,7 @@
 #include <I18n.h>
 #include <Theme.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 
@@ -16,7 +17,8 @@ namespace ui {
 // ============================================================================
 
 struct SettingsMenuView {
-  static constexpr int ITEM_COUNT = 5;
+  enum class Item : int8_t { Reader, Device, Cleanup, FirmwareUpdate, SystemInfo, Count };
+  static constexpr int ITEM_COUNT = static_cast<int>(Item::Count);
 
   ButtonBar buttons;
   int8_t selected = 0;
@@ -31,6 +33,8 @@ struct SettingsMenuView {
     selected = (selected + 1) % ITEM_COUNT;
     needsRender = true;
   }
+
+  Item selectedItem() const { return static_cast<Item>(selected); }
 };
 
 void render(const GfxRenderer& r, const Theme& t, const SettingsMenuView& v);
@@ -40,7 +44,8 @@ void render(const GfxRenderer& r, const Theme& t, const SettingsMenuView& v);
 // ============================================================================
 
 struct CleanupMenuView {
-  static constexpr int ITEM_COUNT = 4;
+  enum class Item : int8_t { ClearBookCache, EmptyTrash, ClearDeviceStorage, FactoryReset, Count };
+  static constexpr int ITEM_COUNT = static_cast<int>(Item::Count);
 
   ButtonBar buttons;
   int8_t selected = 0;
@@ -55,6 +60,8 @@ struct CleanupMenuView {
     selected = (selected + 1) % ITEM_COUNT;
     needsRender = true;
   }
+
+  Item selectedItem() const { return static_cast<Item>(selected); }
 };
 
 void render(const GfxRenderer& r, const Theme& t, const CleanupMenuView& v);
@@ -71,26 +78,37 @@ struct SystemInfoView {
     char value[MAX_VALUE_LEN];
   };
 
-  static constexpr int MAX_FIELDS = 8;
+  enum class Field : uint8_t {
+    Version,
+    Uptime,
+    Battery,
+    Chip,
+    Cpu,
+    FreeMemory,
+    InternalDisk,
+    SdCard,
+    Count,
+  };
+
+  static constexpr size_t FIELD_COUNT = static_cast<size_t>(Field::Count);
   ButtonBar buttons;
-  InfoField fields[MAX_FIELDS] = {};
-  uint8_t fieldCount = 0;
+  InfoField fields[FIELD_COUNT] = {};
   bool needsRender = true;
 
   void clear() {
-    fieldCount = 0;
+    memset(fields, 0, sizeof(fields));
     needsRender = true;
   }
 
-  void addField(const char* label, const char* value) {
-    if (fieldCount < MAX_FIELDS) {
-      strncpy(fields[fieldCount].label, label, sizeof(InfoField::label) - 1);
-      fields[fieldCount].label[sizeof(InfoField::label) - 1] = '\0';
-      strncpy(fields[fieldCount].value, value, MAX_VALUE_LEN - 1);
-      fields[fieldCount].value[MAX_VALUE_LEN - 1] = '\0';
-      fieldCount++;
-      needsRender = true;
-    }
+  bool setField(Field field, const char* label, const char* value) {
+    const size_t index = static_cast<size_t>(field);
+    if (index >= FIELD_COUNT) return false;
+    strncpy(fields[index].label, label, sizeof(InfoField::label) - 1);
+    fields[index].label[sizeof(InfoField::label) - 1] = '\0';
+    strncpy(fields[index].value, value, MAX_VALUE_LEN - 1);
+    fields[index].value[MAX_VALUE_LEN - 1] = '\0';
+    needsRender = true;
+    return true;
   }
 };
 

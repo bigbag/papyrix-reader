@@ -83,7 +83,8 @@ void render(const GfxRenderer& r, const Theme& t, const CoverPageView& v);
 // ============================================================================
 
 struct ReaderMenuView {
-  static constexpr int ITEM_COUNT = 2;
+  enum class Item : int8_t { Chapters, Bookmarks, Count };
+  static constexpr int ITEM_COUNT = static_cast<int>(Item::Count);
 
   int8_t selected = 0;
   bool visible = false;
@@ -113,6 +114,8 @@ struct ReaderMenuView {
       needsRender = true;
     }
   }
+
+  Item selectedItem() const { return static_cast<Item>(selected); }
 };
 
 void render(const GfxRenderer& r, const Theme& t, const ReaderMenuView& v);

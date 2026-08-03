@@ -355,6 +355,11 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/RenderTypes/src
       ${PROJECT_ROOT}/lib/RenderTypes/src/blocks
     )
+  elseif(TEST_NAME STREQUAL "CapacityContractsTest")
+    add_executable(${TEST_NAME} ${TEST_SRC} ${TEST_HELPERS})
+    target_include_directories(${TEST_NAME} PRIVATE
+      ${PROJECT_ROOT}/lib/I18n/src
+    )
   elseif(TEST_NAME STREQUAL "StateMachineTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}

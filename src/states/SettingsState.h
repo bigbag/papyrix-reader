@@ -74,7 +74,7 @@ class SettingsState : public State {
   void populateSystemInfo();
 
   // Actions
-  void clearCache(int type);
+  void clearCache(ui::CleanupMenuView::Item type);
 };
 
 }  // namespace papyrix

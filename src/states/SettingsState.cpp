@@ -22,6 +22,9 @@
 
 namespace papyrix {
 
+static_assert(ui::ReaderSettingsView::MAX_THEMES == MAX_CACHED_THEMES,
+              "Theme manager and settings view capacities must match");
+
 SettingsState::SettingsState(GfxRenderer& renderer)
     : renderer_(renderer),
       core_(nullptr),
@@ -333,25 +336,25 @@ void SettingsState::render(Core& core) {
 }
 
 void SettingsState::openSelected() {
-  switch (menuView_.selected) {
-    case 0:  // Reader
+  switch (menuView_.selectedItem()) {
+    case ui::SettingsMenuView::Item::Reader:
       loadReaderSettings();
       readerView_.selected = 0;
       readerView_.needsRender = true;
       currentScreen_ = SettingsScreen::Reader;
       break;
-    case 1:  // Device
+    case ui::SettingsMenuView::Item::Device:
       loadDeviceSettings();
       deviceView_.selected = 0;
       deviceView_.needsRender = true;
       currentScreen_ = SettingsScreen::Device;
       break;
-    case 2:  // Cleanup
+    case ui::SettingsMenuView::Item::Cleanup:
       cleanupView_.selected = 0;
       cleanupView_.needsRender = true;
       currentScreen_ = SettingsScreen::Cleanup;
       break;
-    case 3:  // Firmware Update
+    case ui::SettingsMenuView::Item::FirmwareUpdate:
       firmwareView_.state = ui::FirmwareUpdateView::State::Idle;
       firmwareView_.progressPercent = 0;
       firmwareView_.needsRender = true;
@@ -364,10 +367,12 @@ void SettingsState::openSelected() {
       }
       currentScreen_ = SettingsScreen::FirmwareUpdate;
       break;
-    case 4:  // System Info
+    case ui::SettingsMenuView::Item::SystemInfo:
       populateSystemInfo();
       infoView_.needsRender = true;
       currentScreen_ = SettingsScreen::SystemInfo;
+      break;
+    case ui::SettingsMenuView::Item::Count:
       break;
   }
   needsRender_ = true;
@@ -431,7 +436,7 @@ void SettingsState::handleConfirm(Core& core) {
       break;
 
     case SettingsScreen::Cleanup:
-      clearCache(cleanupView_.selected);
+      clearCache(cleanupView_.selectedItem());
       break;
 
     case SettingsScreen::SystemInfo:
@@ -712,7 +717,7 @@ void SettingsState::populateSystemInfo() {
   infoView_.clear();
 
   // Firmware version
-  infoView_.addField(tr(VERSION), PAPYRIX_VERSION);
+  infoView_.setField(ui::SystemInfoView::Field::Version, tr(VERSION), PAPYRIX_VERSION);
 
   // Uptime
   const unsigned long uptimeSeconds = millis() / 1000;
@@ -721,7 +726,7 @@ void SettingsState::populateSystemInfo() {
   const unsigned long seconds = uptimeSeconds % 60;
   char uptimeStr[24];
   snprintf(uptimeStr, sizeof(uptimeStr), "%luh %lum %lus", hours, minutes, seconds);
-  infoView_.addField(tr(UPTIME), uptimeStr);
+  infoView_.setField(ui::SystemInfoView::Field::Uptime, tr(UPTIME), uptimeStr);
 
   // Battery
   const uint16_t millivolts = batteryMonitor.readMillivolts();
@@ -732,20 +737,20 @@ void SettingsState::populateSystemInfo() {
   } else {
     snprintf(batteryStr, sizeof(batteryStr), "%u%% (%umV)", percentage, millivolts);
   }
-  infoView_.addField(tr(BATTERY), batteryStr);
+  infoView_.setField(ui::SystemInfoView::Field::Battery, tr(BATTERY), batteryStr);
 
   // Chip model
-  infoView_.addField(tr(CHIP), ESP.getChipModel());
+  infoView_.setField(ui::SystemInfoView::Field::Chip, tr(CHIP), ESP.getChipModel());
 
   // CPU frequency
   char freqStr[16];
   snprintf(freqStr, sizeof(freqStr), "%d MHz", ESP.getCpuFreqMHz());
-  infoView_.addField(tr(CPU), freqStr);
+  infoView_.setField(ui::SystemInfoView::Field::Cpu, tr(CPU), freqStr);
 
   // Free heap memory
   char heapStr[24];
   snprintf(heapStr, sizeof(heapStr), "%lu KB", ESP.getFreeHeap() / 1024);
-  infoView_.addField(tr(FREE_MEMORY), heapStr);
+  infoView_.setField(ui::SystemInfoView::Field::FreeMemory, tr(FREE_MEMORY), heapStr);
 
   // Internal flash storage (LittleFS)
   const size_t totalBytes = LittleFS.totalBytes();
@@ -753,31 +758,31 @@ void SettingsState::populateSystemInfo() {
   char internalStr[32];
   snprintf(internalStr, sizeof(internalStr), "%lu / %lu KB", (unsigned long)(usedBytes / 1024),
            (unsigned long)(totalBytes / 1024));
-  infoView_.addField(tr(INTERNAL_DISK), internalStr);
+  infoView_.setField(ui::SystemInfoView::Field::InternalDisk, tr(INTERNAL_DISK), internalStr);
 
   // SD Card status
-  infoView_.addField(tr(SD_CARD), SdMan.ready() ? tr(READY) : tr(NOT_AVAILABLE));
+  infoView_.setField(ui::SystemInfoView::Field::SdCard, tr(SD_CARD), SdMan.ready() ? tr(READY) : tr(NOT_AVAILABLE));
 }
 
-void SettingsState::clearCache(int type) {
+void SettingsState::clearCache(ui::CleanupMenuView::Item type) {
   switch (type) {
-    case 0:
+    case ui::CleanupMenuView::Item::ClearBookCache:
       confirmView_.setup(tr(CLEAR_CACHES_Q), tr(CLEAR_CACHES_MSG1), tr(CLEAR_CACHES_MSG2));
       pendingAction_ = ACTION_CLEAR_BOOK_CACHE;
       break;
-    case 1:
+    case ui::CleanupMenuView::Item::EmptyTrash:
       confirmView_.setup(tr(EMPTY_TRASH_Q), tr(EMPTY_TRASH_MSG1), tr(EMPTY_TRASH_MSG2));
       pendingAction_ = ACTION_EMPTY_TRASH;
       break;
-    case 2:
+    case ui::CleanupMenuView::Item::ClearDeviceStorage:
       confirmView_.setup(tr(CLEAR_DEVICE_Q), tr(CLEAR_DEVICE_MSG1), tr(CLEAR_DEVICE_MSG2));
       pendingAction_ = ACTION_CLEAR_DEVICE_STORAGE;
       break;
-    case 3:
+    case ui::CleanupMenuView::Item::FactoryReset:
       confirmView_.setup(tr(FACTORY_RESET_Q), tr(FACTORY_RESET_MSG1), tr(FACTORY_RESET_MSG2));
       pendingAction_ = ACTION_FACTORY_RESET;
       break;
-    default:
+    case ui::CleanupMenuView::Item::Count:
       return;
   }
   currentScreen_ = SettingsScreen::ConfirmDialog;

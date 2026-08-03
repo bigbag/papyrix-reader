@@ -12,6 +12,7 @@
 #include <SdFat.h>
 
 #include <algorithm>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -30,7 +31,8 @@ static constexpr const char* IMAGES_DIR = "/images";
 static constexpr const char* SETTINGS_PATH = "/.papyrix/apps/image-viewer.txt";
 static constexpr uint32_t SLIDESHOW_INTERVALS[] = {0, 30000, 60000, 300000};
 static constexpr const char* SLIDESHOW_LABELS[] = {"Off", "30s", "60s", "5min"};
-static constexpr int SLIDESHOW_COUNT = 4;
+static constexpr int SLIDESHOW_COUNT = static_cast<int>(std::size(SLIDESHOW_INTERVALS));
+static_assert(std::size(SLIDESHOW_INTERVALS) == std::size(SLIDESHOW_LABELS));
 
 static constexpr int BOTTOM_BAR_HEIGHT = 23;
 static constexpr uint32_t MAX_IMAGE_FILE_SIZE = 10 * 1024 * 1024;  // 10 MB

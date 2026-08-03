@@ -14,6 +14,7 @@ enum class Button : uint8_t {
   Center,
   Back,
   Power,
+  Count,
 };
 
 // Content format types

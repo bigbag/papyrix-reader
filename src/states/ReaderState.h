@@ -208,7 +208,7 @@ class ReaderState : public State {
   void enterMenuMode(Core& core);
   void exitMenuMode();
   void handleMenuInput(Core& core, const Event& e);
-  void handleMenuAction(Core& core, int action);
+  void handleMenuAction(Core& core, ui::ReaderMenuView::Item action);
 
   // Bookmark overlay mode
   Bookmark bookmarks_[BookmarkManager::MAX_BOOKMARKS];

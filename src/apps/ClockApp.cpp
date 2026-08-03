@@ -9,6 +9,7 @@
 #include <time.h>
 
 #include <ctime>
+#include <iterator>
 
 #include "../Battery.h"
 #include "../core/Core.h"
@@ -28,10 +29,14 @@ static constexpr const char* SETTINGS_PATH = "/.papyrix/apps/clock.txt";
 
 static constexpr uint32_t NTP_SYNC_INTERVALS[] = {10800000, 21600000, 86400000, 0};
 static constexpr const char* NTP_SYNC_LABELS[] = {"3h", "6h", "24h", "Off"};
-static constexpr int NTP_SYNC_COUNT = 4;
+static constexpr int NTP_SYNC_COUNT = static_cast<int>(std::size(NTP_SYNC_INTERVALS));
+static_assert(std::size(NTP_SYNC_INTERVALS) == std::size(NTP_SYNC_LABELS));
 
 static constexpr const char* DATE_FORMAT_LABELS[] = {"YYYY/MM/DD", "DD/MM/YYYY", "MM/DD/YYYY", "DD.MM.YYYY"};
-static constexpr int DATE_FORMAT_COUNT = 4;
+static constexpr int DATE_FORMAT_COUNT = static_cast<int>(std::size(DATE_FORMAT_LABELS));
+
+enum class MenuItem : int8_t { UtcOffset, TimeFormat, DateFormat, NtpSync, SyncNow, Count };
+static constexpr int MENU_ITEM_COUNT = static_cast<int>(MenuItem::Count);
 
 static constexpr int NTP_SERVER_MAX = 3;
 static constexpr const char* DEFAULT_NTP_SERVERS[] = {"pool.ntp.org", "time.nist.gov", "time.google.com"};
@@ -409,14 +414,12 @@ void renderMenu(Core& core) {
   const char* dateFmtLabel = DATE_FORMAT_LABELS[state.dateFormat];
 
   const char* items[] = {tzLabel, fmtLabel, dateFmtLabel, ntpLabel, "Sync Now"};
-  static constexpr int ITEM_COUNT = 5;
+  static_assert(std::size(items) == MENU_ITEM_COUNT);
 
-  ui::popupMenu(renderer, THEME, "Clock Settings", items, ITEM_COUNT, state.menuSelected);
+  ui::popupMenu(renderer, THEME, "Clock Settings", items, MENU_ITEM_COUNT, state.menuSelected);
 }
 
 void onMenuButton(Core& core, Button btn) {
-  static constexpr int MENU_ITEM_COUNT = 5;
-
   switch (btn) {
     case Button::Up:
       state.menuSelected = (state.menuSelected == 0) ? MENU_ITEM_COUNT - 1 : state.menuSelected - 1;
@@ -425,7 +428,7 @@ void onMenuButton(Core& core, Button btn) {
       state.menuSelected = (state.menuSelected + 1) % MENU_ITEM_COUNT;
       break;
     case Button::Center:
-      if (state.menuSelected == 4) {
+      if (static_cast<MenuItem>(state.menuSelected) == MenuItem::SyncNow) {
         core.cpu.unthrottle();
         syncNtpAutoConnect(core);
         state.lastNtpSyncMs = millis();
@@ -434,17 +437,25 @@ void onMenuButton(Core& core, Button btn) {
     case Button::Left:
     case Button::Right: {
       int delta = (btn == Button::Right) ? 1 : -1;
-      if (state.menuSelected == 0) {
-        state.utcOffset = static_cast<int8_t>(state.utcOffset + delta);
-        if (state.utcOffset > 14) state.utcOffset = -12;
-        if (state.utcOffset < -12) state.utcOffset = 14;
-        applyTimezone(state.utcOffset);
-      } else if (state.menuSelected == 1) {
-        state.use24h = !state.use24h;
-      } else if (state.menuSelected == 2) {
-        state.dateFormat = static_cast<int8_t>((state.dateFormat + delta + DATE_FORMAT_COUNT) % DATE_FORMAT_COUNT);
-      } else if (state.menuSelected == 3) {
-        state.ntpSyncSetting = static_cast<int8_t>((state.ntpSyncSetting + delta + NTP_SYNC_COUNT) % NTP_SYNC_COUNT);
+      switch (static_cast<MenuItem>(state.menuSelected)) {
+        case MenuItem::UtcOffset:
+          state.utcOffset = static_cast<int8_t>(state.utcOffset + delta);
+          if (state.utcOffset > 14) state.utcOffset = -12;
+          if (state.utcOffset < -12) state.utcOffset = 14;
+          applyTimezone(state.utcOffset);
+          break;
+        case MenuItem::TimeFormat:
+          state.use24h = !state.use24h;
+          break;
+        case MenuItem::DateFormat:
+          state.dateFormat = static_cast<int8_t>((state.dateFormat + delta + DATE_FORMAT_COUNT) % DATE_FORMAT_COUNT);
+          break;
+        case MenuItem::NtpSync:
+          state.ntpSyncSetting = static_cast<int8_t>((state.ntpSyncSetting + delta + NTP_SYNC_COUNT) % NTP_SYNC_COUNT);
+          break;
+        case MenuItem::SyncNow:
+        case MenuItem::Count:
+          break;
       }
       saveSettings(core);
       break;

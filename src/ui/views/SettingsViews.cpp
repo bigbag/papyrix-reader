@@ -2,6 +2,8 @@
 
 #include <I18n.h>
 
+#include <iterator>
+
 namespace ui {
 
 // ReaderSettingsView runtime initialization
@@ -112,6 +114,7 @@ void render(const GfxRenderer& r, const Theme& t, const SettingsMenuView& v) {
   title(r, t, t.screenMarginTop, tr(SETTINGS));
 
   const char* items[] = {tr(READER), tr(DEVICE), tr(CLEANUP), tr(FIRMWARE_UPDATE), tr(SYSTEM_INFO)};
+  static_assert(std::size(items) == SettingsMenuView::ITEM_COUNT);
   const int startY = 60;
   for (int i = 0; i < SettingsMenuView::ITEM_COUNT; i++) {
     const int y = startY + i * (t.itemHeight + t.itemSpacing);
@@ -130,6 +133,7 @@ void render(const GfxRenderer& r, const Theme& t, const CleanupMenuView& v) {
   title(r, t, t.screenMarginTop, tr(CLEANUP));
 
   const char* items[] = {tr(CLEAR_BOOK_CACHE), tr(EMPTY_TRASH), tr(CLEAR_DEVICE_STORAGE), tr(FACTORY_RESET)};
+  static_assert(std::size(items) == CleanupMenuView::ITEM_COUNT);
   const int startY = 60;
   for (int i = 0; i < CleanupMenuView::ITEM_COUNT; i++) {
     const int y = startY + i * (t.itemHeight + t.itemSpacing);
@@ -150,8 +154,8 @@ void render(const GfxRenderer& r, const Theme& t, const SystemInfoView& v) {
   const int lineHeight = r.getLineHeight(t.uiFontId) + 5;
   const int startY = 60;
 
-  for (int i = 0; i < v.fieldCount; i++) {
-    const int y = startY + i * lineHeight;
+  for (size_t i = 0; i < SystemInfoView::FIELD_COUNT; ++i) {
+    const int y = startY + static_cast<int>(i) * lineHeight;
     twoColumnRow(r, t, y, v.fields[i].label, v.fields[i].value);
   }
 

@@ -77,6 +77,8 @@ void Input::checkButton(Button btn, uint8_t mask) {
     case Button::Power:
       mappedBtn = MappedInputManager::Button::Power;
       break;
+    case Button::Count:
+      return;
   }
 
   isDown = mappedInput.isPressed(mappedBtn);
@@ -85,7 +87,7 @@ void Input::checkButton(Button btn, uint8_t mask) {
     currButtonState_ |= mask;
   }
 
-  int idx = static_cast<int>(btn);
+  const size_t idx = static_cast<size_t>(btn);
 
   // Button just pressed
   if (isDown && !wasDown) {
@@ -152,6 +154,8 @@ bool Input::isPressed(Button btn) const {
     case Button::Power:
       mappedBtn = MappedInputManager::Button::Power;
       break;
+    case Button::Count:
+      return false;
   }
   return mappedInput.isPressed(mappedBtn);
 }

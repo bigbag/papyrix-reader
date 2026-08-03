@@ -3,6 +3,7 @@
 #include <I18n.h>
 
 #include <cstdio>
+#include <iterator>
 
 namespace ui {
 
@@ -69,6 +70,7 @@ void render(const GfxRenderer& r, const Theme& t, const ReaderMenuView& v) {
   if (!v.visible) return;
 
   const char* items[] = {tr(CHAPTERS), tr(BOOKMARKS)};
+  static_assert(std::size(items) == ReaderMenuView::ITEM_COUNT);
   ui::popupMenu(r, t, tr(MENU), items, ReaderMenuView::ITEM_COUNT, v.selected);
   r.displayBuffer();
 }
