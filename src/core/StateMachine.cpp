@@ -3,8 +3,6 @@
 #include <Arduino.h>
 #include <Logging.h>
 
-#include "Core.h"
-
 #define TAG "STATE"
 
 namespace papyrix {

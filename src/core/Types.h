@@ -40,6 +40,7 @@ enum class StateId : uint8_t {
   AppLauncher,
   Error,
   Sleep,
+  Count,
 };
 
 // Sync operation mode

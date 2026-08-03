@@ -355,6 +355,12 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/RenderTypes/src
       ${PROJECT_ROOT}/lib/RenderTypes/src/blocks
     )
+  elseif(TEST_NAME STREQUAL "StateMachineTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/src/core/StateMachine.cpp
+      ${TEST_HELPERS}
+    )
   elseif(TEST_NAME STREQUAL "ContentTypeDetectionTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
