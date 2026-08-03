@@ -14,6 +14,7 @@
 
 #include <FsHelpers.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
@@ -33,8 +34,26 @@ constexpr uint32_t XTH_MAGIC = 0x00485458;  // "XTH\0" for 2-bit page data
 constexpr uint16_t DISPLAY_WIDTH = 480;
 constexpr uint16_t DISPLAY_HEIGHT = 800;
 
-// Safety limit for page count (prevents unbounded allocations)
+// Safety limits for untrusted page metadata
 constexpr uint16_t MAX_XTC_PAGE_COUNT = 10000;
+constexpr uint16_t MAX_XTC_DIMENSION = 2048;
+constexpr size_t XTC_MAX_BITMAP_SIZE = 1024 * 1024;
+
+constexpr size_t xthColumnBytes(uint16_t height) { return (static_cast<size_t>(height) + 7) / 8; }
+constexpr size_t xthPlaneSize(uint16_t width, uint16_t height) {
+  return static_cast<size_t>(width) * xthColumnBytes(height);
+}
+constexpr size_t xthBitmapSize(uint16_t width, uint16_t height) { return xthPlaneSize(width, height) * 2; }
+constexpr size_t xtgBitmapSize(uint16_t width, uint16_t height) {
+  return ((static_cast<size_t>(width) + 7) / 8) * height;
+}
+
+inline uint8_t xthPixelValue(const uint8_t* plane1, const uint8_t* plane2, uint16_t width, uint16_t height, uint16_t x,
+                             uint16_t y) {
+  const size_t byteOffset = static_cast<size_t>(width - 1 - x) * xthColumnBytes(height) + y / 8;
+  const uint8_t shift = static_cast<uint8_t>(7 - y % 8);
+  return static_cast<uint8_t>((((plane1[byteOffset] >> shift) & 1) << 1) | ((plane2[byteOffset] >> shift) & 1));
+}
 
 // XTC file header (56 bytes)
 #pragma pack(push, 1)
@@ -43,17 +62,24 @@ struct XtcHeader {
   uint8_t versionMajor;      // 0x04: Format version major (typically 1) (together with minor = 1.0)
   uint8_t versionMinor;      // 0x05: Format version minor (typically 0)
   uint16_t pageCount;        // 0x06: Total page count
-  uint32_t flags;            // 0x08: Flags/reserved
-  uint32_t headerSize;       // 0x0C: Size of header section (typically 88)
-  uint32_t reserved1;        // 0x10: Reserved
-  uint32_t tocOffset;        // 0x14: TOC offset (0 if unused) - 4 bytes, not 8!
+  uint8_t readDirection;     // 0x08: Reading direction
+  uint8_t hasMetadata;       // 0x09: Metadata presence flag
+  uint8_t hasThumbnails;     // 0x0A: Thumbnail presence flag
+  uint8_t hasChapters;       // 0x0B: Chapter presence flag
+  uint32_t currentPage;      // 0x0C: Current page (1-based)
+  uint64_t metadataOffset;   // 0x10: Metadata offset
   uint64_t pageTableOffset;  // 0x18: Page table offset
   uint64_t dataOffset;       // 0x20: First page data offset
-  uint64_t reserved2;        // 0x28: Reserved
-  uint32_t titleOffset;      // 0x30: Title string offset
+  uint64_t thumbOffset;      // 0x28: Thumbnail offset
+  uint32_t chapterOffset;    // 0x30: Chapter data offset
   uint32_t padding;          // 0x34: Padding to 56 bytes
 };
 #pragma pack(pop)
+
+static_assert(sizeof(XtcHeader) == 56);
+static_assert(offsetof(XtcHeader, hasChapters) == 0x0B);
+static_assert(offsetof(XtcHeader, pageTableOffset) == 0x18);
+static_assert(offsetof(XtcHeader, chapterOffset) == 0x30);
 
 // Page table entry (16 bytes per page)
 #pragma pack(push, 1)
@@ -82,7 +108,8 @@ struct XtgPageHeader {
   //   dataSize = ((width + 7) / 8) * height
   //
   // XTH (2-bit): Two bit planes, column-major (right-to-left), 8 vertical pixels/byte
-  //   dataSize = ((width * height + 7) / 8) * 2
+  //   Each column is padded to a whole byte.
+  //   dataSize = width * ((height + 7) / 8) * 2
   //   First plane: Bit1 for all pixels
   //   Second plane: Bit2 for all pixels
   //   pixelValue = (bit1 << 1) | bit2
@@ -91,13 +118,13 @@ struct XtgPageHeader {
 
 // Page information (internal use, optimized for memory)
 struct PageInfo {
-  uint32_t offset;   // File offset to page data (max 4GB file size)
+  uint64_t offset;   // File offset to page data
   uint32_t size;     // Data size (bytes)
   uint16_t width;    // Page width
   uint16_t height;   // Page height
   uint8_t bitDepth;  // 1 = XTG (1-bit), 2 = XTH (2-bit grayscale)
   uint8_t padding;   // Alignment padding
-};  // 16 bytes total
+};
 
 struct ChapterInfo {
   std::string name;

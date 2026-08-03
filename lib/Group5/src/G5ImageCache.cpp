@@ -1,24 +1,27 @@
 #include "G5ImageCache.h"
 
 #include <SDCardManager.h>
+#include <esp_heap_caps.h>
 
 bool G5ImageCache::compressToFile(const uint8_t* bitmap, int width, int height, const char* path) {
   if (!bitmap || width <= 0 || height <= 0 || !path) {
     return false;
   }
 
-  // Validate dimensions fit in uint16_t header fields
   if (width > UINT16_MAX || height > UINT16_MAX) {
     return false;
   }
 
-  const int rowBytes = (width + 7) / 8;
+  const size_t rowBytes = (static_cast<size_t>(width) + 7) / 8;
+  if (static_cast<size_t>(height) > MAX_RAW_SIZE / rowBytes) {
+    return false;
+  }
 
-  // Estimate buffer size - Group5 typically achieves good compression,
-  // but we allocate for worst case
   const size_t maxCompressedSize = estimateMaxCompressedSize(width, height);
+  if (maxCompressedSize > MAX_COMPRESSED_SIZE || !hasAllocationHeadroom(maxCompressedSize)) {
+    return false;
+  }
 
-  // Allocate compression buffer
   uint8_t* compressBuffer = new (std::nothrow) uint8_t[maxCompressedSize];
   if (!compressBuffer) {
     return false;
@@ -33,7 +36,7 @@ bool G5ImageCache::compressToFile(const uint8_t* bitmap, int width, int height, 
 
   // Encode all rows
   for (int y = 0; y < height; y++) {
-    result = encoder.encodeLine(const_cast<uint8_t*>(bitmap + y * rowBytes));
+    result = encoder.encodeLine(const_cast<uint8_t*>(bitmap + static_cast<size_t>(y) * rowBytes));
     if (result != G5_SUCCESS && result != G5_ENCODE_COMPLETE) {
       delete[] compressBuffer;
       return false;
@@ -41,6 +44,10 @@ bool G5ImageCache::compressToFile(const uint8_t* bitmap, int width, int height, 
   }
 
   const int compressedSize = encoder.size();
+  if (compressedSize <= 0 || static_cast<size_t>(compressedSize) > maxCompressedSize) {
+    delete[] compressBuffer;
+    return false;
+  }
 
   // Write to file
   FsFile outFile;
@@ -93,25 +100,27 @@ bool G5ImageCache::decompressFromFile(const char* path, std::function<void(const
     return false;
   }
 
-  if (header.magic != G5_MAGIC) {
+  size_t rowBytesSize = 0;
+  if (!validateHeader(header, inFile.size(), rowBytesSize) || !hasAllocationHeadroom(header.compressedSize)) {
     inFile.close();
     return false;
   }
 
-  const int rowBytes = (header.width + 7) / 8;
-
-  // Allocate buffers
   uint8_t* compressedData = new (std::nothrow) uint8_t[header.compressedSize];
-  uint8_t* rowBuffer = new (std::nothrow) uint8_t[rowBytes];
-
-  if (!compressedData || !rowBuffer) {
+  if (!compressedData || !hasAllocationHeadroom(rowBytesSize)) {
     delete[] compressedData;
-    delete[] rowBuffer;
     inFile.close();
     return false;
   }
 
-  // Read compressed data
+  const int rowBytes = static_cast<int>(rowBytesSize);
+  uint8_t* rowBuffer = new (std::nothrow) uint8_t[rowBytes];
+  if (!rowBuffer) {
+    delete[] compressedData;
+    inFile.close();
+    return false;
+  }
+
   if (inFile.read(compressedData, header.compressedSize) != header.compressedSize) {
     delete[] compressedData;
     delete[] rowBuffer;
@@ -158,15 +167,35 @@ bool G5ImageCache::readHeader(const char* path, G5ImageHeader& header) {
     inFile.close();
     return false;
   }
+  const size_t fileSize = inFile.size();
   inFile.close();
 
-  return header.magic == G5_MAGIC;
+  size_t rowBytes = 0;
+  return validateHeader(header, fileSize, rowBytes);
+}
+
+bool G5ImageCache::validateHeader(const G5ImageHeader& header, size_t fileSize, size_t& rowBytes) {
+  if (header.magic != G5_MAGIC || header.width == 0 || header.height == 0 || header.compressedSize == 0) {
+    return false;
+  }
+
+  rowBytes = (static_cast<size_t>(header.width) + 7) / 8;
+  if (static_cast<size_t>(header.height) > MAX_RAW_SIZE / rowBytes || header.compressedSize > MAX_COMPRESSED_SIZE) {
+    return false;
+  }
+
+  return fileSize >= sizeof(G5ImageHeader) && header.compressedSize <= fileSize - sizeof(G5ImageHeader);
+}
+
+bool G5ImageCache::hasAllocationHeadroom(size_t bytes) {
+  if (bytes <= 1024) return true;
+  return bytes <= heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) * 80 / 100;
 }
 
 size_t G5ImageCache::estimateMaxCompressedSize(int width, int height) {
   // Group5 can theoretically expand data in worst case (random noise)
   // Worst case: horizontal mode with long codes for every pair
   // Safe estimate: raw size + 50% overhead
-  const size_t rawSize = static_cast<size_t>((width + 7) / 8) * height;
+  const size_t rawSize = ((static_cast<size_t>(width) + 7) / 8) * static_cast<size_t>(height);
   return rawSize + (rawSize / 2) + 1024;  // Extra margin for safety
 }

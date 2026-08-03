@@ -2,6 +2,7 @@
 
 #include <SdFat.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 
@@ -43,4 +44,11 @@ class G5ImageCache {
   // Estimate worst-case compressed size for given dimensions
   // Group5 can expand data in worst case, this provides safe buffer size
   static size_t estimateMaxCompressedSize(int width, int height);
+
+ private:
+  static constexpr size_t MAX_RAW_SIZE = 512 * 1024;
+  static constexpr size_t MAX_COMPRESSED_SIZE = 512 * 1024;
+
+  static bool validateHeader(const G5ImageHeader& header, size_t fileSize, size_t& rowBytes);
+  static bool hasAllocationHeadroom(size_t bytes);
 };

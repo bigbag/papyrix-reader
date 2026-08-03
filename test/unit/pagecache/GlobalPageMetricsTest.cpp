@@ -55,6 +55,27 @@ void recalibrate(std::vector<SectionPageMetric>& metrics) {
   }
 }
 
+// Mirrors the post-probe estimate fill in initializeGlobalPageMetrics.
+// Exact entries (including exact 0-page sections) must not be overwritten.
+void fillEstimates(std::vector<SectionPageMetric>& metrics, size_t bytesPerPage = kEstimatedBytesPerPage) {
+  for (auto& m : metrics) {
+    if (m.exact) continue;
+    const uint16_t estimated = estimatePagesForBytes(m.byteSize, bytesPerPage);
+    if (m.pages == 0) {
+      m.pages = estimated;
+    } else if (estimated > m.pages) {
+      m.pages = estimated;
+    }
+  }
+}
+
+// Mirrors directory-scan / live-overlay acceptance of a probed section cache.
+// pageCount==0 complete caches are exact (Issue #136 residual: image-only FB2).
+void applyProbe(SectionPageMetric& metric, uint16_t pageCount, bool partial) {
+  metric.pages = pageCount;
+  metric.exact = !partial;
+}
+
 struct GlobalPageMetrics {
   int currentPage = 1;
   int totalPages = 0;
@@ -380,6 +401,65 @@ int main() {
     auto gm = resolveMetrics(metrics, 1, 5, 0);
     runner.expectEq(16, gm.currentPage, "no_frontmatter_current");  // 10+5+1
     runner.expectEq(30, gm.totalPages, "no_frontmatter_total");
+  }
+
+  // ============================================
+  // Exact 0-page sections (Issue #136 residual)
+  // Image-only FB2 sections produce complete caches with pageCount==0.
+  // They must count as exact so Full Book Process clears the status-bar "~".
+  // ============================================
+
+  // Probe of a complete empty section → exact with pages=0
+  {
+    SectionPageMetric m{0, false, 280};
+    applyProbe(m, 0, false);
+    runner.expectTrue(m.exact, "zero_page_probe_exact");
+    runner.expectEq<uint16_t>(0, m.pages, "zero_page_probe_pages");
+  }
+
+  // A complete cache replaces a prior overestimate with its lower exact count.
+  {
+    SectionPageMetric m{7, false, 10000};
+    applyProbe(m, 5, false);
+    runner.expectTrue(m.exact, "complete_probe_replaces_estimate_exact");
+    runner.expectEq<uint16_t>(5, m.pages, "complete_probe_lowers_estimate");
+  }
+
+  // Estimate fill must NOT overwrite exact 0 with a byte-size estimate of 1
+  {
+    std::vector<SectionPageMetric> metrics = {
+        {0, true, 280},     // exact empty (image-only)
+        {0, false, 10000},  // uncached → estimate
+        {20, true, 40000},
+    };
+    fillEstimates(metrics, 2000);
+    runner.expectEq<uint16_t>(0, metrics[0].pages, "zero_page_exact_not_overwritten");
+    runner.expectTrue(metrics[0].exact, "zero_page_exact_flag_kept");
+    runner.expectEq<uint16_t>(5, metrics[1].pages, "uncached_still_estimated");
+    runner.expectFalse(metrics[1].exact, "uncached_not_exact");
+  }
+
+  // Old bug: treating pages==0 as "missing" left exact=false + estimate=1 → permanent "~"
+  // even when every real section was exact and the displayed total looked right.
+  {
+    std::vector<SectionPageMetric> buggy = {
+        {1, false, 280},  // phantom estimate for empty section
+        {10, true, 5000},
+        {20, true, 8000},
+    };
+    auto gmBuggy = resolveMetrics(buggy, 2, 19);
+    runner.expectFalse(gmBuggy.totalIsExact, "phantom_empty_keeps_tilde");
+    runner.expectEq(31, gmBuggy.totalPages, "phantom_empty_inflates_total");  // 1+10+20
+
+    std::vector<SectionPageMetric> fixed = {
+        {0, true, 280},  // exact empty
+        {10, true, 5000},
+        {20, true, 8000},
+    };
+    auto gmFixed = resolveMetrics(fixed, 2, 19);
+    runner.expectTrue(gmFixed.totalIsExact, "exact_empty_clears_tilde");
+    runner.expectEq(30, gmFixed.totalPages, "exact_empty_no_phantom_page");  // 0+10+20
+    runner.expectEq(30, gmFixed.currentPage, "exact_empty_last_page");      // 0+10+19+1
   }
 
   return runner.allPassed() ? 0 : 1;

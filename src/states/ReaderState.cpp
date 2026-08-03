@@ -317,20 +317,25 @@ void ReaderState::initializeGlobalPageMetrics(Core& core) {
 
   globalSectionPageMetrics_.resize(static_cast<size_t>(spineCount));
 
+  // Complete caches may legitimately have 0 pages (e.g. FB2 image-only sections
+  // where Fb2Parser skips <image>). Those must still count as exact so Full Book
+  // Process can clear the status-bar "~" (Issue #136 residual).
   auto applyLivePageCacheOverlay = [&]() -> bool {
-    if (currentSpineIndex_ < 0 || currentSpineIndex_ >= spineCount || !pageCache_ || pageCache_->pageCount() == 0) {
+    if (currentSpineIndex_ < 0 || currentSpineIndex_ >= spineCount || !pageCache_) {
       return false;
     }
     auto& metric = globalSectionPageMetrics_[static_cast<size_t>(currentSpineIndex_)];
-    const auto currentPages = static_cast<uint16_t>(std::max<int>(1, pageCache_->pageCount()));
+    const auto currentPages = static_cast<uint16_t>(pageCache_->pageCount());
     const bool currentIsPartial = pageCache_->isPartial();
     bool changed = false;
-    if (currentPages > metric.pages) {
+    if (!currentIsPartial) {
+      if (!metric.exact || metric.pages != currentPages) {
+        metric.pages = currentPages;
+        metric.exact = true;
+        changed = true;
+      }
+    } else if (!metric.exact && currentPages > metric.pages) {
       metric.pages = currentPages;
-      changed = true;
-    }
-    if (!currentIsPartial && !metric.exact) {
-      metric.exact = true;
       changed = true;
     }
     return changed;
@@ -405,7 +410,8 @@ void ReaderState::initializeGlobalPageMetrics(Core& core) {
       const std::string cachePath = (type == ContentType::Epub) ? epubSectionCachePath(core.content.cacheDir(), idx)
                                                                 : core.content.asFb2()->getSectionCachePath(idx);
       const auto probe = PageCache::probe(cachePath, config);
-      if (probe.valid && probe.pageCount > 0) {
+      // Accept pageCount==0: complete empty sections are exact (not missing).
+      if (probe.valid) {
         auto& metric = globalSectionPageMetrics_[static_cast<size_t>(idx)];
         metric.pages = probe.pageCount;
         metric.exact = !probe.partial;
@@ -430,11 +436,13 @@ void ReaderState::initializeGlobalPageMetrics(Core& core) {
 
   for (int i = 0; i < spineCount; ++i) {
     auto& metric = globalSectionPageMetrics_[static_cast<size_t>(i)];
+    // Never overwrite an exact count — including exact 0-page sections.
+    if (metric.exact) continue;
     const size_t itemSize = itemSizes[static_cast<size_t>(i)];
     const uint16_t estimated = estimatePagesForBytes(itemSize, bytesPerPage);
     if (metric.pages == 0) {
       metric.pages = estimated;
-    } else if (!metric.exact && estimated > metric.pages) {
+    } else if (estimated > metric.pages) {
       metric.pages = estimated;
     }
   }
@@ -454,13 +462,13 @@ void ReaderState::updateGlobalPageMetrics(Core& core) {
   }
 
   if (!globalSectionPageMetricsInitialized_ || currentSpineIndex_ < 0 ||
-      currentSpineIndex_ >= static_cast<int>(globalSectionPageMetrics_.size()) || !pageCache_ ||
-      pageCache_->pageCount() == 0) {
+      currentSpineIndex_ >= static_cast<int>(globalSectionPageMetrics_.size()) || !pageCache_) {
     return;
   }
 
   auto& metric = globalSectionPageMetrics_[static_cast<size_t>(currentSpineIndex_)];
-  const auto currentPages = static_cast<uint16_t>(std::max<int>(1, pageCache_->pageCount()));
+  // Allow 0: complete empty sections (image-only FB2) must become exact.
+  const auto currentPages = static_cast<uint16_t>(pageCache_->pageCount());
   const bool currentIsPartial = pageCache_->isPartial();
   bool becameExact = false;
   bool changed = false;
@@ -1436,8 +1444,8 @@ void ReaderState::renderCachedPage(Core& core) {
   const auto vp = getReaderViewport(core.settings.statusBar != 0);
 
   // Handle EPUB/FB2 bounds
+  size_t spineCount = 0;
   if (type == ContentType::Epub || type == ContentType::Fb2) {
-    size_t spineCount = 0;
     if (type == ContentType::Epub) {
       auto* provider = core.content.asEpub();
       if (!provider || !provider->getEpub()) return;
@@ -1465,8 +1473,9 @@ void ReaderState::renderCachedPage(Core& core) {
     parserSpineIndex_ = -1;
   }
 
-  // Create or load cache if needed
-  if (!pageCache_) {
+  auto ensureSectionCacheLoaded = [&]() {
+    if (pageCache_) return;
+
     // Try to load existing cache silently first
     loadCacheFromDisk(core);
 
@@ -1504,6 +1513,48 @@ void ReaderState::renderCachedPage(Core& core) {
       } else if (currentSectionPage_ >= cachedPages) {
         currentSectionPage_ = cachedPages > 0 ? cachedPages - 1 : 0;
       }
+    }
+  };
+
+  ensureSectionCacheLoaded();
+
+  // Skip complete empty sections in-place (e.g. image-only FB2). Must not rely on
+  // a deferred re-render: render() always clears needsRender_ after this returns.
+  if (type == ContentType::Epub || type == ContentType::Fb2) {
+    // On first open lastRenderedSpineIndex_ equals currentSpineIndex_, so leading
+    // empty sections are skipped forward. Previous-page navigation prefers back.
+    const bool preferBack = (lastRenderedSpineIndex_ > currentSpineIndex_);
+    int guard = 0;
+    while (pageCache_ && !pageCache_->isPartial() && pageCache_->pageCount() == 0 &&
+           guard < static_cast<int>(spineCount)) {
+      ++guard;
+      ReaderNavigation::Position position;
+      position.spineIndex = currentSpineIndex_;
+      position.sectionPage = currentSectionPage_;
+      const auto skip = ReaderNavigation::skipEmptySection(position, static_cast<int>(spineCount), preferBack);
+
+      pageCache_.reset();
+      parser_.reset();
+      parserSpineIndex_ = -1;
+
+      if (!skip.needsRender) {
+        if (preferBack) {
+          // No non-empty section before this chain: stay on the page from which
+          // previous navigation started instead of bouncing between empty spines.
+          currentSpineIndex_ = lastRenderedSpineIndex_;
+          currentSectionPage_ = lastRenderedSectionPage_;
+          ensureSectionCacheLoaded();
+          break;
+        }
+        renderer_.drawCenteredText(core.settings.getReaderFontId(theme), 300, tr(END_OF_BOOK), theme.primaryTextBlack,
+                                   BOLD);
+        renderer_.displayBuffer();
+        return;
+      }
+
+      currentSpineIndex_ = skip.position.spineIndex;
+      currentSectionPage_ = skip.position.sectionPage;
+      ensureSectionCacheLoaded();
     }
   }
 

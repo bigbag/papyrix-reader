@@ -1,6 +1,7 @@
 #include "test_utils.h"
 
 #include <cstring>
+#include <string>
 
 #include "EncodingDetector.h"
 #include "ScriptDetector.h"
@@ -9,7 +10,8 @@ static bool isRtlForBuffer(const uint8_t* data, size_t len) {
   size_t bomBytes = 0;
   Encoding enc = detectEncoding(data, len, bomBytes);
   if (enc == Encoding::Utf8) {
-    return ScriptDetector::containsArabic(reinterpret_cast<const char*>(data));
+    const std::string text(reinterpret_cast<const char*>(data), len);
+    return ScriptDetector::containsArabic(text.c_str());
   }
   return false;
 }
@@ -84,12 +86,10 @@ int main() {
                        "CP1251 FB2 header: not RTL");
   }
 
-  // Confirm raw containsArabic would false-positive on CP1251 bytes (documents the bug).
-  // 0xD9 0xC5 = ЩЕ in CP1251, but utf8NextCodepoint decodes it as U+0645 (Arabic MEEM).
+  // Malformed UTF-8 must not turn CP1251 bytes into an Arabic codepoint.
   {
     const char cp1251[] = {'\xD9', '\xC5', '\0'};
-    runner.expectTrue(ScriptDetector::containsArabic(cp1251),
-                      "Raw CP1251 0xD9 0xC5 false-positives as Arabic (documents bug)");
+    runner.expectFalse(ScriptDetector::containsArabic(cp1251), "Raw CP1251 bytes are rejected as malformed UTF-8");
   }
 
   return runner.allPassed() ? 0 : 1;

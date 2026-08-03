@@ -9,11 +9,14 @@
 
 #include <FsHelpers.h>
 #include <Logging.h>
+#include <esp_heap_caps.h>
 
 #define TAG "XTC_PARSE"
 #include <SDCardManager.h>
 
+#include <algorithm>
 #include <cstring>
+#include <new>
 
 namespace xtc {
 
@@ -30,10 +33,7 @@ XtcParser::XtcParser()
 XtcParser::~XtcParser() { close(); }
 
 XtcError XtcParser::open(const char* filepath) {
-  // Close if already open
-  if (m_isOpen) {
-    close();
-  }
+  close();
 
   // Open file
   if (!SdMan.openFileForRead("XTC", filepath, m_file)) {
@@ -49,9 +49,13 @@ XtcError XtcParser::open(const char* filepath) {
     return m_lastError;
   }
 
-  // Read title and author if available
-  readTitle();
-  readAuthor();
+  if (m_header.hasMetadata) {
+    readTitle();
+    readAuthor();
+  } else {
+    m_title.clear();
+    m_author.clear();
+  }
 
   // Read page table
   m_lastError = readPageTable();
@@ -75,11 +79,9 @@ XtcError XtcParser::open(const char* filepath) {
 }
 
 void XtcParser::close() {
-  if (m_isOpen) {
-    m_file.close();
-    m_isOpen = false;
-  }
-  m_chapters.clear();
+  if (m_file) m_file.close();
+  m_isOpen = false;
+  std::vector<ChapterInfo>().swap(m_chapters);
   m_title.clear();
   m_author.clear();
   m_hasChapters = false;
@@ -130,13 +132,8 @@ XtcError XtcParser::readHeader() {
 }
 
 XtcError XtcParser::readTitle() {
-  // Title is usually at offset 0x38 (56) for 88-byte headers
-  // Read title as null-terminated UTF-8 string
-  if (m_header.titleOffset == 0) {
-    m_header.titleOffset = 0x38;  // Default offset
-  }
-
-  if (!m_file.seek(m_header.titleOffset)) {
+  constexpr uint32_t titleOffset = 0x38;
+  if (!m_file.seek(titleOffset)) {
     return XtcError::READ_ERROR;
   }
 
@@ -185,10 +182,9 @@ XtcError XtcParser::readPageTable() {
     return XtcError::CORRUPTED_HEADER;
   }
 
-  // Validate that the page table fits within the file
-  const uint64_t pageTableEnd =
-      m_header.pageTableOffset + static_cast<uint64_t>(m_header.pageCount) * sizeof(PageTableEntry);
-  if (pageTableEnd > m_file.size()) {
+  const uint64_t fileSize = m_file.size();
+  const uint64_t pageTableSize = static_cast<uint64_t>(m_header.pageCount) * sizeof(PageTableEntry);
+  if (m_header.pageTableOffset > fileSize || pageTableSize > fileSize - m_header.pageTableOffset) {
     LOG_ERR(TAG, "Page table extends beyond file");
     return XtcError::CORRUPTED_HEADER;
   }
@@ -221,7 +217,7 @@ bool XtcParser::readPageEntry(uint32_t pageIndex, PageInfo& info) {
     return false;
   }
 
-  info.offset = static_cast<uint32_t>(entry.dataOffset);
+  info.offset = entry.dataOffset;
   info.size = entry.dataSize;
   info.width = entry.width;
   info.height = entry.height;
@@ -234,62 +230,46 @@ XtcError XtcParser::readChapters() {
   m_hasChapters = false;
   m_chapters.clear();
 
-  uint8_t hasChaptersFlag = 0;
-  if (!m_file.seek(0x0B)) {
-    return XtcError::READ_ERROR;
-  }
-  if (m_file.read(&hasChaptersFlag, sizeof(hasChaptersFlag)) != sizeof(hasChaptersFlag)) {
-    return XtcError::READ_ERROR;
-  }
-
-  if (hasChaptersFlag != 1) {
+  if (m_header.hasChapters != 1 || m_header.chapterOffset == 0) {
     return XtcError::OK;
   }
 
-  uint64_t chapterOffset = 0;
-  if (!m_file.seek(0x30)) {
-    return XtcError::READ_ERROR;
-  }
-  if (m_file.read(reinterpret_cast<uint8_t*>(&chapterOffset), sizeof(chapterOffset)) != sizeof(chapterOffset)) {
-    return XtcError::READ_ERROR;
-  }
-
-  if (chapterOffset == 0) {
-    return XtcError::OK;
-  }
-
+  const uint64_t chapterOffset = m_header.chapterOffset;
   const uint64_t fileSize = m_file.size();
-  if (chapterOffset < sizeof(XtcHeader) || chapterOffset >= fileSize || chapterOffset + 96 > fileSize) {
+  constexpr uint64_t chapterSize = 96;
+  constexpr uint64_t minChapterOffset = 0xF8;
+  if (chapterOffset < minChapterOffset || chapterOffset > fileSize || chapterSize > fileSize - chapterOffset) {
     return XtcError::OK;
   }
 
-  uint64_t maxOffset = 0;
-  if (m_header.pageTableOffset > chapterOffset) {
+  uint64_t maxOffset = fileSize;
+  if (m_header.pageTableOffset > chapterOffset && m_header.pageTableOffset <= fileSize) {
     maxOffset = m_header.pageTableOffset;
-  } else if (m_header.dataOffset > chapterOffset) {
+  } else if (m_header.dataOffset > chapterOffset && m_header.dataOffset <= fileSize) {
     maxOffset = m_header.dataOffset;
-  } else {
-    maxOffset = fileSize;
   }
 
   if (maxOffset <= chapterOffset) {
     return XtcError::OK;
   }
 
-  constexpr size_t chapterSize = 96;
+  constexpr uint64_t maxChapters = 500;
   const uint64_t available = maxOffset - chapterOffset;
-  const size_t chapterCount = static_cast<size_t>(available / chapterSize);
-  if (chapterCount == 0) {
-    return XtcError::OK;
+  const size_t chapterCount = static_cast<size_t>(std::min<uint64_t>(available / chapterSize, maxChapters));
+  if (chapterCount == 0 || !m_file.seek(chapterOffset)) {
+    return chapterCount == 0 ? XtcError::OK : XtcError::READ_ERROR;
   }
 
-  if (!m_file.seek(chapterOffset)) {
-    return XtcError::READ_ERROR;
+  const size_t estimatedMemory = chapterCount * (sizeof(ChapterInfo) + 80);
+  const size_t largestBlock = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+  if (estimatedMemory > largestBlock * 80 / 100) {
+    return XtcError::MEMORY_ERROR;
   }
 
-  std::vector<uint8_t> chapterBuf(chapterSize);
+  m_chapters.reserve(chapterCount);
+  std::vector<uint8_t> chapterBuf(static_cast<size_t>(chapterSize));
   for (size_t i = 0; i < chapterCount; i++) {
-    if (m_file.read(chapterBuf.data(), chapterSize) != chapterSize) {
+    if (m_file.read(chapterBuf.data(), chapterBuf.size()) != chapterBuf.size()) {
       return XtcError::READ_ERROR;
     }
 
@@ -308,32 +288,66 @@ XtcError XtcParser::readChapters() {
       break;
     }
 
-    if (startPage > 0) {
-      startPage--;
-    }
-    if (endPage > 0) {
-      endPage--;
-    }
+    if (startPage > 0) startPage--;
+    if (endPage > 0) endPage--;
+    if (startPage >= m_header.pageCount) continue;
+    if (endPage >= m_header.pageCount) endPage = m_header.pageCount - 1;
+    if (startPage > endPage) continue;
 
-    if (startPage >= m_header.pageCount) {
-      continue;
-    }
-
-    if (endPage >= m_header.pageCount) {
-      endPage = m_header.pageCount - 1;
-    }
-
-    if (startPage > endPage) {
-      continue;
-    }
-
-    ChapterInfo chapter{std::move(name), startPage, endPage};
-    m_chapters.push_back(std::move(chapter));
+    m_chapters.push_back({std::move(name), startPage, endPage});
   }
 
   m_hasChapters = !m_chapters.empty();
   LOG_INF(TAG, "Chapters: %u", static_cast<unsigned int>(m_chapters.size()));
   return XtcError::OK;
+}
+
+bool XtcParser::readValidatedPage(uint32_t pageIndex, PageInfo& page, XtgPageHeader& pageHeader, size_t& bitmapSize) {
+  if (!readPageEntry(pageIndex, page)) {
+    m_lastError = XtcError::READ_ERROR;
+    return false;
+  }
+
+  if (page.width == 0 || page.height == 0 || page.width > MAX_XTC_DIMENSION || page.height > MAX_XTC_DIMENSION) {
+    m_lastError = XtcError::CORRUPTED_HEADER;
+    return false;
+  }
+
+  const uint64_t fileSize = m_file.size();
+  if (page.offset > fileSize || sizeof(XtgPageHeader) > fileSize - page.offset || !m_file.seek(page.offset)) {
+    m_lastError = XtcError::READ_ERROR;
+    return false;
+  }
+
+  if (m_file.read(reinterpret_cast<uint8_t*>(&pageHeader), sizeof(pageHeader)) != sizeof(pageHeader)) {
+    m_lastError = XtcError::READ_ERROR;
+    return false;
+  }
+
+  const uint32_t expectedMagic = m_bitDepth == 2 ? XTH_MAGIC : XTG_MAGIC;
+  if (pageHeader.magic != expectedMagic) {
+    m_lastError = XtcError::INVALID_MAGIC;
+    return false;
+  }
+
+  if (pageHeader.compression != 0 || pageHeader.width != page.width || pageHeader.height != page.height) {
+    m_lastError = XtcError::CORRUPTED_HEADER;
+    return false;
+  }
+
+  bitmapSize = m_bitDepth == 2 ? xthBitmapSize(page.width, page.height) : xtgBitmapSize(page.width, page.height);
+  if (bitmapSize == 0 || bitmapSize > XTC_MAX_BITMAP_SIZE || pageHeader.dataSize != bitmapSize) {
+    m_lastError = XtcError::CORRUPTED_HEADER;
+    return false;
+  }
+
+  const uint64_t totalSize = sizeof(XtgPageHeader) + bitmapSize;
+  if (page.size < totalSize || totalSize > fileSize - page.offset) {
+    m_lastError = XtcError::CORRUPTED_HEADER;
+    return false;
+  }
+
+  return true;
 }
 
 bool XtcParser::getPageInfo(uint32_t pageIndex, PageInfo& info) { return readPageEntry(pageIndex, info); }
@@ -343,65 +357,29 @@ size_t XtcParser::loadPage(uint32_t pageIndex, uint8_t* buffer, size_t bufferSiz
     m_lastError = XtcError::FILE_NOT_FOUND;
     return 0;
   }
-
   if (pageIndex >= m_header.pageCount) {
     m_lastError = XtcError::PAGE_OUT_OF_RANGE;
     return 0;
   }
-
-  PageInfo page;
-  if (!readPageEntry(pageIndex, page)) {
-    m_lastError = XtcError::READ_ERROR;
-    return 0;
-  }
-
-  // Seek to page data
-  if (!m_file.seek(page.offset)) {
-    LOG_ERR(TAG, "Failed to seek to page %u at offset %lu", pageIndex, page.offset);
-    m_lastError = XtcError::READ_ERROR;
-    return 0;
-  }
-
-  // Read page header (XTG for 1-bit, XTH for 2-bit - same structure)
-  XtgPageHeader pageHeader;
-  size_t headerRead = m_file.read(reinterpret_cast<uint8_t*>(&pageHeader), sizeof(XtgPageHeader));
-  if (headerRead != sizeof(XtgPageHeader)) {
-    LOG_ERR(TAG, "Failed to read page header for page %u", pageIndex);
-    m_lastError = XtcError::READ_ERROR;
-    return 0;
-  }
-
-  // Verify page magic (XTG for 1-bit, XTH for 2-bit)
-  const uint32_t expectedMagic = (m_bitDepth == 2) ? XTH_MAGIC : XTG_MAGIC;
-  if (pageHeader.magic != expectedMagic) {
-    LOG_ERR(TAG, "Invalid page magic for page %u: 0x%08X (expected 0x%08X)", pageIndex, pageHeader.magic,
-            expectedMagic);
-    m_lastError = XtcError::INVALID_MAGIC;
-    return 0;
-  }
-
-  // Calculate bitmap size based on bit depth
-  // XTG (1-bit): Row-major, ((width+7)/8) * height bytes
-  // XTH (2-bit): Two bit planes, column-major, ((width * height + 7) / 8) * 2 bytes
-  size_t bitmapSize;
-  if (m_bitDepth == 2) {
-    // XTH: two bit planes, each containing (width * height) bits rounded up to bytes
-    bitmapSize = ((static_cast<size_t>(pageHeader.width) * pageHeader.height + 7) / 8) * 2;
-  } else {
-    bitmapSize = ((pageHeader.width + 7) / 8) * pageHeader.height;
-  }
-
-  // Check buffer size
-  if (bufferSize < bitmapSize) {
-    LOG_ERR(TAG, "Buffer too small: need %u, have %u", bitmapSize, bufferSize);
+  if (!buffer && bufferSize != 0) {
     m_lastError = XtcError::MEMORY_ERROR;
     return 0;
   }
 
-  // Read bitmap data
-  size_t bytesRead = m_file.read(buffer, bitmapSize);
+  PageInfo page;
+  XtgPageHeader pageHeader;
+  size_t bitmapSize = 0;
+  if (!readValidatedPage(pageIndex, page, pageHeader, bitmapSize)) {
+    return 0;
+  }
+
+  if (bufferSize < bitmapSize) {
+    m_lastError = XtcError::MEMORY_ERROR;
+    return 0;
+  }
+
+  const size_t bytesRead = m_file.read(buffer, bitmapSize);
   if (bytesRead != bitmapSize) {
-    LOG_ERR(TAG, "Page read error: expected %u, got %u", bitmapSize, bytesRead);
     m_lastError = XtcError::READ_ERROR;
     return 0;
   }
@@ -413,59 +391,39 @@ size_t XtcParser::loadPage(uint32_t pageIndex, uint8_t* buffer, size_t bufferSiz
 XtcError XtcParser::loadPageStreaming(uint32_t pageIndex,
                                       std::function<void(const uint8_t* data, size_t size, size_t offset)> callback,
                                       size_t chunkSize) {
-  if (!m_isOpen) {
-    return XtcError::FILE_NOT_FOUND;
-  }
-
-  if (pageIndex >= m_header.pageCount) {
-    return XtcError::PAGE_OUT_OF_RANGE;
-  }
+  if (!m_isOpen) return XtcError::FILE_NOT_FOUND;
+  if (pageIndex >= m_header.pageCount) return XtcError::PAGE_OUT_OF_RANGE;
+  if (!callback || chunkSize == 0) return XtcError::CORRUPTED_HEADER;
 
   PageInfo page;
-  if (!readPageEntry(pageIndex, page)) {
-    return XtcError::READ_ERROR;
-  }
-
-  // Seek to page data
-  if (!m_file.seek(page.offset)) {
-    return XtcError::READ_ERROR;
-  }
-
-  // Read and skip page header (XTG for 1-bit, XTH for 2-bit)
   XtgPageHeader pageHeader;
-  size_t headerRead = m_file.read(reinterpret_cast<uint8_t*>(&pageHeader), sizeof(XtgPageHeader));
-  const uint32_t expectedMagic = (m_bitDepth == 2) ? XTH_MAGIC : XTG_MAGIC;
-  if (headerRead != sizeof(XtgPageHeader) || pageHeader.magic != expectedMagic) {
-    return XtcError::READ_ERROR;
+  size_t bitmapSize = 0;
+  if (!readValidatedPage(pageIndex, page, pageHeader, bitmapSize)) {
+    return m_lastError;
   }
 
-  // Calculate bitmap size based on bit depth
-  // XTG (1-bit): Row-major, ((width+7)/8) * height bytes
-  // XTH (2-bit): Two bit planes, ((width * height + 7) / 8) * 2 bytes
-  size_t bitmapSize;
-  if (m_bitDepth == 2) {
-    bitmapSize = ((static_cast<size_t>(pageHeader.width) * pageHeader.height + 7) / 8) * 2;
-  } else {
-    bitmapSize = ((pageHeader.width + 7) / 8) * pageHeader.height;
+  chunkSize = std::min<size_t>(chunkSize, 4096);
+  if (chunkSize > 1024 && chunkSize > heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) * 80 / 100) {
+    return XtcError::MEMORY_ERROR;
   }
+  std::unique_ptr<uint8_t[]> chunk(new (std::nothrow) uint8_t[chunkSize]);
+  if (!chunk) return XtcError::MEMORY_ERROR;
 
-  // Read in chunks
-  std::vector<uint8_t> chunk(chunkSize);
   size_t totalRead = 0;
-
   while (totalRead < bitmapSize) {
-    size_t toRead = std::min(chunkSize, bitmapSize - totalRead);
-    size_t bytesRead = m_file.read(chunk.data(), toRead);
-
-    if (bytesRead == 0) {
-      return XtcError::READ_ERROR;
+    const size_t toRead = std::min(chunkSize, bitmapSize - totalRead);
+    const size_t bytesRead = m_file.read(chunk.get(), toRead);
+    if (bytesRead != toRead) {
+      m_lastError = XtcError::READ_ERROR;
+      return m_lastError;
     }
 
-    callback(chunk.data(), bytesRead, totalRead);
+    callback(chunk.get(), bytesRead, totalRead);
     totalRead += bytesRead;
   }
 
-  return XtcError::OK;
+  m_lastError = XtcError::OK;
+  return m_lastError;
 }
 
 bool XtcParser::isValidXtcFile(const char* filepath) {

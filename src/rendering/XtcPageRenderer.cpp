@@ -4,6 +4,7 @@
 #include <GfxRenderer.h>
 #include <Logging.h>
 #include <Xtc/XtcParser.h>
+#include <esp_heap_caps.h>
 #include <esp_task_wdt.h>
 
 #include <cstdlib>
@@ -12,9 +13,6 @@
 #define TAG "XTC_RENDER"
 
 namespace papyrix {
-
-constexpr uint16_t MAX_PAGE_WIDTH = 2048;
-constexpr uint16_t MAX_PAGE_HEIGHT = 2048;
 
 XtcPageRenderer::XtcPageRenderer(GfxRenderer& renderer) : renderer_(renderer) {}
 
@@ -25,32 +23,43 @@ XtcPageRenderer::RenderResult XtcPageRenderer::render(xtc::XtcParser& parser, ui
     return RenderResult::EndOfBook;
   }
 
-  const uint16_t pageWidth = parser.getWidth();
-  const uint16_t pageHeight = parser.getHeight();
-  const uint8_t bitDepth = parser.getBitDepth();
+  xtc::PageInfo pageInfo;
+  if (!parser.getPageInfo(pageNum, pageInfo)) {
+    return RenderResult::PageLoadFailed;
+  }
 
-  if (pageWidth == 0 || pageHeight == 0 || pageWidth > MAX_PAGE_WIDTH || pageHeight > MAX_PAGE_HEIGHT) {
+  const uint16_t pageWidth = pageInfo.width;
+  const uint16_t pageHeight = pageInfo.height;
+  const uint8_t bitDepth = pageInfo.bitDepth;
+
+  if (pageWidth == 0 || pageHeight == 0 || pageWidth > xtc::MAX_XTC_DIMENSION || pageHeight > xtc::MAX_XTC_DIMENSION) {
     LOG_ERR(TAG, "Invalid page dimensions");
     return RenderResult::InvalidDimensions;
   }
 
-  // Calculate buffer size based on bit depth
-  const size_t planeSize = (static_cast<size_t>(pageWidth) * pageHeight + 7) / 8;
+  const size_t planeSize = bitDepth == 2 ? xtc::xthPlaneSize(pageWidth, pageHeight) : 0;
   size_t bufferSize;
   uint8_t* plane1Buffer = nullptr;
   uint8_t* plane2Buffer = nullptr;
 
+  auto allocateBuffer = [](size_t needed) -> uint8_t* {
+    if (needed > 1024 && needed > heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) * 80 / 100) {
+      return nullptr;
+    }
+    return static_cast<uint8_t*>(malloc(needed));
+  };
+
   if (bitDepth == 2) {
     // Split allocation: allocate two separate buffers to handle heap fragmentation
     // Two 48KB blocks are easier to find than one 96KB contiguous block
-    plane1Buffer = static_cast<uint8_t*>(malloc(planeSize));
+    plane1Buffer = allocateBuffer(planeSize);
     if (!plane1Buffer) {
       LOG_ERR(TAG, "Failed to allocate plane1 buffer (%zu bytes, free heap: %lu)", planeSize,
               static_cast<unsigned long>(ESP.getFreeHeap()));
       return RenderResult::AllocationFailed;
     }
 
-    plane2Buffer = static_cast<uint8_t*>(malloc(planeSize));
+    plane2Buffer = allocateBuffer(planeSize);
     if (!plane2Buffer) {
       LOG_ERR(TAG, "Failed to allocate plane2 buffer (%zu bytes, free heap: %lu)", planeSize,
               static_cast<unsigned long>(ESP.getFreeHeap()));
@@ -60,8 +69,8 @@ XtcPageRenderer::RenderResult XtcPageRenderer::render(xtc::XtcParser& parser, ui
 
     bufferSize = planeSize * 2;
   } else {
-    bufferSize = static_cast<size_t>((pageWidth + 7) / 8) * pageHeight;
-    plane1Buffer = static_cast<uint8_t*>(malloc(bufferSize));
+    bufferSize = xtc::xtgBitmapSize(pageWidth, pageHeight);
+    plane1Buffer = allocateBuffer(bufferSize);
     if (!plane1Buffer) {
       LOG_ERR(TAG, "Failed to allocate buffer (%zu bytes, free heap: %lu)", bufferSize,
               static_cast<unsigned long>(ESP.getFreeHeap()));
@@ -72,36 +81,32 @@ XtcPageRenderer::RenderResult XtcPageRenderer::render(xtc::XtcParser& parser, ui
   // Load page data
   size_t bytesRead = 0;
   if (bitDepth == 2) {
+    bool streamOverflow = false;
     // Use streaming to load into separate buffers
     xtc::XtcError err = parser.loadPageStreaming(
         pageNum,
         [&](const uint8_t* data, size_t size, size_t offset) {
-          // Direct data to the appropriate buffer based on offset
-          size_t remaining = size;
-          size_t srcOffset = 0;
+          if (offset > bufferSize || size > bufferSize - offset) {
+            streamOverflow = true;
+            return;
+          }
 
-          while (remaining > 0) {
-            size_t currentOffset = offset + srcOffset;
-            if (currentOffset < planeSize) {
-              // Writing to plane1
-              size_t toWrite = std::min(remaining, planeSize - currentOffset);
-              memcpy(plane1Buffer + currentOffset, data + srcOffset, toWrite);
-              srcOffset += toWrite;
-              remaining -= toWrite;
-            } else {
-              // Writing to plane2
-              size_t plane2Offset = currentOffset - planeSize;
-              size_t toWrite = std::min(remaining, planeSize - plane2Offset);
-              memcpy(plane2Buffer + plane2Offset, data + srcOffset, toWrite);
-              srcOffset += toWrite;
-              remaining -= toWrite;
-            }
+          size_t plane1Bytes = 0;
+          if (offset < planeSize) {
+            plane1Bytes = std::min(size, planeSize - offset);
+            memcpy(plane1Buffer + offset, data, plane1Bytes);
+          }
+
+          const size_t plane2Bytes = size - plane1Bytes;
+          if (plane2Bytes > 0) {
+            const size_t plane2Offset = offset + plane1Bytes - planeSize;
+            memcpy(plane2Buffer + plane2Offset, data + plane1Bytes, plane2Bytes);
           }
           bytesRead += size;
         },
         4096);
 
-    if (err != xtc::XtcError::OK) {
+    if (err != xtc::XtcError::OK || streamOverflow || bytesRead != bufferSize) {
       LOG_ERR(TAG, "Failed to load page %u (streaming error)", pageNum);
       free(plane1Buffer);
       free(plane2Buffer);
@@ -109,7 +114,7 @@ XtcPageRenderer::RenderResult XtcPageRenderer::render(xtc::XtcParser& parser, ui
     }
   } else {
     bytesRead = parser.loadPage(pageNum, plane1Buffer, bufferSize);
-    if (bytesRead == 0) {
+    if (bytesRead != bufferSize) {
       LOG_ERR(TAG, "Failed to load page %u", pageNum);
       free(plane1Buffer);
       return RenderResult::PageLoadFailed;
@@ -123,16 +128,9 @@ XtcPageRenderer::RenderResult XtcPageRenderer::render(xtc::XtcParser& parser, ui
     // Grayscale rendering requires additional passes
     const uint8_t* plane1 = plane1Buffer;
     const uint8_t* plane2 = plane2Buffer;
-    const size_t colBytes = (pageHeight + 7) / 8;
 
     auto getPixelValue = [&](uint16_t x, uint16_t y) -> uint8_t {
-      const size_t colIndex = pageWidth - 1 - x;
-      const size_t byteInCol = y / 8;
-      const size_t bitInByte = 7 - (y % 8);
-      const size_t byteOffset = colIndex * colBytes + byteInCol;
-      const uint8_t bit1 = (plane1[byteOffset] >> bitInByte) & 1;
-      const uint8_t bit2 = (plane2[byteOffset] >> bitInByte) & 1;
-      return (bit1 << 1) | bit2;
+      return xtc::xthPixelValue(plane1, plane2, pageWidth, pageHeight, x, y);
     };
 
     // Pass 1: Black-and-white rendering

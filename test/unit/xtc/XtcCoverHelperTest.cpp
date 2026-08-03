@@ -41,12 +41,9 @@ static std::string buildXtcFile1Bit(uint16_t width, uint16_t height, const std::
   hdr->versionMajor = 1;
   hdr->versionMinor = 0;
   hdr->pageCount = 1;
-  hdr->flags = 0;
-  hdr->headerSize = 88;
-  hdr->tocOffset = 0;
+  hdr->hasMetadata = 1;
   hdr->pageTableOffset = pageTableOffset;
   hdr->dataOffset = pageDataOffset;
-  hdr->titleOffset = headerSize;
 
   // Title
   const char* title = "Test Book";
@@ -88,7 +85,7 @@ static std::string buildXtcFile2Bit(uint16_t width, uint16_t height, const std::
   constexpr size_t pageEntrySize = sizeof(xtc::PageTableEntry);
   const size_t pageDataOffset = pageTableOffset + pageEntrySize;
 
-  const size_t bitmapSize = ((static_cast<size_t>(width) * height + 7) / 8) * 2;
+  const size_t bitmapSize = xtc::xthBitmapSize(width, height);
   const size_t pageDataSize = sizeof(xtc::XtgPageHeader) + bitmapSize;
   const size_t totalSize = pageDataOffset + pageDataSize;
 
@@ -100,12 +97,9 @@ static std::string buildXtcFile2Bit(uint16_t width, uint16_t height, const std::
   hdr->versionMajor = 1;
   hdr->versionMinor = 0;
   hdr->pageCount = 1;
-  hdr->flags = 0;
-  hdr->headerSize = 88;
-  hdr->tocOffset = 0;
+  hdr->hasMetadata = 1;
   hdr->pageTableOffset = pageTableOffset;
   hdr->dataOffset = pageDataOffset;
-  hdr->titleOffset = headerSize;
 
   const char* title = "Test Book 2bit";
   memcpy(data + headerSize, title, strlen(title));
@@ -131,6 +125,15 @@ static std::string buildXtcFile2Bit(uint16_t width, uint16_t height, const std::
   }
 
   return buf;
+}
+
+static void setXthPixel(std::vector<uint8_t>& bitmap, uint16_t width, uint16_t height, uint16_t x, uint16_t y,
+                        uint8_t value) {
+  const size_t planeSize = xtc::xthPlaneSize(width, height);
+  const size_t byteOffset = static_cast<size_t>(width - 1 - x) * xtc::xthColumnBytes(height) + y / 8;
+  const uint8_t mask = static_cast<uint8_t>(1u << (7 - y % 8));
+  if (value & 2) bitmap[byteOffset] |= mask;
+  if (value & 1) bitmap[planeSize + byteOffset] |= mask;
 }
 
 // Helper: parse BMP header fields from raw data
@@ -390,6 +393,34 @@ int main() {
                     "padding: pad byte 1 of row 0 is zero");
 
     parser.close();
+  }
+
+  // ---- Test: non-byte-aligned XTH column heights ----
+  for (const uint16_t h : {uint16_t{9}, uint16_t{17}}) {
+    SdMan.clearFiles();
+    SdMan.clearWrittenFiles();
+
+    constexpr uint16_t w = 8;
+    std::vector<uint8_t> pixels(xtc::xthBitmapSize(w, h), 0);
+    setXthPixel(pixels, w, h, 0, h - 1, 2);
+    SdMan.registerFile("/unaligned.xtch", buildXtcFile2Bit(w, h, pixels));
+
+    xtc::XtcParser parser;
+    runner.expectTrue(parser.open("/unaligned.xtch") == xtc::XtcError::OK, "unaligned XTH: parser opens");
+    runner.expectTrue(xtc::generateCoverBmpFromParser(parser, "/cache/unaligned.bmp"),
+                      "unaligned XTH: cover generation succeeds");
+
+    const std::string bmpData = SdMan.getWrittenData("/cache/unaligned.bmp");
+    constexpr size_t dataOffset = 62;
+    constexpr size_t rowSize = 4;
+    const size_t bottomRow = dataOffset + static_cast<size_t>(h - 1) * rowSize;
+    const bool hasBottomRow = bmpData.size() > bottomRow;
+    runner.expectTrue(hasBottomRow, "unaligned XTH: BMP contains final row");
+    if (hasBottomRow) {
+      runner.expectEq(static_cast<uint8_t>(0),
+                      static_cast<uint8_t>(static_cast<uint8_t>(bmpData[bottomRow]) & 0x80),
+                      "unaligned XTH: final-row pixel is decoded");
+    }
   }
 
   return runner.allPassed() ? 0 : 1;

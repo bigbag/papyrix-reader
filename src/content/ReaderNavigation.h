@@ -38,6 +38,10 @@ class ReaderNavigation {
   // For TXT/Markdown: decrements section page
   static NavResult prev(ContentType type, const Position& current, const PageCache* cache);
 
+  // Move past a complete 0-page EPUB/FB2 section. A result with needsRender=false
+  // means there is no adjacent section in the requested direction.
+  static NavResult skipEmptySection(const Position& current, int spineCount, bool preferBack);
+
   // Check if cache needs extension for the given page
   static bool needsCacheExtension(const PageCache* cache, int sectionPage);
 };

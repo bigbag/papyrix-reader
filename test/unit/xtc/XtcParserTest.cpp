@@ -6,9 +6,16 @@
 #include <Xtc/XtcParser.h>
 #include <Xtc/XtcTypes.h>
 
+#include <cstddef>
+#include <cstdio>
 #include <cstring>
 #include <string>
 #include <vector>
+
+static_assert(sizeof(xtc::XtcHeader) == 56);
+static_assert(offsetof(xtc::XtcHeader, hasChapters) == 0x0B);
+static_assert(offsetof(xtc::XtcHeader, pageTableOffset) == 0x18);
+static_assert(offsetof(xtc::XtcHeader, chapterOffset) == 0x30);
 
 // Helper: build a multi-page XTC file in memory
 static std::string buildMultiPageXtc(uint16_t width, uint16_t height, uint16_t pageCount,
@@ -21,8 +28,7 @@ static std::string buildMultiPageXtc(uint16_t width, uint16_t height, uint16_t p
   const size_t pageDataStart = pageTableOffset + pageEntrySize * pageCount;
 
   const bool is2bit = (magic == xtc::XTCH_MAGIC);
-  const size_t bitmapSize =
-      is2bit ? (((static_cast<size_t>(width) * height + 7) / 8) * 2) : (((width + 7) / 8) * static_cast<size_t>(height));
+  const size_t bitmapSize = is2bit ? xtc::xthBitmapSize(width, height) : xtc::xtgBitmapSize(width, height);
   const size_t pageDataSize = sizeof(xtc::XtgPageHeader) + bitmapSize;
   const size_t totalSize = pageDataStart + pageDataSize * pageCount;
 
@@ -34,12 +40,9 @@ static std::string buildMultiPageXtc(uint16_t width, uint16_t height, uint16_t p
   hdr->versionMajor = 1;
   hdr->versionMinor = 0;
   hdr->pageCount = pageCount;
-  hdr->flags = 0;
-  hdr->headerSize = 88;
-  hdr->tocOffset = 0;
+  hdr->hasMetadata = 1;
   hdr->pageTableOffset = pageTableOffset;
   hdr->dataOffset = pageDataStart;
-  hdr->titleOffset = headerSize;
 
   const char* title = "Multi Page Book";
   memcpy(data + headerSize, title, strlen(title));
@@ -71,8 +74,71 @@ static std::string buildMultiPageXtc(uint16_t width, uint16_t height, uint16_t p
   return buf;
 }
 
+static std::string buildChapterXtc(size_t chapterCount) {
+  constexpr size_t headerSize = sizeof(xtc::XtcHeader);
+  constexpr size_t titleSize = 128;
+  constexpr size_t authorSize = 64;
+  constexpr size_t chapterSize = 96;
+  constexpr uint16_t width = 8;
+  constexpr uint16_t height = 1;
+  const size_t chapterOffset = headerSize + titleSize + authorSize;
+  const size_t pageTableOffset = chapterOffset + chapterCount * chapterSize;
+  const size_t pageDataOffset = pageTableOffset + sizeof(xtc::PageTableEntry);
+  const size_t bitmapSize = xtc::xtgBitmapSize(width, height);
+  const size_t pageDataSize = sizeof(xtc::XtgPageHeader) + bitmapSize;
+
+  std::string file(pageDataOffset + pageDataSize, '\0');
+  auto* data = reinterpret_cast<uint8_t*>(&file[0]);
+  auto* header = reinterpret_cast<xtc::XtcHeader*>(data);
+  header->magic = xtc::XTC_MAGIC;
+  header->versionMajor = 1;
+  header->pageCount = 1;
+  header->hasMetadata = 1;
+  header->hasChapters = 1;
+  header->pageTableOffset = pageTableOffset;
+  header->dataOffset = pageDataOffset;
+  header->chapterOffset = chapterOffset;
+
+  memcpy(data + headerSize, "Chapter Book", 12);
+  for (size_t i = 0; i < chapterCount; i++) {
+    uint8_t* chapter = data + chapterOffset + i * chapterSize;
+    snprintf(reinterpret_cast<char*>(chapter), 80, "Chapter %zu", i + 1);
+    const uint16_t page = 1;
+    memcpy(chapter + 0x50, &page, sizeof(page));
+    memcpy(chapter + 0x52, &page, sizeof(page));
+  }
+
+  auto* entry = reinterpret_cast<xtc::PageTableEntry*>(data + pageTableOffset);
+  entry->dataOffset = pageDataOffset;
+  entry->dataSize = pageDataSize;
+  entry->width = width;
+  entry->height = height;
+
+  auto* pageHeader = reinterpret_cast<xtc::XtgPageHeader*>(data + pageDataOffset);
+  pageHeader->magic = xtc::XTG_MAGIC;
+  pageHeader->width = width;
+  pageHeader->height = height;
+  pageHeader->dataSize = bitmapSize;
+  return file;
+}
+
 int main() {
   TestUtils::TestRunner runner("XtcParser Tests");
+
+  runner.expectEq(size_t{16}, xtc::xthPlaneSize(8, 9), "XTH 8x9 plane pads every column");
+  runner.expectEq(size_t{48}, xtc::xthBitmapSize(8, 17), "XTH 8x17 bitmap has two padded planes");
+
+  {
+    constexpr uint16_t width = 2;
+    constexpr uint16_t height = 9;
+    const size_t planeSize = xtc::xthPlaneSize(width, height);
+    std::vector<uint8_t> bitmap(planeSize * 2, 0);
+    const size_t byteOffset = xtc::xthColumnBytes(height) + 1;
+    bitmap[byteOffset] = 0x80;
+    runner.expectEq(static_cast<uint8_t>(2),
+                    xtc::xthPixelValue(bitmap.data(), bitmap.data() + planeSize, width, height, 0, 8),
+                    "XTH pixel lookup reaches padded final row");
+  }
 
   // Test 1: getPageInfo lazy loading - multi-page random access
   {
@@ -171,10 +237,9 @@ int main() {
     hdr->versionMajor = 1;
     hdr->versionMinor = 0;
     hdr->pageCount = xtc::MAX_XTC_PAGE_COUNT + 1;  // Exceeds limit
-    hdr->headerSize = 88;
+    hdr->hasMetadata = 1;
     hdr->pageTableOffset = headerSize + titleSize + authorSize;
     hdr->dataOffset = hdr->pageTableOffset + sizeof(xtc::PageTableEntry);
-    hdr->titleOffset = headerSize;
 
     SdMan.registerFile("/too_many.xtc", buf);
 
@@ -213,10 +278,9 @@ int main() {
     hdr->versionMajor = 1;
     hdr->versionMinor = 0;
     hdr->pageCount = xtc::MAX_XTC_PAGE_COUNT;
-    hdr->headerSize = 88;
+    hdr->hasMetadata = 1;
     hdr->pageTableOffset = pageTableOffset;
     hdr->dataOffset = pageDataStart;
-    hdr->titleOffset = headerSize;
 
     // Fill first page entry so readPageTable can read default dimensions
     auto* pte = reinterpret_cast<xtc::PageTableEntry*>(data + pageTableOffset);
@@ -260,10 +324,9 @@ int main() {
     hdr->versionMajor = 1;
     hdr->versionMinor = 0;
     hdr->pageCount = 10;  // Claims 10 pages but file is tiny
-    hdr->headerSize = 88;
+    hdr->hasMetadata = 1;
     hdr->pageTableOffset = pageTableOffset;
     hdr->dataOffset = pageTableOffset + 160;
-    hdr->titleOffset = headerSize;
 
     SdMan.registerFile("/truncated.xtc", buf);
 
@@ -336,6 +399,87 @@ int main() {
     runner.expectTrue(err == xtc::XtcError::PAGE_OUT_OF_RANGE, "streaming_lazy: out of range error");
 
     parser.close();
+  }
+
+  // Test 10: page table and embedded dimensions must agree
+  {
+    SdMan.clearFiles();
+    std::string data = buildMultiPageXtc(16, 8, 1);
+    constexpr size_t pageTableOffset = sizeof(xtc::XtcHeader) + 128 + 64;
+    auto* entry = reinterpret_cast<xtc::PageTableEntry*>(&data[pageTableOffset]);
+    auto* pageHeader = reinterpret_cast<xtc::XtgPageHeader*>(&data[entry->dataOffset]);
+    pageHeader->width = 8;
+    SdMan.registerFile("/mismatch.xtc", data);
+
+    xtc::XtcParser parser;
+    parser.open("/mismatch.xtc");
+    std::vector<uint8_t> buffer(32);
+    runner.expectEq(size_t{0}, parser.loadPage(0, buffer.data(), buffer.size()),
+                    "page_validation: rejects table/header dimension mismatch");
+  }
+
+  // Test 11: compressed pages are unsupported
+  {
+    SdMan.clearFiles();
+    std::string data = buildMultiPageXtc(8, 8, 1);
+    constexpr size_t pageTableOffset = sizeof(xtc::XtcHeader) + 128 + 64;
+    auto* entry = reinterpret_cast<xtc::PageTableEntry*>(&data[pageTableOffset]);
+    auto* pageHeader = reinterpret_cast<xtc::XtgPageHeader*>(&data[entry->dataOffset]);
+    pageHeader->compression = 1;
+    SdMan.registerFile("/compressed.xtc", data);
+
+    xtc::XtcParser parser;
+    parser.open("/compressed.xtc");
+    std::vector<uint8_t> buffer(32);
+    runner.expectEq(size_t{0}, parser.loadPage(0, buffer.data(), buffer.size()),
+                    "page_validation: rejects unsupported compression");
+  }
+
+  // Test 12: embedded and table data sizes are validated
+  {
+    SdMan.clearFiles();
+    std::string data = buildMultiPageXtc(8, 8, 1);
+    constexpr size_t pageTableOffset = sizeof(xtc::XtcHeader) + 128 + 64;
+    auto* entry = reinterpret_cast<xtc::PageTableEntry*>(&data[pageTableOffset]);
+    auto* pageHeader = reinterpret_cast<xtc::XtgPageHeader*>(&data[entry->dataOffset]);
+    pageHeader->dataSize++;
+    SdMan.registerFile("/wrong_size.xtc", data);
+
+    xtc::XtcParser parser;
+    parser.open("/wrong_size.xtc");
+    std::vector<uint8_t> buffer(32);
+    runner.expectEq(size_t{0}, parser.loadPage(0, buffer.data(), buffer.size()),
+                    "page_validation: rejects incorrect embedded data size");
+
+    data = buildMultiPageXtc(8, 8, 1);
+    entry = reinterpret_cast<xtc::PageTableEntry*>(&data[pageTableOffset]);
+    entry->dataSize = sizeof(xtc::XtgPageHeader);
+    SdMan.registerFile("/short_entry.xtc", data);
+    parser.close();
+    parser.open("/short_entry.xtc");
+    runner.expectEq(size_t{0}, parser.loadPage(0, buffer.data(), buffer.size()),
+                    "page_validation: rejects truncated page entry");
+  }
+
+  // Test 13: invalid streaming arguments fail before allocation
+  {
+    SdMan.clearFiles();
+    SdMan.registerFile("/zero_chunk.xtc", buildMultiPageXtc(8, 8, 1));
+    xtc::XtcParser parser;
+    parser.open("/zero_chunk.xtc");
+    const auto err = parser.loadPageStreaming(0, [](const uint8_t*, size_t, size_t) {}, 0);
+    runner.expectTrue(err == xtc::XtcError::CORRUPTED_HEADER, "streaming: rejects zero chunk size");
+  }
+
+  // Test 14: chapter parsing is bounded and close releases capacity
+  {
+    SdMan.clearFiles();
+    SdMan.registerFile("/chapters.xtc", buildChapterXtc(501));
+    xtc::XtcParser parser;
+    runner.expectTrue(parser.open("/chapters.xtc") == xtc::XtcError::OK, "chapters: parser opens");
+    runner.expectEq(size_t{500}, parser.getChapters().size(), "chapters: parser caps entries at 500");
+    parser.close();
+    runner.expectEq(size_t{0}, parser.getChapters().capacity(), "chapters: close releases vector capacity");
   }
 
   return runner.allPassed() ? 0 : 1;

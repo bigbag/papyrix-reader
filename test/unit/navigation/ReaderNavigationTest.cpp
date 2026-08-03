@@ -71,7 +71,8 @@ class ReaderNavigation {
       } else if (cache && cache->isPartial()) {
         result.position.sectionPage = current.sectionPage + 1;
         result.needsRender = true;
-      } else if (pageCount > 0 && current.sectionPage >= pageCount - 1) {
+      } else if (cache && !cache->isPartial() && (pageCount == 0 || current.sectionPage >= pageCount - 1)) {
+        // Complete cache, including empty 0-page sections (Issue #136 residual)
         result.position.spineIndex = current.spineIndex + 1;
         result.position.sectionPage = 0;
         result.needsCacheReset = true;
@@ -87,6 +88,25 @@ class ReaderNavigation {
       }
     }
 
+    return result;
+  }
+
+  static NavResult skipEmptySection(const Position& current, int spineCount, bool preferBack) {
+    NavResult result;
+    result.position = current;
+
+    if (preferBack) {
+      if (current.spineIndex <= 0) return result;
+      result.position.spineIndex = current.spineIndex - 1;
+      result.position.sectionPage = INT16_MAX;
+    } else {
+      if (current.spineIndex + 1 >= spineCount) return result;
+      result.position.spineIndex = current.spineIndex + 1;
+      result.position.sectionPage = 0;
+    }
+
+    result.needsRender = true;
+    result.needsCacheReset = true;
     return result;
   }
 
@@ -356,14 +376,82 @@ int main() {
     runner.expectFalse(result.needsRender, "EPUB null cache: needsRender is false");
   }
 
-  // Test 20: EPUB with empty cache (pageCount=0) - no navigation
+  // Test 20: EPUB with empty complete cache (pageCount=0) - skip to next spine
+  // Regression (#136 residual): image-only FB2/EPUB sections produce 0-page complete
+  // caches; next must advance rather than stall.
   {
     PageCache cache(0, false);
     ReaderNavigation::Position pos;
     pos.spineIndex = 1;
     pos.sectionPage = 0;
     auto result = ReaderNavigation::next(ContentType::Epub, pos, &cache, 0);
-    runner.expectFalse(result.needsRender, "EPUB empty cache: needsRender is false");
+    runner.expectEq(2, result.position.spineIndex, "EPUB empty complete: spine advances");
+    runner.expectEq(0, result.position.sectionPage, "EPUB empty complete: sectionPage resets");
+    runner.expectTrue(result.needsRender, "EPUB empty complete: needsRender is true");
+    runner.expectTrue(result.needsCacheReset, "EPUB empty complete: needsCacheReset is true");
+  }
+
+  // Test 20b: FB2 empty complete cache - same skip behavior
+  {
+    PageCache cache(0, false);
+    ReaderNavigation::Position pos;
+    pos.spineIndex = 0;
+    pos.sectionPage = 0;
+    auto result = ReaderNavigation::next(ContentType::Fb2, pos, &cache, 0);
+    runner.expectEq(1, result.position.spineIndex, "FB2 empty complete: spine advances");
+    runner.expectTrue(result.needsCacheReset, "FB2 empty complete: needsCacheReset is true");
+  }
+
+  // Empty-section traversal used by renderCachedPage
+  {
+    ReaderNavigation::Position pos;
+    pos.spineIndex = 2;
+    auto result = ReaderNavigation::skipEmptySection(pos, 5, false);
+    runner.expectEq(3, result.position.spineIndex, "empty section forward: advances spine");
+    runner.expectEq(0, result.position.sectionPage, "empty section forward: starts at first page");
+    runner.expectTrue(result.needsRender, "empty section forward: needs render");
+    runner.expectTrue(result.needsCacheReset, "empty section forward: resets cache");
+  }
+
+  {
+    ReaderNavigation::Position pos;
+    pos.spineIndex = 2;
+    auto result = ReaderNavigation::skipEmptySection(pos, 5, true);
+    runner.expectEq(1, result.position.spineIndex, "empty section backward: decrements spine");
+    runner.expectEq(static_cast<int>(INT16_MAX), result.position.sectionPage,
+                    "empty section backward: requests previous last page");
+  }
+
+  // At spine 0, backward preference stops instead of underflowing or bouncing
+  // forward through a leading chain of empty sections.
+  {
+    ReaderNavigation::Position pos;
+    pos.spineIndex = 0;
+    auto result = ReaderNavigation::skipEmptySection(pos, 3, true);
+    runner.expectFalse(result.needsRender, "leading empty backward: no previous spine");
+    runner.expectEq(0, result.position.spineIndex, "leading empty backward: position unchanged");
+  }
+
+  // First-open/forward traversal still skips a leading empty section.
+  {
+    ReaderNavigation::Position pos;
+    pos.spineIndex = 0;
+    auto result = ReaderNavigation::skipEmptySection(pos, 3, false);
+    runner.expectTrue(result.needsRender, "leading empty forward: advances");
+    runner.expectEq(1, result.position.spineIndex, "leading empty forward: next spine");
+  }
+
+  // A trailing or only empty section has no adjacent page in the requested direction.
+  {
+    ReaderNavigation::Position trailing;
+    trailing.spineIndex = 2;
+    auto trailingResult = ReaderNavigation::skipEmptySection(trailing, 3, false);
+    runner.expectFalse(trailingResult.needsRender, "trailing empty: signals end of book");
+    runner.expectEq(2, trailingResult.position.spineIndex, "trailing empty: position unchanged");
+
+    ReaderNavigation::Position only;
+    auto onlyResult = ReaderNavigation::skipEmptySection(only, 1, false);
+    runner.expectFalse(onlyResult.needsRender, "only empty spine: signals end of book");
   }
 
   // Test 21: XTC single page book - next stays in place

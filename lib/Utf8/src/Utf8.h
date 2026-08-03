@@ -5,6 +5,8 @@
 
 #include "Utf8Nfc.h"
 
+inline constexpr uint32_t UTF8_REPLACEMENT_CODEPOINT = 0xFFFD;
+
 uint32_t utf8NextCodepoint(const unsigned char** string);
 
 inline bool utf8IsCombiningMark(const uint32_t cp) {

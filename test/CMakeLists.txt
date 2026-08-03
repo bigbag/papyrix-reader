@@ -473,6 +473,22 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/src/core/OtaBootSwitch.cpp
       ${TEST_HELPERS}
     )
+  elseif(TEST_NAME STREQUAL "G5ImageCacheTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/Group5/src/G5ImageCache.cpp
+      ${PROJECT_ROOT}/lib/Group5/src/Group5.cpp
+      ${TEST_HELPERS}
+    )
+    target_include_directories(${TEST_NAME} PRIVATE
+      ${PROJECT_ROOT}/lib/Group5/src
+    )
+  elseif(TEST_NAME STREQUAL "Utf8Test")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/Utf8/src/Utf8.cpp
+      ${TEST_HELPERS}
+    )
   else()
     add_executable(${TEST_NAME} ${TEST_SRC} ${TEST_HELPERS})
   endif()

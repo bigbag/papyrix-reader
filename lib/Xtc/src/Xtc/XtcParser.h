@@ -100,6 +100,7 @@ class XtcParser {
   XtcError readAuthor();
   XtcError readChapters();
   bool readPageEntry(uint32_t pageIndex, PageInfo& info);
+  bool readValidatedPage(uint32_t pageIndex, PageInfo& page, XtgPageHeader& pageHeader, size_t& bitmapSize);
 };
 
 }  // namespace xtc
