@@ -978,20 +978,20 @@ void GfxRenderer::drawButtonHints(const int fontId, const char* btn1, const char
   const int screenWidth = getScreenWidth();
   const int pageHeight = getScreenHeight();
   constexpr int numButtons = 4;
-  constexpr int buttonWidth = 106;
   constexpr int buttonHeight = 46;
   constexpr int buttonY = 50;
   constexpr int textYOffset = 10;
-  const int totalGap = std::max(0, screenWidth - numButtons * buttonWidth);
+  const int totalGap = std::max(0, screenWidth - numButtons * BUTTON_HINT_WIDTH);
   const char* labels[] = {btn1, btn2, btn3, btn4};
 
   for (int i = 0; i < numButtons; i++) {
     if (labels[i] != nullptr && labels[i][0] != '\0') {
-      const int x = totalGap * (i + 1) / (numButtons + 1) + i * buttonWidth;
-      drawRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, black);
-      const int textWidth = getTextWidth(fontId, labels[i]);
-      const int textX = x + (buttonWidth - 1 - textWidth) / 2;
-      drawText(fontId, textX, pageHeight - buttonY + textYOffset, labels[i], black);
+      const int x = totalGap * (i + 1) / (numButtons + 1) + i * BUTTON_HINT_WIDTH;
+      drawRect(x, pageHeight - buttonY, BUTTON_HINT_WIDTH, buttonHeight, black);
+      const std::string label = truncatedText(fontId, labels[i], BUTTON_HINT_MAX_TEXT_WIDTH);
+      const int textWidth = getTextWidth(fontId, label.c_str());
+      const int textX = x + (BUTTON_HINT_WIDTH - 1 - textWidth) / 2;
+      drawText(fontId, textX, pageHeight - buttonY + textYOffset, label.c_str(), black);
     }
   }
 }

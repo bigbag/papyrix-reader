@@ -6,6 +6,7 @@
 
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 class ExternalFont;
@@ -16,12 +17,24 @@ class GfxRenderer {
   enum RenderMode { BW, GRAYSCALE_LSB, GRAYSCALE_MSB };
   enum Orientation { Portrait, LandscapeClockwise, PortraitInverted, LandscapeCounterClockwise };
 
+  struct CenteredTextCall {
+    int fontId;
+    int y;
+    std::string text;
+    bool black;
+    EpdFontFamily::Style style;
+  };
+
  private:
   EInkDisplay& einkDisplay;
   RenderMode renderMode;
   Orientation orientation;
   std::map<int, EpdFontFamily> fontMap;
   static uint8_t frameBuffer_[EInkDisplay::BUFFER_SIZE];
+  mutable int lastWrapMaxWidth_ = 0;
+  mutable int lastWrapMaxLines_ = 0;
+  mutable std::vector<CenteredTextCall> centeredTextCalls_;
+  std::vector<std::string> wrappedTextResult_;
 
  public:
   static constexpr int VIEWABLE_MARGIN_TOP = 9;
@@ -68,6 +81,8 @@ class GfxRenderer {
   }
 
   int getEffectiveLineHeight(int fontId) const { return getLineHeight(fontId); }
+  int getScreenWidth() const { return orientation == Portrait || orientation == PortraitInverted ? 480 : 800; }
+  int getScreenHeight() const { return orientation == Portrait || orientation == PortraitInverted ? 800 : 480; }
 
   int getFontAscenderSize(int fontId) const {
     auto it = fontMap.find(fontId);
@@ -86,6 +101,21 @@ class GfxRenderer {
   }
   int getArabicTextWidth(int fontId, const char* text, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const {
     return getTextWidth(fontId, text, style);
+  }
+
+  void setWrappedTextResult(std::vector<std::string> lines) { wrappedTextResult_ = std::move(lines); }
+  int lastWrapMaxWidth() const { return lastWrapMaxWidth_; }
+  int lastWrapMaxLines() const { return lastWrapMaxLines_; }
+  const std::vector<CenteredTextCall>& centeredTextCalls() const { return centeredTextCalls_; }
+  void clearCenteredTextCalls() const { centeredTextCalls_.clear(); }
+
+  std::vector<std::string> wrapTextWithHyphenation(
+      int, const char* text, int maxWidth, int maxLines,
+      EpdFontFamily::Style = EpdFontFamily::REGULAR) const {
+    lastWrapMaxWidth_ = maxWidth;
+    lastWrapMaxLines_ = maxLines;
+    if (!wrappedTextResult_.empty()) return wrappedTextResult_;
+    return text && *text ? std::vector<std::string>{text} : std::vector<std::string>{};
   }
 
   std::vector<std::string> breakWordWithHyphenation(int fontId, const char* word, int maxWidth,
@@ -129,7 +159,10 @@ class GfxRenderer {
   }
 
   void drawText(int, int, int, const char*, bool = true, EpdFontFamily::Style = EpdFontFamily::REGULAR) const {}
-  void drawCenteredText(int, int, const char*, bool = true, EpdFontFamily::Style = EpdFontFamily::REGULAR) const {}
+  void drawCenteredText(int fontId, int y, const char* text, bool black = true,
+                        EpdFontFamily::Style style = EpdFontFamily::REGULAR) const {
+    centeredTextCalls_.push_back({fontId, y, text ? text : "", black, style});
+  }
   void drawThaiText(int, int, int, const char*, bool = true, EpdFontFamily::Style = EpdFontFamily::REGULAR) const {}
   void drawArabicText(int, int, int, const char*, bool = true, EpdFontFamily::Style = EpdFontFamily::REGULAR) const {}
   void clearArea(int, int, int, int, uint8_t = 0xFF) const {}

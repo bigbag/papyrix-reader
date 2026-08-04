@@ -355,6 +355,21 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/RenderTypes/src
       ${PROJECT_ROOT}/lib/RenderTypes/src/blocks
     )
+  elseif(TEST_NAME STREQUAL "ButtonHintDimensionsTest")
+    add_executable(${TEST_NAME} ${TEST_SRC} ${TEST_HELPERS})
+    target_include_directories(${TEST_NAME} BEFORE PRIVATE
+      ${PROJECT_ROOT}/lib/GfxRenderer/src
+      ${PROJECT_ROOT}/lib/ThaiShaper/src
+    )
+  elseif(TEST_NAME STREQUAL "WrappedTextTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/src/ui/WrappedText.cpp
+      ${PROJECT_ROOT}/lib/EpdFont/src/EpdFont.cpp
+      ${PROJECT_ROOT}/lib/EpdFont/src/EpdFontFamily.cpp
+      ${PROJECT_ROOT}/lib/Utf8/src/Utf8.cpp
+      ${TEST_HELPERS}
+    )
   elseif(TEST_NAME STREQUAL "CapacityContractsTest")
     add_executable(${TEST_NAME} ${TEST_SRC} ${TEST_HELPERS})
     target_include_directories(${TEST_NAME} PRIVATE

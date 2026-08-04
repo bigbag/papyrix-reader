@@ -9,6 +9,7 @@
 
 #include "../core/BootMode.h"
 #include "../core/Core.h"
+#include "../ui/WrappedText.h"
 #include "ThemeManager.h"
 
 #define TAG "ERROR"
@@ -76,7 +77,8 @@ void ErrorState::render(Core& core) {
   renderer_.drawCenteredText(theme.readerFontId, 100, tr(ERROR), theme.primaryTextBlack, BOLD);
 
   // Error message
-  renderer_.drawCenteredText(theme.uiFontId, 200, message_, theme.primaryTextBlack, REGULAR);
+  const int maxTextWidth = renderer_.getScreenWidth() - 2 * (theme.screenMarginSide + theme.itemPaddingX);
+  ui::centeredTextWrapped(renderer_, theme.uiFontId, 200, message_, maxTextWidth, 3, theme.primaryTextBlack);
 
   // Instructions
   renderer_.drawCenteredText(theme.uiFontId, 350, tr(PRESS_ANY_BUTTON), theme.primaryTextBlack, REGULAR);

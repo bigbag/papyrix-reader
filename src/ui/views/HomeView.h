@@ -40,6 +40,7 @@ struct HomeView {
   static constexpr int MAX_TITLE_LEN = 256;
   static constexpr int MAX_AUTHOR_LEN = 96;
   static constexpr int MAX_PATH_LEN = 128;
+  static constexpr int MAX_EMPTY_HINT_LINES = 2;
 
   ButtonBar buttons;
 

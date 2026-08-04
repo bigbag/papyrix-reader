@@ -248,6 +248,8 @@ void render(const GfxRenderer& r, const Theme& t, const DeviceSettingsView& v);
 struct ConfirmDialogView {
   static constexpr int MAX_TITLE_LEN = 48;
   static constexpr int MAX_LINE_LEN = 80;
+  static constexpr int MAX_TITLE_LINES = 2;
+  static constexpr int MAX_MESSAGE_LINES = 2;
 
   ButtonBar buttons;
   char title[MAX_TITLE_LEN] = "";
@@ -286,6 +288,8 @@ void render(const GfxRenderer& r, const Theme& t, const ConfirmDialogView& v);
 // ============================================================================
 
 struct FirmwareUpdateView {
+  static constexpr int MAX_STATUS_LINES = 2;
+
   enum class State : uint8_t { Idle, Validating, Flashing, Complete, Error };
 
   ButtonBar buttons;

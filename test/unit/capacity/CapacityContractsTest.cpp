@@ -6,6 +6,8 @@
 #include "core/Types.h"
 #include "drivers/Input.h"
 #include "states/RecentState.h"
+#include "ui/views/CalibreViews.h"
+#include "ui/views/HomeView.h"
 #include "ui/views/ReaderViews.h"
 #include "ui/views/SettingsViews.h"
 
@@ -60,6 +62,11 @@ int main() {
   }
 
   runner.expectEq(3, ui::ReaderMenuView::ITEM_COUNT, "Reader menu exposes three items");
+  runner.expectEq(2, ui::ConfirmDialogView::MAX_TITLE_LINES, "confirmation title allows two lines");
+  runner.expectEq(2, ui::ConfirmDialogView::MAX_MESSAGE_LINES, "each confirmation message allows two lines");
+  runner.expectEq(2, ui::FirmwareUpdateView::MAX_STATUS_LINES, "firmware status allows two lines");
+  runner.expectEq(2, ui::CalibreView::MAX_TEXT_LINES, "Calibre fields allow two lines");
+  runner.expectEq(2, ui::HomeView::MAX_EMPTY_HINT_LINES, "Home empty hint allows two lines");
   runner.expectEq(static_cast<int>(Button::Left), static_cast<int>(RecentState::FILES_BUTTON),
                   "Books opens Files with Left");
   runner.expectEq(static_cast<int>(Button::Right), static_cast<int>(RecentState::INFO_BUTTON),

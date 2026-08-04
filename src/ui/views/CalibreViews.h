@@ -15,6 +15,7 @@ namespace ui {
 struct CalibreView {
   static constexpr int MAX_STATUS_LEN = 64;
   static constexpr int MAX_HELP_LEN = 96;
+  static constexpr int MAX_TEXT_LINES = 2;
 
   enum class Status : uint8_t { Waiting, Connecting, Receiving, Complete, Error };
 

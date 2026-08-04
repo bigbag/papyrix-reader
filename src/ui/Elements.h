@@ -5,6 +5,8 @@
 
 #include <cstdint>
 
+#include "WrappedText.h"
+
 namespace ui {
 
 // Button bar configuration - tracks which buttons are active
@@ -108,9 +110,6 @@ void chapterItem(const GfxRenderer& r, const Theme& t, int fontId, int y, const 
 
 // Wifi entry - Network name + signal strength + lock icon
 void wifiEntry(const GfxRenderer& r, const Theme& t, int y, const char* ssid, int signal, bool locked, bool selected);
-
-// Centered text - Horizontally centered text
-void centeredText(const GfxRenderer& r, const Theme& t, int y, const char* str);
 
 // Centered message - Bold centered message (for loading/error screens)
 void centeredMessage(const GfxRenderer& r, const Theme& t, int fontId, const char* message);

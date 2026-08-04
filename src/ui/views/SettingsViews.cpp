@@ -2,6 +2,7 @@
 
 #include <I18n.h>
 
+#include <algorithm>
 #include <iterator>
 
 namespace ui {
@@ -210,14 +211,23 @@ void render(const GfxRenderer& r, const Theme& t, const ConfirmDialogView& v) {
 
   r.clearScreen(t.backgroundColor);
 
-  r.drawCenteredText(t.readerFontId, top - 40, v.title, t.primaryTextBlack, EpdFontFamily::BOLD);
+  const int maxTextWidth = pageWidth - 2 * (t.screenMarginSide + t.itemPaddingX);
+  const int titleLineHeight = r.getLineHeight(t.readerFontId);
+  const bool titleWraps = r.getTextWidth(t.readerFontId, v.title, EpdFontFamily::BOLD) > maxTextWidth;
+  const int titleY = top - 40 - (titleWraps ? titleLineHeight : 0);
+  centeredTextWrapped(r, t.readerFontId, titleY, v.title, maxTextWidth, ConfirmDialogView::MAX_TITLE_LINES,
+                      t.primaryTextBlack, EpdFontFamily::BOLD);
 
-  r.drawCenteredText(t.uiFontId, top, v.line1, t.primaryTextBlack);
+  const int line1Count = centeredTextWrapped(r, t.uiFontId, top, v.line1, maxTextWidth,
+                                             ConfirmDialogView::MAX_MESSAGE_LINES, t.primaryTextBlack);
+  int messageLines = std::max(1, line1Count);
   if (v.line2[0] != '\0') {
-    r.drawCenteredText(t.uiFontId, top + lineHeight, v.line2, t.primaryTextBlack);
+    const int line2Count = centeredTextWrapped(r, t.uiFontId, top + messageLines * lineHeight, v.line2, maxTextWidth,
+                                               ConfirmDialogView::MAX_MESSAGE_LINES, t.primaryTextBlack);
+    messageLines += std::max(1, line2Count);
   }
 
-  const int buttonY = top + lineHeight * 3;
+  const int buttonY = top + std::max(3, messageLines + 1) * lineHeight;
   constexpr int buttonWidth = 80;
   constexpr int buttonHeight = 36;
   constexpr int buttonSpacing = 20;
@@ -267,14 +277,16 @@ void render(const GfxRenderer& r, const Theme& t, const FirmwareUpdateView& v) {
   }
 
   const int statusY = startY + lineHeight * 3;
-  r.drawCenteredText(t.uiFontId, statusY, v.statusLine, t.primaryTextBlack);
+  const int statusLines = centeredTextWrapped(r, t.uiFontId, statusY, v.statusLine, maxTextWidth,
+                                              FirmwareUpdateView::MAX_STATUS_LINES, t.primaryTextBlack);
+  const int statusLineCount = std::max(1, statusLines);
 
   if (v.state == FirmwareUpdateView::State::Flashing) {
-    progress(r, t, statusY + lineHeight, v.progressPercent, 100);
+    progress(r, t, statusY + statusLineCount * lineHeight, v.progressPercent, 100);
   }
 
   if (v.state == FirmwareUpdateView::State::Error) {
-    r.drawCenteredText(t.uiFontId, statusY + lineHeight * 2, tr(PRESS_ANY_BUTTON), t.primaryTextBlack);
+    centeredText(r, t, statusY + (statusLineCount + 1) * lineHeight, tr(PRESS_ANY_BUTTON));
   }
 
   bool interactive = v.state == FirmwareUpdateView::State::Idle || v.state == FirmwareUpdateView::State::Error;

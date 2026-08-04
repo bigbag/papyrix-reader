@@ -146,7 +146,10 @@ void dialog(const GfxRenderer& r, const Theme& t, const char* titleText, const c
 
   // Dialog box dimensions
   const int dialogW = screenW - 60;
-  const int dialogH = 160;
+  const int lineHeight = r.getLineHeight(t.uiFontId);
+  const int messageMaxWidth = dialogW - 40;
+  const bool messageWraps = r.getTextWidth(t.uiFontId, msg) > messageMaxWidth;
+  const int dialogH = 160 + (messageWraps ? lineHeight : 0);
   const int dialogX = 30;
   const int dialogY = (screenH - dialogH) / 2;
 
@@ -158,7 +161,7 @@ void dialog(const GfxRenderer& r, const Theme& t, const char* titleText, const c
   r.drawCenteredText(t.readerFontId, dialogY + 20, titleText, t.primaryTextBlack, EpdFontFamily::BOLD);
 
   // Draw message
-  r.drawCenteredText(t.uiFontId, dialogY + 60, msg, t.primaryTextBlack);
+  centeredTextWrapped(r, t.uiFontId, dialogY + 60, msg, messageMaxWidth, 2, t.primaryTextBlack);
 
   // Draw buttons (Yes/No)
   const int btnW = 80;
@@ -562,14 +565,11 @@ void wifiEntry(const GfxRenderer& r, const Theme& t, int y, const char* ssid, in
   }
 }
 
-void centeredText(const GfxRenderer& r, const Theme& t, int y, const char* str) {
-  r.drawCenteredText(t.uiFontId, y, str, t.primaryTextBlack);
-}
-
 void centeredMessage(const GfxRenderer& r, const Theme& t, int fontId, const char* message) {
   r.clearScreen(t.backgroundColor);
   const int y = r.getScreenHeight() / 2 - r.getLineHeight(fontId) / 2;
-  r.drawCenteredText(fontId, y, message, t.primaryTextBlack, EpdFontFamily::BOLD);
+  const int maxWidth = r.getScreenWidth() - 2 * (t.screenMarginSide + t.itemPaddingX);
+  centeredTextWrapped(r, fontId, y, message, maxWidth, 3, t.primaryTextBlack, EpdFontFamily::BOLD);
   r.displayBuffer();
 }
 

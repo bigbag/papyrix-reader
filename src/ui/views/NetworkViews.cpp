@@ -3,6 +3,7 @@
 #include <I18n.h>
 #include <qrcode.h>
 
+#include <algorithm>
 #include <cstdio>
 
 namespace ui {
@@ -81,8 +82,10 @@ void render(const GfxRenderer& r, const Theme& t, const WifiListView& v) {
     centeredText(r, t, centerY, v.statusText);
   } else if (v.networkCount == 0) {
     const int centerY = r.getScreenHeight() / 2;
-    centeredText(r, t, centerY, tr(NO_NETWORKS_FOUND));
-    centeredText(r, t, centerY + 30, tr(PRESS_CONFIRM_SCAN));
+    const int lineHeight = r.getLineHeight(t.uiFontId);
+    const int messageLines = centeredText(r, t, centerY, tr(NO_NETWORKS_FOUND));
+    const int hintY = centerY + std::max(30, std::max(1, messageLines) * lineHeight + 1);
+    centeredText(r, t, hintY, tr(PRESS_CONFIRM_SCAN));
   } else {
     const int listStartY = 60;
     const int pageStart = v.getPageStart();
@@ -106,14 +109,17 @@ void render(const GfxRenderer& r, const Theme& t, const WifiConnectingView& v) {
   title(r, t, t.screenMarginTop, tr(CONNECTING_TITLE));
 
   const int centerY = r.getScreenHeight() / 2 - 60;
+  const int lineHeight = r.getLineHeight(t.uiFontId);
 
-  centeredText(r, t, centerY, v.ssid);
-  centeredText(r, t, centerY + 40, v.statusMsg);
+  const int ssidLines = centeredText(r, t, centerY, v.ssid);
+  const int statusY = centerY + std::max(40, std::max(1, ssidLines) * lineHeight + 1);
+  const int statusLines = centeredText(r, t, statusY, v.statusMsg);
 
   if (v.status == WifiConnectingView::Status::Connected) {
     char ipLine[32];
     snprintf(ipLine, sizeof(ipLine), tr(FMT_IP), v.ipAddress);
-    centeredText(r, t, centerY + 80, ipLine);
+    const int ipY = statusY + std::max(40, std::max(1, statusLines) * lineHeight + 1);
+    centeredText(r, t, ipY, ipLine);
   }
 
   buttonBar(r, t, v.buttons);
@@ -145,8 +151,10 @@ void render(const GfxRenderer& r, const Theme& t, const WebServerView& v) {
       drawQRCode(r, qrX + QR_PADDING, qrY + QR_PADDING, wifiQR, t.primaryTextBlack);
 
       const int labelY = qrY + qrSize + 15;
-      centeredText(r, t, labelY, v.ssid);
-      centeredText(r, t, labelY + 30, urlStr);
+      const int lineHeight = r.getLineHeight(t.uiFontId);
+      const int ssidLines = centeredText(r, t, labelY, v.ssid);
+      const int urlY = labelY + std::max(30, std::max(1, ssidLines) * lineHeight + 1);
+      centeredText(r, t, urlY, urlStr);
     } else {
       // STA mode: show single URL QR code centered
       const int qrX = (screenWidth - qrSize) / 2;
@@ -156,8 +164,10 @@ void render(const GfxRenderer& r, const Theme& t, const WebServerView& v) {
 
       // Label and network info below
       const int labelY = qrY + qrSize + 15;
-      centeredText(r, t, labelY, urlStr);
-      centeredText(r, t, labelY + 30, v.ssid);
+      const int lineHeight = r.getLineHeight(t.uiFontId);
+      const int urlLines = centeredText(r, t, labelY, urlStr);
+      const int ssidY = labelY + std::max(30, std::max(1, urlLines) * lineHeight + 1);
+      centeredText(r, t, ssidY, v.ssid);
     }
   } else {
     centeredText(r, t, 180, tr(SERVER_STOPPED));

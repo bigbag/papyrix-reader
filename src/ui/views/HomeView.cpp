@@ -90,9 +90,8 @@ void render(const GfxRenderer& r, const Theme& t, const HomeView& v) {
     r.drawText(t.uiFontId, noBookX, centerY - lineHeight, noBookText, t.primaryTextBlack);
 
     const char* hintText = v.showRecents ? tr(PRESS_FILE_TO_EXPLORE) : tr(PRESS_FILES_TO_EXPLORE);
-    const int hintWidth = r.getTextWidth(t.uiFontId, hintText);
-    const int hintX = cardX + (cardWidth - hintWidth) / 2;
-    r.drawText(t.uiFontId, hintX, centerY + lineHeight / 2, hintText, t.secondaryTextBlack);
+    centeredTextWrapped(r, t.uiFontId, centerY + lineHeight / 2, hintText, cardWidth, HomeView::MAX_EMPTY_HINT_LINES,
+                        t.secondaryTextBlack);
   }
 
   ButtonBar btns{v.hasBook ? tr(READ) : "", v.showRecents ? tr(BOOKS) : tr(FILES), tr(APPS), tr(SETTINGS)};

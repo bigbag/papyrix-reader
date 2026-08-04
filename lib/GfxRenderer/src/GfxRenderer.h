@@ -18,6 +18,10 @@ class StreamingEpdFont;
 
 class GfxRenderer {
  public:
+  static constexpr int BUTTON_HINT_WIDTH = 106;
+  static constexpr int BUTTON_HINT_TEXT_PADDING = 6;
+  static constexpr int BUTTON_HINT_MAX_TEXT_WIDTH = BUTTON_HINT_WIDTH - BUTTON_HINT_TEXT_PADDING * 2;
+
   enum RenderMode { BW, GRAYSCALE_LSB, GRAYSCALE_MSB };
 
   // Logical screen orientation from the perspective of callers
