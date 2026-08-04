@@ -81,11 +81,21 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/ArabicShaper/src/ArabicShaper.cpp
       ${TEST_HELPERS}
     )
-  elseif(TEST_NAME STREQUAL "FsHelpersNormaliseTest")
+  elseif(TEST_NAME STREQUAL "FsHelpersNormaliseTest" OR TEST_NAME STREQUAL "NaturalSortTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
       ${PROJECT_ROOT}/lib/FsHelpers/src/FsHelpers.cpp
       ${TEST_HELPERS}
+    )
+  elseif(TEST_NAME STREQUAL "FileIndexTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/FileIndex/src/FileIndex.cpp
+      ${PROJECT_ROOT}/lib/FsHelpers/src/FsHelpers.cpp
+      ${TEST_HELPERS}
+    )
+    target_include_directories(${TEST_NAME} PRIVATE
+      ${PROJECT_ROOT}/lib/FileIndex/src
     )
   elseif(TEST_NAME MATCHES "^ScriptDetector.*Test$")
     add_executable(${TEST_NAME}

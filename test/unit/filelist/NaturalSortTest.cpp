@@ -1,41 +1,13 @@
 #include "test_utils.h"
 
+#include <FsHelpers.h>
+
 #include <algorithm>
-#include <cctype>
-#include <cstring>
 #include <string>
 #include <vector>
 
-// Inline the natural sort comparator from FileListState.cpp for testing
 static bool naturalLess(const std::string& a, const std::string& b) {
-  const char* s1 = a.c_str();
-  const char* s2 = b.c_str();
-
-  while (*s1 && *s2) {
-    const auto uc = [](char c) { return static_cast<unsigned char>(c); };
-    if (std::isdigit(uc(*s1)) && std::isdigit(uc(*s2))) {
-      while (*s1 == '0') s1++;
-      while (*s2 == '0') s2++;
-
-      int len1 = 0, len2 = 0;
-      while (std::isdigit(uc(s1[len1]))) len1++;
-      while (std::isdigit(uc(s2[len2]))) len2++;
-      if (len1 != len2) return len1 < len2;
-
-      for (int i = 0; i < len1; i++) {
-        if (s1[i] != s2[i]) return s1[i] < s2[i];
-      }
-      s1 += len1;
-      s2 += len2;
-    } else {
-      char c1 = std::tolower(uc(*s1));
-      char c2 = std::tolower(uc(*s2));
-      if (c1 != c2) return c1 < c2;
-      s1++;
-      s2++;
-    }
-  }
-  return *s1 == '\0' && *s2 != '\0';
+  return FsHelpers::naturalCompare(a.c_str(), b.c_str()) < 0;
 }
 
 // Helper: verify strict weak ordering properties for a pair

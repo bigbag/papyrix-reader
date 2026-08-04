@@ -2,17 +2,19 @@
 
 #include <Arduino.h>
 #include <EInkDisplay.h>
+#include <FileIndex.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <SDCardManager.h>
 #include <Utf8.h>
+#include <esp_heap_caps.h>
 #include <esp_system.h>
 
 #include <algorithm>
-#include <cctype>
 #include <cstring>
+#include <new>
 
 #include "../content/RecentBooksStore.h"
 #include "../core/BootMode.h"
@@ -72,119 +74,145 @@ void FileListState::enter(Core& core) {
 
   loadFiles(core);
 
-  if (preservePosition && !files_.empty()) {
-    selectedIndex_ = core.settings.fileListSelectedIndex;
+  const size_t count = entryCount();
+  if (preservePosition && count > 0) {
+    selectedIndex_ = std::min<size_t>(core.settings.fileListSelectedIndex, count - 1);
 
-    // Clamp to valid range
-    if (selectedIndex_ >= files_.size()) {
-      selectedIndex_ = files_.size() - 1;
-    }
-
-    // Verify filename matches, search if not
-    if (strcasecmp(files_[selectedIndex_].name.c_str(), core.settings.fileListSelectedName) != 0) {
-      for (size_t i = 0; i < files_.size(); i++) {
-        if (strcasecmp(files_[i].name.c_str(), core.settings.fileListSelectedName) == 0) {
-          selectedIndex_ = i;
-          break;
-        }
-      }
+    FileEntryView selected{};
+    if (!entryAt(selectedIndex_, selected) || strcasecmp(selected.name, core.settings.fileListSelectedName) != 0) {
+      const size_t restoredIndex = findEntryByName(core.settings.fileListSelectedName);
+      if (restoredIndex < count) selectedIndex_ = restoredIndex;
     }
   } else {
     selectedIndex_ = 0;
   }
 }
 
-void FileListState::exit(Core& core) { LOG_INF(TAG, "Exiting"); }
+void FileListState::exit(Core& core) {
+  LOG_INF(TAG, "Exiting");
+  fileIndex_.reset();
+  std::vector<FileEntry>().swap(files_);
+}
 
 void FileListState::loadFiles(Core& core) {
+  fileIndex_.reset();
   files_.clear();
-  files_.reserve(512);  // Pre-allocate for large libraries
 
-  FsFile dir;
-  auto result = core.storage.openDir(currentDir_, dir);
-  if (!result.ok()) {
-    LOG_ERR(TAG, "Failed to open dir: %s", currentDir_);
+  const size_t reserveBytes = IN_MEMORY_ENTRY_LIMIT * sizeof(FileEntry);
+  const size_t largestBlock = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+  const bool canBufferEntries = files_.capacity() >= IN_MEMORY_ENTRY_LIMIT || reserveBytes <= largestBlock * 80 / 100;
+
+  if (canBufferEntries && files_.capacity() < IN_MEMORY_ENTRY_LIMIT) files_.reserve(IN_MEMORY_ENTRY_LIMIT);
+
+  bool overflow = false;
+  const bool scanned = canBufferEntries && scanFiles(core, IN_MEMORY_ENTRY_LIMIT, overflow);
+  if (scanned && !overflow) {
+    std::sort(files_.begin(), files_.end(), [](const FileEntry& a, const FileEntry& b) {
+      if (a.isDir != b.isDir) return a.isDir;
+      return FsHelpers::naturalCompare(a.name.c_str(), b.name.c_str()) < 0;
+    });
+    LOG_INF(TAG, "Loaded %zu entries", files_.size());
     return;
   }
 
-  char name[256];
-  FsFile entry;
-
-  // Collect all entries (no hard limit during collection)
-  while ((entry = dir.openNextFile())) {
-    entry.getName(name, sizeof(name));
-
-    if (isHidden(name)) {
-      entry.close();
-      continue;
+  std::vector<FileEntry>().swap(files_);
+  FileIndex* index = new (std::nothrow) FileIndex();
+  if (index) {
+    fileIndex_.reset(index);
+    if (fileIndex_->open(currentDir_, acceptEntry)) {
+      LOG_INF(TAG, "Loaded %zu indexed entries", fileIndex_->size());
+      return;
     }
-
-    bool isDir = entry.isDirectory();
-    entry.close();
-
-    if (isDir || isSupportedFile(name)) {
-      files_.push_back({std::string(name), isDir});
-    }
-  }
-  dir.close();
-
-  // Safety check - prevent OOM on extreme cases
-  constexpr size_t MAX_ENTRIES = 1000;
-  if (files_.size() > MAX_ENTRIES) {
-    LOG_INF(TAG, "Warning: truncated to %zu entries", MAX_ENTRIES);
-    files_.resize(MAX_ENTRIES);
-    files_.shrink_to_fit();
+    fileIndex_.reset();
   }
 
-  // Sort: directories first, then natural sort (case-insensitive)
-  std::sort(files_.begin(), files_.end(), [](const FileEntry& a, const FileEntry& b) {
-    if (a.isDir && !b.isDir) return true;
-    if (!a.isDir && b.isDir) return false;
+  const size_t fallbackLargestBlock = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+  const bool canBufferFallback =
+      files_.capacity() >= IN_MEMORY_ENTRY_LIMIT || reserveBytes <= fallbackLargestBlock * 80 / 100;
+  if (!canBufferFallback) {
+    LOG_ERR(TAG, "Insufficient heap to list %s", currentDir_);
+    return;
+  }
+  if (files_.capacity() < IN_MEMORY_ENTRY_LIMIT) files_.reserve(IN_MEMORY_ENTRY_LIMIT);
 
-    const char* s1 = a.name.c_str();
-    const char* s2 = b.name.c_str();
-
-    while (*s1 && *s2) {
-      const auto uc = [](char c) { return static_cast<unsigned char>(c); };
-      if (std::isdigit(uc(*s1)) && std::isdigit(uc(*s2))) {
-        // Skip leading zeros
-        while (*s1 == '0') s1++;
-        while (*s2 == '0') s2++;
-
-        // Compare by digit length first
-        int len1 = 0, len2 = 0;
-        while (std::isdigit(uc(s1[len1]))) len1++;
-        while (std::isdigit(uc(s2[len2]))) len2++;
-        if (len1 != len2) return len1 < len2;
-
-        // Same length: compare digit by digit
-        for (int i = 0; i < len1; i++) {
-          if (s1[i] != s2[i]) return s1[i] < s2[i];
-        }
-        s1 += len1;
-        s2 += len2;
-      } else {
-        char c1 = std::tolower(uc(*s1));
-        char c2 = std::tolower(uc(*s2));
-        if (c1 != c2) return c1 < c2;
-        s1++;
-        s2++;
-      }
-    }
-    return *s1 == '\0' && *s2 != '\0';
-  });
-
-  LOG_INF(TAG, "Loaded %zu entries", files_.size());
+  bool ignoredOverflow = false;
+  if (scanFiles(core, IN_MEMORY_ENTRY_LIMIT, ignoredOverflow)) {
+    std::sort(files_.begin(), files_.end(), [](const FileEntry& a, const FileEntry& b) {
+      if (a.isDir != b.isDir) return a.isDir;
+      return FsHelpers::naturalCompare(a.name.c_str(), b.name.c_str()) < 0;
+    });
+  }
+  LOG_ERR(TAG, "Index failed for %s; showing first %zu entries", currentDir_, files_.size());
 }
 
-bool FileListState::isHidden(const char* name) const {
+bool FileListState::scanFiles(Core& core, size_t limit, bool& overflow) {
+  overflow = false;
+  FsFile directory;
+  const auto result = core.storage.openDir(currentDir_, directory);
+  if (!result.ok()) {
+    LOG_ERR(TAG, "Failed to open dir: %s", currentDir_);
+    return false;
+  }
+
+  char name[FileIndex::MAX_NAME + 1];
+  while (true) {
+    FsFile entry = directory.openNextFile();
+    if (!entry) break;
+
+    entry.getName(name, sizeof(name));
+    const bool isDirectory = entry.isDirectory();
+    entry.close();
+    if (!acceptEntry(name, isDirectory)) continue;
+
+    if (files_.size() >= limit) {
+      overflow = true;
+      break;
+    }
+    files_.push_back({name, isDirectory});
+  }
+  directory.close();
+  return true;
+}
+
+size_t FileListState::entryCount() const { return fileIndex_ ? fileIndex_->size() : files_.size(); }
+
+bool FileListState::entryAt(size_t index, FileEntryView& out) {
+  if (!fileIndex_) {
+    if (index >= files_.size()) return false;
+    out = {files_[index].name.c_str(), files_[index].isDir};
+    return true;
+  }
+
+  if (!fileIndex_->entryAt(index, indexedEntry_)) return false;
+  out = {indexedEntry_.name, indexedEntry_.isDir};
+  return true;
+}
+
+size_t FileListState::findEntryByName(const char* name) {
+  if (!name) return entryCount();
+  if (fileIndex_) {
+    const size_t row = fileIndex_->findRowByName(name);
+    return row == SIZE_MAX ? entryCount() : row;
+  }
+
+  for (size_t i = 0; i < files_.size(); i++) {
+    if (strcasecmp(files_[i].name.c_str(), name) == 0) return i;
+  }
+  return files_.size();
+}
+
+bool FileListState::acceptEntry(const char* name, bool isDir) {
+  return name && !isHidden(name) && (isDir || isSupportedFile(name));
+}
+
+bool FileListState::isHidden(const char* name) {
   if (name[0] == '.') return true;
   if (FsHelpers::isHiddenFsItem(name)) return true;
   if (strncmp(name, "FOUND.", 6) == 0) return true;
   return false;
 }
 
-bool FileListState::isSupportedFile(const char* name) const {
+bool FileListState::isSupportedFile(const char* name) {
   const char* ext = strrchr(name, '.');
   if (!ext) return false;
   ext++;  // Skip the dot
@@ -206,17 +234,18 @@ bool FileListState::isSupportedFile(const char* name) const {
 
 bool FileListState::isTrashDirectory() const { return trash::isPath(currentDir_); }
 
-bool FileListState::isTrashRootEntry() const {
-  return isAtRoot() && selectedIndex_ < files_.size() && files_[selectedIndex_].isDir &&
-         trash::isDirectoryName(files_[selectedIndex_].name.c_str());
+bool FileListState::isTrashRootEntry() {
+  FileEntryView entry{};
+  return isAtRoot() && entryAt(selectedIndex_, entry) && entry.isDir && trash::isDirectoryName(entry.name);
 }
 
-bool FileListState::buildSelectedPath(char* path, size_t pathSize) const {
-  if (files_.empty() || selectedIndex_ >= files_.size() || currentDir_[0] == '\0') return false;
+bool FileListState::buildSelectedPath(char* path, size_t pathSize) {
+  FileEntryView entry{};
+  if (!entryAt(selectedIndex_, entry) || currentDir_[0] == '\0') return false;
 
   const size_t dirLen = strlen(currentDir_);
   const char* separator = currentDir_[dirLen - 1] == '/' ? "" : "/";
-  const int written = snprintf(path, pathSize, "%s%s%s", currentDir_, separator, files_[selectedIndex_].name.c_str());
+  const int written = snprintf(path, pathSize, "%s%s%s", currentDir_, separator, entry.name);
   return written >= 0 && static_cast<size_t>(written) < pathSize;
 }
 
@@ -230,10 +259,13 @@ bool FileListState::findVacantPath(Core& core, const char* directory, const char
 }
 
 void FileListState::setupFileConfirm(Screen screen, const char* title, const char* question) {
+  FileEntryView entry{};
+  if (!entryAt(selectedIndex_, entry)) return;
+
   char line[ui::ConfirmDialogView::MAX_LINE_LEN];
-  const std::string& name = files_[selectedIndex_].name;
-  size_t length = utf8SafeCopy(line, sizeof(line) - 4, name.c_str());
-  if (length < name.size()) {
+  const size_t nameLength = strlen(entry.name);
+  size_t length = utf8SafeCopy(line, sizeof(line) - 4, entry.name);
+  if (length < nameLength) {
     line[length++] = '.';
     line[length++] = '.';
     line[length++] = '.';
@@ -274,7 +306,13 @@ void FileListState::executeConfirmedAction(Core& core) {
     return;
   }
 
-  const FileEntry& entry = files_[selectedIndex_];
+  FileEntryView entry{};
+  if (!entryAt(selectedIndex_, entry)) {
+    currentScreen_ = Screen::Browse;
+    needsRender_ = true;
+    return;
+  }
+
   const bool destructive =
       currentScreen_ == Screen::ConfirmMoveToTrash || currentScreen_ == Screen::ConfirmPermanentDelete;
   if (destructive && core.settings.lastBookPath[0] != '\0' && strcmp(selectedPath_, core.settings.lastBookPath) == 0) {
@@ -291,8 +329,7 @@ void FileListState::executeConfirmedAction(Core& core) {
         trashReady = exists.ok() && (*exists || core.storage.mkdir(currentDir_).ok());
       }
 
-      if (trashReady &&
-          findVacantPath(core, currentDir_, entry.name.c_str(), actionDestination_, sizeof(actionDestination_))) {
+      if (trashReady && findVacantPath(core, currentDir_, entry.name, actionDestination_, sizeof(actionDestination_))) {
         ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(MOVING_TO_TRASH));
         success = core.storage.rename(selectedPath_, actionDestination_).ok();
       }
@@ -302,8 +339,7 @@ void FileListState::executeConfirmedAction(Core& core) {
       }
     } else if (currentScreen_ == Screen::ConfirmRestore) {
       const bool targetFound = trash::findRestorePath(
-          actionDestination_, sizeof(actionDestination_), currentDir_, sizeof(currentDir_), selectedPath_,
-          entry.name.c_str(),
+          actionDestination_, sizeof(actionDestination_), currentDir_, sizeof(currentDir_), selectedPath_, entry.name,
           [&](const char* parent) {
             if (strcmp(parent, "/") == 0) return true;
             const auto exists = core.storage.exists(parent);
@@ -342,9 +378,8 @@ void FileListState::executeConfirmedAction(Core& core) {
     strcpy(currentDir_, "/");
   }
   loadFiles(core);
-  if (selectedIndex_ >= files_.size()) {
-    selectedIndex_ = files_.empty() ? 0 : files_.size() - 1;
-  }
+  const size_t count = entryCount();
+  if (selectedIndex_ >= count) selectedIndex_ = count == 0 ? 0 : count - 1;
   currentScreen_ = Screen::Browse;
   needsRender_ = true;
 }
@@ -397,14 +432,15 @@ StateTransition FileListState::update(Core& core) {
               break;
             case Button::Left:
               break;
-            case Button::Right:
-              if (files_.empty()) break;
+            case Button::Right: {
+              FileEntryView entry{};
+              if (!entryAt(selectedIndex_, entry)) break;
               if (isTrashRootEntry()) {
                 ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(CANNOT_DELETE_TRASH));
                 vTaskDelay(1000 / portTICK_PERIOD_MS);
                 needsRender_ = true;
               } else {
-                switch (trash::deleteAction(files_[selectedIndex_].isDir, isTrashDirectory())) {
+                switch (trash::deleteAction(entry.isDir, isTrashDirectory())) {
                   case trash::DeleteAction::MoveToTrash:
                     promptMoveToTrash();
                     break;
@@ -417,6 +453,7 @@ StateTransition FileListState::update(Core& core) {
                 }
               }
               break;
+            }
             case Button::Center:
               openSelected(core);
               break;
@@ -475,8 +512,10 @@ void FileListState::render(Core& core) {
   }
   renderer_.drawCenteredText(theme.readerFontId, 10, title, theme.primaryTextBlack, BOLD);
 
+  const size_t count = entryCount();
+
   // Empty state
-  if (files_.empty()) {
+  if (count == 0) {
     renderer_.drawText(theme.uiFontId, 20, 60, tr(NO_BOOKS_FOUND), theme.primaryTextBlack);
     renderer_.displayBuffer();
     needsRender_ = false;
@@ -489,16 +528,19 @@ void FileListState::render(Core& core) {
   const int itemHeight = theme.itemHeight + theme.itemSpacing;
   const int pageItems = getPageItems();
   const int pageStart = getPageStartIndex();
-  const int pageEnd = std::min(pageStart + pageItems, static_cast<int>(files_.size()));
+  const int pageEnd = std::min(pageStart + pageItems, static_cast<int>(count));
 
   for (int i = pageStart; i < pageEnd; i++) {
+    FileEntryView entry{};
+    if (!entryAt(static_cast<size_t>(i), entry)) continue;
     const int y = listStartY + (i - pageStart) * itemHeight;
-    ui::fileEntry(renderer_, theme, y, files_[i].name.c_str(), files_[i].isDir,
-                  static_cast<size_t>(i) == selectedIndex_);
+    ui::fileEntry(renderer_, theme, y, entry.name, entry.isDir, static_cast<size_t>(i) == selectedIndex_);
   }
 
+  FileEntryView selected{};
+  const bool hasSelected = entryAt(selectedIndex_, selected);
   const char* backLabel = isAtRoot() ? (core.settings.showRecents ? tr(BOOKS) : tr(HOME)) : tr(BACK);
-  const bool restoreSelected = isTrashDirectory() && !files_[selectedIndex_].isDir;
+  const bool restoreSelected = hasSelected && isTrashDirectory() && !selected.isDir;
   ui::buttonBar(renderer_, theme, backLabel, restoreSelected ? tr(RESTORE) : tr(OPEN), "", tr(DELETE_BTN));
 
   if (firstRender_) {
@@ -512,20 +554,22 @@ void FileListState::render(Core& core) {
 }
 
 void FileListState::navigateUp(Core& core) {
-  if (files_.empty()) return;
+  const size_t count = entryCount();
+  if (count == 0) return;
 
   if (selectedIndex_ > 0) {
     selectedIndex_--;
   } else {
-    selectedIndex_ = files_.size() - 1;  // Wrap to last item
+    selectedIndex_ = count - 1;  // Wrap to last item
   }
   needsRender_ = true;
 }
 
 void FileListState::navigateDown(Core& core) {
-  if (files_.empty()) return;
+  const size_t count = entryCount();
+  if (count == 0) return;
 
-  if (selectedIndex_ + 1 < files_.size()) {
+  if (selectedIndex_ + 1 < count) {
     selectedIndex_++;
   } else {
     selectedIndex_ = 0;  // Wrap to first item
@@ -534,11 +578,8 @@ void FileListState::navigateDown(Core& core) {
 }
 
 void FileListState::openSelected(Core& core) {
-  if (files_.empty()) {
-    return;
-  }
-
-  const FileEntry& entry = files_[selectedIndex_];
+  FileEntryView entry{};
+  if (!entryAt(selectedIndex_, entry)) return;
 
   const size_t pathSize = isTrashDirectory() ? BufferSize::TrashPath : BufferSize::FilePath;
   if (!buildSelectedPath(selectedPath_, pathSize)) {
@@ -567,9 +608,9 @@ void FileListState::openSelected(Core& core) {
     // Save position for return
     strncpy(core.settings.fileListDir, currentDir_, sizeof(core.settings.fileListDir) - 1);
     core.settings.fileListDir[sizeof(core.settings.fileListDir) - 1] = '\0';
-    strncpy(core.settings.fileListSelectedName, entry.name.c_str(), sizeof(core.settings.fileListSelectedName) - 1);
+    strncpy(core.settings.fileListSelectedName, entry.name, sizeof(core.settings.fileListSelectedName) - 1);
     core.settings.fileListSelectedName[sizeof(core.settings.fileListSelectedName) - 1] = '\0';
-    core.settings.fileListSelectedIndex = selectedIndex_;
+    core.settings.fileListSelectedIndex = static_cast<uint16_t>(std::min<size_t>(selectedIndex_, UINT16_MAX));
 
     // Select file - transition to Reader mode via restart
     LOG_INF(TAG, "Selected: %s", selectedPath_);
@@ -611,19 +652,20 @@ int FileListState::getPageItems() const {
 }
 
 int FileListState::getTotalPages() const {
-  if (files_.empty()) return 1;
+  const size_t count = entryCount();
+  if (count == 0) return 1;
   const int pageItems = getPageItems();
-  return (static_cast<int>(files_.size()) + pageItems - 1) / pageItems;
+  return (static_cast<int>(count) + pageItems - 1) / pageItems;
 }
 
 int FileListState::getCurrentPage() const {
-  const int pageItems = getPageItems();
-  return selectedIndex_ / pageItems + 1;
+  const size_t pageItems = static_cast<size_t>(getPageItems());
+  return static_cast<int>(selectedIndex_ / pageItems) + 1;
 }
 
 int FileListState::getPageStartIndex() const {
-  const int pageItems = getPageItems();
-  return (selectedIndex_ / pageItems) * pageItems;
+  const size_t pageItems = static_cast<size_t>(getPageItems());
+  return static_cast<int>((selectedIndex_ / pageItems) * pageItems);
 }
 
 }  // namespace papyrix

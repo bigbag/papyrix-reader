@@ -1,0 +1,11 @@
+{
+  "name": "FileIndex",
+  "version": "1.0.0",
+  "description": "Bounded-RAM SD-backed directory index",
+  "frameworks": ["arduino", "espidf"],
+  "platforms": ["espressif32"],
+  "build": {
+    "srcDir": "src",
+    "includeDir": "src"
+  }
+}

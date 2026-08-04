@@ -13,14 +13,24 @@ class SDCardManager {
   bool begin() { return true; }
   bool ready() const { return true; }
 
-  void registerFile(const std::string& path, const std::string& data) { files_[path] = data; }
+  void registerFile(const std::string& path, const std::string& data) {
+    files_[path] = data;
+    writtenFiles_.erase(path);
+    directories_.erase(path);
+  }
+
+  void registerDirectory(const std::string& path, const std::vector<MockDirectoryEntry>& entries) {
+    directories_[path] = entries;
+    files_.erase(path);
+    writtenFiles_.erase(path);
+  }
 
   // Alias for registerFile - more intuitive name for test setup
   void setFileData(const std::string& path, const std::vector<uint8_t>& data) {
-    files_[path] = std::string(data.begin(), data.end());
+    registerFile(path, std::string(data.begin(), data.end()));
   }
 
-  void setFileData(const std::string& path, const std::string& data) { files_[path] = data; }
+  void setFileData(const std::string& path, const std::string& data) { registerFile(path, data); }
 
   // Control whether exists() returns true for a path
   void setFileExists(const std::string& path, bool exists) {
@@ -34,12 +44,17 @@ class SDCardManager {
     }
   }
 
-  void clearFiles() { files_.clear(); }
+  void clearFiles() {
+    files_.clear();
+    writtenFiles_.clear();
+    directories_.clear();
+  }
 
   // Reset all mock state
   void reset() {
     files_.clear();
     writtenFiles_.clear();
+    directories_.clear();
     openFailCount_ = 0;
     openFileForReadFailCount_ = 0;
     mallocFailCount_ = 0;
@@ -47,9 +62,12 @@ class SDCardManager {
     readLimitActive_ = false;
   }
 
-  bool exists(const char* path) { return files_.find(path) != files_.end(); }
+  bool exists(const char* path) {
+    return files_.find(path) != files_.end() || writtenFiles_.find(path) != writtenFiles_.end() ||
+           directories_.find(path) != directories_.end();
+  }
 
-  bool exists(const std::string& path) { return files_.find(path) != files_.end(); }
+  bool exists(const std::string& path) { return exists(path.c_str()); }
 
   // Failure injection: first N open() calls for a path return an invalid FsFile
   void setOpenFailCount(int count) { openFailCount_ = count; }
@@ -79,19 +97,43 @@ class SDCardManager {
   }
 
   FsFile open(const char* path, int mode = O_RDONLY) {
-    (void)mode;
     FsFile file;
     if (openFailCount_ > 0) {
       openFailCount_--;
-      return file;  // Returns invalid FsFile (operator bool = false)
+      return file;
     }
-    auto it = files_.find(path);
-    if (it != files_.end()) {
-      file.setBuffer(it->second);
-      if (readLimitActive_) {
-        file.setReadLimit(readLimit_);
+
+    const bool writable = (mode & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC)) != 0;
+    if (writable) {
+      std::shared_ptr<std::string> buffer;
+      auto written = writtenFiles_.find(path);
+      if (written != writtenFiles_.end()) {
+        buffer = written->second;
+      } else {
+        buffer = std::make_shared<std::string>();
+        auto existing = files_.find(path);
+        if (existing != files_.end()) *buffer = existing->second;
+        writtenFiles_[path] = buffer;
       }
+      if ((mode & O_TRUNC) != 0) buffer->clear();
+      file.setSharedBuffer(buffer);
+      return file;
     }
+
+    auto directory = directories_.find(path);
+    if (directory != directories_.end()) {
+      file.setDirectory(directory->second);
+      return file;
+    }
+
+    auto existing = files_.find(path);
+    if (existing != files_.end()) {
+      file.setBuffer(existing->second);
+    } else {
+      auto written = writtenFiles_.find(path);
+      if (written != writtenFiles_.end()) file.setBuffer(*written->second);
+    }
+    if (file && readLimitActive_) file.setReadLimit(readLimit_);
     return file;
   }
 
@@ -101,15 +143,8 @@ class SDCardManager {
       openFileForReadFailCount_--;
       return false;
     }
-    auto it = files_.find(path);
-    if (it != files_.end()) {
-      file.setBuffer(it->second);
-      if (readLimitActive_) {
-        file.setReadLimit(readLimit_);
-      }
-      return true;
-    }
-    return false;
+    file = open(path, O_RDONLY);
+    return static_cast<bool>(file);
   }
 
   bool openFileForRead(const char* moduleName, const std::string& path, FsFile& file) {
@@ -136,6 +171,7 @@ class SDCardManager {
   bool remove(const char* path) {
     files_.erase(path);
     writtenFiles_.erase(path);
+    directories_.erase(path);
     return true;
   }
 
@@ -158,8 +194,15 @@ class SDCardManager {
     return rename(tmpPath, finalPath);
   }
 
-  bool mkdir(const char*) { return true; }
-  bool removeDir(const char*) { return true; }
+  bool mkdir(const char* path) {
+    directories_[path] = {};
+    return true;
+  }
+  bool ensureDirectoryExists(const char* path) { return exists(path) || mkdir(path); }
+  bool removeDir(const char* path) {
+    directories_.erase(path);
+    return true;
+  }
 
   static SDCardManager& getInstance() {
     static SDCardManager instance;
@@ -168,9 +211,17 @@ class SDCardManager {
 
   void clearWrittenFiles() { writtenFiles_.clear(); }
 
+  std::vector<std::string> writtenFilePaths() const {
+    std::vector<std::string> paths;
+    paths.reserve(writtenFiles_.size());
+    for (const auto& item : writtenFiles_) paths.push_back(item.first);
+    return paths;
+  }
+
  private:
   std::map<std::string, std::string> files_;
   std::map<std::string, std::shared_ptr<std::string>> writtenFiles_;
+  std::map<std::string, std::vector<MockDirectoryEntry>> directories_;
   int openFailCount_ = 0;
   int openFileForReadFailCount_ = 0;
   int mallocFailCount_ = 0;

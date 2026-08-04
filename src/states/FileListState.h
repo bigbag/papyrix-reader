@@ -1,7 +1,10 @@
 #pragma once
 
+#include <FileIndex.h>
+
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -46,12 +49,19 @@ class FileListState : public State {
   char selectedPath_[BufferSize::TrashPath];
   char actionDestination_[BufferSize::TrashPath] = {};
 
-  // File entries - dynamic vector for unlimited files
   struct FileEntry {
     std::string name;
     bool isDir;
   };
+  struct FileEntryView {
+    const char* name;
+    bool isDir;
+  };
+
+  static constexpr size_t IN_MEMORY_ENTRY_LIMIT = 128;
   std::vector<FileEntry> files_;
+  std::unique_ptr<FileIndex> fileIndex_;
+  FileIndex::Entry indexedEntry_{};
 
   size_t selectedIndex_;
   bool needsRender_;
@@ -62,9 +72,14 @@ class FileListState : public State {
   ui::ConfirmDialogView confirmView_;
 
   void loadFiles(Core& core);
+  bool scanFiles(Core& core, size_t limit, bool& overflow);
+  size_t entryCount() const;
+  bool entryAt(size_t index, FileEntryView& out);
+  size_t findEntryByName(const char* name);
+  static bool acceptEntry(const char* name, bool isDir);
   bool isTrashDirectory() const;
-  bool isTrashRootEntry() const;
-  bool buildSelectedPath(char* path, size_t pathSize) const;
+  bool isTrashRootEntry();
+  bool buildSelectedPath(char* path, size_t pathSize);
   bool findVacantPath(Core& core, const char* directory, const char* filename, char* path, size_t pathSize) const;
   void setupFileConfirm(Screen screen, const char* title, const char* question);
   void promptMoveToTrash();
@@ -83,8 +98,8 @@ class FileListState : public State {
   int getCurrentPage() const;
   int getPageStartIndex() const;
 
-  bool isHidden(const char* name) const;
-  bool isSupportedFile(const char* name) const;
+  static bool isHidden(const char* name);
+  static bool isSupportedFile(const char* name);
   bool isAtRoot() const { return strcmp(currentDir_, "/") == 0; }
 };
 

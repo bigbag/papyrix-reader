@@ -1,11 +1,13 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
 #include <memory>
 #include <sstream>
 #include <string>
+#include <vector>
 
 // Forward declare Print (defined in platform_stubs.h)
 class Print;
@@ -17,6 +19,11 @@ class Print;
 #define O_CREAT 0x40
 #define O_TRUNC 0x80
 
+struct MockDirectoryEntry {
+  std::string name;
+  bool isDirectory;
+};
+
 // Mock FsFile for testing serialization
 class FsFile {
  public:
@@ -26,16 +33,43 @@ class FsFile {
   void setBuffer(const std::string& data) {
     buffer_ = data;
     sharedBuffer_.reset();
+    directoryEntries_.clear();
+    directoryIndex_ = 0;
     pos_ = 0;
     isOpen_ = true;
+    isDirectory_ = false;
   }
 
   // For write-mode: use a shared buffer so data survives after FsFile destruction
   void setSharedBuffer(std::shared_ptr<std::string> buf) {
     sharedBuffer_ = buf;
     buffer_ = *buf;
+    directoryEntries_.clear();
+    directoryIndex_ = 0;
     pos_ = 0;
     isOpen_ = true;
+    isDirectory_ = false;
+  }
+
+  void setDirectory(const std::vector<MockDirectoryEntry>& entries) {
+    buffer_.clear();
+    sharedBuffer_.reset();
+    directoryEntries_ = entries;
+    directoryIndex_ = 0;
+    pos_ = 0;
+    isOpen_ = true;
+    isDirectory_ = true;
+  }
+
+  void setDirectoryEntry(const MockDirectoryEntry& entry) {
+    buffer_.clear();
+    sharedBuffer_.reset();
+    directoryEntries_.clear();
+    directoryIndex_ = 0;
+    name_ = entry.name;
+    pos_ = 0;
+    isOpen_ = true;
+    isDirectory_ = entry.isDirectory;
   }
 
   // Read limit injection: only allow N bytes to be read
@@ -63,6 +97,23 @@ class FsFile {
     pos_ = 0;
   }
 
+  FsFile openNextFile() {
+    FsFile entry;
+    if (!isOpen_ || !isDirectory_ || directoryIndex_ >= directoryEntries_.size()) return entry;
+    entry.setDirectoryEntry(directoryEntries_[directoryIndex_++]);
+    return entry;
+  }
+
+  void getName(char* out, size_t size) const {
+    if (!out || size == 0) return;
+    const size_t length = std::min(name_.size(), size - 1);
+    memcpy(out, name_.data(), length);
+    out[length] = '\0';
+  }
+
+  bool isDirectory() const { return isDirectory_; }
+  uint32_t fileSize() const { return static_cast<uint32_t>(buffer_.size()); }
+  uint64_t fileSize64() const { return buffer_.size(); }
   size_t size() const { return buffer_.size(); }
 
   size_t position() const { return pos_; }
@@ -136,15 +187,22 @@ class FsFile {
     return len;
   }
 
-  bool sync() { return true; }
+  bool sync() {
+    if (sharedBuffer_) *sharedBuffer_ = buffer_;
+    return true;
+  }
 
   bool available() const { return isOpen_ && pos_ < buffer_.size(); }
 
  private:
   std::string buffer_;
   std::shared_ptr<std::string> sharedBuffer_;
+  std::vector<MockDirectoryEntry> directoryEntries_;
+  std::string name_;
+  size_t directoryIndex_ = 0;
   size_t pos_ = 0;
   bool isOpen_ = false;
+  bool isDirectory_ = false;
   size_t readLimit_ = 0;
   bool readLimitActive_ = false;
   size_t totalRead_ = 0;

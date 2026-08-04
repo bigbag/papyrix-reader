@@ -5,6 +5,7 @@
 class FsHelpers {
  public:
   static std::string normalisePath(const std::string& path);
+  static int naturalCompare(const char* a, const char* b);
 
   // Check if a filename should be hidden from file browsers
   // Note: Does NOT check for "." prefix - caller should check that separately
