@@ -71,8 +71,12 @@ class XtcParser {
   std::string getTitle() const { return m_title; }
   std::string getAuthor() const { return m_author; }
 
-  bool hasChapters() const { return m_hasChapters; }
-  const std::vector<ChapterInfo>& getChapters() const { return m_chapters; }
+  bool hasChapters() const;
+  const std::vector<ChapterInfo>& getChapters() const;
+
+#ifdef TEST_BUILD
+  size_t getLoadedChapterCountForTest() const { return m_chapters.size(); }
+#endif
 
   // Validation
   static bool isValidXtcFile(const char* filepath);
@@ -81,16 +85,17 @@ class XtcParser {
   XtcError getLastError() const { return m_lastError; }
 
  private:
-  FsFile m_file;
+  mutable FsFile m_file;
   bool m_isOpen;
   XtcHeader m_header;
-  std::vector<ChapterInfo> m_chapters;
+  mutable std::vector<ChapterInfo> m_chapters;
   std::string m_title;
   std::string m_author;
   uint16_t m_defaultWidth;
   uint16_t m_defaultHeight;
   uint8_t m_bitDepth;  // 1 = XTC/XTG (1-bit), 2 = XTCH/XTH (2-bit)
-  bool m_hasChapters;
+  mutable bool m_hasChapters;
+  mutable bool m_chaptersLoaded;
   XtcError m_lastError;
 
   // Internal helper functions
@@ -98,7 +103,8 @@ class XtcParser {
   XtcError readPageTable();
   XtcError readTitle();
   XtcError readAuthor();
-  XtcError readChapters();
+  XtcError readChapters() const;
+  void ensureChaptersLoaded() const;
   bool readPageEntry(uint32_t pageIndex, PageInfo& info);
   bool readValidatedPage(uint32_t pageIndex, PageInfo& page, XtgPageHeader& pageHeader, size_t& bitmapSize);
 };

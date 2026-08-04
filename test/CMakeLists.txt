@@ -489,6 +489,21 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/Utf8/src/Utf8.cpp
       ${TEST_HELPERS}
     )
+  elseif(TEST_NAME STREQUAL "GlobalPageMetricsTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/src/content/GlobalPageMetrics.cpp
+      ${TEST_HELPERS}
+    )
+  elseif(TEST_NAME STREQUAL "ReaderNavigationTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/src/content/ReaderNavigation.cpp
+      ${TEST_HELPERS}
+    )
+    target_include_directories(${TEST_NAME} BEFORE PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/unit/navigation/mocks
+    )
   else()
     add_executable(${TEST_NAME} ${TEST_SRC} ${TEST_HELPERS})
   endif()

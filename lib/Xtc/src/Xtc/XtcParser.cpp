@@ -15,10 +15,22 @@
 #include <SDCardManager.h>
 
 #include <algorithm>
+#include <array>
 #include <cstring>
 #include <new>
+#include <utility>
 
 namespace xtc {
+namespace {
+
+bool metadataRangeIsValid(const XtcHeader& header, uint64_t fileSize, uint64_t relativeOffset, size_t size) {
+  if (header.metadataOffset < sizeof(XtcHeader) || header.metadataOffset > fileSize) return false;
+  if (relativeOffset > fileSize - header.metadataOffset) return false;
+  const uint64_t absoluteOffset = header.metadataOffset + relativeOffset;
+  return size <= fileSize - absoluteOffset;
+}
+
+}  // namespace
 
 XtcParser::XtcParser()
     : m_isOpen(false),
@@ -26,6 +38,7 @@ XtcParser::XtcParser()
       m_defaultHeight(DISPLAY_HEIGHT),
       m_bitDepth(1),
       m_hasChapters(false),
+      m_chaptersLoaded(false),
       m_lastError(XtcError::OK) {
   memset(&m_header, 0, sizeof(m_header));
 }
@@ -65,13 +78,8 @@ XtcError XtcParser::open(const char* filepath) {
     return m_lastError;
   }
 
-  // Read chapters if present
-  m_lastError = readChapters();
-  if (m_lastError != XtcError::OK) {
-    LOG_ERR(TAG, "Failed to read chapters: %s", errorToString(m_lastError));
-    m_file.close();
-    return m_lastError;
-  }
+  m_hasChapters = m_header.hasChapters == 1 && m_header.chapterOffset != 0;
+  m_chaptersLoaded = false;
 
   m_isOpen = true;
   LOG_INF(TAG, "Opened file: %s (%u pages, %dx%d)", filepath, m_header.pageCount, m_defaultWidth, m_defaultHeight);
@@ -85,6 +93,7 @@ void XtcParser::close() {
   m_title.clear();
   m_author.clear();
   m_hasChapters = false;
+  m_chaptersLoaded = false;
   memset(&m_header, 0, sizeof(m_header));
 }
 
@@ -132,53 +141,43 @@ XtcError XtcParser::readHeader() {
 }
 
 XtcError XtcParser::readTitle() {
-  constexpr uint32_t titleOffset = 0x38;
-  if (!m_file.seek(titleOffset)) {
-    return XtcError::READ_ERROR;
+  constexpr size_t titleSize = 128;
+  if (!metadataRangeIsValid(m_header, m_file.size(), 0, titleSize) || !m_file.seek(m_header.metadataOffset)) {
+    m_title.clear();
+    return XtcError::OK;
   }
 
-  char titleBuf[128] = {0};
-  const int bytesRead = m_file.read(reinterpret_cast<uint8_t*>(titleBuf), sizeof(titleBuf) - 1);
-  if (bytesRead <= 0) {
-    LOG_ERR(TAG, "Warning: Failed to read title (read returned %d)", bytesRead);
+  char titleBuf[titleSize] = {0};
+  if (m_file.read(reinterpret_cast<uint8_t*>(titleBuf), titleSize - 1) != titleSize - 1) {
+    m_title.clear();
+    return XtcError::OK;
   }
-  m_title = titleBuf;
-
-  LOG_INF(TAG, "Title: %s", m_title.c_str());
+  m_title.assign(titleBuf, strnlen(titleBuf, titleSize - 1));
   return XtcError::OK;
 }
 
 XtcError XtcParser::readAuthor() {
-  // Author is at offset 0xB8, directly following title (which ends at 0x38 + 128 = 0xB8)
-  constexpr uint32_t authorOffset = 0xB8;
-  if (!m_file.seek(authorOffset)) {
-    return XtcError::OK;  // Author is optional
+  constexpr uint64_t authorRelativeOffset = 128;
+  constexpr size_t authorSize = 64;
+  if (!metadataRangeIsValid(m_header, m_file.size(), authorRelativeOffset, authorSize) ||
+      !m_file.seek(m_header.metadataOffset + authorRelativeOffset)) {
+    m_author.clear();
+    return XtcError::OK;
   }
 
-  char authorBuf[64] = {0};
-  const int bytesRead = m_file.read(reinterpret_cast<uint8_t*>(authorBuf), sizeof(authorBuf) - 1);
-  if (bytesRead <= 0) {
-    return XtcError::OK;  // Author is optional
+  char authorBuf[authorSize] = {0};
+  if (m_file.read(reinterpret_cast<uint8_t*>(authorBuf), authorSize - 1) != authorSize - 1) {
+    m_author.clear();
+    return XtcError::OK;
   }
-
-  // Validate that the string looks like text (not garbage data)
-  // Check first few bytes for printable ASCII or valid UTF-8 lead bytes
-  const auto* p = reinterpret_cast<const uint8_t*>(authorBuf);
-  if (p[0] == 0 || (p[0] < 0x20 && p[0] != '\t') || p[0] == 0x7F) {
-    return XtcError::OK;  // Starts with control char or null - likely not valid author data
-  }
-
-  m_author = authorBuf;
-
-  if (!m_author.empty()) {
-    LOG_INF(TAG, "Author: %s", m_author.c_str());
-  }
+  m_author.assign(authorBuf, strnlen(authorBuf, authorSize - 1));
   return XtcError::OK;
 }
 
 XtcError XtcParser::readPageTable() {
-  if (m_header.pageTableOffset == 0) {
-    LOG_ERR(TAG, "Page table offset is 0, cannot read");
+  constexpr uint64_t minPageTableOffset = offsetof(XtcHeader, chapterOffset);
+  if (m_header.pageTableOffset < minPageTableOffset) {
+    LOG_ERR(TAG, "Page table offset is before the header boundary");
     return XtcError::CORRUPTED_HEADER;
   }
 
@@ -226,19 +225,38 @@ bool XtcParser::readPageEntry(uint32_t pageIndex, PageInfo& info) {
   return true;
 }
 
-XtcError XtcParser::readChapters() {
-  m_hasChapters = false;
-  m_chapters.clear();
+bool XtcParser::hasChapters() const {
+  ensureChaptersLoaded();
+  return m_hasChapters;
+}
 
-  if (m_header.hasChapters != 1 || m_header.chapterOffset == 0) {
-    return XtcError::OK;
+const std::vector<ChapterInfo>& XtcParser::getChapters() const {
+  ensureChaptersLoaded();
+  return m_chapters;
+}
+
+void XtcParser::ensureChaptersLoaded() const {
+  if (m_chaptersLoaded) return;
+  m_chaptersLoaded = true;
+  const XtcError error = readChapters();
+  if (error != XtcError::OK) {
+    std::vector<ChapterInfo>().swap(m_chapters);
+    m_hasChapters = false;
+    LOG_ERR(TAG, "Optional chapters unavailable: %s", errorToString(error));
   }
+}
 
+XtcError XtcParser::readChapters() const {
+  std::vector<ChapterInfo>().swap(m_chapters);
+  m_hasChapters = false;
+
+  if (m_header.hasChapters != 1 || m_header.chapterOffset == 0) return XtcError::OK;
+
+  constexpr uint64_t chapterSize = 96;
+  constexpr size_t maxChapters = 500;
   const uint64_t chapterOffset = m_header.chapterOffset;
   const uint64_t fileSize = m_file.size();
-  constexpr uint64_t chapterSize = 96;
-  constexpr uint64_t minChapterOffset = 0xF8;
-  if (chapterOffset < minChapterOffset || chapterOffset > fileSize || chapterSize > fileSize - chapterOffset) {
+  if (chapterOffset < sizeof(XtcHeader) || chapterOffset > fileSize || chapterSize > fileSize - chapterOffset) {
     return XtcError::OK;
   }
 
@@ -248,53 +266,48 @@ XtcError XtcParser::readChapters() {
   } else if (m_header.dataOffset > chapterOffset && m_header.dataOffset <= fileSize) {
     maxOffset = m_header.dataOffset;
   }
+  if (maxOffset <= chapterOffset) return XtcError::OK;
 
-  if (maxOffset <= chapterOffset) {
-    return XtcError::OK;
+  size_t chapterCount = static_cast<size_t>(std::min<uint64_t>((maxOffset - chapterOffset) / chapterSize, maxChapters));
+  const bool hasMetadataChapterCount = m_header.hasMetadata &&
+                                       metadataRangeIsValid(m_header, fileSize, 196, sizeof(uint16_t)) &&
+                                       chapterOffset >= m_header.metadataOffset + 196 + sizeof(uint16_t);
+  if (hasMetadataChapterCount) {
+    uint16_t declaredCount = 0;
+    if (!m_file.seek(m_header.metadataOffset + 196) ||
+        m_file.read(reinterpret_cast<uint8_t*>(&declaredCount), sizeof(declaredCount)) != sizeof(declaredCount)) {
+      return XtcError::READ_ERROR;
+    }
+    if (declaredCount > 0) chapterCount = std::min<size_t>(chapterCount, declaredCount);
   }
-
-  constexpr uint64_t maxChapters = 500;
-  const uint64_t available = maxOffset - chapterOffset;
-  const size_t chapterCount = static_cast<size_t>(std::min<uint64_t>(available / chapterSize, maxChapters));
-  if (chapterCount == 0 || !m_file.seek(chapterOffset)) {
-    return chapterCount == 0 ? XtcError::OK : XtcError::READ_ERROR;
-  }
+  if (chapterCount == 0 || !m_file.seek(chapterOffset)) return XtcError::OK;
 
   const size_t estimatedMemory = chapterCount * (sizeof(ChapterInfo) + 80);
   const size_t largestBlock = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
-  if (estimatedMemory > largestBlock * 80 / 100) {
-    return XtcError::MEMORY_ERROR;
-  }
+  if (estimatedMemory > largestBlock * 80 / 100) return XtcError::MEMORY_ERROR;
 
   m_chapters.reserve(chapterCount);
-  std::vector<uint8_t> chapterBuf(static_cast<size_t>(chapterSize));
-  for (size_t i = 0; i < chapterCount; i++) {
-    if (m_file.read(chapterBuf.data(), chapterBuf.size()) != chapterBuf.size()) {
-      return XtcError::READ_ERROR;
-    }
+  std::array<uint8_t, chapterSize> chapterBuf{};
+  for (size_t i = 0; i < chapterCount; ++i) {
+    if (m_file.read(chapterBuf.data(), chapterBuf.size()) != chapterBuf.size()) return XtcError::READ_ERROR;
 
-    char nameBuf[81];
-    memcpy(nameBuf, chapterBuf.data(), 80);
-    nameBuf[80] = '\0';
-    const size_t nameLen = strnlen(nameBuf, 80);
-    std::string name(nameBuf, nameLen);
-
+    const size_t nameLen = strnlen(reinterpret_cast<const char*>(chapterBuf.data()), 80);
     uint16_t startPage = 0;
     uint16_t endPage = 0;
     memcpy(&startPage, chapterBuf.data() + 0x50, sizeof(startPage));
     memcpy(&endPage, chapterBuf.data() + 0x52, sizeof(endPage));
-
-    if (name.empty() && startPage == 0 && endPage == 0) {
-      break;
-    }
-
-    if (startPage > 0) startPage--;
-    if (endPage > 0) endPage--;
+    if (nameLen == 0 && startPage == 0 && endPage == 0) break;
+    if (startPage > 0) --startPage;
+    if (endPage > 0) --endPage;
     if (startPage >= m_header.pageCount) continue;
     if (endPage >= m_header.pageCount) endPage = m_header.pageCount - 1;
     if (startPage > endPage) continue;
 
-    m_chapters.push_back({std::move(name), startPage, endPage});
+    ChapterInfo chapter;
+    chapter.name.assign(reinterpret_cast<const char*>(chapterBuf.data()), nameLen);
+    chapter.startPage = startPage;
+    chapter.endPage = endPage;
+    m_chapters.push_back(std::move(chapter));
   }
 
   m_hasChapters = !m_chapters.empty();

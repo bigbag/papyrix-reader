@@ -6,6 +6,7 @@
 #include <Xtc/XtcParser.h>
 #include <Xtc/XtcTypes.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
@@ -13,6 +14,7 @@
 #include <vector>
 
 static_assert(sizeof(xtc::XtcHeader) == 56);
+static_assert(sizeof(xtc::XtcHeader::chapterOffset) == sizeof(uint64_t));
 static_assert(offsetof(xtc::XtcHeader, hasChapters) == 0x0B);
 static_assert(offsetof(xtc::XtcHeader, pageTableOffset) == 0x18);
 static_assert(offsetof(xtc::XtcHeader, chapterOffset) == 0x30);
@@ -41,6 +43,7 @@ static std::string buildMultiPageXtc(uint16_t width, uint16_t height, uint16_t p
   hdr->versionMinor = 0;
   hdr->pageCount = pageCount;
   hdr->hasMetadata = 1;
+  hdr->metadataOffset = headerSize;
   hdr->pageTableOffset = pageTableOffset;
   hdr->dataOffset = pageDataStart;
 
@@ -74,14 +77,69 @@ static std::string buildMultiPageXtc(uint16_t width, uint16_t height, uint16_t p
   return buf;
 }
 
-static std::string buildChapterXtc(size_t chapterCount) {
+static std::string buildLegacyPageTableXtc() {
+  constexpr size_t pageTableOffset = offsetof(xtc::XtcHeader, chapterOffset);
+  constexpr size_t pageDataOffset = pageTableOffset + sizeof(xtc::PageTableEntry);
+  constexpr uint16_t width = 8;
+  constexpr uint16_t height = 1;
+  constexpr size_t bitmapSize = 1;
+  constexpr size_t pageDataSize = sizeof(xtc::XtgPageHeader) + bitmapSize;
+
+  std::string file(pageDataOffset + pageDataSize, '\0');
+  auto* data = reinterpret_cast<uint8_t*>(&file[0]);
+  auto* header = reinterpret_cast<xtc::XtcHeader*>(data);
+  header->magic = xtc::XTC_MAGIC;
+  header->versionMajor = 1;
+  header->pageCount = 1;
+  header->pageTableOffset = pageTableOffset;
+  header->dataOffset = pageDataOffset;
+
+  auto* entry = reinterpret_cast<xtc::PageTableEntry*>(data + pageTableOffset);
+  entry->dataOffset = pageDataOffset;
+  entry->dataSize = pageDataSize;
+  entry->width = width;
+  entry->height = height;
+
+  auto* pageHeader = reinterpret_cast<xtc::XtgPageHeader*>(data + pageDataOffset);
+  pageHeader->magic = xtc::XTG_MAGIC;
+  pageHeader->width = width;
+  pageHeader->height = height;
+  pageHeader->dataSize = bitmapSize;
+  return file;
+}
+
+static std::string buildRelocatedMetadataXtc() {
+  const std::string original = buildMultiPageXtc(8, 1, 1);
+  constexpr size_t oldPageTableOffset = sizeof(xtc::XtcHeader) + 128 + 64;
+  constexpr size_t oldPageDataOffset = oldPageTableOffset + sizeof(xtc::PageTableEntry);
+  constexpr size_t metadataOffset = sizeof(xtc::XtcHeader) + 32;
+  constexpr size_t newPageTableOffset = metadataOffset + 128 + 64;
+  constexpr size_t newPageDataOffset = newPageTableOffset + sizeof(xtc::PageTableEntry);
+
+  std::string file(original.size() + (newPageDataOffset - oldPageDataOffset), '\0');
+  memcpy(&file[0], original.data(), sizeof(xtc::XtcHeader));
+  memcpy(&file[newPageTableOffset], original.data() + oldPageTableOffset, sizeof(xtc::PageTableEntry));
+  memcpy(&file[newPageDataOffset], original.data() + oldPageDataOffset, original.size() - oldPageDataOffset);
+
+  auto* data = reinterpret_cast<uint8_t*>(&file[0]);
+  auto* header = reinterpret_cast<xtc::XtcHeader*>(data);
+  header->metadataOffset = metadataOffset;
+  header->pageTableOffset = newPageTableOffset;
+  header->dataOffset = newPageDataOffset;
+  auto* entry = reinterpret_cast<xtc::PageTableEntry*>(data + newPageTableOffset);
+  entry->dataOffset = newPageDataOffset;
+  memcpy(data + metadataOffset, "Relocated Title", 15);
+  memcpy(data + metadataOffset + 128, "Relocated Author", 16);
+  return file;
+}
+
+static std::string buildChapterXtc(size_t chapterCount, bool hasMetadata = true) {
   constexpr size_t headerSize = sizeof(xtc::XtcHeader);
-  constexpr size_t titleSize = 128;
-  constexpr size_t authorSize = 64;
+  constexpr size_t metadataSize = 256;
   constexpr size_t chapterSize = 96;
   constexpr uint16_t width = 8;
   constexpr uint16_t height = 1;
-  const size_t chapterOffset = headerSize + titleSize + authorSize;
+  const size_t chapterOffset = headerSize + (hasMetadata ? metadataSize : 0);
   const size_t pageTableOffset = chapterOffset + chapterCount * chapterSize;
   const size_t pageDataOffset = pageTableOffset + sizeof(xtc::PageTableEntry);
   const size_t bitmapSize = xtc::xtgBitmapSize(width, height);
@@ -93,13 +151,19 @@ static std::string buildChapterXtc(size_t chapterCount) {
   header->magic = xtc::XTC_MAGIC;
   header->versionMajor = 1;
   header->pageCount = 1;
-  header->hasMetadata = 1;
+  header->hasMetadata = hasMetadata ? 1 : 0;
   header->hasChapters = 1;
+  header->metadataOffset = hasMetadata ? headerSize : 0;
   header->pageTableOffset = pageTableOffset;
   header->dataOffset = pageDataOffset;
   header->chapterOffset = chapterOffset;
 
-  memcpy(data + headerSize, "Chapter Book", 12);
+  if (hasMetadata) {
+    memcpy(data + headerSize, "Chapter Book", 12);
+    const uint16_t declaredCount = static_cast<uint16_t>(std::min<size_t>(chapterCount, UINT16_MAX));
+    memcpy(data + headerSize + 196, &declaredCount, sizeof(declaredCount));
+  }
+
   for (size_t i = 0; i < chapterCount; i++) {
     uint8_t* chapter = data + chapterOffset + i * chapterSize;
     snprintf(reinterpret_cast<char*>(chapter), 80, "Chapter %zu", i + 1);
@@ -127,6 +191,37 @@ int main() {
 
   runner.expectEq(size_t{16}, xtc::xthPlaneSize(8, 9), "XTH 8x9 plane pads every column");
   runner.expectEq(size_t{48}, xtc::xthBitmapSize(8, 17), "XTH 8x17 bitmap has two padded planes");
+
+  {
+    SdMan.clearFiles();
+    SdMan.registerFile("/legacy_table.xtc", buildLegacyPageTableXtc());
+    xtc::XtcParser parser;
+    runner.expectTrue(parser.open("/legacy_table.xtc") == xtc::XtcError::OK,
+                      "legacy_table: table at 0x30 remains supported");
+  }
+
+  {
+    SdMan.clearFiles();
+    std::string data = buildLegacyPageTableXtc();
+    auto* header = reinterpret_cast<xtc::XtcHeader*>(&data[0]);
+    header->pageTableOffset = offsetof(xtc::XtcHeader, chapterOffset) - 1;
+    SdMan.registerFile("/table_in_header.xtc", data);
+    xtc::XtcParser parser;
+    runner.expectTrue(parser.open("/table_in_header.xtc") == xtc::XtcError::CORRUPTED_HEADER,
+                      "table_bounds: rejects table before legacy header boundary");
+  }
+
+  {
+    SdMan.clearFiles();
+    SdMan.registerFile("/relocated_metadata.xtc", buildRelocatedMetadataXtc());
+    xtc::XtcParser parser;
+    runner.expectTrue(parser.open("/relocated_metadata.xtc") == xtc::XtcError::OK,
+                      "metadata_offset: parser opens");
+    runner.expectEq(std::string("Relocated Title"), parser.getTitle(),
+                    "metadata_offset: title uses declared offset");
+    runner.expectEq(std::string("Relocated Author"), parser.getAuthor(),
+                    "metadata_offset: author follows relocated title");
+  }
 
   {
     constexpr uint16_t width = 2;
@@ -471,15 +566,40 @@ int main() {
     runner.expectTrue(err == xtc::XtcError::CORRUPTED_HEADER, "streaming: rejects zero chunk size");
   }
 
-  // Test 14: chapter parsing is bounded and close releases capacity
+  // Test 14: chapter parsing is bounded, lazy, and close releases capacity
   {
     SdMan.clearFiles();
     SdMan.registerFile("/chapters.xtc", buildChapterXtc(501));
     xtc::XtcParser parser;
     runner.expectTrue(parser.open("/chapters.xtc") == xtc::XtcError::OK, "chapters: parser opens");
+    runner.expectEq(size_t{0}, parser.getLoadedChapterCountForTest(), "chapters: not loaded during open");
+    runner.expectTrue(parser.hasChapters(), "chapters: lazy load succeeds");
     runner.expectEq(size_t{500}, parser.getChapters().size(), "chapters: parser caps entries at 500");
     parser.close();
     runner.expectEq(size_t{0}, parser.getChapters().capacity(), "chapters: close releases vector capacity");
+  }
+
+  {
+    SdMan.clearFiles();
+    SdMan.registerFile("/no_metadata_chapters.xtc", buildChapterXtc(2, false));
+    xtc::XtcParser parser;
+    runner.expectTrue(parser.open("/no_metadata_chapters.xtc") == xtc::XtcError::OK,
+                      "metadata_less_chapters: parser opens");
+    runner.expectTrue(parser.hasChapters(), "metadata_less_chapters: chapters load");
+    runner.expectEq(size_t{2}, parser.getChapters().size(), "metadata_less_chapters: count");
+  }
+
+  {
+    SdMan.clearFiles();
+    SdMan.registerFile("/low_heap_chapters.xtc", buildChapterXtc(500));
+    testSetLargestFreeBlock(1024);
+    xtc::XtcParser parser;
+    runner.expectTrue(parser.open("/low_heap_chapters.xtc") == xtc::XtcError::OK,
+                      "low_heap_chapters: optional TOC does not block open");
+    runner.expectFalse(parser.hasChapters(), "low_heap_chapters: TOC omitted");
+    runner.expectEq(size_t{0}, parser.getChapters().size(), "low_heap_chapters: no partial TOC retained");
+    testResetLargestFreeBlock();
+    runner.expectFalse(parser.hasChapters(), "low_heap_chapters: failed lazy load is not retried");
   }
 
   return runner.allPassed() ? 0 : 1;

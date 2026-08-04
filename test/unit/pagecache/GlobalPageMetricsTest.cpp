@@ -1,117 +1,32 @@
-// Tests for the global page metrics logic extracted from ReaderState.
-// These functions compute whole-book page numbers for EPUB/FB2 by combining
-// exact counts (from cached sections) with byte-size estimates (for uncached).
-
 #include "test_utils.h"
 
-#include <algorithm>
-#include <climits>
+#include <GlobalPageMetrics.h>
+
 #include <cstdint>
 #include <vector>
 
-namespace {
+using papyrix::page_metrics::Display;
+using papyrix::page_metrics::Section;
+using papyrix::page_metrics::applyCache;
+using papyrix::page_metrics::estimatePagesForBytes;
+using papyrix::page_metrics::fillEstimates;
+using papyrix::page_metrics::recalibrate;
+using papyrix::page_metrics::resolve;
+using papyrix::page_metrics::total;
 
-constexpr size_t kEstimatedBytesPerPage = 2048;
+using GlobalPageMetrics = Display;
+using SectionPageMetric = Section;
 
-uint16_t estimatePagesForBytes(const size_t bytes, const size_t bytesPerPage = kEstimatedBytesPerPage) {
-  const size_t safeBytesPerPage = std::max<size_t>(1, bytesPerPage);
-  const size_t pageCount = std::max<size_t>(1, (bytes + safeBytesPerPage - 1) / safeBytesPerPage);
-  return static_cast<uint16_t>(std::min<size_t>(pageCount, UINT16_MAX));
-}
+uint32_t recomputeTotal(const std::vector<SectionPageMetric>& metrics) { return total(metrics); }
 
-struct SectionPageMetric {
-  uint16_t pages = 0;
-  bool exact = false;
-  uint32_t byteSize = 0;
-};
-
-uint32_t recomputeTotal(const std::vector<SectionPageMetric>& metrics) {
-  uint32_t total = 0;
-  for (const auto& m : metrics) {
-    total += m.pages;
-  }
-  return total;
-}
-
-void recalibrate(std::vector<SectionPageMetric>& metrics) {
-  size_t calibBytes = 0;
-  uint32_t calibPages = 0;
-  for (const auto& m : metrics) {
-    if (m.exact && m.byteSize > 0 && m.pages > 0) {
-      calibBytes += m.byteSize;
-      calibPages += m.pages;
-    }
-  }
-  if (calibPages == 0) return;
-
-  const size_t bytesPerPage = std::max<size_t>(256, calibBytes / calibPages);
-
-  for (auto& m : metrics) {
-    if (m.exact || m.byteSize == 0) continue;
-    const uint16_t newEstimate = estimatePagesForBytes(m.byteSize, bytesPerPage);
-    if (newEstimate != m.pages && newEstimate > 0) {
-      m.pages = newEstimate;
-    }
-  }
-}
-
-// Mirrors the post-probe estimate fill in initializeGlobalPageMetrics.
-// Exact entries (including exact 0-page sections) must not be overwritten.
-void fillEstimates(std::vector<SectionPageMetric>& metrics, size_t bytesPerPage = kEstimatedBytesPerPage) {
-  for (auto& m : metrics) {
-    if (m.exact) continue;
-    const uint16_t estimated = estimatePagesForBytes(m.byteSize, bytesPerPage);
-    if (m.pages == 0) {
-      m.pages = estimated;
-    } else if (estimated > m.pages) {
-      m.pages = estimated;
-    }
-  }
-}
-
-// Mirrors directory-scan / live-overlay acceptance of a probed section cache.
-// pageCount==0 complete caches are exact (Issue #136 residual: image-only FB2).
 void applyProbe(SectionPageMetric& metric, uint16_t pageCount, bool partial) {
-  metric.pages = pageCount;
-  metric.exact = !partial;
+  applyCache(metric, pageCount, partial);
 }
-
-struct GlobalPageMetrics {
-  int currentPage = 1;
-  int totalPages = 0;
-  bool totalIsExact = true;
-};
 
 GlobalPageMetrics resolveMetrics(const std::vector<SectionPageMetric>& metrics, int currentSpineIndex,
                                  int currentSectionPage, int textStartIndex = 0) {
-  GlobalPageMetrics result;
-  if (metrics.empty()) return result;
-
-  const int clampedSpine = std::clamp(currentSpineIndex, 0, static_cast<int>(metrics.size()) - 1);
-  uint32_t pagesBefore = 0;
-  uint32_t frontMatterPages = 0;
-  bool totalIsExact = true;
-  for (int i = 0; i < clampedSpine; ++i) {
-    pagesBefore += metrics[static_cast<size_t>(i)].pages;
-    totalIsExact = totalIsExact && metrics[static_cast<size_t>(i)].exact;
-  }
-  for (int i = 0; i < textStartIndex && i < static_cast<int>(metrics.size()); ++i) {
-    frontMatterPages += metrics[static_cast<size_t>(i)].pages;
-  }
-  for (int i = clampedSpine; i < static_cast<int>(metrics.size()); ++i) {
-    totalIsExact = totalIsExact && metrics[static_cast<size_t>(i)].exact;
-  }
-
-  uint32_t total = recomputeTotal(metrics);
-  const int adjustedBefore = std::max(static_cast<int>(pagesBefore) - static_cast<int>(frontMatterPages), 0);
-  const int adjustedTotal = std::max(static_cast<int>(total) - static_cast<int>(frontMatterPages), 1);
-  result.currentPage = adjustedBefore + std::max(currentSectionPage, 0) + 1;
-  result.totalPages = std::max(adjustedTotal, result.currentPage);
-  result.totalIsExact = totalIsExact;
-  return result;
+  return resolve(metrics, currentSpineIndex, currentSectionPage, textStartIndex);
 }
-
-}  // namespace
 
 int main() {
   TestUtils::TestRunner runner("GlobalPageMetrics");
@@ -412,7 +327,9 @@ int main() {
   // Probe of a complete empty section → exact with pages=0
   {
     SectionPageMetric m{0, false, 280};
-    applyProbe(m, 0, false);
+    const auto update = applyCache(m, 0, false);
+    runner.expectTrue(update.changed, "zero_page_probe_changed");
+    runner.expectTrue(update.becameExact, "zero_page_probe_became_exact");
     runner.expectTrue(m.exact, "zero_page_probe_exact");
     runner.expectEq<uint16_t>(0, m.pages, "zero_page_probe_pages");
   }

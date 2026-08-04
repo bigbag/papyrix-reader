@@ -71,8 +71,7 @@ struct XtcHeader {
   uint64_t pageTableOffset;  // 0x18: Page table offset
   uint64_t dataOffset;       // 0x20: First page data offset
   uint64_t thumbOffset;      // 0x28: Thumbnail offset
-  uint32_t chapterOffset;    // 0x30: Chapter data offset
-  uint32_t padding;          // 0x34: Padding to 56 bytes
+  uint64_t chapterOffset;    // 0x30: Chapter data offset
 };
 #pragma pack(pop)
 

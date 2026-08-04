@@ -51,15 +51,8 @@ static constexpr int kCacheTaskStopTimeoutMs = 10000;  // 10s - generous for slo
 namespace {
 constexpr int horizontalPadding = 5;
 constexpr int statusBarMargin = 23;
-constexpr size_t kEstimatedBytesPerPage = 2048;
 constexpr uint8_t kMetricsIndexVersion = 2;
 constexpr const char* kMetricsIndexFilename = "metrics.bin";
-
-uint16_t estimatePagesForBytes(const size_t bytes, const size_t bytesPerPage = kEstimatedBytesPerPage) {
-  const size_t safeBytesPerPage = std::max<size_t>(1, bytesPerPage);
-  const size_t pageCount = std::max<size_t>(1, (bytes + safeBytesPerPage - 1) / safeBytesPerPage);
-  return static_cast<uint16_t>(std::min<size_t>(pageCount, UINT16_MAX));
-}
 
 // Cache path helpers
 inline std::string epubSectionCachePath(const std::string& epubCachePath, int spineIndex) {
@@ -275,16 +268,7 @@ std::vector<std::pair<std::string, uint16_t>> ReaderState::loadAnchorMap(const s
 void ReaderState::invalidateGlobalPageMetrics() {
   globalSectionPageMetrics_.clear();
   globalSectionPageMetrics_.shrink_to_fit();
-  globalSectionPageMetricTotal_ = 0;
   globalSectionPageMetricsInitialized_ = false;
-}
-
-void ReaderState::recomputeGlobalPageMetricTotal() {
-  uint32_t total = 0;
-  for (const auto& metric : globalSectionPageMetrics_) {
-    total += metric.pages;
-  }
-  globalSectionPageMetricTotal_ = total;
 }
 
 void ReaderState::initializeGlobalPageMetrics(Core& core) {
@@ -325,27 +309,15 @@ void ReaderState::initializeGlobalPageMetrics(Core& core) {
       return false;
     }
     auto& metric = globalSectionPageMetrics_[static_cast<size_t>(currentSpineIndex_)];
-    const auto currentPages = static_cast<uint16_t>(pageCache_->pageCount());
-    const bool currentIsPartial = pageCache_->isPartial();
-    bool changed = false;
-    if (!currentIsPartial) {
-      if (!metric.exact || metric.pages != currentPages) {
-        metric.pages = currentPages;
-        metric.exact = true;
-        changed = true;
-      }
-    } else if (!metric.exact && currentPages > metric.pages) {
-      metric.pages = currentPages;
-      changed = true;
-    }
-    return changed;
+    const auto cacheUpdate =
+        page_metrics::applyCache(metric, static_cast<uint16_t>(pageCache_->pageCount()), pageCache_->isPartial());
+    return cacheUpdate.changed;
   };
 
   // Fast path: metrics.bin already has exact page counts for every spine.
   // Skip the per-spine getItemSize / directory-scan / calibration work entirely.
   if (loadMetricsIndex(sectionsDir, config, spineCount)) {
     const bool overlayChanged = applyLivePageCacheOverlay();
-    recomputeGlobalPageMetricTotal();
     globalSectionPageMetricsInitialized_ = true;
     if (overlayChanged) {
       saveMetricsIndex(sectionsDir, config);
@@ -413,8 +385,7 @@ void ReaderState::initializeGlobalPageMetrics(Core& core) {
       // Accept pageCount==0: complete empty sections are exact (not missing).
       if (probe.valid) {
         auto& metric = globalSectionPageMetrics_[static_cast<size_t>(idx)];
-        metric.pages = probe.pageCount;
-        metric.exact = !probe.partial;
+        page_metrics::applyCache(metric, probe.pageCount, probe.partial);
       }
     }
     dir.close();
@@ -422,32 +393,20 @@ void ReaderState::initializeGlobalPageMetrics(Core& core) {
 
   applyLivePageCacheOverlay();
 
-  size_t calibrationBytes = 0;
+  uint64_t calibrationBytes = 0;
   uint32_t calibrationPages = 0;
-  for (const auto& m : globalSectionPageMetrics_) {
-    if (m.exact && m.byteSize > 0 && m.pages > 0) {
-      calibrationBytes += m.byteSize;
-      calibrationPages += m.pages;
+  for (const auto& metric : globalSectionPageMetrics_) {
+    if (metric.exact && metric.byteSize > 0 && metric.pages > 0) {
+      calibrationBytes += metric.byteSize;
+      calibrationPages += metric.pages;
     }
   }
 
-  const size_t bytesPerPage =
-      calibrationPages > 0 ? std::max<size_t>(256, calibrationBytes / calibrationPages) : kEstimatedBytesPerPage;
+  const size_t bytesPerPage = calibrationPages > 0
+                                  ? static_cast<size_t>(std::max<uint64_t>(256, calibrationBytes / calibrationPages))
+                                  : page_metrics::kEstimatedBytesPerPage;
+  page_metrics::fillEstimates(globalSectionPageMetrics_, bytesPerPage);
 
-  for (int i = 0; i < spineCount; ++i) {
-    auto& metric = globalSectionPageMetrics_[static_cast<size_t>(i)];
-    // Never overwrite an exact count — including exact 0-page sections.
-    if (metric.exact) continue;
-    const size_t itemSize = itemSizes[static_cast<size_t>(i)];
-    const uint16_t estimated = estimatePagesForBytes(itemSize, bytesPerPage);
-    if (metric.pages == 0) {
-      metric.pages = estimated;
-    } else if (estimated > metric.pages) {
-      metric.pages = estimated;
-    }
-  }
-
-  recomputeGlobalPageMetricTotal();
   globalSectionPageMetricsInitialized_ = true;
 
   saveMetricsIndex(sectionsDir, config);
@@ -467,26 +426,11 @@ void ReaderState::updateGlobalPageMetrics(Core& core) {
   }
 
   auto& metric = globalSectionPageMetrics_[static_cast<size_t>(currentSpineIndex_)];
-  // Allow 0: complete empty sections (image-only FB2) must become exact.
-  const auto currentPages = static_cast<uint16_t>(pageCache_->pageCount());
-  const bool currentIsPartial = pageCache_->isPartial();
-  bool becameExact = false;
-  bool changed = false;
+  const auto cacheUpdate =
+      page_metrics::applyCache(metric, static_cast<uint16_t>(pageCache_->pageCount()), pageCache_->isPartial());
 
-  if (!currentIsPartial) {
-    if (!metric.exact || metric.pages != currentPages) {
-      metric.pages = currentPages;
-      if (!metric.exact) becameExact = true;
-      metric.exact = true;
-      changed = true;
-    }
-  } else if (!metric.exact && currentPages > metric.pages) {
-    metric.pages = currentPages;
-    changed = true;
-  }
-
-  if (becameExact) {
-    recalibrateGlobalPageEstimates();
+  if (cacheUpdate.becameExact) {
+    page_metrics::recalibrate(globalSectionPageMetrics_);
     // Persist updated metrics to skip directory scan on next book open
     std::string sectionsDir;
     if (type == ContentType::Epub) {
@@ -497,38 +441,7 @@ void ReaderState::updateGlobalPageMetrics(Core& core) {
     const Theme& theme = THEME_MANAGER.current();
     const auto vp = getReaderViewport(core.settings.statusBar != 0);
     saveMetricsIndex(sectionsDir, core.settings.getRenderConfig(theme, vp.width, vp.height));
-  } else if (changed) {
-    recomputeGlobalPageMetricTotal();
   }
-}
-
-void ReaderState::recalibrateGlobalPageEstimates() {
-  if (!globalSectionPageMetricsInitialized_) return;
-
-  size_t calibBytes = 0;
-  uint32_t calibPages = 0;
-  for (const auto& m : globalSectionPageMetrics_) {
-    if (m.exact && m.byteSize > 0 && m.pages > 0) {
-      calibBytes += m.byteSize;
-      calibPages += m.pages;
-    }
-  }
-  if (calibPages == 0) {
-    recomputeGlobalPageMetricTotal();
-    return;
-  }
-
-  const size_t bytesPerPage = std::max<size_t>(256, calibBytes / calibPages);
-
-  for (auto& m : globalSectionPageMetrics_) {
-    if (m.exact || m.byteSize == 0) continue;
-    const uint16_t newEstimate = estimatePagesForBytes(m.byteSize, bytesPerPage);
-    if (newEstimate != m.pages && newEstimate > 0) {
-      m.pages = newEstimate;
-    }
-  }
-
-  recomputeGlobalPageMetricTotal();
 }
 
 ReaderState::GlobalPageMetrics ReaderState::resolveGlobalPageMetrics(Core& core) {
@@ -544,30 +457,8 @@ ReaderState::GlobalPageMetrics ReaderState::resolveGlobalPageMetrics(Core& core)
   if (type == ContentType::Epub || type == ContentType::Fb2) {
     updateGlobalPageMetrics(core);
     if (globalSectionPageMetricsInitialized_ && !globalSectionPageMetrics_.empty()) {
-      const int clampedSpine =
-          std::clamp(currentSpineIndex_, 0, static_cast<int>(globalSectionPageMetrics_.size()) - 1);
-      const int textStart = (type == ContentType::Epub) ? textStartIndex_ : 0;
-      uint32_t pagesBefore = 0;
-      uint32_t frontMatterPages = 0;
-      bool totalIsExact = true;
-      for (int i = 0; i < clampedSpine; ++i) {
-        const auto& sm = globalSectionPageMetrics_[static_cast<size_t>(i)];
-        pagesBefore += sm.pages;
-        totalIsExact = totalIsExact && sm.exact;
-      }
-      for (int i = 0; i < textStart && i < static_cast<int>(globalSectionPageMetrics_.size()); ++i) {
-        frontMatterPages += globalSectionPageMetrics_[static_cast<size_t>(i)].pages;
-      }
-      for (int i = clampedSpine; i < static_cast<int>(globalSectionPageMetrics_.size()); ++i) {
-        totalIsExact = totalIsExact && globalSectionPageMetrics_[static_cast<size_t>(i)].exact;
-      }
-      const int adjustedBefore = std::max(static_cast<int>(pagesBefore) - static_cast<int>(frontMatterPages), 0);
-      const int adjustedTotal =
-          std::max(static_cast<int>(globalSectionPageMetricTotal_) - static_cast<int>(frontMatterPages), 1);
-      metrics.currentPage = adjustedBefore + std::max(currentSectionPage_, 0) + 1;
-      metrics.totalPages = std::max(adjustedTotal, metrics.currentPage);
-      metrics.totalIsExact = totalIsExact;
-      return metrics;
+      const int textStart = type == ContentType::Epub ? textStartIndex_ : 0;
+      return page_metrics::resolve(globalSectionPageMetrics_, currentSpineIndex_, currentSectionPage_, textStart);
     }
   }
 
@@ -2429,7 +2320,7 @@ void ReaderState::processIndexingChunk(Core& core) {
       if (file.open(sectionPath.c_str(), O_RDONLY)) {
         size_t fileSize = file.size();
         file.close();
-        if (estimatePagesForBytes(fileSize) < 30) {
+        if (page_metrics::estimatePagesForBytes(fileSize) < 30) {
           maxPages = 0;
         }
       }
@@ -2440,7 +2331,7 @@ void ReaderState::processIndexingChunk(Core& core) {
       auto spineItem = provider->getEpub()->getSpineItem(indexingSpine_);
       size_t itemSize = 0;
       if (provider->getEpub()->getItemSize(spineItem.href, &itemSize)) {
-        if (estimatePagesForBytes(itemSize) < 30) {
+        if (page_metrics::estimatePagesForBytes(itemSize) < 30) {
           maxPages = 0;
         }
       }

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "../content/BookmarkManager.h"
+#include "../content/GlobalPageMetrics.h"
 #include "../content/ReaderNavigation.h"
 #include "../core/Types.h"
 #include "../rendering/XtcPageRenderer.h"
@@ -123,28 +124,17 @@ class ReaderState : public State {
   void renderStatusBar(Core& core, int marginRight, int marginBottom, int marginLeft);
 
   // Global page metrics — whole-book page counting for EPUB/FB2
-  struct GlobalPageMetrics {
-    int currentPage = 1;
-    int totalPages = 0;
-    bool totalIsExact = true;
-  };
-  struct SectionPageMetric {
-    uint16_t pages = 0;
-    bool exact = false;
-    uint32_t byteSize = 0;
-  };
+  using GlobalPageMetrics = page_metrics::Display;
+  using SectionPageMetric = page_metrics::Section;
   void invalidateGlobalPageMetrics();
   void initializeGlobalPageMetrics(Core& core);
   void updateGlobalPageMetrics(Core& core);
-  void recalibrateGlobalPageEstimates();
-  void recomputeGlobalPageMetricTotal();
   GlobalPageMetrics resolveGlobalPageMetrics(Core& core);
   bool saveMetricsIndex(const std::string& sectionsDir, const RenderConfig& config);
   bool loadMetricsIndex(const std::string& sectionsDir, const RenderConfig& config, int spineCount);
   void deleteMetricsIndex(Core& core);
 
   std::vector<SectionPageMetric> globalSectionPageMetrics_;
-  uint32_t globalSectionPageMetricTotal_ = 0;
   bool globalSectionPageMetricsInitialized_ = false;
 
   // Cache management

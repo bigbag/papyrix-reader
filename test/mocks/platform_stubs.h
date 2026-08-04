@@ -11,8 +11,14 @@
 #ifndef MALLOC_CAP_8BIT
 #define MALLOC_CAP_8BIT 0x01
 #endif
-inline size_t heap_caps_get_largest_free_block(uint32_t) { return 200000; }
-inline size_t heap_caps_get_free_size(uint32_t) { return 200000; }
+inline size_t& testLargestFreeBlock() {
+  static size_t value = 200000;
+  return value;
+}
+inline void testSetLargestFreeBlock(size_t value) { testLargestFreeBlock() = value; }
+inline void testResetLargestFreeBlock() { testLargestFreeBlock() = 200000; }
+inline size_t heap_caps_get_largest_free_block(uint32_t) { return testLargestFreeBlock(); }
+inline size_t heap_caps_get_free_size(uint32_t) { return testLargestFreeBlock(); }
 
 // PROGMEM / pgm_read helpers for host builds
 #ifndef PROGMEM

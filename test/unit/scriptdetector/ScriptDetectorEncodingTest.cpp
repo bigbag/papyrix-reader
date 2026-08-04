@@ -20,8 +20,8 @@ int main() {
   TestUtils::TestRunner runner("ScriptDetector Encoding Gate");
 
   // Windows-1251 Cyrillic must NOT be detected as RTL.
-  // Raw bytes 0xD9 0xC5 (ЩЕ in CP1251) would decode as U+0645 (Arabic MEEM)
-  // if fed to utf8NextCodepoint, which doesn't validate continuation bytes.
+  // Raw bytes 0xD9 0xC5 (ЩЕ in CP1251) resemble an Arabic UTF-8 lead byte,
+  // but the invalid continuation byte must prevent RTL classification.
   {
     // "ВОЗВРАЩЕНИЕ" in CP1251
     const uint8_t data[] = {0xC2, 0xCE, 0xC7, 0xC2, 0xD0, 0xC0, 0xD9, 0xC5, 0xCD, 0xC8, 0xC5};
