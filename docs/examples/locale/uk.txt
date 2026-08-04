@@ -6,6 +6,7 @@ _language_name=Українська
 # Button labels
 BACK=Назад
 OPEN=Відкр.
+INFO=Інфо
 SELECT=Обрати
 CANCEL=Скасув.
 CONFIRM=Підтв.
@@ -33,6 +34,7 @@ CLEANUP=Очищення
 SYSTEM_INFO=Про систему
 CHAPTERS=Розділи
 BOOKMARKS=Закладки
+BOOK_STATS=Статистика книги
 JOIN_NETWORK=До мережі
 CREATE_HOTSPOT=Точка доступу
 WIFI_TRANSFER=Передача WiFi
@@ -49,6 +51,9 @@ CONNECTING_TITLE=Зв'язок
 WEB_SERVER=Вебсервер
 GO_TO_PAGE=До сторінки
 MENU=Меню
+PROGRESS=Прогрес
+TIME_READ=Час читання
+SESSIONS=Сеанси
 
 # Settings labels
 THEME=Тема
@@ -113,9 +118,12 @@ FRONT_BCLR=B/C/L/R
 FRONT_LRBC=L/R/B/C
 
 # Cleanup
+CLEAR_RECENT=Очистити недавні книги
 CLEAR_BOOK_CACHE=Кеш книг
 CLEAR_DEVICE_STORAGE=Сховище
 FACTORY_RESET=Скидання
+CLEAR_RECENT_Q=Очистити недавні книги?
+CLEAR_RECENT_MSG=Книги та статистика зберігаються.
 CLEAR_CACHES_Q=Кеші?
 CLEAR_CACHES_MSG1=Буде видалено
 CLEAR_CACHES_MSG2=кеш і прогрес.
@@ -204,7 +212,6 @@ NO_BOOKMARKS=Закладок немає
 BOOKS=Книги
 RECENT_BOOKS=Нещодавні
 NO_RECENT_BOOKS=Недавніх немає
-REMOVE_FROM_RECENT_Q=Прибрати?
 DELETE_FILE_Q=Видалити?
 DELETE_FOLDER_Q=Теку видалити?
 ENTER_PASSWORD=Пароль

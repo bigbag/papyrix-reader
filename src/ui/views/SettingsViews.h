@@ -44,7 +44,7 @@ void render(const GfxRenderer& r, const Theme& t, const SettingsMenuView& v);
 // ============================================================================
 
 struct CleanupMenuView {
-  enum class Item : int8_t { ClearBookCache, EmptyTrash, ClearDeviceStorage, FactoryReset, Count };
+  enum class Item : int8_t { ClearBookCache, ClearRecent, EmptyTrash, ClearDeviceStorage, FactoryReset, Count };
   static constexpr int ITEM_COUNT = static_cast<int>(Item::Count);
 
   ButtonBar buttons;

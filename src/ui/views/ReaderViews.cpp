@@ -66,10 +66,35 @@ void render(const GfxRenderer& r, const Theme& t, const CoverPageView& v) {
   r.displayBuffer();
 }
 
+void render(const GfxRenderer& r, const Theme& t, const BookStatsView& v) {
+  r.clearScreen(t.backgroundColor);
+
+  const int maxTextWidth = r.getScreenWidth() - 2 * (t.screenMarginSide + 8);
+  const auto titleLines =
+      r.wrapTextWithHyphenation(t.uiFontId, v.title, maxTextWidth, BookStatsView::MAX_TITLE_LINES, EpdFontFamily::BOLD);
+  const int titleLineHeight = r.getLineHeight(t.uiFontId);
+  int textY = 10;
+  for (const auto& line : titleLines) {
+    r.drawCenteredText(t.uiFontId, textY, line.c_str(), t.primaryTextBlack, EpdFontFamily::BOLD);
+    textY += titleLineHeight;
+  }
+
+  if (v.author[0] != '\0') {
+    const auto author = r.truncatedText(t.smallFontId, v.author, maxTextWidth);
+    const int authorY = std::max(52, textY + 4);
+    r.drawCenteredText(t.smallFontId, authorY, author.c_str(), t.secondaryTextBlack);
+  }
+  twoColumnRow(r, t, 110, tr(PROGRESS), v.progress);
+  twoColumnRow(r, t, 150, tr(TIME_READ), v.timeRead);
+  twoColumnRow(r, t, 190, tr(SESSIONS), v.sessions);
+  ui::buttonBar(r, t, tr(BACK), v.showOpen ? tr(OPEN) : "", "", "");
+  r.displayBuffer();
+}
+
 void render(const GfxRenderer& r, const Theme& t, const ReaderMenuView& v) {
   if (!v.visible) return;
 
-  const char* items[] = {tr(CHAPTERS), tr(BOOKMARKS)};
+  const char* items[] = {tr(CHAPTERS), tr(BOOKMARKS), tr(BOOK_STATS)};
   static_assert(std::size(items) == ReaderMenuView::ITEM_COUNT);
   ui::popupMenu(r, t, tr(MENU), items, ReaderMenuView::ITEM_COUNT, v.selected);
   r.displayBuffer();

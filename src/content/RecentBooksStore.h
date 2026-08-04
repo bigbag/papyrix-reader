@@ -18,6 +18,8 @@ struct RecentBook {
 class RecentBooksStore {
  public:
   static constexpr uint8_t FILE_VERSION = 1;
+  static constexpr int MAX_STORED = 10;
+  static constexpr int MIN_VISIBLE = 5;
 
   // Layout constants (mirror FileListState::getPageItems geometry).
   static constexpr int LIST_START_Y = 60;
@@ -30,6 +32,14 @@ class RecentBooksStore {
   // One-screen capacity from display height and row pitch. Scales per device/orientation/font.
   static int maxRecent(int screenHeight, int rowHeight) {
     return std::max(1, (screenHeight - LIST_START_Y - BOTTOM_MARGIN) / std::max(1, rowHeight));
+  }
+
+  static int visibleCapacity(int screenHeight, int rowHeight) {
+    return std::clamp(maxRecent(screenHeight, rowHeight), MIN_VISIBLE, MAX_STORED);
+  }
+
+  static size_t displayCount(size_t storedCount, int screenHeight, int rowHeight) {
+    return std::min(storedCount, static_cast<size_t>(visibleCapacity(screenHeight, rowHeight)));
   }
 
   // ---- Pure logic (header-only, unit-tested) ----
@@ -91,10 +101,10 @@ class RecentBooksStore {
   // ---- Singleton instance API (implemented in .cpp; SdMan-backed) ----
   static RecentBooksStore& instance();
 
-  void add(const std::string& path, const std::string& title, const std::string& author, int maxCount);
+  void add(const std::string& path, const std::string& title, const std::string& author);
   void remove(const std::string& path);
+  bool clearAndSave();
   size_t pruneMissing();  // drops entries whose source file no longer exists; returns count removed
-  void trimTo(int maxCount);
 
   bool load();
   bool save();

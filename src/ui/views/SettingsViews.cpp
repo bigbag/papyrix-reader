@@ -132,7 +132,8 @@ void render(const GfxRenderer& r, const Theme& t, const CleanupMenuView& v) {
 
   title(r, t, t.screenMarginTop, tr(CLEANUP));
 
-  const char* items[] = {tr(CLEAR_BOOK_CACHE), tr(EMPTY_TRASH), tr(CLEAR_DEVICE_STORAGE), tr(FACTORY_RESET)};
+  const char* items[] = {tr(CLEAR_BOOK_CACHE), tr(CLEAR_RECENT), tr(EMPTY_TRASH), tr(CLEAR_DEVICE_STORAGE),
+                         tr(FACTORY_RESET)};
   static_assert(std::size(items) == CleanupMenuView::ITEM_COUNT);
   const int startY = 60;
   for (int i = 0; i < CleanupMenuView::ITEM_COUNT; i++) {

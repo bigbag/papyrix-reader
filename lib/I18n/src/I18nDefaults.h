@@ -9,6 +9,7 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     // Button labels
     "Back",                   // BACK
     "Open",                   // OPEN
+    "Info",                   // INFO
     "Select",                 // SELECT
     "Cancel",                 // CANCEL
     "Confirm",                // CONFIRM
@@ -36,6 +37,7 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "System Info",            // SYSTEM_INFO
     "Chapters",               // CHAPTERS
     "Bookmarks",              // BOOKMARKS
+    "Book stats",             // BOOK_STATS
     "Join Network",           // JOIN_NETWORK
     "Create Hotspot",         // CREATE_HOTSPOT
     "WiFi Transfer",          // WIFI_TRANSFER
@@ -52,6 +54,9 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "Web Server",             // WEB_SERVER
     "Go to Page",             // GO_TO_PAGE
     "Menu",                   // MENU
+    "Progress",               // PROGRESS
+    "Time read",              // TIME_READ
+    "Sessions",               // SESSIONS
 
     // Settings labels
     "Theme",                  // THEME
@@ -116,9 +121,12 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "L/R/B/C",                // FRONT_LRBC
 
     // Cleanup
+    "Clear recent books",     // CLEAR_RECENT
     "Clear Book Cache",       // CLEAR_BOOK_CACHE
     "Clear Device Storage",   // CLEAR_DEVICE_STORAGE
     "Factory Reset",          // FACTORY_RESET
+    "Clear recent books?",    // CLEAR_RECENT_Q
+    "Book files and stats are kept.",  // CLEAR_RECENT_MSG
     "Clear Caches?",          // CLEAR_CACHES_Q
     "This will delete all book caches",    // CLEAR_CACHES_MSG1
     "and reading progress.",               // CLEAR_CACHES_MSG2
@@ -207,7 +215,6 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "Books",                  // BOOKS
     "Recent",                 // RECENT_BOOKS
     "No recent books",        // NO_RECENT_BOOKS
-    "Remove from recent?",    // REMOVE_FROM_RECENT_Q
     "Delete this file?",      // DELETE_FILE_Q
     "Delete this folder?",    // DELETE_FOLDER_Q
     "Enter Password",         // ENTER_PASSWORD

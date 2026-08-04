@@ -62,6 +62,7 @@ on each panel.
 - [x] Plain text (.txt, .text) file support
 - [x] Saved reading position
 - [x] Recently opened books (Books screen) for quick resume
+- [x] Per-book reading statistics (progress, reading time, and sessions)
 - [x] Bookmarks (up to 20 per book, persisted to SD card)
 - [x] Book cover display (JPG/JPEG/PNG/BMP, case-insensitive)
 - [x] Table of contents navigation

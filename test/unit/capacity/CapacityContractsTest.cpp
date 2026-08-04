@@ -5,6 +5,7 @@
 #include "content/BookmarkManager.h"
 #include "core/Types.h"
 #include "drivers/Input.h"
+#include "states/RecentState.h"
 #include "ui/views/ReaderViews.h"
 #include "ui/views/SettingsViews.h"
 
@@ -42,9 +43,12 @@ int main() {
   }
 
   {
-    ui::CleanupMenuView view;
-    for (int i = 0; i < ui::CleanupMenuView::ITEM_COUNT; ++i) view.moveDown();
-    runner.expectEq(int8_t(0), view.selected, "Cleanup menu wraps at derived count");
+    runner.expectEq(5, ui::CleanupMenuView::ITEM_COUNT, "Cleanup menu exposes five items");
+    ui::CleanupMenuView cleanup;
+    for (int i = 0; i < 4; ++i) cleanup.moveDown();
+    runner.expectEq(int8_t(4), cleanup.selected, "Cleanup reaches fifth item");
+    cleanup.moveDown();
+    runner.expectEq(int8_t(0), cleanup.selected, "Cleanup wraps after fifth item");
   }
 
   {
@@ -55,6 +59,11 @@ int main() {
                     "Reader menu clamps at derived count");
   }
 
+  runner.expectEq(3, ui::ReaderMenuView::ITEM_COUNT, "Reader menu exposes three items");
+  runner.expectEq(static_cast<int>(Button::Left), static_cast<int>(RecentState::FILES_BUTTON),
+                  "Books opens Files with Left");
+  runner.expectEq(static_cast<int>(Button::Right), static_cast<int>(RecentState::INFO_BUTTON),
+                  "Books opens Info with Right");
   runner.expectEq(BookmarkManager::MAX_BOOKMARKS, ui::BookmarkListView::MAX_ITEMS,
                   "Bookmark manager and view capacities match");
 

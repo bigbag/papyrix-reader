@@ -21,12 +21,12 @@ RecentBooksStore& RecentBooksStore::instance() {
   return inst;
 }
 
-void RecentBooksStore::add(const std::string& path, const std::string& title, const std::string& author, int maxCount) {
+void RecentBooksStore::add(const std::string& path, const std::string& title, const std::string& author) {
   if (!loaded_) {
     load();
   }
   pruneMissing();
-  books_ = addToList(std::move(books_), path, title, author, maxCount);
+  books_ = addToList(std::move(books_), path, title, author, MAX_STORED);
   save();
 }
 
@@ -38,6 +38,12 @@ void RecentBooksStore::remove(const std::string& path) {
   save();
 }
 
+bool RecentBooksStore::clearAndSave() {
+  if (!loaded_) load();
+  books_.clear();
+  return save();
+}
+
 size_t RecentBooksStore::pruneMissing() {
   size_t before = books_.size();
   books_.erase(
@@ -45,8 +51,6 @@ size_t RecentBooksStore::pruneMissing() {
       books_.end());
   return before - books_.size();
 }
-
-void RecentBooksStore::trimTo(int maxCount) { books_ = trimList(std::move(books_), maxCount); }
 
 bool RecentBooksStore::load() {
   books_.clear();
@@ -76,6 +80,11 @@ bool RecentBooksStore::load() {
     LOG_ERR(TAG, "Corrupt or unknown recent file; resetting");
     books_.clear();
     return false;
+  }
+
+  if (books_.size() > MAX_STORED) {
+    books_.resize(MAX_STORED);
+    if (!save()) LOG_ERR(TAG, "Failed to persist recent book limit migration");
   }
 
   LOG_DBG(TAG, "Loaded %u recent book(s)", static_cast<unsigned>(books_.size()));

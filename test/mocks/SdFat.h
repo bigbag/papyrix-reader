@@ -136,6 +136,8 @@ class FsFile {
     return len;
   }
 
+  bool sync() { return true; }
+
   bool available() const { return isOpen_ && pos_ < buffer_.size(); }
 
  private:

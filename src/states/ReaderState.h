@@ -9,6 +9,8 @@
 #include "../content/BookmarkManager.h"
 #include "../content/GlobalPageMetrics.h"
 #include "../content/ReaderNavigation.h"
+#include "../content/ReadingSessionTracker.h"
+#include "../content/ReadingStatsStore.h"
 #include "../core/Types.h"
 #include "../rendering/XtcPageRenderer.h"
 #include "../ui/views/HomeView.h"
@@ -137,6 +139,11 @@ class ReaderState : public State {
   std::vector<SectionPageMetric> globalSectionPageMetrics_;
   bool globalSectionPageMetricsInitialized_ = false;
 
+  ReadingSessionTracker readingSession_;
+  void recordReadingActivityIfMoved(int oldSpine, int oldSection, uint32_t oldPage);
+  void updateReadingProgress(const GlobalPageMetrics& metrics);
+  void flushReadingSession();
+
   // Cache management
   bool ensurePageCached(Core& core, uint16_t pageNum);
   void loadCacheFromDisk(Core& core);
@@ -199,6 +206,14 @@ class ReaderState : public State {
   void exitMenuMode();
   void handleMenuInput(Core& core, const Event& e);
   void handleMenuAction(Core& core, ui::ReaderMenuView::Item action);
+
+  // Book statistics overlay mode
+  bool bookStatsMode_ = false;
+  ui::BookStatsView bookStatsView_;
+  void enterBookStatsMode(Core& core);
+  void exitBookStatsMode(Core& core);
+  void handleBookStatsInput(Core& core, const Event& e);
+  void populateBookStatsView(Core& core);
 
   // Bookmark overlay mode
   Bookmark bookmarks_[BookmarkManager::MAX_BOOKMARKS];

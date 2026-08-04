@@ -4,7 +4,10 @@
 #include <I18n.h>
 #include <Theme.h>
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 
 #include "../Elements.h"
@@ -79,11 +82,79 @@ struct CoverPageView {
 void render(const GfxRenderer& r, const Theme& t, const CoverPageView& v);
 
 // ============================================================================
+// BookStatsView - Shared per-book reading statistics
+// ============================================================================
+
+inline void formatReadingDuration(char* out, size_t outSize, uint32_t totalSeconds) {
+  if (!out || outSize == 0) return;
+  if (totalSeconds == 0) {
+    snprintf(out, outSize, "—");
+  } else if (totalSeconds < 60) {
+    snprintf(out, outSize, "%lus", static_cast<unsigned long>(totalSeconds));
+  } else if (totalSeconds < 3600) {
+    snprintf(out, outSize, "%lum", static_cast<unsigned long>(totalSeconds / 60));
+  } else {
+    snprintf(out, outSize, "%luh %lum", static_cast<unsigned long>(totalSeconds / 3600),
+             static_cast<unsigned long>((totalSeconds % 3600) / 60));
+  }
+}
+
+inline void formatBookStatsSummary(char* out, size_t outSize, bool hasProgress, uint8_t progressPercent,
+                                   uint32_t totalSeconds) {
+  if (!out || outSize == 0) return;
+
+  char duration[24];
+  formatReadingDuration(duration, sizeof(duration), totalSeconds);
+  if (hasProgress && totalSeconds > 0) {
+    snprintf(out, outSize, "%u%% · %s", std::min<unsigned int>(progressPercent, 100), duration);
+  } else if (hasProgress) {
+    snprintf(out, outSize, "%u%%", std::min<unsigned int>(progressPercent, 100));
+  } else if (totalSeconds > 0) {
+    snprintf(out, outSize, "%s", duration);
+  } else {
+    snprintf(out, outSize, "—");
+  }
+}
+
+struct BookStatsView {
+  static constexpr int MAX_TITLE_LINES = 2;
+
+  char title[129] = {};
+  char author[65] = {};
+  char progress[8] = {};
+  char timeRead[24] = {};
+  char sessions[16] = {};
+  bool showOpen = false;
+  bool needsRender = true;
+
+  void setBook(const char* bookTitle, const char* bookAuthor) {
+    strncpy(title, bookTitle ? bookTitle : "", sizeof(title) - 1);
+    title[sizeof(title) - 1] = '\0';
+    strncpy(author, bookAuthor ? bookAuthor : "", sizeof(author) - 1);
+    author[sizeof(author) - 1] = '\0';
+    needsRender = true;
+  }
+
+  void setStats(bool hasProgress, uint8_t progressPercent, uint32_t totalSeconds, uint32_t sessionCount) {
+    if (hasProgress) {
+      snprintf(progress, sizeof(progress), "%u%%", std::min<unsigned int>(progressPercent, 100));
+    } else {
+      snprintf(progress, sizeof(progress), "—");
+    }
+    formatReadingDuration(timeRead, sizeof(timeRead), totalSeconds);
+    snprintf(sessions, sizeof(sessions), "%lu", static_cast<unsigned long>(sessionCount));
+    needsRender = true;
+  }
+};
+
+void render(const GfxRenderer& r, const Theme& t, const BookStatsView& v);
+
+// ============================================================================
 // ReaderMenuView - In-reader quick menu overlay
 // ============================================================================
 
 struct ReaderMenuView {
-  enum class Item : int8_t { Chapters, Bookmarks, Count };
+  enum class Item : int8_t { Chapters, Bookmarks, BookStats, Count };
   static constexpr int ITEM_COUNT = static_cast<int>(Item::Count);
 
   int8_t selected = 0;

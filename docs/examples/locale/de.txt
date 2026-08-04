@@ -6,6 +6,7 @@ _language_name=Deutsch
 # Button labels
 BACK=Zurück
 OPEN=Öffnen
+INFO=Info
 SELECT=Auswählen
 CANCEL=Abbrechen
 CONFIRM=Bestät.
@@ -33,6 +34,7 @@ CLEANUP=Bereinigung
 SYSTEM_INFO=Systeminfo
 CHAPTERS=Kapitel
 BOOKMARKS=Lesezeichen
+BOOK_STATS=Lesestatistik
 JOIN_NETWORK=Netzwerk beitreten
 CREATE_HOTSPOT=Hotspot erstellen
 WIFI_TRANSFER=WLAN-Übertragung
@@ -49,6 +51,9 @@ CONNECTING_TITLE=Verbindung
 WEB_SERVER=Webserver
 GO_TO_PAGE=Gehe zu Seite
 MENU=Menü
+PROGRESS=Fortschritt
+TIME_READ=Lesezeit
+SESSIONS=Sitzungen
 
 # Settings labels
 THEME=Design
@@ -113,9 +118,12 @@ FRONT_BCLR=B/C/L/R
 FRONT_LRBC=L/R/B/C
 
 # Cleanup
+CLEAR_RECENT=Letzte Bücher löschen
 CLEAR_BOOK_CACHE=Buch-Cache leeren
 CLEAR_DEVICE_STORAGE=Gerätespeicher löschen
 FACTORY_RESET=Werkseinstellungen
+CLEAR_RECENT_Q=Letzte Bücher löschen?
+CLEAR_RECENT_MSG=Buchdateien und Statistiken bleiben erhalten.
 CLEAR_CACHES_Q=Caches leeren?
 CLEAR_CACHES_MSG1=Alle Buch-Caches und
 CLEAR_CACHES_MSG2=Lesefortschritte werden gelöscht.
@@ -204,7 +212,6 @@ NO_BOOKMARKS=Noch keine Lesezeichen
 BOOKS=Bücher
 RECENT_BOOKS=Zuletzt
 NO_RECENT_BOOKS=Keine zuletzt gelesenen Bücher
-REMOVE_FROM_RECENT_Q=Aus „Zuletzt" entfernen?
 DELETE_FILE_Q=Datei löschen?
 DELETE_FOLDER_Q=Ordner löschen?
 ENTER_PASSWORD=Passwort eingeben

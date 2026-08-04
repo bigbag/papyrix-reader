@@ -10,6 +10,7 @@
 #include <algorithm>
 
 #include "../Battery.h"
+#include "../content/RecentBooksStore.h"
 #include "../core/FirmwareUpdater.h"
 #include "../core/TrashPaths.h"
 
@@ -466,6 +467,16 @@ void SettingsState::handleConfirm(Core& core) {
           cleanupView_.needsRender = true;
           needsRender_ = true;
 
+        } else if (pendingAction_ == ACTION_CLEAR_RECENT) {
+          const bool ok = RecentBooksStore::instance().clearAndSave();
+          ui::centeredMessage(renderer_, THEME, THEME.uiFontId, ok ? tr(DONE) : tr(ERROR));
+          vTaskDelay(1000 / portTICK_PERIOD_MS);
+
+          pendingAction_ = ACTION_NONE;
+          currentScreen_ = SettingsScreen::Cleanup;
+          cleanupView_.needsRender = true;
+          needsRender_ = true;
+
         } else if (pendingAction_ == ACTION_EMPTY_TRASH) {
           const auto exists = core.storage.exists(trash::DIRECTORY);
           if (!exists.ok() || !*exists) {
@@ -769,6 +780,10 @@ void SettingsState::clearCache(ui::CleanupMenuView::Item type) {
     case ui::CleanupMenuView::Item::ClearBookCache:
       confirmView_.setup(tr(CLEAR_CACHES_Q), tr(CLEAR_CACHES_MSG1), tr(CLEAR_CACHES_MSG2));
       pendingAction_ = ACTION_CLEAR_BOOK_CACHE;
+      break;
+    case ui::CleanupMenuView::Item::ClearRecent:
+      confirmView_.setup(tr(CLEAR_RECENT_Q), tr(CLEAR_RECENT_MSG), nullptr);
+      pendingAction_ = ACTION_CLEAR_RECENT;
       break;
     case ui::CleanupMenuView::Item::EmptyTrash:
       confirmView_.setup(tr(EMPTY_TRASH_Q), tr(EMPTY_TRASH_MSG1), tr(EMPTY_TRASH_MSG2));

@@ -45,6 +45,7 @@ class SettingsState : public State {
   static constexpr uint8_t ACTION_EMPTY_TRASH = 11;
   static constexpr uint8_t ACTION_CLEAR_DEVICE_STORAGE = 12;
   static constexpr uint8_t ACTION_FACTORY_RESET = 13;
+  static constexpr uint8_t ACTION_CLEAR_RECENT = 14;
 
   uint8_t pendingAction_;
 

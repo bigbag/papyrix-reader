@@ -30,6 +30,7 @@
 #include "../content/BookmarkManager.h"
 #include "../content/ProgressManager.h"
 #include "../content/ReaderNavigation.h"
+#include "../content/ReadingStatsStore.h"
 #include "../content/RecentBooksStore.h"
 #include "../core/BootMode.h"
 #include "../core/Core.h"
@@ -714,9 +715,7 @@ void ReaderState::enter(Core& core) {
   // Record in recent books list (snapshot title/author from opened provider)
   {
     const auto& meta = core.content.metadata();
-    const int rowPitch = RecentBooksStore::rowHeight(renderer_.getLineHeight(THEME_MANAGER.current().uiFontId));
-    RecentBooksStore::instance().add(contentPath_, meta.title, meta.author,
-                                     RecentBooksStore::maxRecent(renderer_.getScreenHeight(), rowPitch));
+    RecentBooksStore::instance().add(contentPath_, meta.title, meta.author);
   }
 
   // Setup cache directories for all content types
@@ -784,6 +783,9 @@ void ReaderState::enter(Core& core) {
     currentSectionPage_ = -1;  // Cover page
   }
 
+  READING_STATS.load();
+  readingSession_.begin(contentPath_, millis());
+
   // Initialize last rendered to loaded position (until first render)
   lastRenderedSpineIndex_ = currentSpineIndex_;
   lastRenderedSectionPage_ = currentSectionPage_;
@@ -807,6 +809,7 @@ void ReaderState::exit(Core& core) {
 
   // Stop background caching task first - BackgroundTask::stop() waits properly
   stopBackgroundCaching();
+  flushReadingSession();
   indexingInProgress_ = false;
   indexingCache_.reset();
   indexingParser_.reset();
@@ -839,6 +842,27 @@ void ReaderState::exit(Core& core) {
 
   // Reset orientation to Portrait for UI
   renderer_.setOrientation(GfxRenderer::Orientation::Portrait);
+}
+
+void ReaderState::recordReadingActivityIfMoved(int oldSpine, int oldSection, uint32_t oldPage) {
+  if (oldSpine != currentSpineIndex_ || oldSection != currentSectionPage_ || oldPage != currentPage_) {
+    readingSession_.onActivity(millis());
+  }
+}
+
+void ReaderState::updateReadingProgress(const GlobalPageMetrics& metrics) {
+  if (metrics.totalPages <= 0) return;
+  const int percent = std::clamp(metrics.currentPage * 100 / metrics.totalPages, 0, 100);
+  readingSession_.updateProgress(static_cast<uint8_t>(percent));
+}
+
+void ReaderState::flushReadingSession() {
+  const auto result = readingSession_.end(millis());
+  if (!result.active) return;
+  if (READING_STATS.recordSession(result.path, result.seconds, result.hasProgress, result.progressPercent) &&
+      !READING_STATS.save()) {
+    LOG_ERR(TAG, "Failed to save reading statistics");
+  }
 }
 
 StateTransition ReaderState::update(Core& core) {
@@ -902,6 +926,10 @@ StateTransition ReaderState::update(Core& core) {
 
   Event e;
   while (core.events.pop(e)) {
+    if (bookStatsMode_) {
+      handleBookStatsInput(core, e);
+      continue;
+    }
     if (menuMode_) {
       handleMenuInput(core, e);
       continue;
@@ -1012,7 +1040,11 @@ void ReaderState::render(Core& core) {
     return;
   }
 
-  if (menuMode_) {
+  if (bookStatsMode_) {
+    ui::render(renderer_, THEME_MANAGER.current(), bookStatsView_);
+    bookStatsView_.needsRender = false;
+    core.display.markDirty();
+  } else if (menuMode_) {
     const Theme& theme = THEME_MANAGER.current();
     ui::render(renderer_, theme, menuView_);
     core.display.markDirty();
@@ -1047,6 +1079,9 @@ void ReaderState::navigateNext(Core& core) {
   // Spine/section logic for EPUB, TXT, Markdown
   // From cover (-1) -> first text content page
   if (currentSpineIndex_ == 0 && currentSectionPage_ == -1) {
+    const int oldSpine = currentSpineIndex_;
+    const int oldSection = currentSectionPage_;
+    const uint32_t oldPage = currentPage_;
     auto* provider = core.content.asEpub();
     size_t spineCount = 1;
     if (provider && provider->getEpub()) {
@@ -1062,6 +1097,7 @@ void ReaderState::navigateNext(Core& core) {
     }
     currentSectionPage_ = 0;
     needsRender_ = true;
+    recordReadingActivityIfMoved(oldSpine, oldSection, oldPage);
     startBackgroundCaching(core);
     return;
   }
@@ -1104,12 +1140,16 @@ void ReaderState::navigatePrev(Core& core) {
   if (currentSpineIndex_ == firstContentSpine && currentSectionPage_ == 0) {
     // Only go to cover if it exists and images enabled
     if (hasCover_ && core.settings.showImages) {
+      const int oldSpine = currentSpineIndex_;
+      const int oldSection = currentSectionPage_;
+      const uint32_t oldPage = currentPage_;
       currentSpineIndex_ = 0;
       currentSectionPage_ = -1;
       parser_.reset();
       parserSpineIndex_ = -1;
       pageCache_.reset();  // Don't need cache for cover
       needsRender_ = true;
+      recordReadingActivityIfMoved(oldSpine, oldSection, oldPage);
     }
     return;  // At start of book either way
   }
@@ -1132,6 +1172,9 @@ void ReaderState::navigatePrev(Core& core) {
 }
 
 void ReaderState::applyNavResult(const ReaderNavigation::NavResult& result, Core& core) {
+  const int oldSpine = currentSpineIndex_;
+  const int oldSection = currentSectionPage_;
+  const uint32_t oldPage = currentPage_;
   currentSpineIndex_ = result.position.spineIndex;
   currentSectionPage_ = result.position.sectionPage;
   currentPage_ = result.position.flatPage;
@@ -1141,6 +1184,7 @@ void ReaderState::applyNavResult(const ReaderNavigation::NavResult& result, Core
     parserSpineIndex_ = -1;
     pageCache_.reset();
   }
+  recordReadingActivityIfMoved(oldSpine, oldSection, oldPage);
   startBackgroundCaching(core);  // Resume caching
 }
 
@@ -1165,8 +1209,10 @@ void ReaderState::navigateNextChapter(Core& core) {
     auto next = core.content.getTocEntry(currentChapter + 1);
     if (!next.ok()) return;
 
+    const uint32_t oldPage = currentPage_;
     currentPage_ = next.value.pageIndex;
     needsRender_ = true;
+    recordReadingActivityIfMoved(currentSpineIndex_, currentSectionPage_, oldPage);
     return;
   }
 
@@ -1186,12 +1232,16 @@ void ReaderState::navigateNextChapter(Core& core) {
   if (currentSpineIndex_ + 1 >= static_cast<int>(spineCount)) return;
 
   stopBackgroundCaching();
+  const int oldSpine = currentSpineIndex_;
+  const int oldSection = currentSectionPage_;
+  const uint32_t oldPage = currentPage_;
   currentSpineIndex_++;
   currentSectionPage_ = 0;
   parser_.reset();
   parserSpineIndex_ = -1;
   pageCache_.reset();
   needsRender_ = true;
+  recordReadingActivityIfMoved(oldSpine, oldSection, oldPage);
   startBackgroundCaching(core);
 }
 
@@ -1215,6 +1265,7 @@ void ReaderState::navigatePrevChapter(Core& core) {
 
     if (currentChapter < 0) return;
 
+    const uint32_t oldPage = currentPage_;
     if (currentPage_ > currentChapterStart) {
       // Mid-chapter: go to start of current chapter
       currentPage_ = currentChapterStart;
@@ -1228,12 +1279,16 @@ void ReaderState::navigatePrevChapter(Core& core) {
     }
 
     needsRender_ = true;
+    recordReadingActivityIfMoved(currentSpineIndex_, currentSectionPage_, oldPage);
     return;
   }
 
   if (type != ContentType::Epub && type != ContentType::Fb2) return;
 
   stopBackgroundCaching();
+  const int oldSpine = currentSpineIndex_;
+  const int oldSection = currentSectionPage_;
+  const uint32_t oldPage = currentPage_;
 
   if (currentSectionPage_ > 0) {
     // Go to beginning of current chapter
@@ -1263,6 +1318,7 @@ void ReaderState::navigatePrevChapter(Core& core) {
   }
 
   needsRender_ = true;
+  recordReadingActivityIfMoved(oldSpine, oldSection, oldPage);
   startBackgroundCaching(core);
 }
 
@@ -1278,6 +1334,7 @@ void ReaderState::renderCurrentPage(Core& core) {
     if (core.settings.showImages) {
       if (renderCoverPage(core)) {
         hasCover_ = true;
+        readingSession_.updateProgress(0);
         core.display.markDirty();
         return;
       }
@@ -1722,6 +1779,7 @@ void ReaderState::renderStatusBar(Core& core, int marginRight, int marginBottom,
   // Page info (whole-book page number via GlobalPageMetrics)
   // Note: renderCachedPage() already stopped the task, so we own pageCache_
   const GlobalPageMetrics metrics = resolveGlobalPageMetrics(core);
+  updateReadingProgress(metrics);
   data.currentPage = metrics.currentPage;
   data.totalPages = metrics.totalPages;
   data.isPartial = data.totalPages <= 0 || !metrics.totalIsExact;
@@ -1747,8 +1805,13 @@ void ReaderState::renderXtcPage(Core& core) {
       });
 
   switch (result) {
-    case XtcPageRenderer::RenderResult::Success:
+    case XtcPageRenderer::RenderResult::Success: {
+      GlobalPageMetrics metrics;
+      metrics.currentPage = static_cast<int>(currentPage_) + 1;
+      metrics.totalPages = static_cast<int>(core.content.pageCount());
+      updateReadingProgress(metrics);
       break;
+    }
     case XtcPageRenderer::RenderResult::EndOfBook:
       ui::centeredMessage(renderer_, theme, theme.uiFontId, tr(END_OF_BOOK));
       break;
@@ -2622,6 +2685,9 @@ void ReaderState::jumpToTocEntry(Core& core, int tocIndex) {
     return;
   }
 
+  const int oldSpine = currentSpineIndex_;
+  const int oldSection = currentSectionPage_;
+  const uint32_t oldPage = currentPage_;
   const auto& chapter = tocView_.chapters[tocIndex];
   ContentType type = core.content.metadata().type;
 
@@ -2692,6 +2758,7 @@ void ReaderState::jumpToTocEntry(Core& core, int tocIndex) {
   }
 
   needsRender_ = true;
+  recordReadingActivityIfMoved(oldSpine, oldSection, oldPage);
   LOG_DBG(TAG, "Jumped to TOC entry %d (spine/page %d)", tocIndex, chapter.pageNum);
 }
 
@@ -2739,6 +2806,7 @@ void ReaderState::exitToUI(Core& core) {
 
   // Stop background caching first - BackgroundTask::stop() waits properly
   stopBackgroundCaching();
+  flushReadingSession();
 
   // Save progress at last rendered position
   if (contentLoaded_) {
@@ -2832,9 +2900,55 @@ void ReaderState::handleMenuAction(Core& core, ui::ReaderMenuView::Item action) 
     case ui::ReaderMenuView::Item::Bookmarks:
       enterBookmarkMode(core);
       break;
+    case ui::ReaderMenuView::Item::BookStats:
+      enterBookStatsMode(core);
+      break;
     case ui::ReaderMenuView::Item::Count:
       break;
   }
+}
+
+// ============================================================================
+// Book Statistics Overlay Mode
+// ============================================================================
+
+void ReaderState::enterBookStatsMode(Core& core) {
+  stopBackgroundCaching();
+  READING_STATS.load();
+  populateBookStatsView(core);
+  bookStatsView_.showOpen = false;
+  bookStatsMode_ = true;
+  needsRender_ = true;
+  LOG_DBG(TAG, "Entered book statistics mode");
+}
+
+void ReaderState::exitBookStatsMode(Core& core) {
+  bookStatsMode_ = false;
+  needsRender_ = true;
+  startBackgroundCaching(core);
+  LOG_DBG(TAG, "Exited book statistics mode");
+}
+
+void ReaderState::handleBookStatsInput(Core& core, const Event& e) {
+  if (e.type == EventType::ButtonPress && e.button == Button::Back) {
+    exitBookStatsMode(core);
+  }
+}
+
+void ReaderState::populateBookStatsView(Core& core) {
+  const auto& meta = core.content.metadata();
+  bookStatsView_.setBook(meta.title, meta.author);
+
+  const ReadingStatsRecord* saved = READING_STATS.find(contentPath_);
+  const auto live = readingSession_.snapshot(millis());
+  const uint32_t savedSeconds = saved ? saved->totalSeconds : 0;
+  const uint32_t savedSessions = saved ? saved->sessionCount : 0;
+  const auto saturatingAdd = [](uint32_t a, uint32_t b) { return UINT32_MAX - a < b ? UINT32_MAX : a + b; };
+  const uint32_t totalSeconds = saturatingAdd(savedSeconds, live.seconds);
+  const uint32_t totalSessions = saturatingAdd(savedSessions, live.seconds > 0 ? 1U : 0U);
+  const bool hasProgress = live.hasProgress || (saved && saved->hasProgress);
+  const uint8_t progress = live.hasProgress ? live.progressPercent : (saved ? saved->progressPercent : 0);
+  bookStatsView_.setStats(hasProgress, progress, totalSeconds, totalSessions);
 }
 
 // ============================================================================
@@ -3020,6 +3134,9 @@ void ReaderState::deleteBookmark(Core& core, int index) {
 void ReaderState::jumpToBookmark(Core& core, int index) {
   if (index < 0 || index >= bookmarkCount_) return;
 
+  const int oldSpine = currentSpineIndex_;
+  const int oldSection = currentSectionPage_;
+  const uint32_t oldPage = currentPage_;
   const Bookmark& bm = bookmarks_[index];
   ContentType type = core.content.metadata().type;
 
@@ -3038,6 +3155,7 @@ void ReaderState::jumpToBookmark(Core& core, int index) {
   }
 
   needsRender_ = true;
+  recordReadingActivityIfMoved(oldSpine, oldSection, oldPage);
   LOG_DBG(TAG, "Jumped to bookmark %d", index);
 }
 

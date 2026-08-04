@@ -5,8 +5,8 @@
 
 // Inline ReaderMenuView to avoid firmware/graphics dependencies
 struct ReaderMenuView {
-  static constexpr const char* const ITEMS[] = {"Chapters", "Bookmarks"};
-  static constexpr int ITEM_COUNT = 2;
+  static constexpr const char* const ITEMS[] = {"Chapters", "Bookmarks", "Book stats"};
+  static constexpr int ITEM_COUNT = 3;
 
   int8_t selected = 0;
   bool visible = false;
@@ -53,9 +53,10 @@ int main() {
 
   // --- ITEM_COUNT matches ITEMS ---
   {
-    runner.expectEq(2, ReaderMenuView::ITEM_COUNT, "ITEM_COUNT is 2");
+    runner.expectEq(3, ReaderMenuView::ITEM_COUNT, "ITEM_COUNT is 3");
     runner.expectTrue(strcmp(ReaderMenuView::ITEMS[0], "Chapters") == 0, "first item is Chapters");
     runner.expectTrue(strcmp(ReaderMenuView::ITEMS[1], "Bookmarks") == 0, "second item is Bookmarks");
+    runner.expectTrue(strcmp(ReaderMenuView::ITEMS[2], "Book stats") == 0, "third item is Book stats");
   }
 
   // --- show ---
@@ -91,7 +92,12 @@ int main() {
 
     view.needsRender = false;
     view.moveDown();
-    runner.expectEq(int8_t(1), view.selected, "moveDown clamps at last item");
+    runner.expectEq(int8_t(2), view.selected, "second moveDown reaches Book stats");
+    runner.expectTrue(view.needsRender, "second moveDown sets needsRender");
+
+    view.needsRender = false;
+    view.moveDown();
+    runner.expectEq(int8_t(2), view.selected, "moveDown clamps at last item");
     runner.expectFalse(view.needsRender, "moveDown at end doesn't set needsRender");
   }
 

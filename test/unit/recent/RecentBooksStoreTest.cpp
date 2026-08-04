@@ -105,12 +105,26 @@ int main() {
     runner.expectEq(40, RecentBooksStore::rowHeight(16), "rowHeight(16)=40");
   }
 
-  // maxRecent: one-screen capacity from screen height and row pitch
+  // visibleCapacity: one-screen capacity clamped to the supported 5..10 range
   {
-    runner.expectEq(13, RecentBooksStore::maxRecent(800, 48), "maxRecent(800,48)=13");  // (800-130)/48
-    runner.expectEq(11, RecentBooksStore::maxRecent(700, 48), "maxRecent(700,48)=11");  // (700-130)/48
-    runner.expectEq(1, RecentBooksStore::maxRecent(100, 48), "maxRecent(100,48)=1 (floor at 1)");
-    runner.expectEq(16, RecentBooksStore::maxRecent(800, 40), "maxRecent(800,40)=16");  // (800-130)/40
+    runner.expectEq(10, RecentBooksStore::visibleCapacity(800, 48), "portrait capacity capped at 10");
+    runner.expectEq(7, RecentBooksStore::visibleCapacity(480, 48), "landscape capacity follows geometry");
+    runner.expectEq(5, RecentBooksStore::visibleCapacity(300, 48), "supported minimum is 5");
+    runner.expectEq(5, RecentBooksStore::visibleCapacity(100, 48), "capacity floor remains 5");
+    runner.expectEq(size_t(5), RecentBooksStore::displayCount(10, 300, 48), "short screen shows five");
+    runner.expectEq(size_t(7), RecentBooksStore::displayCount(10, 480, 48), "landscape shows seven");
+    runner.expectEq(size_t(10), RecentBooksStore::displayCount(10, 800, 48), "portrait shows ten");
+    runner.expectEq(size_t(3), RecentBooksStore::displayCount(3, 800, 48), "never exceeds stored count");
+  }
+
+  // Instance storage contract: retain exactly the ten newest records
+  {
+    auto books = makeBooks({"/0", "/1", "/2", "/3", "/4", "/5", "/6", "/7", "/8", "/9"});
+    auto result =
+        RecentBooksStore::addToList(std::move(books), "/new", "New", "", RecentBooksStore::MAX_STORED);
+    runner.expectEq(size_t(10), result.size(), "stored list remains ten");
+    runner.expectEq(std::string("/new"), result.front().path, "newest is first");
+    runner.expectEq(std::string("/8"), result.back().path, "oldest is evicted");
   }
 
   return runner.allPassed() ? 0 : 1;

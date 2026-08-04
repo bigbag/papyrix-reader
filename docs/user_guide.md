@@ -69,14 +69,15 @@ From the Home screen, press **Books** to open the Books screen.
 
 #### Books (Recent)
 
-The Books screen lists your recently opened books (title and author) so you can resume reading
-without browsing the whole SD card. The list is capped to what fits on one screen and is ordered
-most-recent-first.
+The Books screen keeps up to ten recently opened books, shows as many as fit on one screen, and
+orders them most-recent-first. Each row shows the title and author plus reading progress and
+accumulated reading time when available.
 
-- **Open:** Press **Confirm** to resume the selected book at its saved reading position.
-- **Files:** Press the **Files** button to open the file browser (below).
-- **Delete:** Press the **Right** button to remove the selected book from the list (the file itself
-  is **not** deleted — use the file browser for that). Confirm with **Yes**.
+- **Back:** Return to the Home screen.
+- **Open / Confirm:** Resume the selected book at its saved reading position.
+- **Files / Left:** Open the file browser (below).
+- **Info / Right:** Open Book Stats for the selected book, showing Progress, Time read, and Sessions.
+- Missing files are removed from the list automatically. There is no per-book Remove action.
 - After reading a book you opened from here, you return to the Books screen.
 
 #### File Browser
@@ -262,13 +263,14 @@ Power and device behavior settings:
 - **Show Recents** (default: ON)
   - Options: OFF, ON
   - **ON:** The Home screen shows a **Books** button that opens your recently opened books (with a **Files** button to browse the SD card).
-  - **OFF:** The Home screen shows a **Files** button that opens the file browser directly (the pre-#141 behavior). Recently opened books are still recorded in the background, so switching back to ON shows full history.
+  - **OFF:** The Home screen shows a **Files** button that opens the file browser directly (the pre-#141 behavior). Recently opened books are still recorded in the background, so switching back to ON shows full history. Book Stats remains available from the Reader Menu.
 
 #### Cleanup
 
 Maintenance actions for the device:
 
 - **Clear Book Cache** — Delete all cached book data and reading progress
+- **Clear recent books** — Clear the Books history only. Book files, reading progress, bookmarks, caches, and reading statistics are kept.
 - **Empty Trash** — Permanently delete all books in the recycle bin (`/trash`)
 - **Clear Device Storage** — Erase internal flash storage (requires restart)
 - **Factory Reset** — Erase ALL data (caches, settings, WiFi credentials, fonts) and restart device
@@ -397,7 +399,7 @@ Once you have opened a book, the button layout changes to facilitate reading.
 
 ### System Navigation
 * **Return to Home:** Press **Back** to close the book and return to the Book Selection screen.
-* **Reader Menu:** Press **Confirm** to open the Reader Menu (access chapters and bookmarks).
+* **Reader Menu:** Press **Confirm** to open the Reader Menu (access chapters, bookmarks, and Book Stats).
 
 ### Status Bar
 
@@ -411,12 +413,13 @@ EPUB chapters cache one chapter at a time, so `~` typically clears as soon as th
 
 ### 4.1 Reader Menu
 
-Press **Confirm** while reading to open the Reader Menu. The menu provides two options:
+Press **Confirm** while reading to open the Reader Menu. The menu provides three options:
 
 - **Chapters** — Open the Table of Contents / Chapter Selection screen
 - **Bookmarks** — Open the Bookmarks overlay for the current book
+- **Book stats** — Show Progress, total Time read, and Sessions for the current book
 
-Use **Left/Right** to highlight a menu item and **Confirm** to select. Press **Back** to close the menu and return to reading.
+Book Stats remains available here when **Show Recents** is off. Use **Left/Right** to highlight a menu item and **Confirm** to select. Press **Back** to close the menu and return to reading.
 
 ### 4.2 Bookmarks
 
