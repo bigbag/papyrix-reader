@@ -1,0 +1,11 @@
+{
+  "name": "Memory",
+  "version": "1.0.0",
+  "description": "Bounded scratch allocation utilities",
+  "frameworks": ["arduino", "espidf"],
+  "platforms": ["espressif32"],
+  "build": {
+    "srcDir": "src",
+    "includeDir": "src"
+  }
+}

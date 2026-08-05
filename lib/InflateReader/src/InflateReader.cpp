@@ -3,10 +3,6 @@
 #include <cstring>
 #include <type_traits>
 
-namespace {
-constexpr size_t INFLATE_DICT_SIZE = 32768;
-}
-
 // Guarantee the cast pattern in the header comment is valid.
 static_assert(std::is_standard_layout<InflateReader>::value,
               "InflateReader must be standard-layout for the uzlib callback cast to work");
@@ -23,14 +19,14 @@ bool InflateReader::init(const bool streaming, uint8_t* externalBuffer) {
       ringBuffer = externalBuffer;
       ownsRingBuffer = false;
     } else {
-      ringBuffer = static_cast<uint8_t*>(malloc(INFLATE_DICT_SIZE));
+      ringBuffer = static_cast<uint8_t*>(malloc(STREAMING_DICTIONARY_SIZE));
       if (!ringBuffer) return false;
       ownsRingBuffer = true;
     }
-    memset(ringBuffer, 0, INFLATE_DICT_SIZE);
+    memset(ringBuffer, 0, STREAMING_DICTIONARY_SIZE);
   }
 
-  uzlib_uncompress_init(&decomp, ringBuffer, ringBuffer ? INFLATE_DICT_SIZE : 0);
+  uzlib_uncompress_init(&decomp, ringBuffer, ringBuffer ? STREAMING_DICTIONARY_SIZE : 0);
   return true;
 }
 

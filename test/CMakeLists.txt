@@ -32,6 +32,7 @@ include_directories(
   ${PROJECT_ROOT}/lib/Utf8/src
   ${PROJECT_ROOT}/lib/Serialization/src
   ${PROJECT_ROOT}/lib/AsyncTask/src
+  ${PROJECT_ROOT}/lib/Memory/src
   ${PROJECT_ROOT}/lib/RenderTypes/src
   ${PROJECT_ROOT}/lib/Epub/src/Epub
   ${PROJECT_ROOT}/lib/Epub/src/Epub/css

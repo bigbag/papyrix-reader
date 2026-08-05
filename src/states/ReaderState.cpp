@@ -1326,6 +1326,10 @@ void ReaderState::renderCurrentPage(Core& core) {
   ContentType type = core.content.metadata().type;
   const Theme& theme = THEME_MANAGER.current();
 
+  // Rendering and cache building share the framebuffer. Stop the background
+  // owner before the first clear or draw.
+  stopBackgroundCaching();
+
   // Always clear screen first (prevents previous content from showing through)
   renderer_.clearScreen(theme.backgroundColor);
 
@@ -1411,9 +1415,6 @@ void ReaderState::renderCachedPage(Core& core) {
       return;
     }
   }
-
-  // Stop background task to ensure we own pageCache_ (ownership model)
-  stopBackgroundCaching();
 
   // Background task may have left parser in inconsistent state
   if (!pageCache_ && parser_ && parserSpineIndex_ == currentSpineIndex_) {

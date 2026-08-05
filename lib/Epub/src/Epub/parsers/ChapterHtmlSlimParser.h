@@ -19,6 +19,7 @@
 #include "../css/CssParser.h"
 #include "DataUriStripper.h"
 
+class BuildArena;
 class Page;
 class GfxRenderer;
 class Print;
@@ -51,7 +52,8 @@ class ChapterHtmlSlimParser {
   // Image support
   std::string chapterBasePath;
   std::string imageCachePath;
-  std::function<bool(const std::string&, Print&, size_t)> readItemFn;
+  std::function<bool(const std::string&, Print&, size_t, BuildArena*)> readItemFn;
+  BuildArena* buildScratch_ = nullptr;
 
   // CSS support
   const CssParser* cssParser_ = nullptr;
@@ -140,13 +142,13 @@ class ChapterHtmlSlimParser {
   void cleanupParser();
 
  public:
-  explicit ChapterHtmlSlimParser(const std::string& filepath, GfxRenderer& renderer, const RenderConfig& config,
-                                 const std::function<bool(std::unique_ptr<Page>)>& completePageFn,
-                                 const std::function<void(int)>& progressFn = nullptr,
-                                 const std::string& chapterBasePath = "", const std::string& imageCachePath = "",
-                                 const std::function<bool(const std::string&, Print&, size_t)>& readItemFn = nullptr,
-                                 const CssParser* cssParser = nullptr,
-                                 const std::function<bool()>& externalAbortCallback = nullptr)
+  explicit ChapterHtmlSlimParser(
+      const std::string& filepath, GfxRenderer& renderer, const RenderConfig& config,
+      const std::function<bool(std::unique_ptr<Page>)>& completePageFn,
+      const std::function<void(int)>& progressFn = nullptr, const std::string& chapterBasePath = "",
+      const std::string& imageCachePath = "",
+      const std::function<bool(const std::string&, Print&, size_t, BuildArena*)>& readItemFn = nullptr,
+      const CssParser* cssParser = nullptr, const std::function<bool()>& externalAbortCallback = nullptr)
       : filepath(filepath),
         renderer(renderer),
         config(config),
@@ -167,6 +169,7 @@ class ChapterHtmlSlimParser {
     epilogueXml_ = epilogue;
   }
 
+  void setBuildScratch(BuildArena* scratch) { buildScratch_ = scratch; }
   bool parseAndBuildPages();
   bool resumeParsing();
   bool isSuspended() const { return suspended_; }

@@ -1,5 +1,6 @@
 #include "EpubChapterParser.h"
 
+#include <BuildArena.h>
 #include <Epub/parsers/ChapterHtmlSlimParser.h>
 #include <GfxRenderer.h>
 #include <Html5Normalizer.h>
@@ -8,10 +9,40 @@
 #include <Logging.h>
 #include <Page.h>
 #include <SDCardManager.h>
+#include <core/PerfLog.h>
+#include <esp_heap_caps.h>
 
 #define TAG "EPUB_CHAP"
 
 #include <utility>
+
+namespace {
+class ScratchReporter {
+ public:
+  ScratchReporter(const char* tag, BuildArena& arena, uint32_t started)
+      : tag_(tag),
+        arena_(arena),
+        started_(started),
+        freeBefore_(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
+        largestBefore_(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)) {}
+
+  ~ScratchReporter() {
+    LOG_DBG(tag_,
+            "Scratch high=%zu/%zu failed=%zu fallbacks=%u releases=%u "
+            "heap=%zu->%zu largest=%zu->%zu elapsed=%lu ms",
+            arena_.highWater(), arena_.capacity(), arena_.failedAllocSize(), arena_.fallbackCount(),
+            arena_.releaseFailures(), freeBefore_, heap_caps_get_free_size(MALLOC_CAP_8BIT), largestBefore_,
+            heap_caps_get_largest_free_block(MALLOC_CAP_8BIT), static_cast<unsigned long>(millis() - started_));
+  }
+
+ private:
+  const char* tag_;
+  BuildArena& arena_;
+  uint32_t started_;
+  size_t freeBefore_;
+  size_t largestBefore_;
+};
+}  // namespace
 
 EpubChapterParser::EpubChapterParser(std::shared_ptr<Epub> epub, int spineIndex, GfxRenderer& renderer,
                                      const RenderConfig& config, const std::string& imageCachePath)
@@ -60,6 +91,10 @@ const std::vector<std::pair<std::string, uint16_t>>& EpubChapterParser::getAncho
 
 bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint16_t maxPages,
                                    const AbortCallback& shouldAbort) {
+  const uint32_t scratchStarted = millis();
+  BuildArena scratch(renderer_.getFrameBuffer(), renderer_.getBufferSize());
+  ScratchReporter scratchReporter(TAG, scratch, scratchStarted);
+
   onPageComplete_ = onPageComplete;
   maxPages_ = maxPages;
   pagesCreated_ = 0;
@@ -69,7 +104,9 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
   if (initialized_ && liveParser_ && liveParser_->isSuspended()) {
     Hyphenation::setLanguage(epub_->getLanguage());
 
+    liveParser_->setBuildScratch(&scratch);
     bool success = liveParser_->resumeParsing();
+    liveParser_->setBuildScratch(nullptr);
     currentSubSectionPages_ += pagesCreated_;
 
     hasMore_ = liveParser_->isSuspended() || liveParser_->wasAborted() || (!success && pagesCreated_ > 0);
@@ -216,7 +253,9 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
         if (!SdMan.openFileForWrite("EPUB", tmpHtmlPath_, tmpHtml)) {
           continue;
         }
-        extracted = epub_->readItemContentsToStream(localPath, tmpHtml, 1024, renderer_.getFrameBuffer());
+        const uint32_t extractionStarted = perfMsNow();
+        extracted = epub_->readItemContentsToStream(localPath, tmpHtml, 1024, renderer_.getFrameBuffer(), &scratch);
+        readerPerfLog("epub-extract", extractionStarted);
         tmpHtml.close();
 
         if (!extracted && SdMan.exists(tmpHtmlPath_.c_str())) {
@@ -231,13 +270,15 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
 
       normalizedPath_ = epub_->getCachePath() + "/.norm_" + std::to_string(spineIndex_) + ".html";
       parseHtmlPath_ = tmpHtmlPath_;
-      if (html5::normalizeHtmlForXml(tmpHtmlPath_, normalizedPath_)) {
+      const uint32_t normalizationStarted = perfMsNow();
+      if (html5::normalizeHtmlForXml(tmpHtmlPath_, normalizedPath_, &scratch)) {
         parseHtmlPath_ = normalizedPath_;
       }
+      readerPerfLog("epub-normalize", normalizationStarted);
     }
 
-    auto readItemFn = [this](const std::string& href, Print& out, size_t chunkSize) -> bool {
-      return epub_->readItemContentsToStream(href, out, chunkSize, renderer_.getFrameBuffer());
+    auto readItemFn = [this](const std::string& href, Print& out, size_t chunkSize, BuildArena* arena) -> bool {
+      return epub_->readItemContentsToStream(href, out, chunkSize, renderer_.getFrameBuffer(), arena);
     };
 
     uint16_t pagesBeforeThisSubSection = pagesCreated_;
@@ -300,7 +341,9 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
       }
     }
 
+    liveParser_->setBuildScratch(&scratch);
     bool success = liveParser_->parseAndBuildPages();
+    liveParser_->setBuildScratch(nullptr);
     initialized_ = true;
     currentSubSectionPages_ = pagesCreated_ - pagesBeforeThisSubSection;
 

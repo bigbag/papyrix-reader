@@ -1,5 +1,6 @@
 #include "Html5Normalizer.h"
 
+#include <BuildArena.h>
 #include <SDCardManager.h>
 
 #include <algorithm>
@@ -46,7 +47,7 @@ bool isAttrNameChar(char c) {
 
 }  // namespace
 
-bool normalizeHtmlForXml(const std::string& inputPath, const std::string& outputPath) {
+bool normalizeHtmlForXml(const std::string& inputPath, const std::string& outputPath, BuildArena* scratch) {
   FsFile inFile, outFile;
 
   if (!SdMan.openFileForRead("H5N", inputPath, inFile)) {
@@ -73,8 +74,22 @@ bool normalizeHtmlForXml(const std::string& inputPath, const std::string& output
 
   // Keep these ~2 KB scratch buffers off the stack: normalization runs on the
   // foreground loopTask (8 KB stack) when an HTML/EPUB page isn't cached (Issue #137).
-  auto readBuffer = std::unique_ptr<uint8_t[]>(new (std::nothrow) uint8_t[BUFFER_SIZE]);
-  auto writeBuffer = std::unique_ptr<uint8_t[]>(new (std::nothrow) uint8_t[BUFFER_SIZE + 128]);
+  BuildArena::Scope scratchScope = scratch ? scratch->scope() : BuildArena::Scope{};
+  std::unique_ptr<uint8_t[]> ownedRead;
+  std::unique_ptr<uint8_t[]> ownedWrite;
+  uint8_t* readBuffer = scratch ? scratch->allocArray<uint8_t>(BUFFER_SIZE) : nullptr;
+  uint8_t* writeBuffer = scratch ? scratch->allocArray<uint8_t>(BUFFER_SIZE + 128) : nullptr;
+
+  if (!readBuffer || !writeBuffer) {
+    if (scratch) {
+      scratchScope.release();
+      scratch->noteFallback(BUFFER_SIZE * 2 + 128);
+    }
+    ownedRead.reset(new (std::nothrow) uint8_t[BUFFER_SIZE]);
+    ownedWrite.reset(new (std::nothrow) uint8_t[BUFFER_SIZE + 128]);
+    readBuffer = ownedRead.get();
+    writeBuffer = ownedWrite.get();
+  }
   if (!readBuffer || !writeBuffer) {
     inFile.close();
     outFile.close();
@@ -84,7 +99,7 @@ bool normalizeHtmlForXml(const std::string& inputPath, const std::string& output
 
   auto flushWrite = [&]() -> bool {
     if (writePos > 0) {
-      if (outFile.write(writeBuffer.get(), writePos) != writePos) {
+      if (outFile.write(writeBuffer, writePos) != writePos) {
         return false;
       }
       writePos = 0;
@@ -130,7 +145,7 @@ bool normalizeHtmlForXml(const std::string& inputPath, const std::string& output
   };
 
   while (inFile.available()) {
-    int bytesRead = inFile.read(readBuffer.get(), BUFFER_SIZE);
+    int bytesRead = inFile.read(readBuffer, BUFFER_SIZE);
     if (bytesRead <= 0) break;
 
     for (int i = 0; i < bytesRead; i++) {

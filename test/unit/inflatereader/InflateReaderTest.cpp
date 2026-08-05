@@ -61,6 +61,8 @@ static int chunkedReadCb(uzlib_uncomp* uncomp) {
 
 int main() {
   TestUtils::TestRunner runner("InflateReader");
+  runner.expectEq<size_t>(32768, InflateReader::STREAMING_DICTIONARY_SIZE,
+                          "streaming dictionary contract remains 32 KiB");
 
   // ---- One-shot mode: read() ----
   {

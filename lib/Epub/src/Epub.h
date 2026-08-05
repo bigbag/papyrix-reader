@@ -11,6 +11,7 @@
 #include "Epub/BookMetadataCache.h"
 #include "Epub/css/CssParser.h"
 
+class BuildArena;
 class ZipFile;
 
 class Epub {
@@ -84,7 +85,7 @@ class Epub {
   uint8_t* readItemContentsToBytes(const std::string& itemHref, size_t* size = nullptr,
                                    bool trailingNullByte = false) const;
   bool readItemContentsToStream(const std::string& itemHref, Print& out, size_t chunkSize,
-                                uint8_t* dictBuffer = nullptr) const;
+                                uint8_t* dictBuffer = nullptr, BuildArena* scratch = nullptr) const;
   bool getItemSize(const std::string& itemHref, size_t* size) const;
   bool getSpineItemSizes(std::vector<size_t>& sizes) const;
   BookMetadataCache::SpineEntry getSpineItem(int spineIndex) const;

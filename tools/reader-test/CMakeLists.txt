@@ -81,6 +81,7 @@ target_include_directories(reader-test PRIVATE
   ${PROJECT_ROOT}/lib/Encoding/src
   ${PROJECT_ROOT}/lib/Serialization/src
   ${PROJECT_ROOT}/lib/AsyncTask/src
+  ${PROJECT_ROOT}/lib/Memory/src
   ${PROJECT_ROOT}/lib/RenderTypes/src
   ${PROJECT_ROOT}/lib/Epub/src
   ${PROJECT_ROOT}/lib/Epub/src/Epub

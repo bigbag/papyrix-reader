@@ -1,5 +1,6 @@
 #include "ZipFile.h"
 
+#include <BuildArena.h>
 #include <Logging.h>
 
 #define TAG "ZIP"
@@ -567,12 +568,14 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
 }
 
 bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t chunkSize, uint8_t* dictBuffer,
-                               const std::function<bool()>& shouldAbort) {
-  return readFileToStreamDetailed(filename, out, chunkSize, dictBuffer, shouldAbort) == StreamReadResult::Success;
+                               const std::function<bool()>& shouldAbort, BuildArena* scratch) {
+  return readFileToStreamDetailed(filename, out, chunkSize, dictBuffer, shouldAbort, scratch) ==
+         StreamReadResult::Success;
 }
 
 StreamReadResult ZipFile::readFileToStreamDetailed(const char* filename, Print& out, const size_t chunkSize,
-                                                   uint8_t* dictBuffer, const std::function<bool()>& shouldAbort) {
+                                                   uint8_t* dictBuffer, const std::function<bool()>& shouldAbort,
+                                                   BuildArena* scratch) {
   constexpr uint8_t YIELD_CHUNK_INTERVAL = 8;
 
   const bool wasOpen = isOpen();
@@ -597,7 +600,18 @@ StreamReadResult ZipFile::readFileToStreamDetailed(const char* filename, Print& 
   const auto inflatedDataSize = fileStat.uncompressedSize;
 
   if (fileStat.method == ZIP_METHOD_STORED) {
-    const auto buffer = static_cast<uint8_t*>(malloc(chunkSize));
+    auto arenaScope = scratch ? scratch->scope() : BuildArena::Scope{};
+    bool arenaBacked = false;
+    uint8_t* buffer = scratch ? scratch->allocArray<uint8_t>(chunkSize) : nullptr;
+    if (buffer) {
+      arenaBacked = true;
+    } else {
+      if (scratch) {
+        arenaScope.release();
+        scratch->noteFallback(chunkSize);
+      }
+      buffer = static_cast<uint8_t*>(malloc(chunkSize));
+    }
     if (!buffer) {
       LOG_ERR(TAG, "Failed to allocate memory for buffer");
       if (!wasOpen) close();
@@ -611,7 +625,7 @@ StreamReadResult ZipFile::readFileToStreamDetailed(const char* filename, Print& 
         chunkCounter = 0;
         if (shouldAbort()) {
           LOG_ERR(TAG, "Stored stream extraction aborted");
-          free(buffer);
+          if (!arenaBacked) free(buffer);
           if (!wasOpen) close();
           return StreamReadResult::Aborted;
         }
@@ -621,14 +635,14 @@ StreamReadResult ZipFile::readFileToStreamDetailed(const char* filename, Print& 
       const size_t dataRead = file.read(buffer, remaining < chunkSize ? remaining : chunkSize);
       if (dataRead == 0) {
         LOG_ERR(TAG, "Could not read more bytes");
-        free(buffer);
+        if (!arenaBacked) free(buffer);
         if (!wasOpen) close();
         return StreamReadResult::ReadError;
       }
 
       if (out.write(buffer, dataRead) != dataRead) {
         LOG_ERR(TAG, "Failed to write all output bytes to stream");
-        free(buffer);
+        if (!arenaBacked) free(buffer);
         if (!wasOpen) close();
         return StreamReadResult::WriteError;
       }
@@ -636,23 +650,44 @@ StreamReadResult ZipFile::readFileToStreamDetailed(const char* filename, Print& 
     }
 
     if (!wasOpen) close();
-    free(buffer);
+    if (!arenaBacked) free(buffer);
     return StreamReadResult::Success;
   }
 
   if (fileStat.method == ZIP_METHOD_DEFLATED) {
-    auto* fileReadBuffer = static_cast<uint8_t*>(malloc(chunkSize));
-    if (!fileReadBuffer) {
-      LOG_ERR(TAG, "Failed to allocate memory for zip file read buffer");
-      if (!wasOpen) close();
-      return StreamReadResult::AllocFailed;
-    }
+    auto arenaScope = scratch ? scratch->scope() : BuildArena::Scope{};
+    bool arenaBacked = false;
+    uint8_t* fileReadBuffer = nullptr;
+    uint8_t* outputBuffer = nullptr;
+    uint8_t* arenaDictionary = nullptr;
 
-    auto* outputBuffer = static_cast<uint8_t*>(malloc(chunkSize));
-    if (!outputBuffer) {
-      free(fileReadBuffer);
-      if (!wasOpen) close();
-      return StreamReadResult::AllocFailed;
+    size_t requiredBytes = SIZE_MAX;
+    if (chunkSize <= (SIZE_MAX - InflateReader::STREAMING_DICTIONARY_SIZE) / 2) {
+      requiredBytes = chunkSize * 2 + InflateReader::STREAMING_DICTIONARY_SIZE;
+    }
+    if (scratch && requiredBytes != SIZE_MAX) {
+      fileReadBuffer = scratch->allocArray<uint8_t>(chunkSize);
+      outputBuffer = scratch->allocArray<uint8_t>(chunkSize);
+      arenaDictionary = scratch->allocArray<uint8_t>(InflateReader::STREAMING_DICTIONARY_SIZE);
+      arenaBacked = fileReadBuffer && outputBuffer && arenaDictionary;
+    }
+    if (!arenaBacked) {
+      if (scratch) {
+        arenaScope.release();
+        scratch->noteFallback(requiredBytes);
+      }
+      fileReadBuffer = static_cast<uint8_t*>(malloc(chunkSize));
+      if (!fileReadBuffer) {
+        LOG_ERR(TAG, "Failed to allocate memory for zip file read buffer");
+        if (!wasOpen) close();
+        return StreamReadResult::AllocFailed;
+      }
+      outputBuffer = static_cast<uint8_t*>(malloc(chunkSize));
+      if (!outputBuffer) {
+        free(fileReadBuffer);
+        if (!wasOpen) close();
+        return StreamReadResult::AllocFailed;
+      }
     }
 
     ZipInflateCtx ctx;
@@ -661,11 +696,13 @@ StreamReadResult ZipFile::readFileToStreamDetailed(const char* filename, Print& 
     ctx.readBuf = fileReadBuffer;
     ctx.readBufSize = chunkSize;
 
-    if (!ctx.reader.init(true, dictBuffer)) {
+    if (!ctx.reader.init(true, arenaBacked ? arenaDictionary : dictBuffer)) {
       LOG_ERR(TAG, "Failed to init inflate reader (largest free: %u)",
               heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
-      free(outputBuffer);
-      free(fileReadBuffer);
+      if (!arenaBacked) {
+        free(outputBuffer);
+        free(fileReadBuffer);
+      }
       if (!wasOpen) close();
       return StreamReadResult::AllocFailed;
     }
@@ -725,8 +762,10 @@ StreamReadResult ZipFile::readFileToStreamDetailed(const char* filename, Print& 
     }
 
     if (!wasOpen) close();
-    free(outputBuffer);
-    free(fileReadBuffer);
+    if (!arenaBacked) {
+      free(outputBuffer);
+      free(fileReadBuffer);
+    }
     return result;
   }
 

@@ -9,6 +9,8 @@
 
 #include "test_utils.h"
 
+#include <BuildArena.h>
+
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
@@ -26,6 +28,7 @@
 
 // Forward declarations for helper functions
 std::vector<uint8_t> createMinimalZip();
+std::vector<uint8_t> createStoredZip(const std::string& name, const std::string& contents);
 std::vector<uint8_t> createZipWithInvalidOffset(const char* name);
 std::vector<uint8_t> createZipWithUnsupportedCompression(const char* name);
 std::vector<uint8_t> createZipWithNamedEntries(const std::vector<std::pair<std::string, uint32_t>>& entries);
@@ -168,6 +171,39 @@ int main() {
     MockPrint output;
     ZipFile zip("/test.zip");
     runner.expectFalse(zip.readFileToStream("test.txt", output, 1024), "StreamInvalidOffset_ReturnsFalse");
+  }
+
+  {
+    SdMan.reset();
+    const std::string payload(3000, 'x');
+    SdMan.setFileData("/stored.zip", createStoredZip("chapter.xhtml", payload));
+    std::string path = "/stored.zip";
+    ZipFile zip(path);
+    MockPrint output;
+    uint8_t bytes[4096] = {};
+    BuildArena arena(bytes, sizeof(bytes));
+    const auto result = zip.readFileToStreamDetailed("chapter.xhtml", output, 1024, nullptr, nullptr, &arena);
+    runner.expectTrue(result == StreamReadResult::Success, "stored arena extraction succeeds");
+    runner.expectEq<size_t>(payload.size(), output.data().size(), "stored arena output size");
+    runner.expectTrue(std::equal(output.data().begin(), output.data().end(), payload.begin()),
+                      "stored arena output matches");
+    runner.expectTrue(arena.highWater() >= 1024, "stored arena used");
+    runner.expectEq<size_t>(0, arena.used(), "stored arena scope released");
+  }
+
+  {
+    SdMan.reset();
+    const std::string payload(3000, 'x');
+    SdMan.setFileData("/stored.zip", createStoredZip("chapter.xhtml", payload));
+    std::string path = "/stored.zip";
+    ZipFile zip(path);
+    MockPrint output;
+    uint8_t bytes[128] = {};
+    BuildArena arena(bytes, sizeof(bytes));
+    const auto result = zip.readFileToStreamDetailed("chapter.xhtml", output, 1024, nullptr, nullptr, &arena);
+    runner.expectTrue(result == StreamReadResult::Success, "stored tiny arena extraction succeeds");
+    runner.expectEq<uint32_t>(1, arena.fallbackCount(), "stored tiny arena fallback counted");
+    runner.expectEq<size_t>(0, arena.used(), "stored tiny arena scope released");
   }
 
   // ========================================================================
@@ -368,6 +404,67 @@ std::vector<uint8_t> createMinimalZip() {
   data[80] = 0x05;
   data[81] = 0x06;
   data[92] = 0x00;  // 0 entries
+  return data;
+}
+
+std::vector<uint8_t> createStoredZip(const std::string& name, const std::string& contents) {
+  std::vector<uint8_t> data;
+  auto u16 = [&](uint16_t value) {
+    data.push_back(static_cast<uint8_t>(value));
+    data.push_back(static_cast<uint8_t>(value >> 8));
+  };
+  auto u32 = [&](uint32_t value) {
+    data.push_back(static_cast<uint8_t>(value));
+    data.push_back(static_cast<uint8_t>(value >> 8));
+    data.push_back(static_cast<uint8_t>(value >> 16));
+    data.push_back(static_cast<uint8_t>(value >> 24));
+  };
+  auto bytes = [&](const std::string& value) { data.insert(data.end(), value.begin(), value.end()); };
+
+  const uint32_t size = static_cast<uint32_t>(contents.size());
+  u32(0x04034b50);
+  u16(20);
+  u16(0);
+  u16(0);
+  u16(0);
+  u16(0);
+  u32(0);
+  u32(size);
+  u32(size);
+  u16(static_cast<uint16_t>(name.size()));
+  u16(0);
+  bytes(name);
+  bytes(contents);
+
+  const uint32_t centralOffset = static_cast<uint32_t>(data.size());
+  u32(0x02014b50);
+  u16(20);
+  u16(20);
+  u16(0);
+  u16(0);
+  u16(0);
+  u16(0);
+  u32(0);
+  u32(size);
+  u32(size);
+  u16(static_cast<uint16_t>(name.size()));
+  u16(0);
+  u16(0);
+  u16(0);
+  u16(0);
+  u32(0);
+  u32(0);
+  bytes(name);
+  const uint32_t centralSize = static_cast<uint32_t>(data.size()) - centralOffset;
+
+  u32(0x06054b50);
+  u16(0);
+  u16(0);
+  u16(1);
+  u16(1);
+  u32(centralSize);
+  u32(centralOffset);
+  u16(0);
   return data;
 }
 

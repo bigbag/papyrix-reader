@@ -6,6 +6,8 @@
 #include <unordered_map>
 #include <vector>
 
+class BuildArena;
+
 enum class StreamReadResult : uint8_t {
   Success,
   OpenFailed,
@@ -90,8 +92,9 @@ class ZipFile {
   // These functions will open and close the zip as needed
   uint8_t* readFileToMemory(const char* filename, size_t* size = nullptr, bool trailingNullByte = false);
   bool readFileToStream(const char* filename, Print& out, size_t chunkSize, uint8_t* dictBuffer = nullptr,
-                        const std::function<bool()>& shouldAbort = nullptr);
+                        const std::function<bool()>& shouldAbort = nullptr, BuildArena* scratch = nullptr);
   StreamReadResult readFileToStreamDetailed(const char* filename, Print& out, size_t chunkSize,
                                             uint8_t* dictBuffer = nullptr,
-                                            const std::function<bool()>& shouldAbort = nullptr);
+                                            const std::function<bool()>& shouldAbort = nullptr,
+                                            BuildArena* scratch = nullptr);
 };

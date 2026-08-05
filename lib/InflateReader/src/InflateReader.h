@@ -39,6 +39,8 @@ enum class InflateStatus {
 //
 class InflateReader {
  public:
+  static constexpr size_t STREAMING_DICTIONARY_SIZE = 32768;
+
   InflateReader() = default;
   ~InflateReader();
 

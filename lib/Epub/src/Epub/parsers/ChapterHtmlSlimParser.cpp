@@ -9,6 +9,7 @@
 #include <Page.h>
 #include <SDCardManager.h>
 #include <Utf8.h>
+#include <core/PerfLog.h>
 #include <esp_heap_caps.h>
 #include <expat.h>
 #include <freertos/FreeRTOS.h>
@@ -880,10 +881,12 @@ bool ChapterHtmlSlimParser::parseLoop() {
         const uint16_t splitWidth =
             (inset < config.viewportWidth) ? static_cast<uint16_t>(config.viewportWidth - inset) : config.viewportWidth;
         currentLeftInset_ = currentBlockStyle_.leftInset();
+        const uint32_t layoutStarted = perfMsNow();
         currentTextBlock->layoutAndExtractLines(
             renderer, config.fontId, splitWidth,
             [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); }, true,
-            [this]() -> bool { return stopRequested_ || shouldAbort(); });
+            [this]() -> bool { return stopRequested_ || shouldAbort(); }, buildScratch_);
+        readerPerfLog("epub-layout", layoutStarted);
       }
     }
   } while (!done);
@@ -1114,10 +1117,12 @@ void ChapterHtmlSlimParser::makePages() {
                                       : config.viewportWidth;
   currentLeftInset_ = currentBlockStyle_.leftInset();
 
+  const uint32_t layoutStarted = perfMsNow();
   currentTextBlock->layoutAndExtractLines(
       renderer, config.fontId, effectiveWidth,
       [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); }, true,
-      [this]() -> bool { return stopRequested_; });
+      [this]() -> bool { return stopRequested_; }, buildScratch_);
+  readerPerfLog("epub-layout", layoutStarted);
 
   // Apply bottom spacing from CSS block style
   if (!stopRequested_ && currentBlockStyle_.bottomInset() > 0) {
@@ -1226,7 +1231,7 @@ std::string ChapterHtmlSlimParser::cacheImage(const std::string& src) {
     return "";
   }
 
-  if (!readItemFn(resolvedPath, tempFile, 1024)) {
+  if (!readItemFn(resolvedPath, tempFile, 1024, buildScratch_)) {
     LOG_ERR(TAG, "Failed to extract image: %s", resolvedPath.c_str());
     tempFile.close();
     SdMan.remove(tempPath.c_str());

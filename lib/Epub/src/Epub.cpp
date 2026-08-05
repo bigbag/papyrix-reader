@@ -1061,14 +1061,14 @@ uint8_t* Epub::readItemContentsToBytes(const std::string& itemHref, size_t* size
 }
 
 bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, const size_t chunkSize,
-                                    uint8_t* dictBuffer) const {
+                                    uint8_t* dictBuffer, BuildArena* scratch) const {
   if (itemHref.empty()) {
     LOG_ERR(TAG, "Failed to read item, empty href");
     return false;
   }
 
   const std::string path = FsHelpers::normalisePath(itemHref);
-  return ZipFile(filepath).readFileToStream(path.c_str(), out, chunkSize, dictBuffer);
+  return ZipFile(filepath).readFileToStream(path.c_str(), out, chunkSize, dictBuffer, nullptr, scratch);
 }
 
 bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {

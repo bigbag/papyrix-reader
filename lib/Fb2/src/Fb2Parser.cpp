@@ -1,5 +1,6 @@
 #include "Fb2Parser.h"
 
+#include <BuildArena.h>
 #include <EncodingDetector.h>
 #include <ExpatEncodingHandler.h>
 #include <GfxRenderer.h>
@@ -9,6 +10,8 @@
 #include <ParsedText.h>
 #include <SDCardManager.h>
 #include <Utf8.h>
+#include <core/PerfLog.h>
+#include <esp_heap_caps.h>
 
 #ifdef ARDUINO
 #include <esp_task_wdt.h>
@@ -43,6 +46,32 @@ bool matches(const char* tag, const char* tags[], int count) {
   }
   return false;
 }
+
+class ScratchReporter {
+ public:
+  ScratchReporter(const char* tag, BuildArena& arena, uint32_t started)
+      : tag_(tag),
+        arena_(arena),
+        started_(started),
+        freeBefore_(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
+        largestBefore_(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)) {}
+
+  ~ScratchReporter() {
+    LOG_DBG(tag_,
+            "Scratch high=%zu/%zu failed=%zu fallbacks=%u releases=%u "
+            "heap=%zu->%zu largest=%zu->%zu elapsed=%lu ms",
+            arena_.highWater(), arena_.capacity(), arena_.failedAllocSize(), arena_.fallbackCount(),
+            arena_.releaseFailures(), freeBefore_, heap_caps_get_free_size(MALLOC_CAP_8BIT), largestBefore_,
+            heap_caps_get_largest_free_block(MALLOC_CAP_8BIT), static_cast<unsigned long>(millis() - started_));
+  }
+
+ private:
+  const char* tag_;
+  BuildArena& arena_;
+  uint32_t started_;
+  size_t freeBefore_;
+  size_t largestBefore_;
+};
 }  // namespace
 
 Fb2Parser::Fb2Parser(std::string filepath, GfxRenderer& renderer, const RenderConfig& config,
@@ -70,6 +99,7 @@ void Fb2Parser::reset() {
   bomSkip_ = 0;
   hasMore_ = true;
   isRtl_ = false;
+  buildScratch_ = nullptr;
   stopRequested_ = false;
   depth_ = 0;
   skipUntilDepth_ = INT_MAX;
@@ -96,6 +126,15 @@ void Fb2Parser::reset() {
 
 bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint16_t maxPages,
                            const AbortCallback& shouldAbort) {
+  const uint32_t scratchStarted = millis();
+  BuildArena scratch(renderer_.getFrameBuffer(), renderer_.getBufferSize());
+  ScratchReporter scratchReporter(TAG, scratch, scratchStarted);
+  buildScratch_ = &scratch;
+  struct ClearScratch {
+    BuildArena*& slot;
+    ~ClearScratch() { slot = nullptr; }
+  } clearScratch{buildScratch_};
+
   onPageComplete_ = onPageComplete;
   maxPages_ = maxPages;
   pagesCreated_ = 0;
@@ -108,7 +147,15 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
   // Keep the 4 KB read buffer off the stack: the foreground "page not cached"
   // render runs this whole parse -> layout -> font-render chain on the 8 KB
   // loopTask stack, where an on-stack buffer this size overflows it (Issue #137).
-  auto buffer = std::unique_ptr<uint8_t[]>(new (std::nothrow) uint8_t[READ_CHUNK_SIZE + 1]);
+  auto inputScope = scratch.scope();
+  std::unique_ptr<uint8_t[]> ownedBuffer;
+  uint8_t* buffer = scratch.allocArray<uint8_t>(READ_CHUNK_SIZE + 1);
+  if (!buffer) {
+    inputScope.release();
+    scratch.noteFallback(READ_CHUNK_SIZE + 1);
+    ownedBuffer.reset(new (std::nothrow) uint8_t[READ_CHUNK_SIZE + 1]);
+    buffer = ownedBuffer.get();
+  }
   if (!buffer) {
     LOG_ERR(TAG, "Failed to allocate read buffer");
     return false;
@@ -148,12 +195,12 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
 
     fileSize_ = resumeFile_.size();
 
-    size_t peekBytes = resumeFile_.read(buffer.get(), READ_CHUNK_SIZE);
+    size_t peekBytes = resumeFile_.read(buffer, READ_CHUNK_SIZE);
     const char* explicitEncoding = nullptr;
     bomSkip_ = 0;
     if (peekBytes > 0) {
       buffer[peekBytes] = '\0';
-      if (detectEncoding(buffer.get(), peekBytes, bomSkip_) == Encoding::Utf8) {
+      if (detectEncoding(buffer, peekBytes, bomSkip_) == Encoding::Utf8) {
         explicitEncoding = "UTF-8";
       }
     }
@@ -192,11 +239,11 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
       return false;
     }
 
-    size_t bytesRead = resumeFile_.read(buffer.get(), READ_CHUNK_SIZE);
+    size_t bytesRead = resumeFile_.read(buffer, READ_CHUNK_SIZE);
     if (bytesRead == 0) break;
 
     int done = (resumeFile_.available() == 0) ? 1 : 0;
-    auto status = XML_Parse(xmlParser_, reinterpret_cast<const char*>(buffer.get()), static_cast<int>(bytesRead), done);
+    auto status = XML_Parse(xmlParser_, reinterpret_cast<const char*>(buffer), static_cast<int>(bytesRead), done);
     if (status == XML_STATUS_ERROR) {
       LOG_ERR(TAG, "Parse error at line %lu: %s", XML_GetCurrentLineNumber(xmlParser_),
               XML_ErrorString(XML_GetErrorCode(xmlParser_)));
@@ -492,6 +539,7 @@ void Fb2Parser::makePages() {
   const int lineHeight = static_cast<int>(renderer_.getLineHeight(config_.fontId) * config_.lineCompression);
   bool continueProcessing = true;
 
+  const uint32_t layoutStarted = perfMsNow();
   currentTextBlock_->layoutAndExtractLines(
       renderer_, config_.fontId, config_.viewportWidth,
       [this, &continueProcessing](const std::shared_ptr<TextBlock>& line) {
@@ -501,7 +549,9 @@ void Fb2Parser::makePages() {
           continueProcessing = false;
         }
       },
-      true, [this, &continueProcessing]() -> bool { return !continueProcessing || (shouldAbort_ && shouldAbort_()); });
+      true, [this, &continueProcessing]() -> bool { return !continueProcessing || (shouldAbort_ && shouldAbort_()); },
+      buildScratch_);
+  readerPerfLog("fb2-layout", layoutStarted);
 
   if (!hitMaxPages_) {
     switch (config_.spacingLevel) {

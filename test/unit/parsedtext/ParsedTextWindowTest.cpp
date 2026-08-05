@@ -1,13 +1,18 @@
 // Layer-2 safety net for Issue #137: ParsedText::layoutAndExtractLines must lay
-// out an over-long block in bounded windows so the transient heap (most notably
-// the pre-split duplicate of the word list) stays O(cap), not O(paragraph).
+// out an over-long block in bounded windows so the transient heap used by word
+// preprocessing and layout workspaces stays O(cap), not O(paragraph).
 // This protects every format that can hand a single huge block to layout
 // (EPUB/FB2/HTML), even where the parser has no word cap of its own.
 
+#include <BuildArena.h>
 #include <GfxRenderer.h>
 #include <ParsedText.h>
 
+#include <algorithm>
+#include <array>
+#include <chrono>
 #include <cstddef>
+#include <cstdio>
 #include <cstdlib>
 #include <memory>
 #include <new>
@@ -20,6 +25,7 @@
 namespace {
 size_t g_liveBytes = 0;
 size_t g_peakBytes = 0;
+size_t g_trackedAllocations = 0;
 bool g_tracking = false;
 constexpr size_t kHeader = alignof(std::max_align_t);
 
@@ -28,7 +34,10 @@ void* trackedAlloc(size_t n) {
   if (!base) return nullptr;
   *static_cast<size_t*>(base) = n;
   g_liveBytes += n;
-  if (g_tracking && g_liveBytes > g_peakBytes) g_peakBytes = g_liveBytes;
+  if (g_tracking) {
+    ++g_trackedAllocations;
+    if (g_liveBytes > g_peakBytes) g_peakBytes = g_liveBytes;
+  }
   return static_cast<char*>(base) + kHeader;
 }
 void trackedFree(void* p) {
@@ -61,12 +70,19 @@ void operator delete[](void* p, const std::nothrow_t&) noexcept { trackedFree(p)
 namespace {
 size_t trackBegin() {
   g_peakBytes = g_liveBytes;
+  g_trackedAllocations = 0;
   g_tracking = true;
   return g_liveBytes;
 }
-size_t trackEnd(size_t baseline) {
+
+struct HeapSample {
+  size_t peakBytes;
+  size_t allocations;
+};
+
+HeapSample trackEnd(size_t baseline) {
   g_tracking = false;
-  return g_peakBytes - baseline;
+  return {g_peakBytes - baseline, g_trackedAllocations};
 }
 }  // namespace
 // -----------------------------------------------------------------------------
@@ -94,8 +110,8 @@ int main() {
   GfxRenderer renderer;
 
   // --- Peak transient bounded for a block far larger than the cap ---
-  // Hyphenation on so preSplitOversizedWords duplicates the word list; without
-  // windowing that duplicate is O(block) and the peak blows past the bound.
+  // Hyphenation stays enabled so preprocessing and layout exercise their full
+  // working set in every bounded window.
   {
     const int kWords = 4000;
     auto pt = makeBlock(kWords, /*hyphenation=*/true);
@@ -103,17 +119,18 @@ int main() {
     int lineCount = 0;
     auto onLine = [&](std::shared_ptr<TextBlock>) { lineCount++; };  // drop immediately
 
-    size_t baseline = trackBegin();
-    bool ok = pt->layoutAndExtractLines(renderer, kFontId, kViewport, onLine);
-    size_t peakDelta = trackEnd(baseline);
+    const size_t baseline = trackBegin();
+    const bool ok = pt->layoutAndExtractLines(renderer, kFontId, kViewport, onLine);
+    const HeapSample sample = trackEnd(baseline);
 
+    std::fprintf(stderr, "LAYOUT_BASELINE peak=%zu allocations=%zu\n", sample.peakBytes, sample.allocations);
     runner.expectTrue(ok, "window_peak: layout completed");
     runner.expectTrue(lineCount > 1, "window_peak: produced lines");
     runner.expectTrue(pt->isEmpty(), "window_peak: all words consumed");
-
-    constexpr size_t kBoundBytes = 128 * 1024;
-    runner.expectTrue(peakDelta < kBoundBytes, "window_peak: transient bounded (" + std::to_string(peakDelta / 1024) +
-                                                   " KB, limit " + std::to_string(kBoundBytes / 1024) + " KB)");
+    runner.expectTrue(sample.peakBytes <= 24 * 1024,
+                      "window_peak: transient heap at most 24 KiB (" + std::to_string(sample.peakBytes) + ")");
+    runner.expectTrue(sample.allocations <= 11312,
+                      "window_peak: allocations at most 75% baseline (" + std::to_string(sample.allocations) + ")");
   }
 
   // --- No word lost or duplicated across window boundaries ---
@@ -195,6 +212,73 @@ int main() {
       runner.expectEqual(emSpace + "w0", got[0], "indent_window: first word carries the indent");
     }
   }
+
+  auto flatten = [&](ParsedText& parsed, BuildArena* arena) {
+    std::vector<std::string> out;
+    const bool ok = parsed.layoutAndExtractLines(
+        renderer, kFontId, kViewport,
+        [&](std::shared_ptr<TextBlock> line) {
+          for (const auto& word : line->getWords()) out.push_back(word.word);
+        },
+        true, nullptr, arena);
+    runner.expectTrue(ok, "arena layout completed");
+    return out;
+  };
+
+  {
+    auto heap = makeBlock(512, true);
+    auto arenaBacked = makeBlock(512, true);
+    const auto expected = flatten(*heap, nullptr);
+    uint8_t frame[48000] = {};
+    BuildArena arena(frame, sizeof(frame));
+    const auto actual = flatten(*arenaBacked, &arena);
+    runner.expectTrue(actual == expected, "48 KiB arena output matches heap");
+    runner.expectTrue(arena.highWater() > 0, "arena workspace used");
+    runner.expectEq<uint32_t>(0, arena.fallbackCount(), "48 KiB arena needs no fallback");
+    std::fprintf(stderr, "ARENA_X4 high=%zu/%zu fallbacks=%u releases=%u\n", arena.highWater(), arena.capacity(),
+                 arena.fallbackCount(), arena.releaseFailures());
+  }
+
+  {
+    auto heap = makeBlock(512, true);
+    auto arenaBacked = makeBlock(512, true);
+    const auto expected = flatten(*heap, nullptr);
+    uint8_t frame[52272] = {};
+    BuildArena arena(frame, sizeof(frame));
+    auto inputScope = arena.scope();
+    runner.expectTrue(arena.alloc(4097, alignof(uint8_t)) != nullptr, "FB2 input buffer reserved");
+    const auto actual = flatten(*arenaBacked, &arena);
+    runner.expectTrue(actual == expected, "X3 nested layout output matches heap");
+    runner.expectEq<uint32_t>(0, arena.fallbackCount(), "X3 nested arena needs no fallback");
+    std::fprintf(stderr, "ARENA_X3 high=%zu/%zu fallbacks=%u releases=%u\n", arena.highWater(), arena.capacity(),
+                 arena.fallbackCount(), arena.releaseFailures());
+  }
+
+  {
+    auto heap = makeBlock(512, true);
+    auto arenaBacked = makeBlock(512, true);
+    const auto expected = flatten(*heap, nullptr);
+    uint8_t tiny[128] = {};
+    BuildArena arena(tiny, sizeof(tiny));
+    const auto actual = flatten(*arenaBacked, &arena);
+    runner.expectTrue(actual == expected, "tiny arena falls back without output changes");
+    runner.expectEq<uint32_t>(1, arena.fallbackCount(), "tiny arena fallback counted once");
+  }
+
+  std::array<long long, 20> layoutMicros{};
+  for (size_t sampleIndex = 0; sampleIndex < layoutMicros.size(); ++sampleIndex) {
+    auto timed = makeBlock(4000, true);
+    int lines = 0;
+    const auto started = std::chrono::steady_clock::now();
+    timed->layoutAndExtractLines(renderer, kFontId, kViewport, [&](std::shared_ptr<TextBlock>) { ++lines; });
+    const auto stopped = std::chrono::steady_clock::now();
+    layoutMicros[sampleIndex] =
+        std::chrono::duration_cast<std::chrono::microseconds>(stopped - started).count();
+    runner.expectTrue(lines > 0, "timing: produced lines");
+  }
+  std::sort(layoutMicros.begin(), layoutMicros.end());
+  const long long medianMicros = layoutMicros[layoutMicros.size() / 2];
+  std::fprintf(stderr, "LAYOUT_TIME median_us=%lld samples=%zu\n", medianMicros, layoutMicros.size());
 
   runner.printSummary();
   return runner.allPassed() ? 0 : 1;

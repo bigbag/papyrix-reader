@@ -5,6 +5,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 // Collect words from extracted TextBlock lines
@@ -225,6 +226,57 @@ int main() {
     auto w1 = collectWords(lines);
     auto w2 = collectWords(rest);
     runner.expectEq(size_t(8), w1.size() + w2.size(), "parser_pattern_all_words_accounted");
+  }
+
+  // --- Repeated aborts during oversized-word preprocessing preserve output ---
+  {
+    auto makeOversized = [] {
+      auto block = std::make_unique<ParsedText>(TextBlock::LEFT_ALIGN, 0, true, true, false);
+      for (int i = 0; i < 120; ++i) {
+        const auto style = (i % 2 == 0) ? EpdFontFamily::REGULAR : EpdFontFamily::ITALIC;
+        block->addWord("abcdefgh\xC2\xADijklmnop\xC2\xADqrstuvwx", style);
+      }
+      return block;
+    };
+    auto flattenStyled = [](const std::vector<std::shared_ptr<TextBlock>>& lines) {
+      std::vector<std::pair<std::string, EpdFontFamily::Style>> result;
+      for (const auto& line : lines) {
+        for (const auto& word : line->getWords()) result.emplace_back(word.word, word.style);
+      }
+      return result;
+    };
+
+    auto uninterrupted = makeOversized();
+    std::vector<std::shared_ptr<TextBlock>> expectedLines;
+    runner.expectTrue(uninterrupted->layoutAndExtractLines(
+                          renderer, kFontId, kViewport,
+                          [&](std::shared_ptr<TextBlock> line) { expectedLines.push_back(std::move(line)); }),
+                      "oversized uninterrupted completes");
+
+    auto resumed = makeOversized();
+    int abortBudget = 3;
+    for (int attempt = 0; attempt < 3; ++attempt) {
+      int checksThisAttempt = 0;
+      const bool ok = resumed->layoutAndExtractLines(
+          renderer, kFontId, kViewport, [](std::shared_ptr<TextBlock>) {}, true,
+          [&]() {
+            ++checksThisAttempt;
+            if (checksThisAttempt == 2 && abortBudget > 0) {
+              --abortBudget;
+              return true;
+            }
+            return false;
+          });
+      runner.expectFalse(ok, "oversized preprocessing attempt aborts");
+    }
+
+    std::vector<std::shared_ptr<TextBlock>> actualLines;
+    runner.expectTrue(resumed->layoutAndExtractLines(
+                          renderer, kFontId, kViewport,
+                          [&](std::shared_ptr<TextBlock> line) { actualLines.push_back(std::move(line)); }),
+                      "oversized resumed parse completes");
+    runner.expectTrue(flattenStyled(actualLines) == flattenStyled(expectedLines),
+                      "oversized abort/resume preserves words and styles");
   }
 
   // --- Single word: always fits on one line ---

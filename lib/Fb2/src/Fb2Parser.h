@@ -13,6 +13,7 @@
 #include <memory>
 #include <string>
 
+class BuildArena;
 class Page;
 class GfxRenderer;
 class ParsedText;
@@ -38,6 +39,7 @@ class Fb2Parser : public ContentParser {
   std::string language_;
   bool hasMore_ = true;
   bool isRtl_ = false;
+  BuildArena* buildScratch_ = nullptr;
 
   // Expat state
   XML_Parser xmlParser_ = nullptr;

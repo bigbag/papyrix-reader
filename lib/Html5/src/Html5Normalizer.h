@@ -1,6 +1,8 @@
 #pragma once
 #include <string>
 
+class BuildArena;
+
 namespace html5 {
 
 // Normalize HTML for Expat (XML) parsing:
@@ -8,6 +10,6 @@ namespace html5 {
 //  - Escape '<' inside quoted attribute values → &lt;
 //  - Normalize bare boolean attributes: defer → defer=""
 //  - Force-close tags when '<' appears in unquoted attribute area
-bool normalizeHtmlForXml(const std::string& inputPath, const std::string& outputPath);
+bool normalizeHtmlForXml(const std::string& inputPath, const std::string& outputPath, BuildArena* scratch = nullptr);
 
 }  // namespace html5

@@ -1,14 +1,15 @@
 #include "test_utils.h"
 
+#include <BuildArena.h>
 #include <Html5Normalizer.h>
 #include <SDCardManager.h>
 
 #include <string>
 
-static std::string normalize(const std::string& input) {
+static std::string normalize(const std::string& input, BuildArena* scratch = nullptr) {
   SdMan.reset();
   SdMan.registerFile("/in.html", input);
-  html5::normalizeHtmlForXml("/in.html", "/out.html");
+  html5::normalizeHtmlForXml("/in.html", "/out.html", scratch);
   return SdMan.getWrittenData("/out.html");
 }
 
@@ -265,6 +266,27 @@ int main() {
   {
     auto out = normalize("<div><img src=\"a.jpg\"><p>text</p></div>");
     runner.expectEqual("<div><img src=\"a.jpg\" /><p>text</p></div>", out, "mixed: img then p");
+  }
+
+  // ============================================
+  // Scratch arena
+  // ============================================
+
+  {
+    uint8_t bytes[2304] = {};
+    BuildArena arena(bytes, sizeof(bytes));
+    runner.expectEqual("<p>x<br /></p>", normalize("<p>x<br></p>", &arena), "arena: output unchanged");
+    runner.expectTrue(arena.highWater() >= 1024 + 1152, "arena: both buffers allocated");
+    runner.expectEq<uint32_t>(0, arena.fallbackCount(), "arena: no fallback");
+    runner.expectEq<size_t>(0, arena.used(), "arena: scope released on return");
+  }
+
+  {
+    uint8_t bytes[128] = {};
+    BuildArena arena(bytes, sizeof(bytes));
+    runner.expectEqual("<p>x<br /></p>", normalize("<p>x<br></p>", &arena), "arena fallback: output unchanged");
+    runner.expectEq<uint32_t>(1, arena.fallbackCount(), "arena fallback counted");
+    runner.expectEq<size_t>(0, arena.used(), "failed arena scope released");
   }
 
   // ============================================
