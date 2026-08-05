@@ -138,7 +138,7 @@ The Books tab is the default view. It shows files and folders on the SD card roo
 #### Creating Folders
 
 1. Click the **New Folder** button
-2. Enter a folder name (letters, numbers, underscores, and hyphens only)
+2. Enter a supported folder name
 3. Click **Create**
 
 ![New Folder dialog](images/web-new-folder.png)
@@ -153,6 +153,20 @@ This is useful for organizing your ebooks by genre, author, or series.
 **Warning:** Deletion is permanent and cannot be undone!
 
 **Note:** Folders must be empty before they can be deleted.
+
+### Unicode filenames
+
+Folder creation, upload, and rename support UTF-8 names in Latin (including Vietnamese), Cyrillic, Greek, Thai, and Arabic. Names are normalized to NFC before storage.
+
+Web mutations reject:
+
+- control characters and `" * / : < > ? \ |`;
+- dot-prefixed names, `.` and `..`;
+- names longer than 255 UTF-8 bytes;
+- complete paths longer than 1023 bytes;
+- CJK filenames, because the device file-browser font cannot render them.
+
+Invalid names return HTTP `400`. Upload validation happens before the destination file is opened, so rejected uploads leave no partial file.
 
 ### Sleep Tab
 

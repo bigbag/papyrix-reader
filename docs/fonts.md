@@ -45,6 +45,10 @@ The built-in fonts include native support for:
 
 No custom fonts are needed for these scripts - they work out of the box.
 
+### Filename display coverage
+
+The device file browser uses the built-in UI font. Web-created filenames are supported for Latin (including Vietnamese), Cyrillic, Greek, Thai, and Arabic. CJK `.bin` fonts are available for book text only and are deliberately excluded from UI rendering, so Web UI create, upload, and rename operations reject CJK filenames.
+
 ## Font Samples
 
 ### PT Serif

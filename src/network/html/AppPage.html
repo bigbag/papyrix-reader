@@ -277,6 +277,30 @@ function fmtSize(b){if(!b)return'0 B';var k=1024,u=['B','KB','MB','GB'];var i=Ma
 function post(url,params){return new Promise(function(ok,fail){var fd=new FormData();for(var k in params)fd.append(k,params[k]);var x=new XMLHttpRequest();x.open('POST',url,true);x.onload=function(){x.status<300?ok(x.responseText):fail(x.responseText)};x.onerror=function(){fail('Network error')};x.send(fd)})}
 function getPath(tab){return tab==='books'?booksPath:tab==='fonts'?fontsPath:TAB_CFG[tab].base}
 
+function isUnsupportedCjk(cp){
+  return(cp>=0x4E00&&cp<=0x9FFF)||(cp>=0x3400&&cp<=0x4DBF)||
+    (cp>=0xF900&&cp<=0xFAFF)||(cp>=0x3040&&cp<=0x309F)||
+    (cp>=0x30A0&&cp<=0x30FF)||(cp>=0xAC00&&cp<=0xD7AF)||
+    (cp>=0x20000&&cp<=0x2A6DF)||(cp>=0xFF00&&cp<=0xFFEF);
+}
+
+function validateFileName(name){
+  var normalized=name.normalize?name.normalize('NFC'):name;
+  if(!normalized)return{name:normalized,error:'Enter a name'};
+  if(/[\x00-\x1F"*\/:<>?\\|]/.test(normalized)||normalized.charAt(0)==='.'){
+    return{name:normalized,error:'Invalid characters in name'};
+  }
+  for(var ch of normalized){
+    if(isUnsupportedCjk(ch.codePointAt(0))){
+      return{name:normalized,error:'CJK filenames are not supported'};
+    }
+  }
+  if(new TextEncoder().encode(normalized).length>255){
+    return{name:normalized,error:'Name is too long'};
+  }
+  return{name:normalized,error:''};
+}
+
 // --- Tabs ---
 document.getElementById('tabs').addEventListener('click',function(e){
   if(e.target.tagName==='BUTTON'&&e.target.dataset.tab){switchTab(e.target.dataset.tab)}
@@ -480,6 +504,12 @@ function doUpload(){
     }
   }
 
+  var checked=validateFileName(file.name);
+  if(checked.error){alert(checked.error);return}
+  if(checked.name!==file.name){
+    file=new File([file],checked.name,{type:file.type});
+  }
+
   var btn=document.getElementById('uploadBtn');
   var pw=document.getElementById('uploadProgress');
   var pf=document.getElementById('uploadFill');
@@ -521,8 +551,9 @@ function openFolder(tab){
 
 function doCreateFolder(){
   var name=document.getElementById('folderNameInput').value.trim();
-  if(!name){alert('Enter a folder name');return}
-  if(!/^[a-zA-Z0-9_\-. ]+$/.test(name)){alert('Invalid characters in name');return}
+  var checked=validateFileName(name);
+  if(checked.error){alert(checked.error);return}
+  name=checked.name;
   var path=getPath(folderForTab);
 
   var prep=(folderForTab==='fonts')?ensureDirectory(path):Promise.resolve();
@@ -546,8 +577,9 @@ function openRename(name,path){
 function doRename(){
   var path=document.getElementById('renamePath').value;
   var newName=document.getElementById('renameInput').value.trim();
-  if(!newName){alert('Enter a name');return}
-  if(newName.indexOf('/')!==-1||newName.indexOf('..')!==-1){alert('Invalid name');return}
+  var checked=validateFileName(newName);
+  if(checked.error){alert(checked.error);return}
+  newName=checked.name;
   post('/rename',{path:path,newName:newName}).then(function(){
     closeModal('renameModal');loadTabData(activeTab);
   }).catch(function(err){alert('Error: '+err)});

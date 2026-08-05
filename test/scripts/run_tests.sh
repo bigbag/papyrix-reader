@@ -51,6 +51,18 @@ else
 fi
 echo ""
 
+echo "----------------------------------------"
+echo "Running: WebUiFilenameValidationTest"
+echo "----------------------------------------"
+TOTAL=$((TOTAL + 1))
+if python3 "$SCRIPT_DIR/WebUiFilenameValidationTest.py"; then
+    PASSED=$((PASSED + 1))
+else
+    FAILED=$((FAILED + 1))
+    echo "FAILED: WebUiFilenameValidationTest"
+fi
+echo ""
+
 echo "========================================"
 echo "=== Test Run Summary ==="
 echo "========================================"

@@ -421,6 +421,15 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/src/content/ContentTypes.cpp
       ${TEST_HELPERS}
     )
+  elseif(TEST_NAME STREQUAL "WebFileNameValidationTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/src/network/WebFileNameValidation.cpp
+      ${PROJECT_ROOT}/lib/ScriptDetector/src/ScriptDetector.cpp
+      ${PROJECT_ROOT}/lib/Utf8/src/Utf8.cpp
+      ${PROJECT_ROOT}/lib/Utf8/src/Utf8Nfc.cpp
+      ${TEST_HELPERS}
+    )
   elseif(TEST_NAME STREQUAL "CpuDriverTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}

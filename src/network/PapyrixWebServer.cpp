@@ -9,16 +9,35 @@
 #include <WiFi.h>
 #include <esp_heap_caps.h>
 
-#include <vector>
-
 #include "../IniParser.h"
 #include "../config.h"
 #include "../content/RecentBooksStore.h"
+#include "WebFileNameValidation.h"
 #include "html/AppPageHtml.generated.h"
 
 #define TAG "WEBSERVER"
 
 namespace papyrix {
+namespace {
+
+web::FileNameError prepareWebFileName(String& name) {
+  if (name.isEmpty()) return web::FileNameError::Empty;
+  if (!web::isValidUtf8(name.c_str(), name.length())) return web::FileNameError::InvalidUtf8;
+
+  const size_t normalizedLength = utf8NormalizeNfc(name.begin(), name.length());
+  if (normalizedLength < name.length()) name.remove(normalizedLength);
+  return web::validateFileName(name.c_str(), name.length());
+}
+
+bool appendWebPathComponent(String& path, const String& name) {
+  const bool endsWithSlash = path.endsWith("/");
+  if (!web::canAppendPathComponent(path.length(), endsWithSlash, name.length())) return false;
+  if (!endsWithSlash) path += "/";
+  path += name;
+  return true;
+}
+
+}  // namespace
 
 static void sendGzipHtml(WebServer* server, const char* data, size_t len) {
   server->sendHeader("Content-Encoding", "gzip");
@@ -216,27 +235,17 @@ void PapyrixWebServer::handleUpload() {
 
   if (upload.status == UPLOAD_FILE_START) {
     upload_.fileName = upload.filename;
-    {
-      size_t len = upload_.fileName.length();
-      if (len > 0 && len < 512) {
-        std::vector<char> buf(len + 1);
-        memcpy(buf.data(), upload_.fileName.c_str(), len);
-        buf[len] = '\0';
-        size_t nfcLen = utf8NormalizeNfc(buf.data(), len);
-        upload_.fileName = String(buf.data(), nfcLen);
-      } else if (len >= 512) {
-        LOG_WRN(TAG, "Filename too long for NFC normalization: %zu bytes", len);
-      }
-    }
     upload_.size = 0;
     upload_.success = false;
     upload_.error = "";
     upload_.bufferPos = 0;
-    if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < UploadState::BUFFER_SIZE * 2) {
-      upload_.error = "Insufficient memory for upload";
+
+    const web::FileNameError nameError = prepareWebFileName(upload_.fileName);
+    if (nameError != web::FileNameError::None) {
+      upload_.error = web::fileNameErrorMessage(nameError);
+      LOG_ERR(TAG, "Rejected upload filename: %s", upload_.error.c_str());
       return;
     }
-    upload_.buffer.resize(UploadState::BUFFER_SIZE);
 
     if (server_->hasArg("path")) {
       upload_.path = server_->arg("path");
@@ -253,8 +262,11 @@ void PapyrixWebServer::handleUpload() {
     LOG_INF(TAG, "Upload start: %s to %s", upload_.fileName.c_str(), upload_.path.c_str());
 
     String filePath = upload_.path;
-    if (!filePath.endsWith("/")) filePath += "/";
-    filePath += upload_.fileName;
+    if (!appendWebPathComponent(filePath, upload_.fileName)) {
+      upload_.error = "Path is too long";
+      LOG_ERR(TAG, "Rejected upload path: too long");
+      return;
+    }
 
     if (!FsHelpers::isSupportedBookFile(upload_.fileName.c_str()) &&
         !FsHelpers::isImageFile(upload_.fileName.c_str()) &&
@@ -265,6 +277,12 @@ void PapyrixWebServer::handleUpload() {
       LOG_ERR(TAG, "Rejected upload: %s (unsupported type)", upload_.fileName.c_str());
       return;
     }
+
+    if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < UploadState::BUFFER_SIZE * 2) {
+      upload_.error = "Insufficient memory for upload";
+      return;
+    }
+    upload_.buffer.resize(UploadState::BUFFER_SIZE);
 
     if (SdMan.exists(filePath.c_str())) {
       SdMan.remove(filePath.c_str());
@@ -347,8 +365,9 @@ void PapyrixWebServer::handleCreateFolder() {
   }
 
   String folderName = server_->arg("name");
-  if (folderName.isEmpty()) {
-    server_->send(400, "text/plain", "Folder name cannot be empty");
+  const web::FileNameError nameError = prepareWebFileName(folderName);
+  if (nameError != web::FileNameError::None) {
+    server_->send(400, "text/plain", web::fileNameErrorMessage(nameError));
     return;
   }
 
@@ -364,8 +383,10 @@ void PapyrixWebServer::handleCreateFolder() {
   }
 
   String folderPath = parentPath;
-  if (!folderPath.endsWith("/")) folderPath += "/";
-  folderPath += folderName;
+  if (!appendWebPathComponent(folderPath, folderName)) {
+    server_->send(400, "text/plain", "Path is too long");
+    return;
+  }
 
   if (SdMan.exists(folderPath.c_str())) {
     server_->send(400, "text/plain", "Folder already exists");
@@ -488,7 +509,7 @@ void PapyrixWebServer::handleRename() {
   String itemPath = server_->arg("path");
   String newName = server_->arg("newName");
 
-  if (itemPath.isEmpty() || itemPath == "/" || newName.isEmpty() || itemPath.indexOf("..") >= 0) {
+  if (itemPath.isEmpty() || itemPath == "/" || itemPath.indexOf("..") >= 0) {
     server_->send(400, "text/plain", "Invalid parameters");
     return;
   }
@@ -497,9 +518,9 @@ void PapyrixWebServer::handleRename() {
     itemPath = "/" + itemPath;
   }
 
-  // Security: reject path traversal and hidden names
-  if (newName.indexOf('/') >= 0 || newName.indexOf("..") >= 0 || newName.startsWith(".")) {
-    server_->send(400, "text/plain", "Invalid new name");
+  const web::FileNameError nameError = prepareWebFileName(newName);
+  if (nameError != web::FileNameError::None) {
+    server_->send(400, "text/plain", web::fileNameErrorMessage(nameError));
     return;
   }
 
@@ -516,8 +537,12 @@ void PapyrixWebServer::handleRename() {
   }
 
   // Build new path: same parent directory + new name
-  int lastSlash = itemPath.lastIndexOf('/');
-  String newPath = (lastSlash <= 0) ? "/" + newName : itemPath.substring(0, lastSlash) + "/" + newName;
+  const int lastSlash = itemPath.lastIndexOf('/');
+  String newPath = lastSlash <= 0 ? "/" : itemPath.substring(0, lastSlash);
+  if (!appendWebPathComponent(newPath, newName)) {
+    server_->send(400, "text/plain", "Path is too long");
+    return;
+  }
 
   if (SdMan.exists(newPath.c_str())) {
     server_->send(400, "text/plain", "An item with that name already exists");

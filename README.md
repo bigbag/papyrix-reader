@@ -103,12 +103,12 @@ on each panel.
 
 ### File System
 - [x] exFAT and FAT32 SD card support
-- [x] UTF-8 filenames (Cyrillic, etc.)
+- [x] UTF-8 filenames through the Web UI for Latin (including Vietnamese), Cyrillic, Greek, Thai, and Arabic
 - [x] File explorer with nested folders
 - [x] Recycle bin (`/trash`) - deleting a book moves it to `/trash` instead of removing it; browse to restore or permanently delete, and empty the trash from the Cleanup menu
 - [x] Hidden system folders filtering (LOST.DIR, $RECYCLE.BIN, etc.)
 
-> **Tip:** If you organise your library into deeply nested folders with Cyrillic or CJK names, format the SD card as **exFAT** rather than FAT32. Non-Latin characters use 2-4 bytes each in UTF-8, so deep folder paths can exceed FAT32's path length limit.
+> **Tip:** Web UI folder creation, upload, and rename normalize supported Unicode names to NFC. Names are limited to 255 UTF-8 bytes and complete paths to 1023 bytes. CJK filenames are not supported because CJK glyphs are unavailable in the device file-browser UI. For deeply nested folders with supported non-Latin names, prefer exFAT over FAT32.
 
 See [the user guide](docs/user_guide.md) for operating instructions, and the [customization guide](docs/customization.md) for themes and fonts. Example theme and font files are available in [`docs/examples/`](docs/examples/).
 

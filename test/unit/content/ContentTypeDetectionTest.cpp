@@ -28,6 +28,15 @@ int main() {
   runner.expectEq(uint8_t(papyrix::ContentType::Xtc), uint8_t(papyrix::detectContentType("/books/test.xtch")),
                   "xtch detected");
 
+  // === Web-created supported Unicode path ===
+
+  runner.expectEq(uint8_t(papyrix::ContentType::Epub),
+                  uint8_t(papyrix::detectContentType(u8"/Sách/Đường về.epub")),
+                  "epub detected in Vietnamese Web-created path");
+  runner.expectEq(uint8_t(papyrix::ContentType::Fb2),
+                  uint8_t(papyrix::detectContentType(u8"/Книги/История.fb2")),
+                  "fb2 detected in Cyrillic Web-created path");
+
   // === Case insensitive ===
 
   runner.expectEq(uint8_t(papyrix::ContentType::Epub), uint8_t(papyrix::detectContentType("/books/TEST.EPUB")),
