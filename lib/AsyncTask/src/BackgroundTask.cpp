@@ -14,10 +14,10 @@ BackgroundTask::BackgroundTask() {
 }
 
 BackgroundTask::~BackgroundTask() {
-  stop();
+  const bool stopped = stop(0);
 
   // Safe to delete event group only after task has fully exited
-  if (eventGroup_) {
+  if (eventGroup_ && stopped) {
     vEventGroupDelete(eventGroup_);
     eventGroup_ = nullptr;
   }

@@ -39,31 +39,60 @@ constexpr uint8_t CACHE_FILE_VERSION = 20;  // v20: CSS block-level margins/padd
 // - bytesConsumed (4)       @ 25  (v19+)
 // - totalBytes (4)          @ 29  (v19+)
 constexpr uint32_t kPageCountOffset = 18;
-constexpr uint32_t kLutOffsetOffset = 21;
-constexpr uint32_t kBytesConsumedOffset = 25;
 constexpr uint32_t kHeaderSize = 33;
+
+struct CacheHeader {
+  uint8_t version = 0;
+  RenderConfig config{};
+  uint16_t pageCount = 0;
+  uint8_t partial = 0;
+  uint32_t lutOffset = 0;
+  uint32_t bytesConsumed = 0;
+  uint32_t totalBytes = 0;
+};
+
+bool readCacheHeader(FsFile& file, CacheHeader& header) {
+  return file.seek(0) && serialization::readPodChecked(file, header.version) &&
+         serialization::readPodChecked(file, header.config.fontId) &&
+         serialization::readPodChecked(file, header.config.lineCompression) &&
+         serialization::readPodChecked(file, header.config.indentLevel) &&
+         serialization::readPodChecked(file, header.config.spacingLevel) &&
+         serialization::readPodChecked(file, header.config.paragraphAlignment) &&
+         serialization::readPodChecked(file, header.config.hyphenation) &&
+         serialization::readPodChecked(file, header.config.showImages) &&
+         serialization::readPodChecked(file, header.config.viewportWidth) &&
+         serialization::readPodChecked(file, header.config.viewportHeight) &&
+         serialization::readPodChecked(file, header.pageCount) && serialization::readPodChecked(file, header.partial) &&
+         serialization::readPodChecked(file, header.lutOffset) &&
+         serialization::readPodChecked(file, header.bytesConsumed) &&
+         serialization::readPodChecked(file, header.totalBytes);
+}
+
+bool hasValidLutSpan(const CacheHeader& header, size_t fileSize) {
+  if (header.partial > 1 || header.lutOffset < kHeaderSize || header.lutOffset > fileSize) return false;
+  const size_t lutSize = static_cast<size_t>(header.pageCount) * sizeof(uint32_t);
+  return lutSize <= fileSize - header.lutOffset;
+}
 }  // namespace
 
 PageCache::PageCache(std::string cachePath) : cachePath_(std::move(cachePath)) {}
 
 bool PageCache::writeHeader(bool isPartial) {
-  file_.seek(0);
-  serialization::writePod(file_, CACHE_FILE_VERSION);
-  serialization::writePod(file_, config_.fontId);
-  serialization::writePod(file_, config_.lineCompression);
-  serialization::writePod(file_, config_.indentLevel);
-  serialization::writePod(file_, config_.spacingLevel);
-  serialization::writePod(file_, config_.paragraphAlignment);
-  serialization::writePod(file_, config_.hyphenation);
-  serialization::writePod(file_, config_.showImages);
-  serialization::writePod(file_, config_.viewportWidth);
-  serialization::writePod(file_, config_.viewportHeight);
-  serialization::writePod(file_, pageCount_);
-  serialization::writePod(file_, static_cast<uint8_t>(isPartial ? 1 : 0));
-  serialization::writePod(file_, static_cast<uint32_t>(0));  // LUT offset placeholder
-  serialization::writePod(file_, bytesConsumed_);
-  serialization::writePod(file_, totalBytes_);
-  return true;
+  const uint8_t partial = isPartial ? 1 : 0;
+  const uint32_t lutOffset = 0;
+  return file_.seek(0) && serialization::writePodChecked(file_, CACHE_FILE_VERSION) &&
+         serialization::writePodChecked(file_, config_.fontId) &&
+         serialization::writePodChecked(file_, config_.lineCompression) &&
+         serialization::writePodChecked(file_, config_.indentLevel) &&
+         serialization::writePodChecked(file_, config_.spacingLevel) &&
+         serialization::writePodChecked(file_, config_.paragraphAlignment) &&
+         serialization::writePodChecked(file_, config_.hyphenation) &&
+         serialization::writePodChecked(file_, config_.showImages) &&
+         serialization::writePodChecked(file_, config_.viewportWidth) &&
+         serialization::writePodChecked(file_, config_.viewportHeight) &&
+         serialization::writePodChecked(file_, pageCount_) && serialization::writePodChecked(file_, partial) &&
+         serialization::writePodChecked(file_, lutOffset) && serialization::writePodChecked(file_, bytesConsumed_) &&
+         serialization::writePodChecked(file_, totalBytes_);
 }
 
 bool PageCache::writeLut(const std::vector<uint32_t>& lut) {
@@ -79,18 +108,14 @@ bool PageCache::writeLut(const std::vector<uint32_t>& lut) {
       LOG_ERR(TAG, "Invalid page position in LUT");
       return false;
     }
-    serialization::writePod(file_, pos);
+    if (!serialization::writePodChecked(file_, pos)) return false;
   }
 
   // Update header with final values
-  file_.seek(kPageCountOffset);
-  serialization::writePod(file_, pageCount_);
-  serialization::writePod(file_, static_cast<uint8_t>(isPartial_ ? 1 : 0));
-  serialization::writePod(file_, lutOffset);
-  serialization::writePod(file_, bytesConsumed_);
-  serialization::writePod(file_, totalBytes_);
-
-  return true;
+  const uint8_t partial = isPartial_ ? 1 : 0;
+  return file_.seek(kPageCountOffset) && serialization::writePodChecked(file_, pageCount_) &&
+         serialization::writePodChecked(file_, partial) && serialization::writePodChecked(file_, lutOffset) &&
+         serialization::writePodChecked(file_, bytesConsumed_) && serialization::writePodChecked(file_, totalBytes_);
 }
 
 bool PageCache::loadLut(std::vector<uint32_t>& lut) {
@@ -105,35 +130,28 @@ bool PageCache::loadLut(std::vector<uint32_t>& lut) {
     return false;
   }
 
-  // Read lutOffset from header
-  file_.seek(kLutOffsetOffset);
-  serialization::readPod(file_, lutOffset_);
-
-  // Validate lutOffset before seeking
-  if (lutOffset_ < kHeaderSize || lutOffset_ >= fileSize) {
-    LOG_ERR(TAG, "Invalid lutOffset: %u (file size: %zu)", lutOffset_, fileSize);
+  CacheHeader header;
+  if (!readCacheHeader(file_, header) || header.version != CACHE_FILE_VERSION || !hasValidLutSpan(header, fileSize)) {
+    LOG_ERR(TAG, "Invalid cache header");
     file_.close();
     return false;
   }
-
-  // Read pageCount from header
-  file_.seek(kPageCountOffset);
-  serialization::readPod(file_, pageCount_);
-
-  // Validate LUT fits within file
-  const size_t lutEnd = lutOffset_ + static_cast<size_t>(pageCount_) * sizeof(uint32_t);
-  if (lutEnd > fileSize) {
-    LOG_ERR(TAG, "LUT extends past file: %zu > %zu", lutEnd, fileSize);
-    file_.close();
-    return false;
-  }
+  lutOffset_ = header.lutOffset;
+  pageCount_ = header.pageCount;
 
   // Read existing LUT entries
-  file_.seek(lutOffset_);
+  if (!file_.seek(lutOffset_)) {
+    file_.close();
+    return false;
+  }
   lut.reserve(pageCount_);
   for (uint16_t i = 0; i < pageCount_; i++) {
     uint32_t pos;
-    serialization::readPod(file_, pos);
+    if (!serialization::readPodChecked(file_, pos)) {
+      file_.close();
+      lut.clear();
+      return false;
+    }
     if (pos == 0 || pos < kHeaderSize || pos >= lutOffset_) {
       LOG_ERR(TAG, "Corrupt LUT entry %d: position %u", i, pos);
       file_.close();
@@ -152,25 +170,19 @@ bool PageCache::loadRaw() {
     return false;
   }
 
-  uint8_t version;
-  serialization::readPod(file_, version);
-  if (version != CACHE_FILE_VERSION) {
+  const size_t fileSize = file_.size();
+  CacheHeader header;
+  if (!readCacheHeader(file_, header) || header.version != CACHE_FILE_VERSION || !hasValidLutSpan(header, fileSize)) {
     file_.close();
-    LOG_ERR(TAG, "Version mismatch: got %u, expected %u", version, CACHE_FILE_VERSION);
+    LOG_ERR(TAG, "Invalid cache header");
     return false;
   }
 
-  // Skip config fields, read pageCount and isPartial
-  file_.seek(kPageCountOffset);
-  serialization::readPod(file_, pageCount_);
-  uint8_t partial;
-  serialization::readPod(file_, partial);
-  isPartial_ = (partial != 0);
-
-  // Skip lutOffset, read bytesConsumed/totalBytes
-  file_.seek(kBytesConsumedOffset);
-  serialization::readPod(file_, bytesConsumed_);
-  serialization::readPod(file_, totalBytes_);
+  pageCount_ = header.pageCount;
+  isPartial_ = header.partial != 0;
+  lutOffset_ = header.lutOffset;
+  bytesConsumed_ = header.bytesConsumed;
+  totalBytes_ = header.totalBytes;
 
   file_.close();
   return true;
@@ -182,43 +194,28 @@ bool PageCache::load(const RenderConfig& config) {
   }
 
   // Read and validate header
-  uint8_t version;
-  serialization::readPod(file_, version);
-  if (version != CACHE_FILE_VERSION) {
+  const size_t fileSize = file_.size();
+  CacheHeader header;
+  if (!readCacheHeader(file_, header) || header.version != CACHE_FILE_VERSION || !hasValidLutSpan(header, fileSize)) {
     file_.close();
-    LOG_ERR(TAG, "Version mismatch: got %u, expected %u", version, CACHE_FILE_VERSION);
+    LOG_ERR(TAG, "Invalid cache header");
     clear();
     return false;
   }
 
-  RenderConfig fileConfig;
-  serialization::readPod(file_, fileConfig.fontId);
-  serialization::readPod(file_, fileConfig.lineCompression);
-  serialization::readPod(file_, fileConfig.indentLevel);
-  serialization::readPod(file_, fileConfig.spacingLevel);
-  serialization::readPod(file_, fileConfig.paragraphAlignment);
-  serialization::readPod(file_, fileConfig.hyphenation);
-  serialization::readPod(file_, fileConfig.showImages);
-  serialization::readPod(file_, fileConfig.viewportWidth);
-  serialization::readPod(file_, fileConfig.viewportHeight);
-
-  if (config != fileConfig) {
+  if (config != header.config) {
     file_.close();
     LOG_INF(TAG, "Config mismatch, invalidating cache");
     clear();
     return false;
   }
 
-  serialization::readPod(file_, pageCount_);
-  uint8_t partial;
-  serialization::readPod(file_, partial);
-  isPartial_ = (partial != 0);
+  pageCount_ = header.pageCount;
+  isPartial_ = header.partial != 0;
+  lutOffset_ = header.lutOffset;
+  bytesConsumed_ = header.bytesConsumed;
+  totalBytes_ = header.totalBytes;
   config_ = config;
-
-  // Skip lutOffset, read parser-progress sample
-  file_.seek(kBytesConsumedOffset);
-  serialization::readPod(file_, bytesConsumed_);
-  serialization::readPod(file_, totalBytes_);
 
   file_.close();
   LOG_INF(TAG, "Loaded: %d pages, partial=%d", pageCount_, isPartial_);
@@ -242,11 +239,16 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
         LOG_ERR(TAG, "Failed to read header for extend");
         return false;
       }
-      hdr.seek(kLutOffsetOffset);
-      serialization::readPod(hdr, oldLutOffset);
-      hdr.seek(kPageCountOffset);
-      serialization::readPod(hdr, oldPageCount);
+      CacheHeader header;
+      const bool validHeader = readCacheHeader(hdr, header) && header.version == CACHE_FILE_VERSION &&
+                               hasValidLutSpan(header, hdr.size()) && header.pageCount == skipPages;
       hdr.close();
+      if (!validHeader) {
+        LOG_ERR(TAG, "Invalid header for extend");
+        return false;
+      }
+      oldLutOffset = header.lutOffset;
+      oldPageCount = header.pageCount;
     }
 
     if (!file_.open(cachePath_.c_str(), O_RDWR)) {
@@ -266,7 +268,11 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
     isPartial_ = false;
 
     // Write placeholder header
-    writeHeader(false);
+    if (!writeHeader(false)) {
+      file_.close();
+      SdMan.remove(cachePath_.c_str());
+      return false;
+    }
   }
 
   // Check for abort before starting expensive parsing
@@ -350,13 +356,11 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
     bool copyOk = true;
     while (remaining > 0) {
       uint32_t toRead = remaining < kCopyBuf ? remaining : kCopyBuf;
-      file_.seek(srcPos);
-      if (file_.read(copyBuf, toRead) != toRead) {
+      if (!file_.seek(srcPos) || file_.read(copyBuf, toRead) != toRead || !file_.seek(dstPos) ||
+          file_.write(copyBuf, toRead) != toRead) {
         copyOk = false;
         break;
       }
-      file_.seek(dstPos);
-      file_.write(copyBuf, toRead);
       srcPos += toRead;
       dstPos += toRead;
       remaining -= toRead;
@@ -367,17 +371,22 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
       SdMan.remove(cachePath_.c_str());
       return false;
     }
-    // Append new entries
+    // Append new entries and update header
+    bool writeOk = true;
     for (const uint32_t pos : lut) {
-      serialization::writePod(file_, pos);
+      writeOk = writeOk && serialization::writePodChecked(file_, pos);
     }
-    // Update header
-    file_.seek(kPageCountOffset);
-    serialization::writePod(file_, pageCount_);
-    serialization::writePod(file_, static_cast<uint8_t>(isPartial_ ? 1 : 0));
-    serialization::writePod(file_, newLutOffset);
-    serialization::writePod(file_, bytesConsumed_);
-    serialization::writePod(file_, totalBytes_);
+    const uint8_t partial = isPartial_ ? 1 : 0;
+    writeOk = writeOk && file_.seek(kPageCountOffset) && serialization::writePodChecked(file_, pageCount_) &&
+              serialization::writePodChecked(file_, partial) && serialization::writePodChecked(file_, newLutOffset) &&
+              serialization::writePodChecked(file_, bytesConsumed_) &&
+              serialization::writePodChecked(file_, totalBytes_);
+    if (!writeOk) {
+      file_.close();
+      pageCount_ = skipPages;
+      SdMan.remove(cachePath_.c_str());
+      return false;
+    }
     lutOffset_ = newLutOffset;
   } else if (!writeLut(lut)) {
     file_.close();
@@ -393,8 +402,12 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
     return false;
   }
 
-  file_.sync();
+  const bool synced = file_.sync();
   file_.close();
+  if (!synced) {
+    SdMan.remove(cachePath_.c_str());
+    return false;
+  }
   LOG_INF(TAG, "Created in %lu ms: %d pages, partial=%d", millis() - startMs, pageCount_, isPartial_);
   return true;
 }
@@ -429,11 +442,19 @@ bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const Ab
     }
 
     // Read current LUT position from header
-    file_.seek(kLutOffsetOffset);
-    uint32_t oldLutOffset = 0;
-    serialization::readPod(file_, oldLutOffset);
+    CacheHeader header;
+    if (!readCacheHeader(file_, header) || header.version != CACHE_FILE_VERSION || header.pageCount != pageCount_ ||
+        !hasValidLutSpan(header, file_.size())) {
+      LOG_ERR(TAG, "Invalid header for hot extend");
+      file_.close();
+      return false;
+    }
+    const uint32_t oldLutOffset = header.lutOffset;
 
-    file_.seekEnd();
+    if (!file_.seekEnd()) {
+      file_.close();
+      return false;
+    }
 
     const uint16_t pagesBefore = pageCount_;
     const uint16_t oldPageCount = pageCount_;
@@ -481,40 +502,45 @@ bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const Ab
       uint32_t dstPos = newLutOffset;
       while (remaining > 0) {
         uint32_t toRead = remaining < kCopyBuf ? remaining : kCopyBuf;
-        file_.seek(srcPos);
-        size_t n = file_.read(buf, toRead);
-        if (n != toRead) {
-          LOG_ERR(TAG, "LUT copy read failed at %u", srcPos);
+        if (!file_.seek(srcPos)) {
+          LOG_ERR(TAG, "LUT copy seek failed at %u", srcPos);
           pageCount_ = pagesBefore;
           file_.close();
           SdMan.remove(cachePath_.c_str());
           return false;
         }
-        file_.seek(dstPos);
-        file_.write(buf, n);
+        const size_t n = file_.read(buf, toRead);
+        if (n != toRead || !file_.seek(dstPos) || file_.write(buf, n) != n) {
+          LOG_ERR(TAG, "LUT copy failed at %u", srcPos);
+          pageCount_ = pagesBefore;
+          file_.close();
+          SdMan.remove(cachePath_.c_str());
+          return false;
+        }
         srcPos += static_cast<uint32_t>(n);
         dstPos += static_cast<uint32_t>(n);
         remaining -= static_cast<uint32_t>(n);
       }
     }
 
-    // Append new LUT entries
-    file_.seek(newLutOffset + oldPageCount * static_cast<uint32_t>(sizeof(uint32_t)));
+    // Append new LUT entries and update header
+    bool writeOk = file_.seek(newLutOffset + oldPageCount * static_cast<uint32_t>(sizeof(uint32_t)));
     for (uint16_t i = 0; i < newCount; i++) {
-      serialization::writePod(file_, newOffsets[i]);
+      writeOk = writeOk && serialization::writePodChecked(file_, newOffsets[i]);
     }
 
-    // Update header
     lutOffset_ = newLutOffset;
-    file_.seek(kPageCountOffset);
-    serialization::writePod(file_, pageCount_);
-    serialization::writePod(file_, static_cast<uint8_t>(isPartial_ ? 1 : 0));
-    serialization::writePod(file_, newLutOffset);
-    serialization::writePod(file_, bytesConsumed_);
-    serialization::writePod(file_, totalBytes_);
-
-    file_.sync();
+    const uint8_t partial = isPartial_ ? 1 : 0;
+    writeOk = writeOk && file_.seek(kPageCountOffset) && serialization::writePodChecked(file_, pageCount_) &&
+              serialization::writePodChecked(file_, partial) && serialization::writePodChecked(file_, newLutOffset) &&
+              serialization::writePodChecked(file_, bytesConsumed_) &&
+              serialization::writePodChecked(file_, totalBytes_) && file_.sync();
     file_.close();
+    if (!writeOk) {
+      pageCount_ = pagesBefore;
+      SdMan.remove(cachePath_.c_str());
+      return false;
+    }
     LOG_INF(TAG, "Hot extend done: %d pages, partial=%d", pageCount_, isPartial_);
     return true;
   }
@@ -559,26 +585,37 @@ std::unique_ptr<Page> PageCache::loadPage(uint16_t pageNum) {
 
     const size_t fileSize = file_.size();
 
-    // Read LUT offset from header
-    file_.seek(kLutOffsetOffset);
-    uint32_t lutOffset;
-    serialization::readPod(file_, lutOffset);
+    CacheHeader header;
+    if (!readCacheHeader(file_, header) || header.version != CACHE_FILE_VERSION || pageNum >= header.pageCount ||
+        !hasValidLutSpan(header, fileSize)) {
+      LOG_ERR(TAG, "Invalid cache header while loading page");
+      file_.close();
+      continue;
+    }
+    const uint32_t lutOffset = header.lutOffset;
 
-    // Validate LUT offset
-    if (lutOffset < kHeaderSize || lutOffset >= fileSize) {
+    // Validate LUT offset and requested LUT entry
+    const size_t lutEntryEnd = static_cast<size_t>(lutOffset) + (static_cast<size_t>(pageNum) + 1) * sizeof(uint32_t);
+    if (lutEntryEnd > fileSize) {
       LOG_ERR(TAG, "Invalid LUT offset: %u (file size: %zu)", lutOffset, fileSize);
       file_.close();
       continue;
     }
 
     // Read page position from LUT
-    file_.seek(lutOffset + static_cast<size_t>(pageNum) * sizeof(uint32_t));
+    if (!file_.seek(lutOffset + static_cast<size_t>(pageNum) * sizeof(uint32_t))) {
+      file_.close();
+      continue;
+    }
     uint32_t pagePos;
-    serialization::readPod(file_, pagePos);
+    if (!serialization::readPodChecked(file_, pagePos)) {
+      file_.close();
+      continue;
+    }
 
     // Validate page position
-    if (pagePos < kHeaderSize || pagePos >= fileSize) {
-      LOG_ERR(TAG, "Invalid page position: %u (file size: %zu)", pagePos, fileSize);
+    if (pagePos < kHeaderSize || pagePos >= lutOffset) {
+      LOG_ERR(TAG, "Invalid page position: %u (LUT offset: %u)", pagePos, lutOffset);
       file_.close();
       continue;
     }
@@ -608,32 +645,15 @@ PageCache::ProbeResult PageCache::probe(const std::string& cachePath, const Rend
     return result;
   }
 
-  uint8_t version;
-  serialization::readPod(file, version);
-  if (version != CACHE_FILE_VERSION) {
+  CacheHeader header;
+  if (!readCacheHeader(file, header) || header.version != CACHE_FILE_VERSION || config != header.config ||
+      !hasValidLutSpan(header, fileSize)) {
     file.close();
     return result;
   }
 
-  RenderConfig fileConfig;
-  serialization::readPod(file, fileConfig.fontId);
-  serialization::readPod(file, fileConfig.lineCompression);
-  serialization::readPod(file, fileConfig.indentLevel);
-  serialization::readPod(file, fileConfig.spacingLevel);
-  serialization::readPod(file, fileConfig.paragraphAlignment);
-  serialization::readPod(file, fileConfig.hyphenation);
-  serialization::readPod(file, fileConfig.showImages);
-  serialization::readPod(file, fileConfig.viewportWidth);
-  serialization::readPod(file, fileConfig.viewportHeight);
-  if (config != fileConfig) {
-    file.close();
-    return result;
-  }
-
-  serialization::readPod(file, result.pageCount);
-  uint8_t partial;
-  serialization::readPod(file, partial);
-  result.partial = (partial != 0);
+  result.pageCount = header.pageCount;
+  result.partial = header.partial != 0;
 
   file.close();
   result.valid = true;

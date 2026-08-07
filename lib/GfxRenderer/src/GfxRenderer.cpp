@@ -52,7 +52,8 @@ static void utf8PrefixBoundaries(const std::string& text, std::vector<size_t>& o
 }
 
 __attribute__((always_inline)) static inline void writeFB(uint8_t* fb, int stride, int physX, int physY, bool state) {
-  const int idx = physY * stride + (physX >> 3);
+  assert(fb && stride > 0 && physX >= 0 && physY >= 0 && physX < stride * 8);
+  const size_t idx = static_cast<size_t>(physY) * static_cast<size_t>(stride) + static_cast<size_t>(physX >> 3);
   const uint8_t bit = static_cast<uint8_t>(1 << (7 - (physX & 7)));
   if (state)
     fb[idx] &= ~bit;
@@ -82,6 +83,7 @@ __attribute__((always_inline)) static inline void orientedWriteFB(uint8_t* fb, i
       pY = sX;
       break;
   }
+  assert(pX >= 0 && pX < panelW && pY >= 0 && pY < panelH);
   writeFB(fb, stride, pX, pY, state);
 }
 
@@ -181,7 +183,8 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
   }
 
   // Calculate byte position and bit position
-  const uint16_t byteIndex = rotatedY * einkDisplay.getDisplayWidthBytes() + (rotatedX / 8);
+  const size_t byteIndex =
+      static_cast<size_t>(rotatedY) * einkDisplay.getDisplayWidthBytes() + static_cast<size_t>(rotatedX / 8);
   const uint8_t bitPosition = 7 - (rotatedX % 8);  // MSB first
 
   if (state) {
@@ -1477,36 +1480,23 @@ void GfxRenderer::renderThaiCluster(const EpdFontFamily& fontFamily, const ThaiS
 
     const int screenHeight = getScreenHeight();
     const int screenWidth = getScreenWidth();
+    const int logLeft = glyphX + left;
+    const int logTop = glyphY - glyphData->top;
+    const int xStart = std::max(0, -logLeft);
+    const int xEnd = std::min(static_cast<int>(width), screenWidth - logLeft);
+    const int yStart = std::max(0, -logTop);
+    const int yEnd = std::min(static_cast<int>(height), screenHeight - logTop);
+    const int panelW = einkDisplay.getDisplayWidth();
+    const int panelH = einkDisplay.getDisplayHeight();
+    const int stride = einkDisplay.getDisplayWidthBytes();
 
-    for (int bitmapY = 0; bitmapY < height; bitmapY++) {
-      const int screenY = glyphY - glyphData->top + bitmapY;
-      if (screenY < 0 || screenY >= screenHeight) continue;
-
-      for (int bitmapX = 0; bitmapX < width; bitmapX++) {
+    for (int bitmapY = yStart; bitmapY < yEnd; bitmapY++) {
+      const int screenY = logTop + bitmapY;
+      for (int bitmapX = xStart; bitmapX < xEnd; bitmapX++) {
+        bool state;
         const int pixelPosition = bitmapY * width + bitmapX;
-        const int screenX = glyphX + left + bitmapX;
-        if (screenX < 0 || screenX >= screenWidth) continue;
-
-        if (is2Bit) {
-          const uint8_t byte = bitmap[pixelPosition / 4];
-          const uint8_t bit_index = (3 - pixelPosition % 4) * 2;
-          const uint8_t bmpVal = 3 - (byte >> bit_index) & 0x3;
-
-          if (renderMode == BW && bmpVal < 3) {
-            drawPixel(screenX, screenY, pixelState);
-          } else if (renderMode == GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
-            drawPixel(screenX, screenY, false);
-          } else if (renderMode == GRAYSCALE_LSB && bmpVal == 1) {
-            drawPixel(screenX, screenY, false);
-          }
-        } else {
-          const uint8_t byte = bitmap[pixelPosition / 8];
-          const uint8_t bit_index = 7 - (pixelPosition % 8);
-
-          if ((byte >> bit_index) & 1) {
-            drawPixel(screenX, screenY, pixelState);
-          }
-        }
+        if (!extractFontPixel(bitmap, pixelPosition, is2Bit, renderMode, pixelState, state)) continue;
+        orientedWriteFB(frameBuffer, stride, logLeft + bitmapX, screenY, orientation, panelW, panelH, state);
       }
     }
 

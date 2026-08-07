@@ -18,7 +18,7 @@
 
 namespace {
 
-constexpr uint8_t CACHE_FILE_VERSION = 17;
+constexpr uint8_t CACHE_FILE_VERSION = 20;
 
 // Header layout (must match PageCache.cpp):
 // - version (1 byte)
@@ -34,7 +34,9 @@ constexpr uint8_t CACHE_FILE_VERSION = 17;
 // - pageCount (2 bytes)
 // - isPartial (1 byte)
 // - lutOffset (4 bytes)
-constexpr uint32_t HEADER_SIZE = 1 + 4 + 4 + 1 + 1 + 1 + 1 + 1 + 2 + 2 + 2 + 1 + 4;
+// - bytesConsumed (4 bytes)
+// - totalBytes (4 bytes)
+constexpr uint32_t HEADER_SIZE = 1 + 4 + 4 + 1 + 1 + 1 + 1 + 1 + 2 + 2 + 2 + 1 + 4 + 4 + 4;
 
 // Write a complete cache header to an FsFile buffer
 void writeCacheHeader(FsFile& file, uint16_t pageCount, bool isPartial, uint8_t version = CACHE_FILE_VERSION) {
@@ -62,6 +64,10 @@ void writeCacheHeader(FsFile& file, uint16_t pageCount, bool isPartial, uint8_t 
   serialization::writePod(file, partial);
   uint32_t lutOffset = HEADER_SIZE;
   serialization::writePod(file, lutOffset);
+  uint32_t bytesConsumed = 0;
+  serialization::writePod(file, bytesConsumed);
+  uint32_t totalBytes = 0;
+  serialization::writePod(file, totalBytes);
 }
 
 // Mirrors the loadRaw() logic from PageCache.cpp
@@ -79,18 +85,27 @@ LoadRawResult loadRaw(const std::string& path) {
     return result;
   }
 
+  if (file.size() < HEADER_SIZE) {
+    file.close();
+    return result;
+  }
+
   uint8_t version;
-  serialization::readPod(file, version);
-  if (version != CACHE_FILE_VERSION) {
+  if (!serialization::readPodChecked(file, version) || version != CACHE_FILE_VERSION) {
     file.close();
     return result;
   }
 
   // Skip config fields, read pageCount and isPartial
-  file.seek(HEADER_SIZE - 4 - 1 - 2);
-  serialization::readPod(file, result.pageCount);
+  if (!file.seek(18) || !serialization::readPodChecked(file, result.pageCount)) {
+    file.close();
+    return result;
+  }
   uint8_t partial;
-  serialization::readPod(file, partial);
+  if (!serialization::readPodChecked(file, partial)) {
+    file.close();
+    return result;
+  }
   result.isPartial = (partial != 0);
 
   file.close();
@@ -184,13 +199,13 @@ int main() {
     runner.expectEq(static_cast<uint16_t>(65535), result.pageCount, "max_pages_count");
   }
 
-  // Test 8: Header size is exactly 25 bytes
+  // Test 8: Header size is exactly 33 bytes
   {
     FsFile writer;
     writer.setBuffer("");
     writeCacheHeader(writer, 1, false);
-    runner.expectEq(static_cast<uint32_t>(25), static_cast<uint32_t>(writer.getBuffer().size()),
-                    "header_size_25_bytes");
+    runner.expectEq(static_cast<uint32_t>(33), static_cast<uint32_t>(writer.getBuffer().size()),
+                    "header_size_33_bytes");
   }
 
   // Test 9: Seek position is correct (HEADER_SIZE - 4 - 1 - 2 = 18)
@@ -208,11 +223,11 @@ int main() {
     runner.expectEq(static_cast<uint8_t>(1), static_cast<uint8_t>(buf[20]), "ispartial_byte");
   }
 
-  // Test 10: Old version (version 16) is rejected
+  // Test 10: Old version is rejected
   {
     FsFile writer;
     writer.setBuffer("");
-    writeCacheHeader(writer, 5, false, 16);
+    writeCacheHeader(writer, 5, false, CACHE_FILE_VERSION - 1);
     SdMan.registerFile("/cache/old_version.bin", writer.getBuffer());
 
     auto result = loadRaw("/cache/old_version.bin");
@@ -263,6 +278,10 @@ int main() {
     serialization::writePod(writer, partial);
     uint32_t lutOffset = HEADER_SIZE;
     serialization::writePod(writer, lutOffset);
+    uint32_t bytesConsumed = 12;
+    serialization::writePod(writer, bytesConsumed);
+    uint32_t totalBytes = 34;
+    serialization::writePod(writer, totalBytes);
 
     SdMan.registerFile("/cache/diff_config.bin", writer.getBuffer());
 
@@ -270,6 +289,18 @@ int main() {
     runner.expectTrue(result.success, "diff_config_success");
     runner.expectEq(static_cast<uint16_t>(77), result.pageCount, "diff_config_page_count");
     runner.expectFalse(result.isPartial, "diff_config_not_partial");
+  }
+
+  // Test 13: Truncated header is rejected
+  {
+    FsFile writer;
+    writer.setBuffer("");
+    writeCacheHeader(writer, 5, false);
+    std::string truncated = writer.getBuffer().substr(0, HEADER_SIZE - 1);
+    SdMan.registerFile("/cache/truncated.bin", truncated);
+
+    auto result = loadRaw("/cache/truncated.bin");
+    runner.expectFalse(result.success, "truncated_header_rejected");
   }
 
   SdMan.clearFiles();

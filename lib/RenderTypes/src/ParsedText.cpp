@@ -714,17 +714,16 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
   if (isRtl) {
     // RTL: Position words from right to left
-    uint16_t xpos;
+    int xpos = pageWidth;
     if (effectiveStyle == TextBlock::CENTER_ALIGN) {
-      xpos = pageWidth - (spareSpace - static_cast<int>(actualGapCount) * spacing) / 2;
-    } else {
-      xpos = pageWidth;  // RIGHT_ALIGN and JUSTIFIED start from right edge
+      const int freeSpace = std::max(0, spareSpace - static_cast<int>(actualGapCount) * spacing);
+      xpos -= freeSpace / 2;
     }
 
     for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
       const uint16_t currentWordWidth = wordWidths[lastBreakAt + wordIdx];
-      xpos -= currentWordWidth;
-      lineData.push_back({replaceTrailingSoftHyphen(std::move(*wordIt)), xpos, *styleIt});
+      xpos = std::max(0, xpos - currentWordWidth);
+      lineData.push_back({replaceTrailingSoftHyphen(std::move(*wordIt)), static_cast<uint16_t>(xpos), *styleIt});
 
       auto nextWordIt = wordIt;
       ++nextWordIt;
@@ -735,16 +734,18 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     }
   } else {
     // LTR: Position words from left to right
-    uint16_t xpos = 0;
+    int xpos = 0;
+    const int freeSpace = std::max(0, spareSpace - static_cast<int>(actualGapCount) * spaceWidth);
     if (effectiveStyle == TextBlock::RIGHT_ALIGN) {
-      xpos = spareSpace - static_cast<int>(actualGapCount) * spaceWidth;
+      xpos = freeSpace;
     } else if (effectiveStyle == TextBlock::CENTER_ALIGN) {
-      xpos = (spareSpace - static_cast<int>(actualGapCount) * spaceWidth) / 2;
+      xpos = freeSpace / 2;
     }
 
     for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
       const uint16_t currentWordWidth = wordWidths[lastBreakAt + wordIdx];
-      lineData.push_back({replaceTrailingSoftHyphen(std::move(*wordIt)), xpos, *styleIt});
+      lineData.push_back(
+          {replaceTrailingSoftHyphen(std::move(*wordIt)), static_cast<uint16_t>(std::min(xpos, pageWidth)), *styleIt});
 
       auto nextWordIt = wordIt;
       ++nextWordIt;

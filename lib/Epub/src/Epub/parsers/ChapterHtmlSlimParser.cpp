@@ -1239,7 +1239,7 @@ std::string ChapterHtmlSlimParser::cacheImage(const std::string& src) {
     if (SdMan.openFileForWrite("EHP", failedMarker, marker)) {
       marker.close();
     }
-    sessionFailedImageHashes().insert(srcHash);
+    blacklistFailedImage(srcHash);
     consecutiveImageFailures_++;
     return "";
   }
@@ -1262,7 +1262,7 @@ std::string ChapterHtmlSlimParser::cacheImage(const std::string& src) {
     if (SdMan.openFileForWrite("EHP", failedMarker, marker)) {
       marker.close();
     }
-    sessionFailedImageHashes().insert(srcHash);
+    blacklistFailedImage(srcHash);
     consecutiveImageFailures_++;
     return "";
   }

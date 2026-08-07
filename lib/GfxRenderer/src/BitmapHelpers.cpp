@@ -160,19 +160,19 @@ uint8_t quantize1bit(int gray, int x, int y) { return gray < 128 ? 0 : 1; }
 #include "SDCardManager.h"
 
 // Helper functions for BMP I/O
-static uint16_t readLE16(FsFile& f) {
-  const int c0 = f.read();
-  const int c1 = f.read();
-  return static_cast<uint16_t>(c0 & 0xFF) | (static_cast<uint16_t>(c1 & 0xFF) << 8);
+static bool readLE16(FsFile& f, uint16_t& value) {
+  uint8_t bytes[2];
+  if (f.read(bytes, sizeof(bytes)) != sizeof(bytes)) return false;
+  value = static_cast<uint16_t>(bytes[0]) | (static_cast<uint16_t>(bytes[1]) << 8);
+  return true;
 }
 
-static uint32_t readLE32(FsFile& f) {
-  const int c0 = f.read();
-  const int c1 = f.read();
-  const int c2 = f.read();
-  const int c3 = f.read();
-  return static_cast<uint32_t>(c0 & 0xFF) | (static_cast<uint32_t>(c1 & 0xFF) << 8) |
-         (static_cast<uint32_t>(c2 & 0xFF) << 16) | (static_cast<uint32_t>(c3 & 0xFF) << 24);
+static bool readLE32(FsFile& f, uint32_t& value) {
+  uint8_t bytes[4];
+  if (f.read(bytes, sizeof(bytes)) != sizeof(bytes)) return false;
+  value = static_cast<uint32_t>(bytes[0]) | (static_cast<uint32_t>(bytes[1]) << 8) |
+          (static_cast<uint32_t>(bytes[2]) << 16) | (static_cast<uint32_t>(bytes[3]) << 24);
+  return true;
 }
 
 static void writeLE16(Print& out, uint16_t value) {
@@ -266,6 +266,7 @@ class RawAtkinson1BitDitherer {
   RawAtkinson1BitDitherer& operator=(const RawAtkinson1BitDitherer&) = delete;
 
   uint8_t processPixel(int gray, int x) {
+    assert(x >= 0 && x < width);
     // NO adjustPixel() call - source is already contrast-enhanced
     if (!valid()) return gray >= 128 ? 1 : 0;
     int adjusted = gray + errorRow0[x + 2];
@@ -316,25 +317,38 @@ bool bmpTo1BitBmpScaled(const char* srcPath, const char* dstPath, int targetMaxW
     return false;
   }
 
+  if (targetMaxWidth <= 0 || targetMaxHeight <= 0) {
+    LOG_ERR(TAG, "Invalid thumbnail dimensions: %dx%d", targetMaxWidth, targetMaxHeight);
+    srcFile.close();
+    return false;
+  }
+
   // Parse BMP header
-  if (readLE16(srcFile) != 0x4D42) {
+  uint16_t magic;
+  if (!readLE16(srcFile, magic) || magic != 0x4D42 || !srcFile.seekCur(8)) {
     LOG_ERR(TAG, "Not a BMP file");
     srcFile.close();
     return false;
   }
 
-  srcFile.seekCur(8);  // Skip file size and reserved
-  const uint32_t pixelOffset = readLE32(srcFile);
-
-  const uint32_t dibSize = readLE32(srcFile);
+  uint32_t pixelOffset;
+  uint32_t dibSize;
+  uint32_t widthValue;
+  uint32_t heightValue;
+  if (!readLE32(srcFile, pixelOffset) || !readLE32(srcFile, dibSize) || !readLE32(srcFile, widthValue) ||
+      !readLE32(srcFile, heightValue)) {
+    LOG_ERR(TAG, "Truncated BMP header");
+    srcFile.close();
+    return false;
+  }
   if (dibSize < 40) {
     LOG_ERR(TAG, "Unsupported DIB header");
     srcFile.close();
     return false;
   }
 
-  const int srcWidth = static_cast<int32_t>(readLE32(srcFile));
-  const int32_t rawHeight = static_cast<int32_t>(readLE32(srcFile));
+  const int srcWidth = static_cast<int32_t>(widthValue);
+  const int32_t rawHeight = static_cast<int32_t>(heightValue);
 
   // Reject corrupt/truncated headers before size math (div0 / overflow / INT32_MIN UB).
   static constexpr int kMaxBmpDim = 8192;
@@ -354,8 +368,12 @@ bool bmpTo1BitBmpScaled(const char* srcPath, const char* dstPath, int targetMaxW
   }
   const int srcHeight = -rawHeight;
 
-  srcFile.seekCur(2);  // Skip planes
-  const uint16_t bpp = readLE16(srcFile);
+  uint16_t bpp;
+  if (!srcFile.seekCur(2) || !readLE16(srcFile, bpp)) {
+    LOG_ERR(TAG, "Truncated BMP header");
+    srcFile.close();
+    return false;
+  }
 
   if (bpp != 1 && bpp != 2) {
     LOG_ERR(TAG, "Expected 1 or 2-bit BMP, got %d-bit", bpp);
@@ -393,6 +411,12 @@ bool bmpTo1BitBmpScaled(const char* srcPath, const char* dstPath, int targetMaxW
   // Calculate row sizes
   const int srcRowBytes = (srcWidth * bpp + 31) / 32 * 4;  // bpp-bit source, 4-byte aligned
   const int outRowBytes = (outWidth + 31) / 32 * 4;        // 1-bit output, 4-byte aligned
+  const size_t pixelBytes = static_cast<size_t>(srcRowBytes) * static_cast<size_t>(srcHeight);
+  if (pixelOffset > srcFile.size() || pixelBytes > srcFile.size() - pixelOffset) {
+    LOG_ERR(TAG, "BMP pixel data extends past EOF");
+    srcFile.close();
+    return false;
+  }
 
   // Allocate buffers for source rows needed per output row
   auto* srcRows = static_cast<uint8_t*>(malloc(srcRowBytes * maxSrcRowsPerOut));

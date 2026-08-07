@@ -94,7 +94,7 @@ class ReaderState : public State {
   Core* coreForCacheTask_ = nullptr;
   bool thumbnailDone_ = false;
   void startBackgroundCaching(Core& core);
-  void stopBackgroundCaching();
+  bool stopBackgroundCaching(bool waitForever = false);
 
   // Navigation helpers (delegates to ReaderNavigation)
   void navigateNext(Core& core);

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cassert>
 #include <cstdint>
 #include <cstring>
 #include <new>
@@ -55,6 +56,7 @@ class Atkinson1BitDitherer {
   Atkinson1BitDitherer& operator=(const Atkinson1BitDitherer& other) = delete;
 
   uint8_t processPixel(int gray, int x) {
+    assert(x >= 0 && x < width);
     // Apply brightness/contrast/gamma adjustments
     gray = adjustPixel(gray);
     if (!valid()) return gray >= 128 ? 1 : 0;
@@ -147,6 +149,7 @@ class AtkinsonDitherer {
   AtkinsonDitherer& operator=(const AtkinsonDitherer& other) = delete;
 
   uint8_t processPixel(int gray, int x) {
+    assert(x >= 0 && x < width);
     if (!valid()) {
       if (gray < 30) return 0;
       if (gray < 50) return 1;
@@ -264,6 +267,7 @@ class FloydSteinbergDitherer {
   // Process a single pixel and return quantized 2-bit value
   // x is the logical x position (0 to width-1), direction handled internally
   uint8_t processPixel(int gray, int x) {
+    assert(x >= 0 && x < width);
     if (!valid()) {
       if (gray < 30) return 0;
       if (gray < 50) return 1;

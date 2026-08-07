@@ -265,6 +265,21 @@ int main() {
     runner.expectEq<uint32_t>(1, arena.fallbackCount(), "tiny arena fallback counted once");
   }
 
+  for (const bool rtl : {false, true}) {
+    for (const auto alignment : {TextBlock::CENTER_ALIGN, TextBlock::RIGHT_ALIGN}) {
+      ParsedText oversized(alignment, 0, false, true, rtl);
+      oversized.addWord("this-word-is-wider-than-the-viewport", EpdFontFamily::REGULAR);
+      uint16_t xPos = UINT16_MAX;
+      const bool ok = oversized.layoutAndExtractLines(
+          renderer, kFontId, kViewport,
+          [&](std::shared_ptr<TextBlock> line) {
+            if (!line->getWords().empty()) xPos = line->getWords().front().xPos;
+          });
+      runner.expectTrue(ok, "oversized alignment completes");
+      runner.expectEq<uint16_t>(0, xPos, "oversized alignment clamps x to zero");
+    }
+  }
+
   std::array<long long, 20> layoutMicros{};
   for (size_t sampleIndex = 0; sampleIndex < layoutMicros.size(); ++sampleIndex) {
     auto timed = makeBlock(4000, true);

@@ -20,7 +20,7 @@
 
 namespace {
 
-constexpr uint8_t CACHE_FILE_VERSION = 19;
+constexpr uint8_t CACHE_FILE_VERSION = 20;
 constexpr uint32_t kHeaderSize = 33;
 
 RenderConfig defaultConfig() {
@@ -48,6 +48,8 @@ void writeCacheHeader(FsFile& file, const RenderConfig& config, uint16_t pageCou
   serialization::writePod(file, bytesConsumed);
   uint32_t totalBytes = 0;
   serialization::writePod(file, totalBytes);
+  const uint32_t pagePosition = kHeaderSize;
+  for (uint16_t i = 0; i < pageCount; i++) serialization::writePod(file, pagePosition);
 }
 
 // Mirror of PageCache::probe() — reads header and validates config match
@@ -72,32 +74,34 @@ ProbeResult probe(const std::string& cachePath, const RenderConfig& config) {
   }
 
   uint8_t version;
-  serialization::readPod(file, version);
-  if (version != CACHE_FILE_VERSION) {
-    file.close();
-    return result;
-  }
-
   RenderConfig fileConfig;
-  serialization::readPod(file, fileConfig.fontId);
-  serialization::readPod(file, fileConfig.lineCompression);
-  serialization::readPod(file, fileConfig.indentLevel);
-  serialization::readPod(file, fileConfig.spacingLevel);
-  serialization::readPod(file, fileConfig.paragraphAlignment);
-  serialization::readPod(file, fileConfig.hyphenation);
-  serialization::readPod(file, fileConfig.showImages);
-  serialization::readPod(file, fileConfig.viewportWidth);
-  serialization::readPod(file, fileConfig.viewportHeight);
-  if (config != fileConfig) {
+  uint8_t partial;
+  uint32_t lutOffset;
+  uint32_t bytesConsumed;
+  uint32_t totalBytes;
+  const bool headerValid = serialization::readPodChecked(file, version) &&
+                           serialization::readPodChecked(file, fileConfig.fontId) &&
+                           serialization::readPodChecked(file, fileConfig.lineCompression) &&
+                           serialization::readPodChecked(file, fileConfig.indentLevel) &&
+                           serialization::readPodChecked(file, fileConfig.spacingLevel) &&
+                           serialization::readPodChecked(file, fileConfig.paragraphAlignment) &&
+                           serialization::readPodChecked(file, fileConfig.hyphenation) &&
+                           serialization::readPodChecked(file, fileConfig.showImages) &&
+                           serialization::readPodChecked(file, fileConfig.viewportWidth) &&
+                           serialization::readPodChecked(file, fileConfig.viewportHeight) &&
+                           serialization::readPodChecked(file, result.pageCount) &&
+                           serialization::readPodChecked(file, partial) &&
+                           serialization::readPodChecked(file, lutOffset) &&
+                           serialization::readPodChecked(file, bytesConsumed) &&
+                           serialization::readPodChecked(file, totalBytes);
+  const size_t lutSize = static_cast<size_t>(result.pageCount) * sizeof(uint32_t);
+  if (!headerValid || version != CACHE_FILE_VERSION || config != fileConfig || partial > 1 ||
+      lutOffset < kHeaderSize || lutOffset > fileSize || lutSize > fileSize - lutOffset) {
     file.close();
     return result;
   }
 
-  serialization::readPod(file, result.pageCount);
-  uint8_t partial;
-  serialization::readPod(file, partial);
-  result.partial = (partial != 0);
-
+  result.partial = partial != 0;
   file.close();
   result.valid = true;
   return result;
@@ -216,6 +220,18 @@ int main() {
     runner.expectFalse(result.valid, "truncated_file_invalid");
   }
 
+  // LUT declared by the header must fit in the file
+  {
+    FsFile writer;
+    writer.setBuffer("");
+    writeCacheHeader(writer, cfg, 2, false);
+    std::string truncated = writer.getBuffer().substr(0, writer.getBuffer().size() - sizeof(uint32_t));
+    SdMan.registerFile("/cache/truncated_lut.bin", truncated);
+
+    auto result = probe("/cache/truncated_lut.bin", cfg);
+    runner.expectFalse(result.valid, "truncated_lut_invalid");
+  }
+
   // Zero page count
   {
     FsFile writer;
@@ -245,7 +261,7 @@ int main() {
   {
     FsFile writer;
     writer.setBuffer("");
-    writeCacheHeader(writer, cfg, 1, false);
+    writeCacheHeader(writer, cfg, 0, false);
     runner.expectEq(static_cast<uint32_t>(kHeaderSize), static_cast<uint32_t>(writer.getBuffer().size()),
                     "header_size_33_bytes");
   }

@@ -623,7 +623,7 @@ ReaderState::ReaderState(GfxRenderer& renderer)
   contentPath_[0] = '\0';
 }
 
-ReaderState::~ReaderState() { stopBackgroundCaching(); }
+ReaderState::~ReaderState() { stopBackgroundCaching(true); }
 
 void ReaderState::setContentPath(const char* path) {
   if (path) {
@@ -649,7 +649,7 @@ void ReaderState::enter(Core& core) {
   indexingFailed_ = false;
   indexingCache_.reset();
   indexingParser_.reset();
-  stopBackgroundCaching();  // Ensure any previous task is stopped
+  stopBackgroundCaching(true);  // Ensure any previous task is stopped
   invalidateGlobalPageMetrics();
   parser_.reset();  // Safe - task is stopped
   parserSpineIndex_ = -1;
@@ -808,7 +808,7 @@ void ReaderState::exit(Core& core) {
   LOG_INF(TAG, "Exiting");
 
   // Stop background caching task first - BackgroundTask::stop() waits properly
-  stopBackgroundCaching();
+  stopBackgroundCaching(true);
   flushReadingSession();
   indexingInProgress_ = false;
   indexingCache_.reset();
@@ -1063,7 +1063,7 @@ void ReaderState::render(Core& core) {
 
 void ReaderState::navigateNext(Core& core) {
   // Stop background task before accessing pageCache_ (ownership model)
-  stopBackgroundCaching();
+  if (!stopBackgroundCaching()) return;
 
   ContentType type = core.content.metadata().type;
 
@@ -1115,7 +1115,7 @@ void ReaderState::navigateNext(Core& core) {
 
 void ReaderState::navigatePrev(Core& core) {
   // Stop background task before accessing pageCache_ (ownership model)
-  stopBackgroundCaching();
+  if (!stopBackgroundCaching()) return;
 
   ContentType type = core.content.metadata().type;
 
@@ -1231,7 +1231,7 @@ void ReaderState::navigateNextChapter(Core& core) {
 
   if (currentSpineIndex_ + 1 >= static_cast<int>(spineCount)) return;
 
-  stopBackgroundCaching();
+  if (!stopBackgroundCaching()) return;
   const int oldSpine = currentSpineIndex_;
   const int oldSection = currentSectionPage_;
   const uint32_t oldPage = currentPage_;
@@ -1285,7 +1285,7 @@ void ReaderState::navigatePrevChapter(Core& core) {
 
   if (type != ContentType::Epub && type != ContentType::Fb2) return;
 
-  stopBackgroundCaching();
+  if (!stopBackgroundCaching()) return;
   const int oldSpine = currentSpineIndex_;
   const int oldSection = currentSectionPage_;
   const uint32_t oldPage = currentPage_;
@@ -1328,7 +1328,7 @@ void ReaderState::renderCurrentPage(Core& core) {
 
   // Rendering and cache building share the framebuffer. Stop the background
   // owner before the first clear or draw.
-  stopBackgroundCaching();
+  if (!stopBackgroundCaching()) return;
 
   // Always clear screen first (prevents previous content from showing through)
   renderer_.clearScreen(theme.backgroundColor);
@@ -1895,7 +1895,7 @@ void ReaderState::startBackgroundCaching(Core& core) {
   // BackgroundTask handles safe restart via CAS loop
   if (cacheTask_.isRunning()) {
     LOG_ERR(TAG, "Warning: Previous cache task still running, stopping first");
-    stopBackgroundCaching();
+    if (!stopBackgroundCaching()) return;
   }
 
   LOG_INF(TAG, "Starting background page cache task");
@@ -2004,16 +2004,18 @@ void ReaderState::startBackgroundCaching(Core& core) {
       0);  // priority 0 (idle)
 }
 
-void ReaderState::stopBackgroundCaching() {
+bool ReaderState::stopBackgroundCaching(const bool waitForever) {
   if (!cacheTask_.isRunning()) {
-    return;
+    return true;
   }
 
   // BackgroundTask::stop() uses event-based waiting (no polling)
-  // and NEVER force-deletes the task
-  if (!cacheTask_.stop(kCacheTaskStopTimeoutMs)) {
+  // and NEVER force-deletes the task.
+  const uint32_t timeoutMs = waitForever ? 0 : kCacheTaskStopTimeoutMs;
+  if (!cacheTask_.stop(timeoutMs)) {
     LOG_ERR(TAG, "Cache task did not stop within timeout");
-    LOG_ERR(TAG, "Task may be blocked on SD card I/O");
+    LOG_ERR(TAG, "Task may be blocked on SD card I/O; ownership not transferred");
+    return false;
   }
 
   // Yield to allow FreeRTOS idle task to clean up the deleted task's TCB.
@@ -2022,6 +2024,7 @@ void ReaderState::stopBackgroundCaching() {
   // pageCache_.reset() can trigger mutex ownership violations
   // (assert failed: xQueueGenericSend queue.c:832).
   vTaskDelay(10 / portTICK_PERIOD_MS);
+  return true;
 }
 
 // ============================================================================
@@ -2461,7 +2464,7 @@ void ReaderState::enterTocMode(Core& core) {
 
   // Stop background task before TOC overlay — both SD card I/O (thumbnail)
   // and e-ink display update share the same SPI bus
-  stopBackgroundCaching();
+  if (!stopBackgroundCaching()) return;
 
   populateTocView(core);
   int currentIdx = findCurrentTocEntry(core);
@@ -2844,7 +2847,7 @@ void ReaderState::exitToUI(Core& core) {
 // ============================================================================
 
 void ReaderState::enterMenuMode(Core& core) {
-  stopBackgroundCaching();
+  if (!stopBackgroundCaching()) return;
   menuView_.show();
   menuMode_ = true;
   needsRender_ = true;
@@ -2914,7 +2917,7 @@ void ReaderState::handleMenuAction(Core& core, ui::ReaderMenuView::Item action) 
 // ============================================================================
 
 void ReaderState::enterBookStatsMode(Core& core) {
-  stopBackgroundCaching();
+  if (!stopBackgroundCaching()) return;
   READING_STATS.load();
   populateBookStatsView(core);
   bookStatsView_.showOpen = false;
@@ -2957,7 +2960,7 @@ void ReaderState::populateBookStatsView(Core& core) {
 // ============================================================================
 
 void ReaderState::enterBookmarkMode(Core& core) {
-  stopBackgroundCaching();
+  if (!stopBackgroundCaching()) return;
   populateBookmarkView();
   bookmarkView_.buttons = ui::ButtonBar(tr(BACK), tr(GO), tr(ADD), tr(DELETE_BTN));
   bookmarkMode_ = true;

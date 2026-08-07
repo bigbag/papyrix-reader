@@ -117,6 +117,37 @@ int main() {
     runner.expectEq<uint16_t>(0, zip.getTotalEntries(), "NoEOCD_ZeroEntries");
   }
 
+  {
+    SdMan.reset();
+    std::vector<uint8_t> data = createMinimalZip();
+    data[94] = 0xFF;
+    data[95] = 0xFF;
+    data[96] = 0xFF;
+    data[97] = 0x7F;
+    SdMan.setFileData("/bad-offset.zip", data);
+    ZipFile zip("/bad-offset.zip");
+    runner.expectFalse(zip.loadAllFileStatSlims(), "InvalidCentralDirectoryOffset_Rejected");
+  }
+
+  {
+    SdMan.reset();
+    std::vector<uint8_t> data = createMinimalZip();
+    data[88] = 0x11;  // 10001 entries
+    data[89] = 0x27;
+    SdMan.setFileData("/too-many.zip", data);
+    ZipFile zip("/too-many.zip");
+    runner.expectFalse(zip.loadAllFileStatSlims(), "ExcessiveEntryCount_Rejected");
+  }
+
+  {
+    SdMan.reset();
+    std::vector<uint8_t> data = createZipWithNamedEntries({{"chapter.xhtml", 123}});
+    data.erase(data.begin() + 46);  // Truncate the filename while preserving an EOCD record
+    SdMan.setFileData("/truncated-central.zip", data);
+    ZipFile zip("/truncated-central.zip");
+    runner.expectFalse(zip.loadAllFileStatSlims(), "TruncatedCentralDirectory_Rejected");
+  }
+
   // ========================================================================
   // readFileToMemory - Error Cases
   // ========================================================================

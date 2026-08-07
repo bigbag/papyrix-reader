@@ -327,11 +327,24 @@ int main() {
     runner.expectEq(static_cast<uint16_t>(199), result, "readPodValidated: just below boundary accepted");
   }
 
+  // Test 24: readPodValidated truncated input
+  {
+    FsFile file;
+    const uint8_t byte = 100;
+    std::string data(reinterpret_cast<const char*>(&byte), sizeof(byte));
+    file.setBuffer(data);
+
+    uint16_t result = 42;
+    const bool success = serialization::readPodValidated(file, result, static_cast<uint16_t>(200));
+    runner.expectFalse(success, "readPodValidated: truncated input fails");
+    runner.expectEq(static_cast<uint16_t>(42), result, "readPodValidated: truncated input preserves original");
+  }
+
   // ============================================
   // Multiple values in sequence
   // ============================================
 
-  // Test 24: Multiple PODs in sequence
+  // Test 25: Multiple PODs in sequence
   {
     std::stringstream ss;
     uint8_t a = 1;

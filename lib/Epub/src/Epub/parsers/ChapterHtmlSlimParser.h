@@ -183,4 +183,10 @@ class ChapterHtmlSlimParser {
     static std::unordered_set<size_t> instance;
     return instance;
   }
+
+  static void blacklistFailedImage(size_t hash) {
+    auto& hashes = sessionFailedImageHashes();
+    static constexpr size_t MAX_SESSION_FAILED_IMAGES = 32;
+    if (hashes.size() < MAX_SESSION_FAILED_IMAGES) hashes.insert(hash);
+  }
 };

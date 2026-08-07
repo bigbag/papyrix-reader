@@ -102,11 +102,10 @@ BmpReaderError Bitmap::parseHeaders() {
 
   for (int i = 0; i < 256; i++) paletteLum[i] = static_cast<uint8_t>(i);
   if (colorsUsed > 0) {
-    uint8_t palBuf[256 * 4];
-    const int palBytes = static_cast<int>(colorsUsed * 4);
-    if (file.read(palBuf, palBytes) != palBytes) return BmpReaderError::FileInvalid;
+    if (!file.seek(14 + biSize)) return BmpReaderError::FileInvalid;
     for (uint32_t i = 0; i < colorsUsed; i++) {
-      const uint8_t* rgb = palBuf + i * 4;
+      uint8_t rgb[4];
+      if (file.read(rgb, sizeof(rgb)) != sizeof(rgb)) return BmpReaderError::FileInvalid;
       paletteLum[i] = (77u * rgb[2] + 150u * rgb[1] + 29u * rgb[0]) >> 8;
     }
   }
