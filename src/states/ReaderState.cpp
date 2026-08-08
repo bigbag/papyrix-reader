@@ -34,6 +34,7 @@
 #include "../content/RecentBooksStore.h"
 #include "../core/BootMode.h"
 #include "../core/Core.h"
+#include "../core/EmergencyBootTransition.h"
 #include "../drivers/Device.h"
 #include "../ui/Elements.h"
 #include "../ui/views/ReaderViews.h"
@@ -83,16 +84,16 @@ bool readMetricsIndexFile(const std::string& sectionsDir, const RenderConfig& co
   }
 
   RenderConfig fileConfig;
-  serialization::readPod(file, fileConfig.fontId);
-  serialization::readPod(file, fileConfig.lineCompression);
-  serialization::readPod(file, fileConfig.indentLevel);
-  serialization::readPod(file, fileConfig.spacingLevel);
-  serialization::readPod(file, fileConfig.paragraphAlignment);
-  serialization::readPod(file, fileConfig.hyphenation);
-  serialization::readPod(file, fileConfig.showImages);
-  serialization::readPod(file, fileConfig.viewportWidth);
-  serialization::readPod(file, fileConfig.viewportHeight);
-  if (config != fileConfig) {
+  const bool configRead = serialization::readPodChecked(file, fileConfig.fontId) &&
+                          serialization::readPodChecked(file, fileConfig.lineCompression) &&
+                          serialization::readPodChecked(file, fileConfig.indentLevel) &&
+                          serialization::readPodChecked(file, fileConfig.spacingLevel) &&
+                          serialization::readPodChecked(file, fileConfig.paragraphAlignment) &&
+                          serialization::readPodChecked(file, fileConfig.hyphenation) &&
+                          serialization::readPodChecked(file, fileConfig.showImages) &&
+                          serialization::readPodChecked(file, fileConfig.viewportWidth) &&
+                          serialization::readPodChecked(file, fileConfig.viewportHeight);
+  if (!configRead || config != fileConfig) {
     file.close();
     return false;
   }
@@ -103,7 +104,7 @@ bool readMetricsIndexFile(const std::string& sectionsDir, const RenderConfig& co
     return false;
   }
 
-  out.resize(static_cast<size_t>(spineCount));
+  std::vector<MetricsEntry> decoded(static_cast<size_t>(spineCount));
   for (int i = 0; i < spineCount; ++i) {
     uint16_t pages;
     uint8_t flags;
@@ -113,10 +114,11 @@ bool readMetricsIndexFile(const std::string& sectionsDir, const RenderConfig& co
       file.close();
       return false;
     }
-    out[static_cast<size_t>(i)] = MetricsEntry{pages, (flags & 1) != 0, byteSize};
+    decoded[static_cast<size_t>(i)] = MetricsEntry{pages, (flags & 1) != 0, byteSize};
   }
 
   file.close();
+  out.swap(decoded);
   return true;
 }
 }  // namespace
@@ -128,28 +130,35 @@ bool ReaderState::saveMetricsIndex(const std::string& sectionsDir, const RenderC
   FsFile file;
   if (!SdMan.openFileForWrite("MIDX", path, file)) return false;
 
-  serialization::writePod(file, kMetricsIndexVersion);
-  serialization::writePod(file, config.fontId);
-  serialization::writePod(file, config.lineCompression);
-  serialization::writePod(file, config.indentLevel);
-  serialization::writePod(file, config.spacingLevel);
-  serialization::writePod(file, config.paragraphAlignment);
-  serialization::writePod(file, config.hyphenation);
-  serialization::writePod(file, config.showImages);
-  serialization::writePod(file, config.viewportWidth);
-  serialization::writePod(file, config.viewportHeight);
-
+  if (globalSectionPageMetrics_.size() > UINT16_MAX) {
+    file.close();
+    SdMan.remove(path.c_str());
+    return false;
+  }
   const uint16_t entryCount = static_cast<uint16_t>(globalSectionPageMetrics_.size());
-  serialization::writePod(file, entryCount);
+  bool writeOk = serialization::writePodChecked(file, kMetricsIndexVersion) &&
+                 serialization::writePodChecked(file, config.fontId) &&
+                 serialization::writePodChecked(file, config.lineCompression) &&
+                 serialization::writePodChecked(file, config.indentLevel) &&
+                 serialization::writePodChecked(file, config.spacingLevel) &&
+                 serialization::writePodChecked(file, config.paragraphAlignment) &&
+                 serialization::writePodChecked(file, config.hyphenation) &&
+                 serialization::writePodChecked(file, config.showImages) &&
+                 serialization::writePodChecked(file, config.viewportWidth) &&
+                 serialization::writePodChecked(file, config.viewportHeight) &&
+                 serialization::writePodChecked(file, entryCount);
 
   for (const auto& m : globalSectionPageMetrics_) {
-    serialization::writePod(file, m.pages);
     const uint8_t flags = m.exact ? 1 : 0;
-    serialization::writePod(file, flags);
-    serialization::writePod(file, m.byteSize);
+    writeOk = writeOk && serialization::writePodChecked(file, m.pages) && serialization::writePodChecked(file, flags) &&
+              serialization::writePodChecked(file, m.byteSize);
   }
-
+  writeOk = writeOk && file.sync();
   file.close();
+  if (!writeOk) {
+    SdMan.remove(path.c_str());
+    return false;
+  }
   LOG_DBG(TAG, "Saved metrics index: %u entries", entryCount);
   return true;
 }
@@ -201,20 +210,21 @@ void ReaderState::saveAnchorMap(const ContentParser& parser, const std::string& 
   FsFile file;
   if (!SdMan.openFileForWrite("RDR", anchorPath, file)) return;
 
+  bool writeOk = true;
   if (anchors.size() > UINT16_MAX) {
-    uint16_t zero = 0;
-    serialization::writePod(file, zero);
-    file.close();
-    return;
+    const uint16_t zero = 0;
+    writeOk = serialization::writePodChecked(file, zero);
+  } else {
+    const uint16_t count = static_cast<uint16_t>(anchors.size());
+    writeOk = serialization::writePodChecked(file, count);
+    for (const auto& entry : anchors) {
+      writeOk = writeOk && serialization::writeStringChecked(file, entry.first) &&
+                serialization::writePodChecked(file, entry.second);
+    }
   }
-  uint16_t count = static_cast<uint16_t>(anchors.size());
-  serialization::writePod(file, count);
-  for (const auto& entry : anchors) {
-    serialization::writeString(file, entry.first);
-    serialization::writePod(file, entry.second);
-  }
-  file.sync();
+  writeOk = writeOk && file.sync();
   file.close();
+  if (!writeOk) SdMan.remove(anchorPath.c_str());
 }
 
 int ReaderState::loadAnchorPage(const std::string& cachePath, const std::string& anchor) {
@@ -2808,8 +2818,21 @@ void ReaderState::renderTocOverlay(Core& core) {
 void ReaderState::exitToUI(Core& core) {
   LOG_INF(TAG, "Exiting to UI mode via restart");
 
-  // Stop background caching first - BackgroundTask::stop() waits properly
-  stopBackgroundCaching();
+  // Determine return destination from cached transition or fall back to sourceState_
+  ReturnTo returnTo = ReturnTo::HOME;
+  const auto& transition = getTransition();
+  if (transition.isValid()) {
+    returnTo = transition.returnTo;
+  } else if (sourceState_ == StateId::FileList) {
+    returnTo = ReturnTo::FILE_MANAGER;
+  }
+
+  if (!stopBackgroundCaching()) {
+    LOG_ERR(TAG, "Cache task stop timed out; restarting to UI without SD writes");
+    saveEmergencyUiTransition(returnTo);
+    ESP.restart();
+    return;
+  }
   flushReadingSession();
 
   // Save progress at last rendered position
@@ -2822,15 +2845,6 @@ void ReaderState::exitToUI(Core& core) {
     saveBookmarks(core);
     // Skip pageCache_.reset() and content.close() — ESP.restart() follows,
     // and if stopBackgroundCaching() timed out the task still uses them.
-  }
-
-  // Determine return destination from cached transition or fall back to sourceState_
-  ReturnTo returnTo = ReturnTo::HOME;
-  const auto& transition = getTransition();
-  if (transition.isValid()) {
-    returnTo = transition.returnTo;
-  } else if (sourceState_ == StateId::FileList) {
-    returnTo = ReturnTo::FILE_MANAGER;
   }
 
   // Show notification and restart

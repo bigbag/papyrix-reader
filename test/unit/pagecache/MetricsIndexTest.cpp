@@ -42,29 +42,28 @@ bool saveMetricsIndex(const std::string& sectionsDir, const RenderConfig& config
   FsFile file;
   if (!SdMan.openFileForWrite("MIDX", path, file)) return false;
 
-  serialization::writePod(file, kMetricsIndexVersion);
-  serialization::writePod(file, config.fontId);
-  serialization::writePod(file, config.lineCompression);
-  serialization::writePod(file, config.indentLevel);
-  serialization::writePod(file, config.spacingLevel);
-  serialization::writePod(file, config.paragraphAlignment);
-  serialization::writePod(file, config.hyphenation);
-  serialization::writePod(file, config.showImages);
-  serialization::writePod(file, config.viewportWidth);
-  serialization::writePod(file, config.viewportHeight);
-
   const uint16_t entryCount = static_cast<uint16_t>(metrics.size());
-  serialization::writePod(file, entryCount);
+  bool writeOk = serialization::writePodChecked(file, kMetricsIndexVersion) &&
+                 serialization::writePodChecked(file, config.fontId) &&
+                 serialization::writePodChecked(file, config.lineCompression) &&
+                 serialization::writePodChecked(file, config.indentLevel) &&
+                 serialization::writePodChecked(file, config.spacingLevel) &&
+                 serialization::writePodChecked(file, config.paragraphAlignment) &&
+                 serialization::writePodChecked(file, config.hyphenation) &&
+                 serialization::writePodChecked(file, config.showImages) &&
+                 serialization::writePodChecked(file, config.viewportWidth) &&
+                 serialization::writePodChecked(file, config.viewportHeight) &&
+                 serialization::writePodChecked(file, entryCount);
 
   for (const auto& m : metrics) {
-    serialization::writePod(file, m.pages);
     const uint8_t flags = m.exact ? 1 : 0;
-    serialization::writePod(file, flags);
-    serialization::writePod(file, m.byteSize);
+    writeOk = writeOk && serialization::writePodChecked(file, m.pages) &&
+              serialization::writePodChecked(file, flags) && serialization::writePodChecked(file, m.byteSize);
   }
-
+  writeOk = writeOk && file.sync();
   file.close();
-  return true;
+  if (!writeOk) SdMan.remove(path.c_str());
+  return writeOk;
 }
 
 // Mirrors ReaderState::readMetricsIndexFile
@@ -81,16 +80,16 @@ bool readMetricsIndexFile(const std::string& sectionsDir, const RenderConfig& co
   }
 
   RenderConfig fileConfig;
-  serialization::readPod(file, fileConfig.fontId);
-  serialization::readPod(file, fileConfig.lineCompression);
-  serialization::readPod(file, fileConfig.indentLevel);
-  serialization::readPod(file, fileConfig.spacingLevel);
-  serialization::readPod(file, fileConfig.paragraphAlignment);
-  serialization::readPod(file, fileConfig.hyphenation);
-  serialization::readPod(file, fileConfig.showImages);
-  serialization::readPod(file, fileConfig.viewportWidth);
-  serialization::readPod(file, fileConfig.viewportHeight);
-  if (config != fileConfig) {
+  const bool configRead = serialization::readPodChecked(file, fileConfig.fontId) &&
+                          serialization::readPodChecked(file, fileConfig.lineCompression) &&
+                          serialization::readPodChecked(file, fileConfig.indentLevel) &&
+                          serialization::readPodChecked(file, fileConfig.spacingLevel) &&
+                          serialization::readPodChecked(file, fileConfig.paragraphAlignment) &&
+                          serialization::readPodChecked(file, fileConfig.hyphenation) &&
+                          serialization::readPodChecked(file, fileConfig.showImages) &&
+                          serialization::readPodChecked(file, fileConfig.viewportWidth) &&
+                          serialization::readPodChecked(file, fileConfig.viewportHeight);
+  if (!configRead || config != fileConfig) {
     file.close();
     return false;
   }
@@ -101,7 +100,7 @@ bool readMetricsIndexFile(const std::string& sectionsDir, const RenderConfig& co
     return false;
   }
 
-  out.resize(static_cast<size_t>(spineCount));
+  std::vector<MetricsEntry> decoded(static_cast<size_t>(spineCount));
   for (int i = 0; i < spineCount; ++i) {
     uint16_t pages;
     uint8_t flags;
@@ -111,10 +110,11 @@ bool readMetricsIndexFile(const std::string& sectionsDir, const RenderConfig& co
       file.close();
       return false;
     }
-    out[static_cast<size_t>(i)] = MetricsEntry{pages, (flags & 1) != 0, byteSize};
+    decoded[static_cast<size_t>(i)] = MetricsEntry{pages, (flags & 1) != 0, byteSize};
   }
 
   file.close();
+  out.swap(decoded);
   return true;
 }
 
@@ -266,7 +266,75 @@ int main() {
     runner.expectFalse(readMetricsIndexFile(dir, config, 3, out), "truncated_rejected");
   }
 
-  // Test 7: Missing file is rejected
+  // Test 7: Every truncated RenderConfig prefix is rejected transactionally
+  {
+    const std::string dir = "/cache/book7";
+    const std::string path = dir + "/" + kMetricsIndexFilename;
+    const RenderConfig config = makeConfig();
+    FsFile writer;
+    writer.setBuffer("");
+    serialization::writePod(writer, kMetricsIndexVersion);
+    serialization::writePod(writer, config.fontId);
+    serialization::writePod(writer, config.lineCompression);
+    serialization::writePod(writer, config.indentLevel);
+    serialization::writePod(writer, config.spacingLevel);
+    serialization::writePod(writer, config.paragraphAlignment);
+    serialization::writePod(writer, config.hyphenation);
+    serialization::writePod(writer, config.showImages);
+    serialization::writePod(writer, config.viewportWidth);
+    serialization::writePod(writer, config.viewportHeight);
+    const std::string configBytes = writer.getBuffer();
+
+    bool allRejected = true;
+    bool outputPreserved = true;
+    for (size_t length = 1; length < configBytes.size(); length++) {
+      SdMan.registerFile(path, configBytes.substr(0, length));
+      std::vector<MetricsEntry> out = {{777, true, 888}};
+      allRejected = allRejected && !readMetricsIndexFile(dir, config, 1, out);
+      outputPreserved = outputPreserved && out.size() == 1 && out[0].pages == 777 && out[0].byteSize == 888;
+    }
+    runner.expectTrue(allRejected, "truncated_config_prefixes_rejected");
+    runner.expectTrue(outputPreserved, "truncated_config_preserves_output");
+  }
+
+  // Test 8: A complete RenderConfig without an entry count is rejected transactionally
+  {
+    const std::string dir = "/cache/book8";
+    const std::string path = dir + "/" + kMetricsIndexFilename;
+    const RenderConfig config = makeConfig();
+    FsFile writer;
+    writer.setBuffer("");
+    serialization::writePod(writer, kMetricsIndexVersion);
+    serialization::writePod(writer, config.fontId);
+    serialization::writePod(writer, config.lineCompression);
+    serialization::writePod(writer, config.indentLevel);
+    serialization::writePod(writer, config.spacingLevel);
+    serialization::writePod(writer, config.paragraphAlignment);
+    serialization::writePod(writer, config.hyphenation);
+    serialization::writePod(writer, config.showImages);
+    serialization::writePod(writer, config.viewportWidth);
+    serialization::writePod(writer, config.viewportHeight);
+    SdMan.registerFile(path, writer.getBuffer());
+    std::vector<MetricsEntry> out = {{777, true, 888}};
+    runner.expectFalse(readMetricsIndexFile(dir, config, 1, out), "missing_entry_count_rejected");
+    runner.expectEq<uint16_t>(777, out[0].pages, "missing_entry_count_preserves_output");
+  }
+
+  // Test 9: Checked writer rejects short writes and sync failures
+  {
+    SdMan.reset();
+    SdMan.setWriteLimit(1);
+    runner.expectFalse(saveMetricsIndex("/cache/write-short", makeConfig(), {{1, true, 2}}),
+                       "short_write_rejected");
+  }
+  {
+    SdMan.reset();
+    SdMan.setSyncResult(false);
+    runner.expectFalse(saveMetricsIndex("/cache/sync-fail", makeConfig(), {{1, true, 2}}),
+                       "sync_failure_rejected");
+  }
+
+  // Test 10: Missing file is rejected
   {
     SdMan.clearWrittenFiles();
     std::vector<MetricsEntry> out;

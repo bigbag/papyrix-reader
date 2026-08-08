@@ -20,18 +20,20 @@
 // Anchor map write/read helpers (mirrors ReaderState::saveAnchorMap/loadAnchorPage)
 // ============================================================================
 
-static void writeAnchorMap(FsFile& file, const std::vector<std::pair<std::string, uint16_t>>& anchors) {
+static bool writeAnchorMap(FsFile& file, const std::vector<std::pair<std::string, uint16_t>>& anchors) {
+  bool writeOk = true;
   if (anchors.size() > UINT16_MAX) {
-    uint16_t zero = 0;
-    serialization::writePod(file, zero);
-    return;
+    const uint16_t zero = 0;
+    writeOk = serialization::writePodChecked(file, zero);
+  } else {
+    const uint16_t count = static_cast<uint16_t>(anchors.size());
+    writeOk = serialization::writePodChecked(file, count);
+    for (const auto& entry : anchors) {
+      writeOk = writeOk && serialization::writeStringChecked(file, entry.first) &&
+                serialization::writePodChecked(file, entry.second);
+    }
   }
-  uint16_t count = static_cast<uint16_t>(anchors.size());
-  serialization::writePod(file, count);
-  for (const auto& entry : anchors) {
-    serialization::writeString(file, entry.first);
-    serialization::writePod(file, entry.second);
-  }
+  return writeOk && file.sync();
 }
 
 static int readAnchorPage(FsFile& file, const std::string& anchor) {
@@ -269,6 +271,22 @@ int main() {
     file.seek(0);
     int page = readAnchorPage(file, "max-page");
     runner.expectEq(static_cast<int>(UINT16_MAX), page, "max_page: handles uint16_t max value");
+  }
+
+  // Test 14: Short writes are rejected
+  {
+    FsFile file;
+    file.setBuffer("");
+    file.setWriteLimit(1);
+    runner.expectFalse(writeAnchorMap(file, {{"anchor", 1}}), "short_write: rejected");
+  }
+
+  // Test 15: Sync failures are rejected
+  {
+    FsFile file;
+    file.setBuffer("");
+    file.setSyncResult(false);
+    runner.expectFalse(writeAnchorMap(file, {{"anchor", 1}}), "sync_failure: rejected");
   }
 
   return runner.allPassed() ? 0 : 1;

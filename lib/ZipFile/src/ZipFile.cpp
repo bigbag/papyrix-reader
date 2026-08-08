@@ -179,31 +179,27 @@ long ZipFile::getDataOffset(const FileStatSlim& fileStat) {
 
   uint8_t pLocalHeader[localHeaderSize];
   const uint64_t fileOffset = fileStat.localHeaderOffset;
+  const size_t fileSize = file.size();
 
-  if (fileOffset > file.size() || !file.seek(fileOffset)) {
+  if (fileOffset > fileSize || !file.seek(fileOffset)) {
     if (!wasOpen) close();
     return -1;
   }
   const size_t read = file.read(pLocalHeader, localHeaderSize);
-  if (!wasOpen) {
-    close();
-  }
-
+  long result = -1;
   if (read != localHeaderSize) {
     LOG_ERR(TAG, "Something went wrong reading the local header");
-    return -1;
-  }
-
-  if (pLocalHeader[0] + (pLocalHeader[1] << 8) + (pLocalHeader[2] << 16) + (pLocalHeader[3] << 24) !=
-      0x04034b50 /* MZ_ZIP_LOCAL_DIR_HEADER_SIG */) {
+  } else if (readLe32(pLocalHeader) != 0x04034b50 /* MZ_ZIP_LOCAL_DIR_HEADER_SIG */) {
     LOG_ERR(TAG, "Not a valid zip file header");
-    return -1;
+  } else {
+    const uint16_t filenameLength = readLe16(pLocalHeader + 26);
+    const uint16_t extraLength = readLe16(pLocalHeader + 28);
+    const uint64_t dataOffset = fileOffset + localHeaderSize + filenameLength + extraLength;
+    if (dataOffset <= fileSize && dataOffset <= LONG_MAX) result = static_cast<long>(dataOffset);
   }
 
-  const uint16_t filenameLength = readLe16(pLocalHeader + 26);
-  const uint16_t extraOffset = readLe16(pLocalHeader + 28);
-  const uint64_t dataOffset = fileOffset + localHeaderSize + filenameLength + extraOffset;
-  return dataOffset <= file.size() && dataOffset <= LONG_MAX ? static_cast<long>(dataOffset) : -1;
+  if (!wasOpen) close();
+  return result;
 }
 
 bool ZipFile::loadZipDetails() {

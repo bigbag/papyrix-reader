@@ -5,6 +5,7 @@
 #include "test_utils.h"
 
 #include <cstdint>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -18,6 +19,17 @@
 namespace {
 
 constexpr uint8_t BOOK_CACHE_VERSION = 7;
+
+uint32_t readU32(const std::string& data, size_t offset) {
+  uint32_t value = 0;
+  memcpy(&value, data.data() + offset, sizeof(value));
+  return value;
+}
+
+template <typename T>
+void writeAt(std::string& data, size_t offset, const T& value) {
+  memcpy(data.data() + offset, &value, sizeof(value));
+}
 
 struct TestBookData {
   BookMetadataCache::BookMetadata metadata;
@@ -329,7 +341,7 @@ int main() {
     runner.expectEqual("en", cache.coreMetadata.language, "Metadata_Language");
   }
 
-  // ======================== version mismatch ========================
+  // ======================== malformed files ========================
 
   {
     SdMan.reset();
@@ -340,6 +352,128 @@ int main() {
 
     BookMetadataCache cache("/cache");
     runner.expectFalse(cache.load(), "Load_VersionMismatch");
+  }
+
+  for (size_t length = 0; length < 9; length++) {
+    SdMan.reset();
+    SdMan.registerFile("/cache/book.bin", std::string(length, '\0'));
+    BookMetadataCache cache("/cache");
+    runner.expectFalse(cache.load(), "Load_TruncatedHeader_" + std::to_string(length));
+  }
+
+  {
+    SdMan.reset();
+    auto bin = buildBookBin(makeTestBook());
+    const uint32_t invalidOffset = static_cast<uint32_t>(bin.size() + 1);
+    writeAt(bin, 1, invalidOffset);
+    SdMan.registerFile("/cache/book.bin", bin);
+    BookMetadataCache cache("/cache");
+    runner.expectFalse(cache.load(), "Load_LutOffsetOutOfRange");
+  }
+
+  {
+    SdMan.reset();
+    TestBookData data;
+    auto bin = buildBookBin(data);
+    const uint16_t oneSpine = 1;
+    writeAt(bin, 5, oneSpine);
+    SdMan.registerFile("/cache/book.bin", bin);
+    BookMetadataCache cache("/cache");
+    runner.expectFalse(cache.load(), "Load_TruncatedLut");
+  }
+
+  {
+    SdMan.reset();
+    auto bin = buildBookBin(makeTestBook());
+    const uint32_t lutOffset = readU32(bin, 1);
+    writeAt(bin, lutOffset, lutOffset);
+    SdMan.registerFile("/cache/book.bin", bin);
+    BookMetadataCache cache("/cache");
+    runner.expectTrue(cache.load(), "SpinePositionBeforeData_LoadsHeader");
+    runner.expectTrue(cache.getSpineEntry(0).href.empty(), "SpinePositionBeforeData_Rejected");
+  }
+
+  {
+    SdMan.reset();
+    auto data = makeTestBook();
+    auto bin = buildBookBin(data);
+    const uint32_t lutOffset = readU32(bin, 1);
+    const size_t firstTocLut = lutOffset + data.spine.size() * sizeof(uint32_t);
+    const uint32_t invalidPosition = static_cast<uint32_t>(bin.size());
+    writeAt(bin, firstTocLut, invalidPosition);
+    SdMan.registerFile("/cache/book.bin", bin);
+    BookMetadataCache cache("/cache");
+    runner.expectTrue(cache.load(), "TocPositionOutOfRange_LoadsHeader");
+    runner.expectTrue(cache.getTocEntry(0).title.empty(), "TocPositionOutOfRange_Rejected");
+  }
+
+  {
+    SdMan.reset();
+    auto data = makeTestBook();
+    auto bin = buildBookBin(data);
+    const uint32_t lutOffset = readU32(bin, 1);
+    const size_t firstTocLut = lutOffset + data.spine.size() * sizeof(uint32_t);
+    const uint32_t firstTocPosition = readU32(bin, firstTocLut);
+    bin.resize(firstTocPosition + 2);
+    SdMan.registerFile("/cache/book.bin", bin);
+    BookMetadataCache cache("/cache");
+    runner.expectTrue(cache.load(), "TruncatedTocEntry_LoadsHeader");
+    std::vector<BookMetadataCache::TocEntry> entries;
+    runner.expectFalse(cache.readTocEntries(entries, 4), "TruncatedTocEntry_Rejected");
+    runner.expectEq<size_t>(0, entries.size(), "TruncatedTocEntry_ClearsOutput");
+  }
+
+  // ======================== checked writes ========================
+
+  {
+    SdMan.reset();
+    const auto data = makeTestBook();
+    BookMetadataCache cache("/cache");
+    runner.expectTrue(cache.rebuildFromMemory(data.metadata, data.spine, data.toc), "Rebuild_Success");
+    runner.expectTrue(SdMan.exists("/cache/book.bin"), "Rebuild_PublishesFinalFile");
+    runner.expectFalse(SdMan.exists("/cache/book.bin.new"), "Rebuild_RemovesTemporaryFile");
+    BookMetadataCache loaded("/cache");
+    runner.expectTrue(loaded.load(), "Rebuild_ResultLoads");
+  }
+
+  {
+    SdMan.reset();
+    SdMan.setWriteLimit(1);
+    const auto data = makeTestBook();
+    BookMetadataCache cache("/cache");
+    runner.expectFalse(cache.rebuildFromMemory(data.metadata, data.spine, data.toc),
+                       "Rebuild_ShortWriteRejected");
+    runner.expectFalse(SdMan.exists("/cache/book.bin"), "Rebuild_ShortWriteNoFinalFile");
+    runner.expectFalse(SdMan.exists("/cache/book.bin.new"), "Rebuild_ShortWriteRemovesTemporaryFile");
+  }
+
+  {
+    SdMan.reset();
+    SdMan.setSyncResult(false);
+    const auto data = makeTestBook();
+    BookMetadataCache cache("/cache");
+    runner.expectFalse(cache.rebuildFromMemory(data.metadata, data.spine, data.toc),
+                       "Rebuild_SyncFailureRejected");
+    runner.expectFalse(SdMan.exists("/cache/book.bin"), "Rebuild_SyncFailureNoFinalFile");
+    runner.expectFalse(SdMan.exists("/cache/book.bin.new"), "Rebuild_SyncFailureRemovesTemporaryFile");
+  }
+
+  {
+    SdMan.reset();
+    const auto data = makeTestBook();
+    BookMetadataCache cache("/cache");
+    runner.expectTrue(cache.beginWrite(), "Build_Begin");
+    runner.expectTrue(cache.beginContentOpfPass(), "Build_BeginSpine");
+    for (const auto& entry : data.spine) cache.createSpineEntry(entry.href);
+    runner.expectTrue(cache.endContentOpfPass(), "Build_EndSpine");
+    runner.expectTrue(cache.beginTocPass(), "Build_BeginToc");
+    for (const auto& entry : data.toc) {
+      cache.createTocEntry(entry.title, entry.href, entry.anchor, entry.level);
+    }
+    runner.expectTrue(cache.endTocPass(), "Build_EndToc");
+    runner.expectTrue(cache.endWrite(), "Build_End");
+    runner.expectTrue(cache.buildBookBin("/book.epub", data.metadata), "Build_CheckedOutputSuccess");
+    runner.expectTrue(SdMan.exists("/cache/book.bin"), "Build_PublishesFinalFile");
   }
 
   return runner.allPassed() ? 0 : 1;

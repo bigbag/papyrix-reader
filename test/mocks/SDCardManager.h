@@ -60,6 +60,9 @@ class SDCardManager {
     mallocFailCount_ = 0;
     readLimit_ = 0;
     readLimitActive_ = false;
+    writeLimit_ = 0;
+    writeLimitActive_ = false;
+    syncResult_ = true;
   }
 
   bool exists(const char* path) {
@@ -96,6 +99,13 @@ class SDCardManager {
     readLimitActive_ = true;
   }
 
+  void setWriteLimit(size_t limit) {
+    writeLimit_ = limit;
+    writeLimitActive_ = true;
+  }
+
+  void setSyncResult(bool result) { syncResult_ = result; }
+
   FsFile open(const char* path, int mode = O_RDONLY) {
     FsFile file;
     if (openFailCount_ > 0) {
@@ -117,6 +127,8 @@ class SDCardManager {
       }
       if ((mode & O_TRUNC) != 0) buffer->clear();
       file.setSharedBuffer(buffer);
+      if (writeLimitActive_) file.setWriteLimit(writeLimit_);
+      file.setSyncResult(syncResult_);
       return file;
     }
 
@@ -156,6 +168,8 @@ class SDCardManager {
     auto buf = std::make_shared<std::string>();
     writtenFiles_[path] = buf;
     file.setSharedBuffer(buf);
+    if (writeLimitActive_) file.setWriteLimit(writeLimit_);
+    file.setSyncResult(syncResult_);
     return true;
   }
 
@@ -227,6 +241,9 @@ class SDCardManager {
   int mallocFailCount_ = 0;
   size_t readLimit_ = 0;
   bool readLimitActive_ = false;
+  size_t writeLimit_ = 0;
+  bool writeLimitActive_ = false;
+  bool syncResult_ = true;
 };
 
 #define SdMan SDCardManager::getInstance()

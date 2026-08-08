@@ -38,6 +38,11 @@ class FsFile {
     pos_ = 0;
     isOpen_ = true;
     isDirectory_ = false;
+    totalRead_ = 0;
+    readLimitActive_ = false;
+    totalWritten_ = 0;
+    writeLimitActive_ = false;
+    syncResult_ = true;
   }
 
   // For write-mode: use a shared buffer so data survives after FsFile destruction
@@ -49,6 +54,11 @@ class FsFile {
     pos_ = 0;
     isOpen_ = true;
     isDirectory_ = false;
+    totalRead_ = 0;
+    readLimitActive_ = false;
+    totalWritten_ = 0;
+    writeLimitActive_ = false;
+    syncResult_ = true;
   }
 
   void setDirectory(const std::vector<MockDirectoryEntry>& entries) {
@@ -77,6 +87,13 @@ class FsFile {
     readLimit_ = limit;
     readLimitActive_ = true;
   }
+
+  void setWriteLimit(size_t limit) {
+    writeLimit_ = limit;
+    writeLimitActive_ = true;
+  }
+
+  void setSyncResult(bool result) { syncResult_ = result; }
 
   std::string getBuffer() const { return buffer_; }
 
@@ -112,9 +129,9 @@ class FsFile {
   }
 
   bool isDirectory() const { return isDirectory_; }
-  uint32_t fileSize() const { return static_cast<uint32_t>(buffer_.size()); }
-  uint64_t fileSize64() const { return buffer_.size(); }
-  size_t size() const { return buffer_.size(); }
+  uint32_t fileSize() const { return isOpen_ ? static_cast<uint32_t>(buffer_.size()) : 0; }
+  uint64_t fileSize64() const { return isOpen_ ? buffer_.size() : 0; }
+  size_t size() const { return isOpen_ ? buffer_.size() : 0; }
 
   size_t position() const { return pos_; }
 
@@ -168,26 +185,34 @@ class FsFile {
   int read(uint32_t* buf, size_t len) { return read(reinterpret_cast<uint8_t*>(buf), len); }
 
   size_t write(uint8_t byte) {
-    if (!isOpen_) return 0;
+    if (!isOpen_ || (writeLimitActive_ && totalWritten_ >= writeLimit_)) return 0;
     if (pos_ >= buffer_.size()) {
       buffer_.resize(pos_ + 1);
     }
     buffer_[pos_++] = static_cast<char>(byte);
+    totalWritten_++;
     return 1;
   }
 
   size_t write(const uint8_t* buf, size_t len) {
     if (!isOpen_) return 0;
+    if (writeLimitActive_) {
+      const size_t remaining = writeLimit_ - totalWritten_;
+      len = std::min(len, remaining);
+    }
+    if (len == 0) return 0;
     // Extend buffer if needed
     if (pos_ + len > buffer_.size()) {
       buffer_.resize(pos_ + len);
     }
     memcpy(&buffer_[pos_], buf, len);
     pos_ += len;
+    totalWritten_ += len;
     return len;
   }
 
   bool sync() {
+    if (!syncResult_) return false;
     if (sharedBuffer_) *sharedBuffer_ = buffer_;
     return true;
   }
@@ -206,4 +231,8 @@ class FsFile {
   size_t readLimit_ = 0;
   bool readLimitActive_ = false;
   size_t totalRead_ = 0;
+  size_t writeLimit_ = 0;
+  bool writeLimitActive_ = false;
+  size_t totalWritten_ = 0;
+  bool syncResult_ = true;
 };

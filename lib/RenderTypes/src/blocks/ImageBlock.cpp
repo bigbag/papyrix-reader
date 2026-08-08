@@ -44,10 +44,8 @@ void ImageBlock::render(GfxRenderer& renderer, const int fontId, const int x, co
 }
 
 bool ImageBlock::serialize(FsFile& file) const {
-  serialization::writeString(file, cachedBmpPath);
-  serialization::writePod(file, width);
-  serialization::writePod(file, height);
-  return true;
+  return serialization::writeStringChecked(file, cachedBmpPath) && serialization::writePodChecked(file, width) &&
+         serialization::writePodChecked(file, height);
 }
 
 std::unique_ptr<ImageBlock> ImageBlock::deserialize(FsFile& file) {

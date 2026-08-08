@@ -68,6 +68,8 @@ void writeCacheHeader(FsFile& file, uint16_t pageCount, bool isPartial, uint8_t 
   serialization::writePod(file, bytesConsumed);
   uint32_t totalBytes = 0;
   serialization::writePod(file, totalBytes);
+  const uint32_t pagePosition = HEADER_SIZE;
+  for (uint16_t i = 0; i < pageCount; i++) serialization::writePod(file, pagePosition);
 }
 
 // Mirrors the loadRaw() logic from PageCache.cpp
@@ -75,10 +77,12 @@ struct LoadRawResult {
   bool success;
   uint16_t pageCount;
   bool isPartial;
+  uint32_t bytesConsumed;
+  uint32_t totalBytes;
 };
 
 LoadRawResult loadRaw(const std::string& path) {
-  LoadRawResult result = {false, 0, false};
+  LoadRawResult result = {false, 0, false, 0, 0};
 
   FsFile file;
   if (!SdMan.openFileForRead("CACHE", path, file)) {
@@ -90,23 +94,40 @@ LoadRawResult loadRaw(const std::string& path) {
     return result;
   }
 
-  uint8_t version;
-  if (!serialization::readPodChecked(file, version) || version != CACHE_FILE_VERSION) {
+  uint8_t version = 0;
+  uint32_t fontId = 0;
+  float lineCompression = 0;
+  uint8_t indentLevel = 0;
+  uint8_t spacingLevel = 0;
+  uint8_t paragraphAlignment = 0;
+  bool hyphenation = false;
+  bool showImages = false;
+  uint16_t viewportWidth = 0;
+  uint16_t viewportHeight = 0;
+  uint8_t partial = 0;
+  uint32_t lutOffset = 0;
+  const bool headerValid = serialization::readPodChecked(file, version) &&
+                           serialization::readPodChecked(file, fontId) &&
+                           serialization::readPodChecked(file, lineCompression) &&
+                           serialization::readPodChecked(file, indentLevel) &&
+                           serialization::readPodChecked(file, spacingLevel) &&
+                           serialization::readPodChecked(file, paragraphAlignment) &&
+                           serialization::readPodChecked(file, hyphenation) &&
+                           serialization::readPodChecked(file, showImages) &&
+                           serialization::readPodChecked(file, viewportWidth) &&
+                           serialization::readPodChecked(file, viewportHeight) &&
+                           serialization::readPodChecked(file, result.pageCount) &&
+                           serialization::readPodChecked(file, partial) &&
+                           serialization::readPodChecked(file, lutOffset) &&
+                           serialization::readPodChecked(file, result.bytesConsumed) &&
+                           serialization::readPodChecked(file, result.totalBytes);
+  const size_t lutSize = static_cast<size_t>(result.pageCount) * sizeof(uint32_t);
+  if (!headerValid || version != CACHE_FILE_VERSION || partial > 1 || lutOffset < HEADER_SIZE ||
+      lutOffset > file.size() || lutSize > file.size() - lutOffset) {
     file.close();
     return result;
   }
-
-  // Skip config fields, read pageCount and isPartial
-  if (!file.seek(18) || !serialization::readPodChecked(file, result.pageCount)) {
-    file.close();
-    return result;
-  }
-  uint8_t partial;
-  if (!serialization::readPodChecked(file, partial)) {
-    file.close();
-    return result;
-  }
-  result.isPartial = (partial != 0);
+  result.isPartial = partial != 0;
 
   file.close();
   result.success = true;
@@ -203,7 +224,7 @@ int main() {
   {
     FsFile writer;
     writer.setBuffer("");
-    writeCacheHeader(writer, 1, false);
+    writeCacheHeader(writer, 0, false);
     runner.expectEq(static_cast<uint32_t>(33), static_cast<uint32_t>(writer.getBuffer().size()),
                     "header_size_33_bytes");
   }
@@ -282,6 +303,8 @@ int main() {
     serialization::writePod(writer, bytesConsumed);
     uint32_t totalBytes = 34;
     serialization::writePod(writer, totalBytes);
+    const uint32_t pagePosition = HEADER_SIZE;
+    for (uint16_t i = 0; i < pageCount; i++) serialization::writePod(writer, pagePosition);
 
     SdMan.registerFile("/cache/diff_config.bin", writer.getBuffer());
 
@@ -289,6 +312,8 @@ int main() {
     runner.expectTrue(result.success, "diff_config_success");
     runner.expectEq(static_cast<uint16_t>(77), result.pageCount, "diff_config_page_count");
     runner.expectFalse(result.isPartial, "diff_config_not_partial");
+    runner.expectEq<uint32_t>(12, result.bytesConsumed, "diff_config_bytes_consumed");
+    runner.expectEq<uint32_t>(34, result.totalBytes, "diff_config_total_bytes");
   }
 
   // Test 13: Truncated header is rejected
@@ -301,6 +326,19 @@ int main() {
 
     auto result = loadRaw("/cache/truncated.bin");
     runner.expectFalse(result.success, "truncated_header_rejected");
+  }
+
+  // Test 14: Truncated LUT is rejected
+  {
+    FsFile writer;
+    writer.setBuffer("");
+    writeCacheHeader(writer, 2, false);
+    std::string truncated = writer.getBuffer();
+    truncated.resize(truncated.size() - sizeof(uint32_t));
+    SdMan.registerFile("/cache/truncated_lut.bin", truncated);
+
+    auto result = loadRaw("/cache/truncated_lut.bin");
+    runner.expectFalse(result.success, "truncated_lut_rejected");
   }
 
   SdMan.clearFiles();

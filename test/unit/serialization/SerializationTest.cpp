@@ -286,7 +286,8 @@ int main() {
     file.setBuffer(data);
 
     uint16_t result = 0;
-    serialization::readPodValidated(file, result, static_cast<uint16_t>(200));
+    const bool success = serialization::readPodValidated(file, result, static_cast<uint16_t>(200));
+    runner.expectTrue(success, "readPodValidated: in-range read succeeds");
     runner.expectEq(static_cast<uint16_t>(100), result, "readPodValidated: accepts value within range");
   }
 
@@ -298,7 +299,8 @@ int main() {
     file.setBuffer(data);
 
     uint16_t result = 42;  // Initial value should be preserved
-    serialization::readPodValidated(file, result, static_cast<uint16_t>(200));
+    const bool success = serialization::readPodValidated(file, result, static_cast<uint16_t>(200));
+    runner.expectTrue(success, "readPodValidated: out-of-range read succeeds");
     runner.expectEq(static_cast<uint16_t>(42), result, "readPodValidated: rejects value exceeding max, keeps original");
   }
 
@@ -310,7 +312,8 @@ int main() {
     file.setBuffer(data);
 
     uint16_t result = 42;
-    serialization::readPodValidated(file, result, static_cast<uint16_t>(200));
+    const bool success = serialization::readPodValidated(file, result, static_cast<uint16_t>(200));
+    runner.expectTrue(success, "readPodValidated: boundary read succeeds");
     // value < maxValue check means 200 < 200 is false, so should keep original
     runner.expectEq(static_cast<uint16_t>(42), result, "readPodValidated: boundary value (equal) keeps original");
   }
@@ -323,7 +326,8 @@ int main() {
     file.setBuffer(data);
 
     uint16_t result = 42;
-    serialization::readPodValidated(file, result, static_cast<uint16_t>(200));
+    const bool success = serialization::readPodValidated(file, result, static_cast<uint16_t>(200));
+    runner.expectTrue(success, "readPodValidated: below-boundary read succeeds");
     runner.expectEq(static_cast<uint16_t>(199), result, "readPodValidated: just below boundary accepted");
   }
 

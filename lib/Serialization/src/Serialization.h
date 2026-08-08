@@ -47,6 +47,13 @@ static void writeString(FsFile& file, const std::string& s) {
   file.write(reinterpret_cast<const uint8_t*>(s.data()), len);
 }
 
+[[nodiscard]] static bool writeStringChecked(FsFile& file, const std::string& s) {
+  if (s.size() > UINT32_MAX) return false;
+  const uint32_t len = static_cast<uint32_t>(s.size());
+  return writePodChecked(file, len) &&
+         file.write(reinterpret_cast<const uint8_t*>(s.data()), len) == static_cast<size_t>(len);
+}
+
 [[nodiscard]] static bool readString(std::istream& is, std::string& s) {
   uint32_t len;
   readPod(is, len);

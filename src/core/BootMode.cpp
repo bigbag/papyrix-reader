@@ -7,6 +7,7 @@
 
 #include "../ThemeManager.h"
 #include "Core.h"
+#include "EmergencyBootTransition.h"
 #include "PapyrixSettings.h"
 
 // Access global renderer from main.cpp
@@ -25,6 +26,14 @@ static bool transitionCached = false;
 
 BootMode detectBootMode() {
   LOG_DBG(TAG, "Checking boot mode...");
+
+  ModeTransition emergencyTransition;
+  if (consumeEmergencyUiTransition(emergencyTransition)) {
+    LOG_INF(TAG, "Using emergency UI transition, returnTo=%d", static_cast<int>(emergencyTransition.returnTo));
+    cachedTransition = emergencyTransition;
+    transitionCached = true;
+    return BootMode::UI;
+  }
 
   // Check settings for pending UI transition (1=UI mode)
   if (core.settings.pendingTransition == 1) {

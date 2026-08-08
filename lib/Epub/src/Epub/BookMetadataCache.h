@@ -44,24 +44,36 @@ class BookMetadataCache {
   uint32_t lutOffset;
   uint16_t spineCount;
   uint16_t tocCount;
+  uint32_t dataOffset;
+  uint32_t cacheFileSize;
   bool loaded;
   bool buildMode;
+  bool buildFailed;
 
   FsFile bookFile;
   // Temp file handles during build
   FsFile spineFile;
   FsFile tocFile;
 
-  uint32_t writeSpineEntry(FsFile& file, const SpineEntry& entry) const;
-  uint32_t writeTocEntry(FsFile& file, const TocEntry& entry) const;
+  bool writeSpineEntry(FsFile& file, const SpineEntry& entry) const;
+  bool writeTocEntry(FsFile& file, const TocEntry& entry) const;
   SpineEntry readSpineEntry(FsFile& file) const;
   TocEntry readTocEntry(FsFile& file) const;
+  bool readEntryPosition(uint32_t lutEntryOffset, uint32_t& entryPosition);
 
  public:
   BookMetadata coreMetadata;
 
   explicit BookMetadataCache(std::string cachePath)
-      : cachePath(std::move(cachePath)), lutOffset(0), spineCount(0), tocCount(0), loaded(false), buildMode(false) {}
+      : cachePath(std::move(cachePath)),
+        lutOffset(0),
+        spineCount(0),
+        tocCount(0),
+        dataOffset(0),
+        cacheFileSize(0),
+        loaded(false),
+        buildMode(false),
+        buildFailed(false) {}
   ~BookMetadataCache() = default;
 
   // Building phase (stream to disk immediately)

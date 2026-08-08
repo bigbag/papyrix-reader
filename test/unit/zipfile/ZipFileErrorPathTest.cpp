@@ -149,6 +149,26 @@ int main() {
   }
 
   // ========================================================================
+  // Local header offsets
+  // ========================================================================
+
+  {
+    SdMan.reset();
+    const std::string name = "chapter.xhtml";
+    const std::string path = "/stored.zip";
+    SdMan.setFileData(path, createStoredZip(name, "content"));
+    ZipFile zip(path);
+    ZipFile::FileStatSlim stat{};
+    runner.expectTrue(zip.open(), "DataOffset_OpenForStat");
+    runner.expectTrue(zip.loadFileStatSlim(name.c_str(), &stat), "DataOffset_LoadStat");
+    zip.close();
+    runner.expectFalse(zip.isOpen(), "DataOffset_StartsClosed");
+    runner.expectEq<long>(static_cast<long>(30 + name.size()), zip.getDataOffset(stat),
+                          "DataOffset_StandaloneClosedFile");
+    runner.expectFalse(zip.isOpen(), "DataOffset_RestoresClosedState");
+  }
+
+  // ========================================================================
   // readFileToMemory - Error Cases
   // ========================================================================
 

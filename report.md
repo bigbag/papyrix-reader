@@ -1,219 +1,226 @@
-# Witchhunt Reader → Papyrix: Reuse Assessment
+# Firmware Code Review — papyrix-reader
 
-Comparison of `witchhunt-reader/` against Papyrix for features, concepts, and techniques worth adopting.
-
-**Source:** `witchhunt-reader/` (CrossPoint lineage, X3/X4 ESP32-C3 e-reader firmware)
-**Target:** Papyrix reader
-**Date:** 2026-08-04
-
----
-
-## Summary
-
-Yes — there is useful material in Witchhunt Reader, but mostly as **ideas and targeted techniques**, not a wholesale port. Witch is optimized hard for speed, CSS layout, and memory. Papyrix already wins on languages (CJK/Arabic/Thai), FB2, Knuth–Plass, themes, and dual-mode architecture.
-
-**Bottom line:** Steal **memory patterns**, **footnote cache design**, **richer CSS pieces**, **KOSync**, and **gesture/stats UX**. Treat Witch as a design reference and test oracle — not something to merge wholesale.
+**Scope:** `./src` and `./lib` C/C++ sources
+**Platform:** ESP32-C3 (Arduino, PlatformIO, C++20, `-Oz -flto`)
+**Goals:** Safe firmware, low memory usage, fast book rendering
+**Date:** 2026-08-07
+**Revision:** 3 — verified after firmware safety hardening
 
 ---
 
-## Already covered / low value to copy
+## Verdict
 
-| Witch feature | Papyrix status |
-|---|---|
-| EPUB/MD/TXT, hyphenation, AA | Have it |
-| Bookmarks, recent books, TOC | Have it |
-| Custom fonts/themes, sleep screens | Have it |
-| Background page cache | Have it (`PageCache` + `BackgroundTask`) |
-| Button remap | Have it (basic) |
-| Calibre / web upload | Have it |
-| Natural sort | Have it |
-| Clock | Have mini-app `ClockApp` |
-| OPDS | Removed on purpose |
-| ActivityManager stack | Different UI model; stick with `State` |
+The previously identified malformed-input and background-cache ownership problems are now hardened. PageCache validates headers, LUT spans, and page positions; nested Page payloads reject truncated framing; ZIP and BMP readers check structural bounds; settings and EPUB metadata caches decode transactionally; and Reader mode no longer performs SD operations after a background-task stop timeout.
+
+No immediate critical memory-safety issue was found in the reviewed paths. Remaining work is mostly low-risk durability, maintainability, or measurement-driven performance work. The intentional Reader/UI restart and framebuffer-as-scratch design should remain unless the memory architecture changes.
 
 ---
 
-## Worth borrowing (ranked)
+## Fixed safety findings
 
-### High value — reading quality
+### F1. Background cache ownership transfer
 
-#### 1. Richer CSS / layout
+**Files:** `src/states/ReaderState.cpp`, `lib/AsyncTask/src/BackgroundTask.cpp`
+**Status:** fixed
 
-- **Witch:** floats (text wrap), real tables, small-caps, strikethrough, CSS `line-height` / `font-size`, drop caps.
-- **Papyrix today:** tables are `[Table omitted]` with an explicit TODO; CSS is simpler; complex layouts are sanitized.
-- **Takeaway:** don’t port the whole engine. Steal the *property model* (`CssFloat`, `CssTextDecoration`, `lineHeight`, `fontSizeMultiplier`) and implement tables/floats incrementally. Highest user-visible win for commercial EPUBs.
+Interactive callers abort when `stopBackgroundCaching()` times out. Lifecycle paths wait for task completion before destroying task-owned resources. `BackgroundTask` does not destroy its event group while its task may still be running.
 
-**Reference:** `witchhunt-reader/lib/Epub/Epub/css/CssStyle.h`
+`exitToUI()` now also fails closed. If the bounded stop times out, it records a one-shot UI transition in RTC no-init memory and restarts without further SD, framebuffer, PageCache, or parser access. Boot-mode detection consumes the marker once before consulting SD-backed settings.
 
-#### 2. Footnote system (`FootnotePreviews`)
+### F2. Generic serialization truncation
 
-- Book-level `footnotes.bin`, hash index on SD, inline previews.
-- Handles Calibre/MOBI-style notes — not only EPUB3 `epub:type`.
-- **Takeaway:** concept + on-disk format is gold; fits Papyrix’s SD-cache style.
+**File:** `lib/Serialization/src/Serialization.h`
+**Status:** fixed
 
-**Reference:** `witchhunt-reader/lib/Epub/Epub/FootnotePreviews.h`
+Checked POD and string writers are available. `readPodValidated()` reads into initialized temporary storage and leaves the destination unchanged on a short read.
 
-#### 3. KOReader sync
+### F3. PageCache header and LUT validation
 
-- Witch has a full on-device KOSync client.
-- Papyrix docs mention it historically; no `lib/KOReaderSync` in tree now.
-- **Takeaway:** high multi-device value if progress sync is a goal. Prefer protocol reimplementation over blind copy (shared ancestry / attribution).
+**File:** `lib/PageCache/src/PageCache.cpp`
+**Status:** fixed
 
-**Reference:** `witchhunt-reader/lib/KOReaderSync/`
+Cache headers use one checked field-by-field decoder. Header size, LUT span, LUT entry positions, seeks, copies, writes, syncs, extend paths, and commit paths are validated. Valid page positions satisfy:
 
----
+```text
+kHeaderSize <= pagePosition < lutOffset
+```
 
-### High value — memory / speed concepts
+### F4. Nested Page payload serialization
 
-#### 4. `BuildArena` bump allocator
+**Files:**
 
-- One budgeted arena for section build → no mid-parse heap fragmentation OOMs.
-- **Takeaway:** excellent fit for ESP32-C3; pairs with Papyrix’s “check largest free block” discipline. Small, portable idea.
+- `lib/RenderTypes/src/Page.cpp`
+- `lib/RenderTypes/src/blocks/TextBlock.cpp`
+- `lib/RenderTypes/src/blocks/ImageBlock.cpp`
 
-**Reference:** `witchhunt-reader/lib/Memory/BuildArena.h`
+**Status:** fixed
 
-#### 5. Secondary framebuffer release during heavy work
+Page counts, tags, coordinates, word data, styles, image paths, and image dimensions now use checked reads/writes. Truncated payloads return failure instead of using indeterminate scalar values, and short writes propagate to PageCache before LUT commit.
 
-- Temporarily free ~48KB AA buffer while indexing, restore after.
-- **Takeaway:** technique, not a library. Big for large/CSS-heavy books.
+### F5. Settings decoding
 
-**Reference:** `witchhunt-reader/docs/secondary-buffer-management.md`
+**Files:**
 
-#### 6. Background section lookahead (A/B/C model)
+- `src/core/SettingsSerialization.cpp`
+- `src/core/PapyrixSettings.cpp`
 
-- Not just page pre-render: idle pre-build of next ~3 spines, cooperative slices, heap gates, AA deferred pass priority.
-- **Takeaway:** evolve `ReaderState` background caching toward “next chapter ready before you hit it.”
+**Status:** fixed
 
-**Reference:** `witchhunt-reader/docs/background-rendering.md`
+Both settings load APIs use one transactional decoder. Mandatory headers and every declared field are checked. Older files still preserve defaults for fields not present in their declared field count. Corrupt input does not partially update the live Settings object.
 
-#### 7. TJpgDec (+ progressive JPEG path)
+The format remains field-by-field. Raw `Settings` or `RenderConfig` struct serialization should not be introduced because padding, ABI, and `bool` representation are not stable persistence contracts.
 
-- Witch replaced heavier JPEG stacks with IRAM-friendly TJpgDec; big win on covers/images.
-- **Takeaway:** evaluate vs `picojpeg` if image path is still slow/fragile.
+### F6. Reader metrics index
 
-**Reference:** `witchhunt-reader/lib/TJpgDec/`
+**File:** `src/states/ReaderState.cpp`
+**Status:** fixed
 
----
+All RenderConfig fields and metrics entries are read with checked helpers. Entries are decoded into temporary storage and committed only after the complete index is valid.
 
-### Medium value — UX
+### F7. EPUB metadata cache reads
 
-#### 8. `ButtonEventManager` (short / double / long → actions)
+**File:** `lib/Epub/src/Epub/BookMetadataCache.cpp`
+**Status:** fixed
 
-- 23 actions × gesture; double-click only adds latency when configured.
-- Papyrix has long-press + power actions; not a full per-button gesture matrix.
-- **Takeaway:** good QoL for power-user controls without UI chrome.
+The cache header and metadata decode into local state. Spine/TOC counts are bounded, the LUT must begin at the expected position and fit in the file, and every LUT entry and seek is validated against the data region and file size. Malformed caches fail cleanly and can be rebuilt.
 
-**Reference:** `witchhunt-reader/src/ButtonEventManager.h`
+### F8. ZIP validation
 
-#### 9. Reading stats + session tracker
+**File:** `lib/ZipFile/src/ZipFile.cpp`
+**Status:** fixed
 
-- Streaks, time, pages/min, ETA — small standalone modules (~350 LOC).
-- **Takeaway:** easy “apps/” or Settings screen; optional.
+EOCD and central-directory reads are checked. Entry counts, names, compressed/inflated sizes, file spans, seeks, allocation limits, decompression output, and `inflatedDataSize + 1` arithmetic are validated.
 
-**Reference:** `witchhunt-reader/src/ReadingStats.*`, `ReadingSessionTracker.*`
+### F9. BMP and alignment bounds
 
-#### 10. Global + named bookmarks
+**Files:**
 
-- Cross-book jump index + custom names.
-- Papyrix has per-book bookmarks only.
+- `lib/GfxRenderer/src/BitmapHelpers.cpp`
+- `lib/GfxRenderer/src/Bitmap.cpp`
+- `lib/RenderTypes/src/ParsedText.cpp`
 
-**Reference:** `witchhunt-reader/src/GlobalBookmarkIndex.*`, `BookmarkStore.h`
+**Status:** fixed
 
-#### 11. Book info screen + finished-book flow
+BMP scalar reads, dimensions, palette reads, and pixel spans are checked. Centered and right-aligned overlong text uses signed calculations and clamps offsets without unsigned wraparound.
 
-- Metadata/cover/description; series/next-book/move-folder on finish.
+### F10. Framebuffer and rendering hardening
 
-#### 12. Sleep screen upgrades
+**Files:** `lib/GfxRenderer/src/GfxRenderer.cpp`, `lib/GfxRenderer/src/BitmapHelpers.h`
+**Status:** fixed
 
-- Transparent overlay on current page, info strip (title/chapter/%), PNG alpha, sequential pick.
-- Papyrix already has Dark/Light/Custom/Cover/Keep Page — extend, don’t replace.
-
-#### 13. Large-directory support with an SD-backed `FileIndex` — adopted
-
-- Papyrix now keeps directories with up to 128 matching entries in RAM and switches larger directories to an SD-backed index.
-- Every matching entry remains accessible and naturally sorted while RAM usage stays independent of directory size.
-- The implementation detects large directories early and releases the temporary in-memory entries before building or validating the index.
-- File removal and recycle-bin behavior use the same indexed backend, including move, restore, permanent deletion, empty-directory deletion, duplicate-name handling, and trash-root protection.
-- The design borrows Witch’s external-sort/index-file concept without its peak-memory flaw: Witch still builds and retains the complete in-memory list before opening its index.
-
-**References:** `lib/FileIndex/`, `witchhunt-reader/lib/FileIndex/`
-
-#### 14. USB serial file transfer (MicroReader-compatible)
-
-- Nice for Calibre plugin / file managers without WiFi.
-- Medium effort; clear product niche.
-
-**Reference:** `witchhunt-reader/lib/SerialTransfer/`, `src/SerialTransferDevice.*`
-
-#### 15. Captive-portal client detect + QR
-
-- Practical for hotel/cafe WiFi.
-- Fits network stack if that UX matters.
+Framebuffer indices use `size_t`, debug assertions guard internal coordinate contracts, and public rendering paths clip inputs. Thai cluster rendering writes clipped pixels directly through oriented framebuffer access. BMP palettes are read incrementally rather than using a large temporary stack allocation.
 
 ---
 
-### Lower fit / be careful
+## Remaining valid findings
 
-| Item | Why |
-|---|---|
-| **Weather panel** | Fun; optional mini-app only. Not core reading. |
-| **GIF decoder** | Niche in books. |
-| **Bionic/focus reading** | Polarizing; easy later if layout supports span styles. |
-| **Cover carousel home** | Polish; Home/Recent already work. |
-| **I18n UI strings system** | Papyrix has `lib/I18n`; compare docs, don’t replace blindly. |
-| **yxml SaxParser vs Expat** | Memory tradeoff research only; big rip-up. |
-| **ActivityManager** | Architectural fork; high cost, low need. |
+### R1. ReaderState remains large
+
+**File:** `src/states/ReaderState.cpp` — approximately 3191 lines
+**Severity:** maintainability
+**Priority:** low to medium
+
+ReaderState still owns loading, navigation, rendering, caching, overlays, progress, bookmarks, and indexing. This increases review cost, but line count alone is not a correctness defect. Extract components only when modifying those responsibilities, rather than performing a broad rewrite.
+
+A small cache-ownership wrapper could make future access discipline harder to violate, but current callers enforce the ownership transfer contract.
+
+### R2. Repeated RenderConfig field lists
+
+**Files:** `src/states/ReaderState.cpp`, `lib/PageCache/src/PageCache.cpp`
+**Severity:** maintainability/durability
+**Priority:** medium
+
+RenderConfig persistence and comparison still repeat the field list. Introduce shared checked field-by-field encode/decode helpers when this format next changes. Do not serialize the raw struct.
+
+### R3. Metadata and metrics writers still use unchecked convenience writers
+
+**Files:** `lib/Epub/src/Epub/BookMetadataCache.cpp`, `src/states/ReaderState.cpp`
+**Severity:** cache durability
+**Priority:** low
+
+Several disposable metadata-cache and metrics-index construction paths still use `writePod()`/`writeString()` rather than checked variants. A partial file is rejected on the next read and rebuilt, so this is not currently a malformed-input memory-safety hole. Propagating write/sync failures would avoid publishing work known to be incomplete.
+
+### R4. Hot PageCache extension retains old LUT blocks
+
+**File:** `lib/PageCache/src/PageCache.cpp`
+**Severity:** SD usage/performance
+**Priority:** low
+
+Each hot extension appends pages and a new LUT after the previous LUT. Old LUT blocks become unreachable interior data. Accumulation can exceed four bytes per final page across repeated extensions. Measure real cache growth before redesigning or compacting the file format.
+
+### R5. Width-cache full reset
+
+**File:** `lib/GfxRenderer/src/GfxRenderer.cpp`
+**Severity:** performance
+**Priority:** low
+
+When the 256-entry width cache fills, all keys are cleared. This may cause a re-measurement spike, but linear probing prevents incorrect collision results. Benchmark layout latency before adding LRU bookkeeping and RAM overhead.
+
+### R6. Float Knuth–Plass calculations
+
+**File:** `lib/RenderTypes/src/ParsedText.cpp`
+**Severity:** performance
+**Priority:** measurement required
+
+The ESP32-C3 has no hardware FPU, and line-breaking badness/demerits use `float` in an O(n²) dynamic program. This is a plausible hotspot, not a demonstrated defect. Profile long paragraphs before replacing it with fixed-point or a simpler optional breaker.
+
+### R7. `int16_t` width-cache values
+
+**File:** `lib/GfxRenderer/src/GfxRenderer.h`
+**Severity:** latent range limit
+**Priority:** no current fix
+
+Widths above 32767 would truncate, but current supported viewports cannot reach that range. Expanding values to `int32_t` costs about 512 bytes of constrained RAM and is not justified today.
 
 ---
 
-## Practical shortlist (max benefit)
+## Intentional designs — do not change without new evidence
 
-If the goal is max benefit for Papyrix without becoming Witch:
+### Reader/UI restart boundary
 
-1. **`BuildArena` + secondary-buffer release** — reliability on big books
-2. **Tables + strikethrough + basic float images** — close own TODOs / CSS gap
-3. **Footnote preview cache** — reading UX
-4. **Background next-section pre-build** — fewer “Indexing…” stalls
-5. **KOReader sync** — if multi-device is a goal
-6. **Button short/double/long actions** — power users
-7. **Reading stats** — cheap delight
+`exitToUI()` uses `ESP.restart()` intentionally. UI and Reader are separate boot modes, allowing Reader mode to reclaim memory held by UI state, fonts, Wi-Fi, and caches. Replacing this with a direct Home transition would undermine the memory model and reintroduce teardown pressure.
 
----
+### Framebuffer scratch reuse
 
-## What not to do
+Page construction uses the framebuffer as a bounded BuildArena while rendering is stopped. This saves a large transient allocation on a device with limited contiguous heap. Keep the ownership rule documented and tested; do not allocate a second scratch arena solely for type purity.
 
-- Don’t vendor large chunks of Witch UI/activity code — different architecture, messy history/attribution (they even rewrote SerialTransfer clean-room for that reason).
-- Don’t re-add OPDS unless product direction changed (it was intentionally removed).
-- Don’t trade away CJK/RTL/FB2 for their CSS wins — merge ideas into *Papyrix* pipeline (`ChapterHtmlSlimParser` / `PageCache`).
+### Single framebuffer
 
----
+`platformio.ini` defines:
 
-## Papyrix strengths to keep
+```text
+EINK_DISPLAY_SINGLE_BUFFER_MODE=1
+```
 
-- FB2 support
-- CJK / Arabic / Thai / Vietnamese text
-- Knuth–Plass line breaking
-- Custom themes from SD
-- Dual-boot / reader-mode memory strategy
-- Cleaner State-based UI vs Activity stack
-- Focused scope (reader-first)
+Therefore only one maximum-size static framebuffer is compiled, approximately 52 KB—not approximately 104 KB. Double-buffer memory analysis does not apply to the current firmware configuration.
+
+### Greedy and optimized rendering paths
+
+Per-pixel release checks, generalized cache eviction, and more complex line-breaking algorithms all carry speed or RAM costs. Existing clipping and debug assertions are appropriate unless device measurements demonstrate a reachable failure.
 
 ---
 
-## Key Witch paths for follow-up
+## Recommended next work
 
-| Area | Path |
-|---|---|
-| Feature matrix / README | `witchhunt-reader/README.md` |
-| CSS model | `witchhunt-reader/lib/Epub/Epub/css/CssStyle.h` |
-| Footnotes | `witchhunt-reader/lib/Epub/Epub/FootnotePreviews.h` |
-| Build arena | `witchhunt-reader/lib/Memory/BuildArena.h` |
-| Background render | `witchhunt-reader/docs/background-rendering.md` |
-| Secondary buffer | `witchhunt-reader/docs/secondary-buffer-management.md` |
-| Button gestures | `witchhunt-reader/src/ButtonEventManager.h` |
-| Reading stats | `witchhunt-reader/src/ReadingStats.*` |
-| Global bookmarks | `witchhunt-reader/src/GlobalBookmarkIndex.*` |
-| File index | `witchhunt-reader/lib/FileIndex/` |
-| KOReader sync | `witchhunt-reader/lib/KOReaderSync/` |
-| Serial transfer | `witchhunt-reader/lib/SerialTransfer/` |
-| JPEG decoder | `witchhunt-reader/lib/TJpgDec/` |
+1. Test the hardened firmware on device with large EPUBs, rapid navigation, menu/TOC transitions, and intentionally truncated caches.
+2. Check metadata/metrics writer and sync results so disposable caches are never knowingly published incomplete.
+3. Centralize checked RenderConfig field serialization when its schema next changes.
+4. Measure PageCache stale-LUT growth on large books.
+5. Profile long-paragraph layout and width-cache reset latency before performance changes.
+6. Extract ReaderState responsibilities incrementally only when feature work touches them.
+
+---
+
+## Verification
+
+The hardening changes include regression coverage for truncated serialization, PageCache headers/LUTs, nested Page payloads, EPUB metadata LUTs, ZIP directories, BMP input, settings files, Reader metrics, alignment overflow, and RTC emergency transitions.
+
+Required verification before merge:
+
+```bash
+make format
+make test
+make build
+make check
+git diff --check
+```

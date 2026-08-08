@@ -509,6 +509,26 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/Utf8/src/Utf8.cpp
       ${TEST_HELPERS}
     )
+  elseif(TEST_NAME STREQUAL "EmergencyBootTransitionTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/src/core/EmergencyBootTransition.cpp
+      ${TEST_HELPERS}
+    )
+  elseif(TEST_NAME STREQUAL "SettingsSerializationTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/src/core/SettingsSerialization.cpp
+      ${TEST_HELPERS}
+    )
+  elseif(TEST_NAME STREQUAL "PageSerializationTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/RenderTypes/src/Page.cpp
+      ${PROJECT_ROOT}/lib/RenderTypes/src/blocks/TextBlock.cpp
+      ${PROJECT_ROOT}/lib/Utf8/src/Utf8.cpp
+      ${TEST_HELPERS}
+    )
   elseif(TEST_NAME STREQUAL "BookMetadataCacheTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}

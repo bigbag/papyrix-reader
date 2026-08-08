@@ -20,18 +20,16 @@ IRAM_ATTR void PageLine::render(GfxRenderer& renderer, const int fontId, const i
 }
 
 bool PageLine::serialize(FsFile& file) {
-  serialization::writePod(file, xPos);
-  serialization::writePod(file, yPos);
-
-  // serialize TextBlock pointed to by PageLine
-  return block->serialize(file);
+  return serialization::writePodChecked(file, xPos) && serialization::writePodChecked(file, yPos) &&
+         block->serialize(file);
 }
 
 std::unique_ptr<PageLine> PageLine::deserialize(FsFile& file) {
-  int16_t xPos;
-  int16_t yPos;
-  serialization::readPod(file, xPos);
-  serialization::readPod(file, yPos);
+  int16_t xPos = 0;
+  int16_t yPos = 0;
+  if (!serialization::readPodChecked(file, xPos) || !serialization::readPodChecked(file, yPos)) {
+    return nullptr;
+  }
 
   auto tb = TextBlock::deserialize(file);
   if (!tb) {
@@ -50,16 +48,16 @@ void PageImage::render(GfxRenderer& renderer, const int fontId, const int xOffse
 }
 
 bool PageImage::serialize(FsFile& file) {
-  serialization::writePod(file, xPos);
-  serialization::writePod(file, yPos);
-  return block->serialize(file);
+  return serialization::writePodChecked(file, xPos) && serialization::writePodChecked(file, yPos) &&
+         block->serialize(file);
 }
 
 std::unique_ptr<PageImage> PageImage::deserialize(FsFile& file) {
-  int16_t xPos;
-  int16_t yPos;
-  serialization::readPod(file, xPos);
-  serialization::readPod(file, yPos);
+  int16_t xPos = 0;
+  int16_t yPos = 0;
+  if (!serialization::readPodChecked(file, xPos) || !serialization::readPodChecked(file, yPos)) {
+    return nullptr;
+  }
 
   auto ib = ImageBlock::deserialize(file);
   if (!ib) {
@@ -103,12 +101,12 @@ void Page::warmGlyphs(const GfxRenderer& renderer, const int fontId) const {
 }
 
 bool Page::serialize(FsFile& file) const {
-  const uint16_t count = elements.size();
-  serialization::writePod(file, count);
+  if (elements.size() > UINT16_MAX) return false;
+  const uint16_t count = static_cast<uint16_t>(elements.size());
+  if (!serialization::writePodChecked(file, count)) return false;
 
   for (const auto& el : elements) {
-    serialization::writePod(file, static_cast<uint8_t>(el->getTag()));
-    if (!el->serialize(file)) {
+    if (!serialization::writePodChecked(file, static_cast<uint8_t>(el->getTag())) || !el->serialize(file)) {
       return false;
     }
   }
@@ -122,8 +120,11 @@ std::unique_ptr<Page> Page::deserialize(FsFile& file) {
   // Max elements per page - prevents memory exhaustion from corrupted cache
   constexpr uint16_t MAX_PAGE_ELEMENTS = 500;
 
-  uint16_t count;
-  serialization::readPod(file, count);
+  uint16_t count = 0;
+  if (!serialization::readPodChecked(file, count)) {
+    LOG_ERR(TAG, "Deserialization failed: couldn't read element count");
+    return nullptr;
+  }
 
   // Validate element count to prevent memory exhaustion
   if (count > MAX_PAGE_ELEMENTS) {
@@ -132,8 +133,11 @@ std::unique_ptr<Page> Page::deserialize(FsFile& file) {
   }
 
   for (uint16_t i = 0; i < count; i++) {
-    uint8_t tag;
-    serialization::readPod(file, tag);
+    uint8_t tag = 0;
+    if (!serialization::readPodChecked(file, tag)) {
+      LOG_ERR(TAG, "Deserialization failed: couldn't read element tag");
+      return nullptr;
+    }
 
     if (tag == TAG_PageLine) {
       auto pl = PageLine::deserialize(file);

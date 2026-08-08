@@ -21,18 +21,22 @@ IRAM_ATTR void TextBlock::render(const GfxRenderer& renderer, const int fontId, 
 }
 
 bool TextBlock::serialize(FsFile& file) const {
-  // Word count
-  serialization::writePod(file, static_cast<uint16_t>(wordData.size()));
+  if (wordData.size() > UINT16_MAX) return false;
+  const uint16_t wordCount = static_cast<uint16_t>(wordData.size());
+  if (!serialization::writePodChecked(file, wordCount)) return false;
 
   // Write words, then xpos, then styles (maintains backward-compatible format)
-  for (const auto& wd : wordData) serialization::writeString(file, wd.word);
-  for (const auto& wd : wordData) serialization::writePod(file, wd.xPos);
-  for (const auto& wd : wordData) serialization::writePod(file, wd.style);
+  for (const auto& wd : wordData) {
+    if (!serialization::writeStringChecked(file, wd.word)) return false;
+  }
+  for (const auto& wd : wordData) {
+    if (!serialization::writePodChecked(file, wd.xPos)) return false;
+  }
+  for (const auto& wd : wordData) {
+    if (!serialization::writePodChecked(file, wd.style)) return false;
+  }
 
-  // Block style
-  serialization::writePod(file, style);
-
-  return true;
+  return serialization::writePodChecked(file, style);
 }
 
 std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
