@@ -28,10 +28,10 @@ class ScratchReporter {
 
   ~ScratchReporter() {
     LOG_DBG(tag_,
-            "Scratch high=%zu/%zu failed=%zu fallbacks=%u releases=%u "
+            "Scratch high=%zu/%zu failed=%zu fallbacks=%u scope_failures=%u "
             "heap=%zu->%zu largest=%zu->%zu elapsed=%lu ms",
             arena_.highWater(), arena_.capacity(), arena_.failedAllocSize(), arena_.fallbackCount(),
-            arena_.releaseFailures(), freeBefore_, heap_caps_get_free_size(MALLOC_CAP_8BIT), largestBefore_,
+            arena_.scopeFailureCount(), freeBefore_, heap_caps_get_free_size(MALLOC_CAP_8BIT), largestBefore_,
             heap_caps_get_largest_free_block(MALLOC_CAP_8BIT), static_cast<unsigned long>(millis() - started_));
   }
 

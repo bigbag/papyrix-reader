@@ -28,8 +28,8 @@ class ReadingStatsStore {
 
   static ReadingStatsStore& instance();
 
-  static std::vector<ReadingStatsRecord> applySession(std::vector<ReadingStatsRecord> records, const std::string& path,
-                                                      uint32_t seconds, bool hasProgress, uint8_t progressPercent);
+  static bool applySession(std::vector<ReadingStatsRecord>& records, const std::string& path, uint32_t seconds,
+                           bool hasProgress, uint8_t progressPercent);
   static std::vector<uint8_t> serializeRecords(const std::vector<ReadingStatsRecord>& records);
   static bool deserializeRecords(const uint8_t* data, size_t len, std::vector<ReadingStatsRecord>& out);
 

@@ -235,8 +235,8 @@ int main() {
     runner.expectTrue(actual == expected, "48 KiB arena output matches heap");
     runner.expectTrue(arena.highWater() > 0, "arena workspace used");
     runner.expectEq<uint32_t>(0, arena.fallbackCount(), "48 KiB arena needs no fallback");
-    std::fprintf(stderr, "ARENA_X4 high=%zu/%zu fallbacks=%u releases=%u\n", arena.highWater(), arena.capacity(),
-                 arena.fallbackCount(), arena.releaseFailures());
+    std::fprintf(stderr, "ARENA_X4 high=%zu/%zu fallbacks=%u scope_failures=%u\n", arena.highWater(), arena.capacity(),
+                 arena.fallbackCount(), arena.scopeFailureCount());
   }
 
   {
@@ -250,8 +250,8 @@ int main() {
     const auto actual = flatten(*arenaBacked, &arena);
     runner.expectTrue(actual == expected, "X3 nested layout output matches heap");
     runner.expectEq<uint32_t>(0, arena.fallbackCount(), "X3 nested arena needs no fallback");
-    std::fprintf(stderr, "ARENA_X3 high=%zu/%zu fallbacks=%u releases=%u\n", arena.highWater(), arena.capacity(),
-                 arena.fallbackCount(), arena.releaseFailures());
+    std::fprintf(stderr, "ARENA_X3 high=%zu/%zu fallbacks=%u scope_failures=%u\n", arena.highWater(), arena.capacity(),
+                 arena.fallbackCount(), arena.scopeFailureCount());
   }
 
   {
@@ -270,9 +270,8 @@ int main() {
       ParsedText oversized(alignment, 0, false, true, rtl);
       oversized.addWord("this-word-is-wider-than-the-viewport", EpdFontFamily::REGULAR);
       uint16_t xPos = UINT16_MAX;
-      const bool ok = oversized.layoutAndExtractLines(
-          renderer, kFontId, kViewport,
-          [&](std::shared_ptr<TextBlock> line) {
+      const bool ok =
+          oversized.layoutAndExtractLines(renderer, kFontId, kViewport, [&](std::shared_ptr<TextBlock> line) {
             if (!line->getWords().empty()) xPos = line->getWords().front().xPos;
           });
       runner.expectTrue(ok, "oversized alignment completes");
@@ -287,8 +286,7 @@ int main() {
     const auto started = std::chrono::steady_clock::now();
     timed->layoutAndExtractLines(renderer, kFontId, kViewport, [&](std::shared_ptr<TextBlock>) { ++lines; });
     const auto stopped = std::chrono::steady_clock::now();
-    layoutMicros[sampleIndex] =
-        std::chrono::duration_cast<std::chrono::microseconds>(stopped - started).count();
+    layoutMicros[sampleIndex] = std::chrono::duration_cast<std::chrono::microseconds>(stopped - started).count();
     runner.expectTrue(lines > 0, "timing: produced lines");
   }
   std::sort(layoutMicros.begin(), layoutMicros.end());

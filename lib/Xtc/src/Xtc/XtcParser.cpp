@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <array>
+#include <climits>
 #include <cstring>
 #include <new>
 #include <utility>
@@ -28,6 +29,12 @@ bool metadataRangeIsValid(const XtcHeader& header, uint64_t fileSize, uint64_t r
   if (relativeOffset > fileSize - header.metadataOffset) return false;
   const uint64_t absoluteOffset = header.metadataOffset + relativeOffset;
   return size <= fileSize - absoluteOffset;
+}
+
+bool readExact(FsFile& file, void* data, size_t size) {
+  if (size > static_cast<size_t>(INT_MAX)) return false;
+  const int bytesRead = file.read(static_cast<uint8_t*>(data), size);
+  return bytesRead >= 0 && static_cast<size_t>(bytesRead) == size;
 }
 
 }  // namespace
@@ -99,8 +106,7 @@ void XtcParser::close() {
 
 XtcError XtcParser::readHeader() {
   // Read first 56 bytes of header
-  size_t bytesRead = m_file.read(reinterpret_cast<uint8_t*>(&m_header), sizeof(XtcHeader));
-  if (bytesRead != sizeof(XtcHeader)) {
+  if (!readExact(m_file, &m_header, sizeof(XtcHeader))) {
     return XtcError::READ_ERROR;
   }
 
@@ -141,36 +147,34 @@ XtcError XtcParser::readHeader() {
 }
 
 XtcError XtcParser::readTitle() {
-  constexpr size_t titleSize = 128;
-  if (!metadataRangeIsValid(m_header, m_file.size(), 0, titleSize) || !m_file.seek(m_header.metadataOffset)) {
+  if (!metadataRangeIsValid(m_header, m_file.size(), METADATA_TITLE_OFFSET, METADATA_TITLE_SIZE) ||
+      !m_file.seek(m_header.metadataOffset + METADATA_TITLE_OFFSET)) {
     m_title.clear();
     return XtcError::OK;
   }
 
-  char titleBuf[titleSize] = {0};
-  if (m_file.read(reinterpret_cast<uint8_t*>(titleBuf), titleSize - 1) != titleSize - 1) {
+  char titleBuf[METADATA_TITLE_SIZE] = {0};
+  if (!readExact(m_file, titleBuf, METADATA_TITLE_SIZE - 1)) {
     m_title.clear();
     return XtcError::OK;
   }
-  m_title.assign(titleBuf, strnlen(titleBuf, titleSize - 1));
+  m_title.assign(titleBuf, strnlen(titleBuf, METADATA_TITLE_SIZE - 1));
   return XtcError::OK;
 }
 
 XtcError XtcParser::readAuthor() {
-  constexpr uint64_t authorRelativeOffset = 128;
-  constexpr size_t authorSize = 64;
-  if (!metadataRangeIsValid(m_header, m_file.size(), authorRelativeOffset, authorSize) ||
-      !m_file.seek(m_header.metadataOffset + authorRelativeOffset)) {
+  if (!metadataRangeIsValid(m_header, m_file.size(), METADATA_AUTHOR_OFFSET, METADATA_AUTHOR_SIZE) ||
+      !m_file.seek(m_header.metadataOffset + METADATA_AUTHOR_OFFSET)) {
     m_author.clear();
     return XtcError::OK;
   }
 
-  char authorBuf[authorSize] = {0};
-  if (m_file.read(reinterpret_cast<uint8_t*>(authorBuf), authorSize - 1) != authorSize - 1) {
+  char authorBuf[METADATA_AUTHOR_SIZE] = {0};
+  if (!readExact(m_file, authorBuf, METADATA_AUTHOR_SIZE - 1)) {
     m_author.clear();
     return XtcError::OK;
   }
-  m_author.assign(authorBuf, strnlen(authorBuf, authorSize - 1));
+  m_author.assign(authorBuf, strnlen(authorBuf, METADATA_AUTHOR_SIZE - 1));
   return XtcError::OK;
 }
 
@@ -212,7 +216,7 @@ bool XtcParser::readPageEntry(uint32_t pageIndex, PageInfo& info) {
   }
 
   PageTableEntry entry;
-  if (m_file.read(reinterpret_cast<uint8_t*>(&entry), sizeof(PageTableEntry)) != sizeof(PageTableEntry)) {
+  if (!readExact(m_file, &entry, sizeof(PageTableEntry))) {
     return false;
   }
 
@@ -269,13 +273,14 @@ XtcError XtcParser::readChapters() const {
   if (maxOffset <= chapterOffset) return XtcError::OK;
 
   size_t chapterCount = static_cast<size_t>(std::min<uint64_t>((maxOffset - chapterOffset) / chapterSize, maxChapters));
-  const bool hasMetadataChapterCount = m_header.hasMetadata &&
-                                       metadataRangeIsValid(m_header, fileSize, 196, sizeof(uint16_t)) &&
-                                       chapterOffset >= m_header.metadataOffset + 196 + sizeof(uint16_t);
+  const bool hasMetadataChapterCount =
+      m_header.hasMetadata &&
+      metadataRangeIsValid(m_header, fileSize, METADATA_CHAPTER_COUNT_OFFSET, sizeof(uint16_t)) &&
+      chapterOffset >= m_header.metadataOffset + METADATA_CHAPTER_COUNT_OFFSET + sizeof(uint16_t);
   if (hasMetadataChapterCount) {
     uint16_t declaredCount = 0;
-    if (!m_file.seek(m_header.metadataOffset + 196) ||
-        m_file.read(reinterpret_cast<uint8_t*>(&declaredCount), sizeof(declaredCount)) != sizeof(declaredCount)) {
+    if (!m_file.seek(m_header.metadataOffset + METADATA_CHAPTER_COUNT_OFFSET) ||
+        !readExact(m_file, &declaredCount, sizeof(declaredCount))) {
       return XtcError::READ_ERROR;
     }
     if (declaredCount > 0) chapterCount = std::min<size_t>(chapterCount, declaredCount);
@@ -289,7 +294,7 @@ XtcError XtcParser::readChapters() const {
   m_chapters.reserve(chapterCount);
   std::array<uint8_t, chapterSize> chapterBuf{};
   for (size_t i = 0; i < chapterCount; ++i) {
-    if (m_file.read(chapterBuf.data(), chapterBuf.size()) != chapterBuf.size()) return XtcError::READ_ERROR;
+    if (!readExact(m_file, chapterBuf.data(), chapterBuf.size())) return XtcError::READ_ERROR;
 
     const size_t nameLen = strnlen(reinterpret_cast<const char*>(chapterBuf.data()), 80);
     uint16_t startPage = 0;
@@ -332,7 +337,7 @@ bool XtcParser::readValidatedPage(uint32_t pageIndex, PageInfo& page, XtgPageHea
     return false;
   }
 
-  if (m_file.read(reinterpret_cast<uint8_t*>(&pageHeader), sizeof(pageHeader)) != sizeof(pageHeader)) {
+  if (!readExact(m_file, &pageHeader, sizeof(pageHeader))) {
     m_lastError = XtcError::READ_ERROR;
     return false;
   }
@@ -391,8 +396,8 @@ size_t XtcParser::loadPage(uint32_t pageIndex, uint8_t* buffer, size_t bufferSiz
     return 0;
   }
 
-  const size_t bytesRead = m_file.read(buffer, bitmapSize);
-  if (bytesRead != bitmapSize) {
+  const int bytesRead = m_file.read(buffer, bitmapSize);
+  if (bytesRead < 0 || static_cast<size_t>(bytesRead) != bitmapSize) {
     m_lastError = XtcError::READ_ERROR;
     return 0;
   }
@@ -425,8 +430,8 @@ XtcError XtcParser::loadPageStreaming(uint32_t pageIndex,
   size_t totalRead = 0;
   while (totalRead < bitmapSize) {
     const size_t toRead = std::min(chunkSize, bitmapSize - totalRead);
-    const size_t bytesRead = m_file.read(chunk.get(), toRead);
-    if (bytesRead != toRead) {
+    const int bytesRead = m_file.read(chunk.get(), toRead);
+    if (bytesRead < 0 || static_cast<size_t>(bytesRead) != toRead) {
       m_lastError = XtcError::READ_ERROR;
       return m_lastError;
     }

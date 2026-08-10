@@ -1,5 +1,3 @@
-#include "test_utils.h"
-
 #include <HardwareSerial.h>
 #include <SDCardManager.h>
 #include <SdFat.h>
@@ -12,6 +10,8 @@
 #include <cstring>
 #include <string>
 #include <vector>
+
+#include "test_utils.h"
 
 static_assert(sizeof(xtc::XtcHeader) == 56);
 static_assert(sizeof(xtc::XtcHeader::chapterOffset) == sizeof(uint64_t));
@@ -133,7 +133,7 @@ static std::string buildRelocatedMetadataXtc() {
   return file;
 }
 
-static std::string buildChapterXtc(size_t chapterCount, bool hasMetadata = true) {
+static std::string buildChapterXtc(size_t chapterCount, bool hasMetadata = true, int declaredCount = -1) {
   constexpr size_t headerSize = sizeof(xtc::XtcHeader);
   constexpr size_t metadataSize = 256;
   constexpr size_t chapterSize = 96;
@@ -160,8 +160,9 @@ static std::string buildChapterXtc(size_t chapterCount, bool hasMetadata = true)
 
   if (hasMetadata) {
     memcpy(data + headerSize, "Chapter Book", 12);
-    const uint16_t declaredCount = static_cast<uint16_t>(std::min<size_t>(chapterCount, UINT16_MAX));
-    memcpy(data + headerSize + 196, &declaredCount, sizeof(declaredCount));
+    const uint16_t encodedCount = declaredCount < 0 ? static_cast<uint16_t>(std::min<size_t>(chapterCount, UINT16_MAX))
+                                                    : static_cast<uint16_t>(declaredCount);
+    memcpy(data + headerSize + xtc::METADATA_CHAPTER_COUNT_OFFSET, &encodedCount, sizeof(encodedCount));
   }
 
   for (size_t i = 0; i < chapterCount; i++) {
@@ -215,10 +216,8 @@ int main() {
     SdMan.clearFiles();
     SdMan.registerFile("/relocated_metadata.xtc", buildRelocatedMetadataXtc());
     xtc::XtcParser parser;
-    runner.expectTrue(parser.open("/relocated_metadata.xtc") == xtc::XtcError::OK,
-                      "metadata_offset: parser opens");
-    runner.expectEq(std::string("Relocated Title"), parser.getTitle(),
-                    "metadata_offset: title uses declared offset");
+    runner.expectTrue(parser.open("/relocated_metadata.xtc") == xtc::XtcError::OK, "metadata_offset: parser opens");
+    runner.expectEq(std::string("Relocated Title"), parser.getTitle(), "metadata_offset: title uses declared offset");
     runner.expectEq(std::string("Relocated Author"), parser.getAuthor(),
                     "metadata_offset: author follows relocated title");
   }
@@ -577,6 +576,25 @@ int main() {
     runner.expectEq(size_t{500}, parser.getChapters().size(), "chapters: parser caps entries at 500");
     parser.close();
     runner.expectEq(size_t{0}, parser.getChapters().capacity(), "chapters: close releases vector capacity");
+  }
+
+  {
+    SdMan.clearFiles();
+    SdMan.registerFile("/declared_chapters.xtc", buildChapterXtc(10, true, 5));
+    xtc::XtcParser parser;
+    runner.expectTrue(parser.open("/declared_chapters.xtc") == xtc::XtcError::OK, "declared_chapters: parser opens");
+    runner.expectTrue(parser.hasChapters(), "declared_chapters: chapters load");
+    runner.expectEq(size_t{5}, parser.getChapters().size(), "declared_chapters: metadata limits records");
+  }
+
+  {
+    SdMan.clearFiles();
+    SdMan.registerFile("/unspecified_chapters.xtc", buildChapterXtc(10, true, 0));
+    xtc::XtcParser parser;
+    runner.expectTrue(parser.open("/unspecified_chapters.xtc") == xtc::XtcError::OK,
+                      "unspecified_chapters: parser opens");
+    runner.expectTrue(parser.hasChapters(), "unspecified_chapters: chapters load");
+    runner.expectEq(size_t{10}, parser.getChapters().size(), "unspecified_chapters: zero keeps all records");
   }
 
   {

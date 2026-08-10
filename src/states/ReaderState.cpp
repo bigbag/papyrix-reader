@@ -1787,8 +1787,7 @@ void ReaderState::renderStatusBar(Core& core, int marginRight, int marginBottom,
   const uint16_t millivolts = batteryMonitor.readMillivolts();
   data.batteryPercent = (millivolts < 100) ? -1 : static_cast<int>(batteryMonitor.readPercentage());
 
-  // Page info (whole-book page number via GlobalPageMetrics)
-  // Note: renderCachedPage() already stopped the task, so we own pageCache_
+  // Resolve whole-book page information from the current cache snapshot.
   const GlobalPageMetrics metrics = resolveGlobalPageMetrics(core);
   updateReadingProgress(metrics);
   data.currentPage = metrics.currentPage;

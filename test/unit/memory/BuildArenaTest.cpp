@@ -1,9 +1,9 @@
-#include "test_utils.h"
-
 #include <BuildArena.h>
 
 #include <cstdint>
 #include <limits>
+
+#include "test_utils.h"
 
 int main() {
   TestUtils::TestRunner runner("BuildArena");
@@ -48,11 +48,34 @@ int main() {
     auto outer = first.scope();
     auto inner = first.scope();
     runner.expectFalse(outer.release(), "out-of-order release refused");
-    runner.expectEq<uint32_t>(1, first.releaseFailures(), "invalid release counted");
+    runner.expectEq<uint32_t>(1, first.scopeFailureCount(), "invalid scope operation counted");
     runner.expectTrue(inner.release(), "newest scope releases");
     runner.expectTrue(outer.release(), "outer releases afterward");
     auto foreign = first.scope();
     runner.expectFalse(second.release(foreign), "cross-arena release refused");
+  }
+
+  {
+    BuildArena arena(64);
+    auto outer = arena.scope();
+    runner.expectTrue(arena.alloc(8, 1) != nullptr, "outer allocation succeeds");
+    auto inner = arena.scope();
+    runner.expectTrue(arena.alloc(16, 1) != nullptr, "inner allocation succeeds");
+    runner.expectTrue(inner.commit(), "inner scope commits");
+    runner.expectFalse(inner.valid(), "commit invalidates scope");
+    runner.expectEq<size_t>(24, arena.used(), "commit preserves allocations");
+    runner.expectTrue(outer.release(), "parent releases after child commit");
+    runner.expectEq<size_t>(0, arena.used(), "parent release reclaims committed child");
+  }
+
+  {
+    BuildArena arena(64);
+    auto outer = arena.scope();
+    auto inner = arena.scope();
+    runner.expectFalse(outer.commit(), "out-of-order commit refused");
+    runner.expectEq<uint32_t>(1, arena.scopeFailureCount(), "invalid commit counted");
+    runner.expectTrue(inner.commit(), "newest scope commits");
+    runner.expectTrue(outer.release(), "parent releases after committed child");
   }
 
   {
@@ -74,6 +97,32 @@ int main() {
     runner.expectTrue(arena.alloc(1, 3) == nullptr, "non-power-of-two alignment refused");
     runner.expectTrue(arena.allocArray<uint32_t>(std::numeric_limits<size_t>::max() / sizeof(uint32_t) + 1) == nullptr,
                       "array multiplication overflow refused");
+  }
+
+  {
+    BuildArena arena(64);
+    uint32_t* values = arena.allocArray<uint32_t>(4);
+    runner.expectTrue(values != nullptr, "aligned array allocation succeeds");
+    runner.expectEq<size_t>(0, reinterpret_cast<uintptr_t>(values) % alignof(uint32_t), "array is aligned");
+    for (uint32_t i = 0; i < 4; ++i) values[i] = i * 7;
+    runner.expectEq<uint32_t>(21, values[3], "array storage is writable");
+    runner.expectEq<size_t>(sizeof(uint32_t) * 4, arena.used(), "array advances cursor by its byte size");
+  }
+
+  {
+    alignas(std::max_align_t) uint8_t bytes[17] = {};
+    BuildArena arena(bytes + 1, 16);
+    void* empty = arena.alloc(0, 8);
+    runner.expectTrue(empty != nullptr, "zero-byte allocation returns aligned pointer");
+    runner.expectEq<size_t>(0, reinterpret_cast<uintptr_t>(empty) % 8, "zero-byte allocation is aligned");
+    runner.expectTrue(arena.used() < 8, "zero-byte allocation consumes only alignment padding");
+  }
+
+  {
+    BuildArena arena(16);
+    uint32_t* empty = arena.allocArray<uint32_t>(0);
+    runner.expectTrue(empty != nullptr, "zero-length array returns aligned pointer");
+    runner.expectEq<size_t>(0, arena.used(), "zero-length array does not consume aligned arena");
   }
 
   {

@@ -39,6 +39,13 @@ constexpr uint16_t MAX_XTC_PAGE_COUNT = 10000;
 constexpr uint16_t MAX_XTC_DIMENSION = 2048;
 constexpr size_t XTC_MAX_BITMAP_SIZE = 1024 * 1024;
 
+// Metadata block layout relative to XtcHeader::metadataOffset.
+constexpr uint64_t METADATA_TITLE_OFFSET = 0;
+constexpr size_t METADATA_TITLE_SIZE = 128;
+constexpr uint64_t METADATA_AUTHOR_OFFSET = 128;
+constexpr size_t METADATA_AUTHOR_SIZE = 64;
+constexpr uint64_t METADATA_CHAPTER_COUNT_OFFSET = 196;
+
 constexpr size_t xthColumnBytes(uint16_t height) { return (static_cast<size_t>(height) + 7) / 8; }
 constexpr size_t xthPlaneSize(uint16_t width, uint16_t height) {
   return static_cast<size_t>(width) * xthColumnBytes(height);

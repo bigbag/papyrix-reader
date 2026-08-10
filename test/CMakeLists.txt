@@ -386,7 +386,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
     target_include_directories(${TEST_NAME} PRIVATE
       ${PROJECT_ROOT}/lib/I18n/src
     )
-  elseif(TEST_NAME STREQUAL "BookStatsViewTest")
+  elseif(TEST_NAME STREQUAL "BookStatsViewTest" OR TEST_NAME STREQUAL "ReaderMenuViewTest")
     add_executable(${TEST_NAME} ${TEST_SRC} ${TEST_HELPERS})
     target_include_directories(${TEST_NAME} PRIVATE
       ${PROJECT_ROOT}/lib/I18n/src
@@ -397,7 +397,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/src/content/RecentBooksStore.cpp
       ${TEST_HELPERS}
     )
-  elseif(TEST_NAME STREQUAL "ReadingStatsStoreTest")
+  elseif(TEST_NAME STREQUAL "ReadingStatsStoreTest" OR TEST_NAME STREQUAL "ReadingStatsStoreLoadFailureTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
       ${PROJECT_ROOT}/src/content/ReadingStatsStore.cpp

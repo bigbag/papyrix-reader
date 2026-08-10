@@ -65,7 +65,7 @@ class BuildArena {
   size_t highWater() const { return highWater_; }
   size_t failedAllocSize() const { return failedAllocSize_; }
   uint32_t fallbackCount() const { return fallbackCount_; }
-  uint32_t releaseFailures() const { return releaseFailures_; }
+  uint32_t scopeFailureCount() const { return scopeFailureCount_; }
 
   void* alloc(size_t bytes, size_t align = alignof(std::max_align_t)) {
     if (!base_ || align == 0 || (align & (align - 1)) != 0 || cursor_ > SIZE_MAX - (align - 1)) {
@@ -116,7 +116,7 @@ class BuildArena {
 
   bool release(Scope& scope) {
     if (!scope.valid() || scope.owner_ != this || scope.id_ != activeScopeId_) {
-      ++releaseFailures_;
+      ++scopeFailureCount_;
       return false;
     }
     cursor_ = scope.start_;
@@ -128,7 +128,7 @@ class BuildArena {
 
   bool commit(Scope& scope) {
     if (!scope.valid() || scope.owner_ != this || scope.id_ != activeScopeId_) {
-      ++releaseFailures_;
+      ++scopeFailureCount_;
       return false;
     }
     activeScopeId_ = scope.parentId_;
@@ -155,7 +155,7 @@ class BuildArena {
   size_t highWater_ = 0;
   size_t failedAllocSize_ = 0;
   uint32_t fallbackCount_ = 0;
-  uint32_t releaseFailures_ = 0;
+  uint32_t scopeFailureCount_ = 0;
   uint32_t activeScopeId_ = 0;
   uint32_t nextScopeId_ = 1;
 };

@@ -35,6 +35,7 @@ class FsFile {
     sharedBuffer_.reset();
     directoryEntries_.clear();
     directoryIndex_ = 0;
+    name_.clear();
     pos_ = 0;
     isOpen_ = true;
     isDirectory_ = false;
@@ -51,6 +52,7 @@ class FsFile {
     buffer_ = *buf;
     directoryEntries_.clear();
     directoryIndex_ = 0;
+    name_.clear();
     pos_ = 0;
     isOpen_ = true;
     isDirectory_ = false;
@@ -66,6 +68,7 @@ class FsFile {
     sharedBuffer_.reset();
     directoryEntries_ = entries;
     directoryIndex_ = 0;
+    name_.clear();
     pos_ = 0;
     isOpen_ = true;
     isDirectory_ = true;
@@ -110,8 +113,20 @@ class FsFile {
     if (sharedBuffer_) {
       *sharedBuffer_ = buffer_;
     }
+    sharedBuffer_.reset();
+    directoryEntries_.clear();
+    directoryIndex_ = 0;
+    name_.clear();
     isOpen_ = false;
+    isDirectory_ = false;
     pos_ = 0;
+    readLimit_ = 0;
+    readLimitActive_ = false;
+    totalRead_ = 0;
+    writeLimit_ = 0;
+    writeLimitActive_ = false;
+    totalWritten_ = 0;
+    syncResult_ = true;
   }
 
   FsFile openNextFile() {

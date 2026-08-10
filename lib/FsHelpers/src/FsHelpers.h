@@ -5,6 +5,9 @@
 class FsHelpers {
  public:
   static std::string normalisePath(const std::string& path);
+  // Compares ASCII case-insensitively with natural digit runs. Non-ASCII UTF-8
+  // bytes use deterministic byte order; this is not locale-aware collation.
+  // Null pointers sort before non-null pointers.
   static int naturalCompare(const char* a, const char* b);
 
   // Check if a filename should be hidden from file browsers

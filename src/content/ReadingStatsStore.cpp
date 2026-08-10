@@ -38,7 +38,7 @@ void appendU32(std::vector<uint8_t>& out, uint32_t value) {
 
 bool readU16(const uint8_t* data, size_t len, size_t& pos, uint16_t& value) {
   if (pos + 2 > len) return false;
-  value = static_cast<uint16_t>(data[pos]) | static_cast<uint16_t>(data[pos + 1] << 8);
+  value = static_cast<uint16_t>(data[pos]) | (static_cast<uint16_t>(data[pos + 1]) << 8);
   pos += 2;
   return true;
 }
@@ -58,33 +58,44 @@ ReadingStatsStore& ReadingStatsStore::instance() {
   return store;
 }
 
-std::vector<ReadingStatsRecord> ReadingStatsStore::applySession(std::vector<ReadingStatsRecord> records,
-                                                                const std::string& path, uint32_t seconds,
-                                                                bool hasProgress, uint8_t progressPercent) {
-  if (path.empty() || path.size() > MAX_PATH_BYTES || (seconds == 0 && !hasProgress)) return records;
+bool ReadingStatsStore::applySession(std::vector<ReadingStatsRecord>& records, const std::string& path,
+                                     uint32_t seconds, bool hasProgress, uint8_t progressPercent) {
+  if (path.empty() || path.size() > MAX_PATH_BYTES || (seconds == 0 && !hasProgress)) return false;
 
-  ReadingStatsRecord updated;
-  const auto existing = std::find_if(records.begin(), records.end(),
-                                     [&path](const ReadingStatsRecord& record) { return record.path == path; });
-  if (existing != records.end()) {
-    updated = std::move(*existing);
-    records.erase(existing);
-  } else {
-    updated.path = path;
+  auto existing = std::find_if(records.begin(), records.end(),
+                               [&path](const ReadingStatsRecord& record) { return record.path == path; });
+  bool changed = false;
+  if (existing == records.end()) {
+    if (records.size() >= MAX_RECORDS) records.resize(MAX_RECORDS - 1);
+    records.insert(records.begin(), ReadingStatsRecord{});
+    records.front().path = path;
+    changed = true;
+  } else if (existing != records.begin()) {
+    std::rotate(records.begin(), existing, existing + 1);
+    changed = true;
   }
 
+  ReadingStatsRecord& updated = records.front();
   if (seconds > 0) {
-    updated.totalSeconds = saturatingAdd(updated.totalSeconds, seconds);
-    updated.sessionCount = saturatingAdd(updated.sessionCount, 1);
+    const uint32_t totalSeconds = saturatingAdd(updated.totalSeconds, seconds);
+    const uint32_t sessionCount = saturatingAdd(updated.sessionCount, 1);
+    changed = changed || totalSeconds != updated.totalSeconds || sessionCount != updated.sessionCount;
+    updated.totalSeconds = totalSeconds;
+    updated.sessionCount = sessionCount;
   }
   if (hasProgress) {
+    const uint8_t clampedProgress = std::min<uint8_t>(progressPercent, 100);
+    changed = changed || !updated.hasProgress || updated.progressPercent != clampedProgress;
     updated.hasProgress = true;
-    updated.progressPercent = std::min<uint8_t>(progressPercent, 100);
+    updated.progressPercent = clampedProgress;
   }
 
-  records.insert(records.begin(), std::move(updated));
-  if (records.size() > MAX_RECORDS) records.resize(MAX_RECORDS);
-  return records;
+  if (records.size() > MAX_RECORDS) {
+    records.resize(MAX_RECORDS);
+    changed = true;
+  }
+
+  return changed;
 }
 
 std::vector<uint8_t> ReadingStatsStore::serializeRecords(const std::vector<ReadingStatsRecord>& records) {
@@ -200,15 +211,17 @@ bool ReadingStatsStore::save() const {
   }
 
   const size_t written = file.write(data.data(), data.size());
-  file.sync();
+  const bool synced = written == data.size() && file.sync();
   file.close();
-  if (written != data.size()) {
-    LOG_ERR(TAG, "Short stats write %u/%u", static_cast<unsigned>(written), static_cast<unsigned>(data.size()));
+  if (!synced) {
+    LOG_ERR(TAG, "Failed stats write or sync %u/%u", static_cast<unsigned>(written),
+            static_cast<unsigned>(data.size()));
     SdMan.remove(STATS_TMP);
     return false;
   }
   if (!SdMan.commitFile(STATS_TMP, STATS_FILE)) {
     LOG_ERR(TAG, "Failed to commit reading stats");
+    SdMan.remove(STATS_TMP);
     return false;
   }
   return true;
@@ -217,10 +230,7 @@ bool ReadingStatsStore::save() const {
 bool ReadingStatsStore::recordSession(const std::string& path, uint32_t seconds, bool hasProgress,
                                       uint8_t progressPercent) {
   if (!loaded_) load();
-  auto updated = applySession(records_, path, seconds, hasProgress, progressPercent);
-  if (updated == records_) return false;
-  records_ = std::move(updated);
-  return true;
+  return applySession(records_, path, seconds, hasProgress, progressPercent);
 }
 
 const ReadingStatsRecord* ReadingStatsStore::find(const std::string& path) const {

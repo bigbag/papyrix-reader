@@ -7,8 +7,6 @@
 // or memory leaks. Tests that require successful ZIP parsing are not included
 // as they would require a more sophisticated mock or real ZIP files.
 
-#include "test_utils.h"
-
 #include <BuildArena.h>
 
 #include <algorithm>
@@ -18,10 +16,12 @@
 #include <utility>
 #include <vector>
 
+#include "test_utils.h"
+
 // Include mocks
 #include "HardwareSerial.h"
-#include "SdFat.h"
 #include "SDCardManager.h"
+#include "SdFat.h"
 
 // Include ZipFile header
 #include "ZipFile.h"
@@ -29,6 +29,7 @@
 // Forward declarations for helper functions
 std::vector<uint8_t> createMinimalZip();
 std::vector<uint8_t> createStoredZip(const std::string& name, const std::string& contents);
+std::vector<uint8_t> createDeflatedZip(const std::string& name, uint32_t inflatedSize = 1040);
 std::vector<uint8_t> createZipWithInvalidOffset(const char* name);
 std::vector<uint8_t> createZipWithUnsupportedCompression(const char* name);
 std::vector<uint8_t> createZipWithNamedEntries(const std::vector<std::pair<std::string, uint32_t>>& entries);
@@ -36,10 +37,24 @@ std::vector<uint8_t> createZipWithNamedEntries(const std::vector<std::pair<std::
 // same name as poisonName, but size=poisonSize) after all normal entries.
 // If the early-exit break fires correctly the poison entry is never reached;
 // if it is reached, sizes[poisonIndex] will be overwritten with poisonSize.
-std::vector<uint8_t> createZipWithPoisonTrailingEntry(
-    const std::vector<std::pair<std::string, uint32_t>>& entries,
-    const std::string& poisonName,
-    uint32_t poisonSize);
+std::vector<uint8_t> createZipWithPoisonTrailingEntry(const std::vector<std::pair<std::string, uint32_t>>& entries,
+                                                      const std::string& poisonName, uint32_t poisonSize);
+
+// Raw deflate of "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ" repeated 20 times.
+constexpr uint8_t LARGE_DEFLATED[] = {
+    0x4b, 0x4c, 0x4a, 0x4e, 0x49, 0x4d, 0x4b, 0xcf, 0xc8, 0xcc, 0xca, 0xce, 0xc9, 0xcd, 0xcb, 0x2f,
+    0x28, 0x2c, 0x2a, 0x2e, 0x29, 0x2d, 0x2b, 0xaf, 0xa8, 0xac, 0x72, 0x74, 0x72, 0x76, 0x71, 0x75,
+    0x73, 0xf7, 0xf0, 0xf4, 0xf2, 0xf6, 0xf1, 0xf5, 0xf3, 0x0f, 0x08, 0x0c, 0x0a, 0x0e, 0x09, 0x0d,
+    0x0b, 0x8f, 0x88, 0x8c, 0x4a, 0x1c, 0xd5, 0x33, 0xaa, 0x67, 0x54, 0xcf, 0xb0, 0xd4, 0x03, 0x00,
+};
+
+std::string largeInflatedPayload() {
+  const std::string letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  std::string result;
+  result.reserve(1040);
+  for (int i = 0; i < 20; ++i) result += letters;
+  return result;
+}
 
 // Mock Print for stream testing
 class MockPrint : public Print {
@@ -257,6 +272,66 @@ int main() {
     runner.expectEq<size_t>(0, arena.used(), "stored tiny arena scope released");
   }
 
+  {
+    SdMan.reset();
+    const std::string payload = largeInflatedPayload();
+    const std::string path = "/deflated.zip";
+    SdMan.setFileData(path, createDeflatedZip("chapter.xhtml"));
+    ZipFile zip(path);
+    MockPrint output;
+    uint8_t bytes[33024] = {};
+    BuildArena arena(bytes, sizeof(bytes));
+    const auto result = zip.readFileToStreamDetailed("chapter.xhtml", output, 64, nullptr, nullptr, &arena);
+    runner.expectTrue(result == StreamReadResult::Success, "deflated arena extraction succeeds");
+    runner.expectTrue(std::equal(output.data().begin(), output.data().end(), payload.begin()),
+                      "deflated arena output matches");
+    runner.expectEq<uint32_t>(0, arena.fallbackCount(), "deflated arena avoids fallback");
+    runner.expectEq<size_t>(0, arena.used(), "deflated arena scope released");
+  }
+
+  {
+    SdMan.reset();
+    const std::string payload = largeInflatedPayload();
+    const std::string path = "/deflated-fallback.zip";
+    SdMan.setFileData(path, createDeflatedZip("chapter.xhtml"));
+    ZipFile zip(path);
+    MockPrint output;
+    uint8_t bytes[128] = {};
+    BuildArena arena(bytes, sizeof(bytes));
+    const auto result = zip.readFileToStreamDetailed("chapter.xhtml", output, 64, nullptr, nullptr, &arena);
+    runner.expectTrue(result == StreamReadResult::Success, "partial deflated arena falls back to heap");
+    runner.expectTrue(std::equal(output.data().begin(), output.data().end(), payload.begin()),
+                      "deflated fallback output matches");
+    runner.expectEq<uint32_t>(1, arena.fallbackCount(), "deflated heap fallback counted");
+    runner.expectEq<size_t>(0, arena.used(), "deflated fallback releases partial arena allocations");
+  }
+
+  {
+    SdMan.reset();
+    const std::string path = "/deflated-abort.zip";
+    SdMan.setFileData(path, createDeflatedZip("chapter.xhtml"));
+    ZipFile zip(path);
+    MockPrint output;
+    uint8_t bytes[33024] = {};
+    BuildArena arena(bytes, sizeof(bytes));
+    const auto result = zip.readFileToStreamDetailed("chapter.xhtml", output, 8, nullptr, [] { return true; }, &arena);
+    runner.expectTrue(result == StreamReadResult::Aborted, "deflated extraction aborts");
+    runner.expectEq<size_t>(0, arena.used(), "deflated abort releases arena");
+  }
+
+  {
+    SdMan.reset();
+    const std::string path = "/deflated-size.zip";
+    SdMan.setFileData(path, createDeflatedZip("chapter.xhtml", 1041));
+    ZipFile zip(path);
+    MockPrint output;
+    uint8_t bytes[33024] = {};
+    BuildArena arena(bytes, sizeof(bytes));
+    const auto result = zip.readFileToStreamDetailed("chapter.xhtml", output, 64, nullptr, nullptr, &arena);
+    runner.expectTrue(result == StreamReadResult::SizeMismatch, "deflated size mismatch is reported");
+    runner.expectEq<size_t>(0, arena.used(), "deflated size mismatch releases arena");
+  }
+
   // ========================================================================
   // getInflatedFileSize - Error Cases
   // ========================================================================
@@ -415,8 +490,7 @@ int main() {
         {nameB, correctSizeB},
         {nameA, correctSizeA},
     };
-    SdMan.setFileData("/test.zip",
-        createZipWithPoisonTrailingEntry(entries, nameA, poisonSizeA));
+    SdMan.setFileData("/test.zip", createZipWithPoisonTrailingEntry(entries, nameA, poisonSizeA));
     std::string path4 = "/test.zip";
     ZipFile zip(path4);
 
@@ -458,46 +532,48 @@ std::vector<uint8_t> createMinimalZip() {
   return data;
 }
 
-std::vector<uint8_t> createStoredZip(const std::string& name, const std::string& contents) {
+namespace {
+
+std::vector<uint8_t> createSingleEntryZip(const std::string& name, const uint8_t* compressed, size_t compressedSize,
+                                          uint32_t inflatedSize, uint16_t method) {
   std::vector<uint8_t> data;
-  auto u16 = [&](uint16_t value) {
+  const auto u16 = [&data](uint16_t value) {
     data.push_back(static_cast<uint8_t>(value));
     data.push_back(static_cast<uint8_t>(value >> 8));
   };
-  auto u32 = [&](uint32_t value) {
+  const auto u32 = [&data](uint32_t value) {
     data.push_back(static_cast<uint8_t>(value));
     data.push_back(static_cast<uint8_t>(value >> 8));
     data.push_back(static_cast<uint8_t>(value >> 16));
     data.push_back(static_cast<uint8_t>(value >> 24));
   };
-  auto bytes = [&](const std::string& value) { data.insert(data.end(), value.begin(), value.end()); };
+  const auto bytes = [&data](const std::string& value) { data.insert(data.end(), value.begin(), value.end()); };
 
-  const uint32_t size = static_cast<uint32_t>(contents.size());
   u32(0x04034b50);
   u16(20);
   u16(0);
-  u16(0);
+  u16(method);
   u16(0);
   u16(0);
   u32(0);
-  u32(size);
-  u32(size);
+  u32(static_cast<uint32_t>(compressedSize));
+  u32(inflatedSize);
   u16(static_cast<uint16_t>(name.size()));
   u16(0);
   bytes(name);
-  bytes(contents);
+  data.insert(data.end(), compressed, compressed + compressedSize);
 
   const uint32_t centralOffset = static_cast<uint32_t>(data.size());
   u32(0x02014b50);
   u16(20);
   u16(20);
   u16(0);
-  u16(0);
+  u16(method);
   u16(0);
   u16(0);
   u32(0);
-  u32(size);
-  u32(size);
+  u32(static_cast<uint32_t>(compressedSize));
+  u32(inflatedSize);
   u16(static_cast<uint16_t>(name.size()));
   u16(0);
   u16(0);
@@ -517,6 +593,17 @@ std::vector<uint8_t> createStoredZip(const std::string& name, const std::string&
   u32(centralOffset);
   u16(0);
   return data;
+}
+
+}  // namespace
+
+std::vector<uint8_t> createStoredZip(const std::string& name, const std::string& contents) {
+  return createSingleEntryZip(name, reinterpret_cast<const uint8_t*>(contents.data()), contents.size(),
+                              static_cast<uint32_t>(contents.size()), 0);
+}
+
+std::vector<uint8_t> createDeflatedZip(const std::string& name, uint32_t inflatedSize) {
+  return createSingleEntryZip(name, LARGE_DEFLATED, sizeof(LARGE_DEFLATED), inflatedSize, 8);
 }
 
 std::vector<uint8_t> createZipWithInvalidOffset(const char* name) {
@@ -657,10 +744,8 @@ std::vector<uint8_t> createZipWithUnsupportedCompression(const char* name) {
 // fillUncompressedSizes fires correctly, the poison entry is never read.
 // If the break is absent the loop processes the poison entry and may
 // overwrite a previously-correct size value.
-std::vector<uint8_t> createZipWithPoisonTrailingEntry(
-    const std::vector<std::pair<std::string, uint32_t>>& entries,
-    const std::string& poisonName,
-    uint32_t poisonSize) {
+std::vector<uint8_t> createZipWithPoisonTrailingEntry(const std::vector<std::pair<std::string, uint32_t>>& entries,
+                                                      const std::string& poisonName, uint32_t poisonSize) {
   // Reuse the same builder logic as createZipWithNamedEntries but with an
   // extra entry appended.
   auto allEntries = entries;

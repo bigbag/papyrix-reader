@@ -1,7 +1,7 @@
-#include "ui/views/ReaderViews.h"
-#include "test_utils.h"
-
 #include <cstring>
+
+#include "test_utils.h"
+#include "ui/views/ReaderViews.h"
 
 int main() {
   TestUtils::TestRunner runner("BookStatsView");
@@ -20,6 +20,11 @@ int main() {
   runner.expectTrue(strcmp(view.progress, "—") == 0, "unknown progress uses dash");
   runner.expectTrue(strcmp(view.timeRead, "—") == 0, "zero time uses dash");
   runner.expectTrue(strcmp(view.sessions, "0") == 0, "zero sessions shown");
+
+  view.setStats(true, 1, 1, 1);
+  runner.expectTrue(strcmp(view.timeRead, "1s") == 0, "one second is formatted");
+  view.setStats(true, 1, 59, 1);
+  runner.expectTrue(strcmp(view.timeRead, "59s") == 0, "sub-minute duration keeps seconds");
 
   char summary[40];
   ui::formatBookStatsSummary(summary, sizeof(summary), true, 8, 65);

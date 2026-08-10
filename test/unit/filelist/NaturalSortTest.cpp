@@ -1,10 +1,10 @@
-#include "test_utils.h"
-
 #include <FsHelpers.h>
 
 #include <algorithm>
 #include <string>
 #include <vector>
+
+#include "test_utils.h"
 
 static bool naturalLess(const std::string& a, const std::string& b) {
   return FsHelpers::naturalCompare(a.c_str(), b.c_str()) < 0;
@@ -18,7 +18,7 @@ static void verifyPair(TestUtils::TestRunner& t, const std::string& lesser, cons
 }
 
 static void verifyEqual(TestUtils::TestRunner& t, const std::string& a, const std::string& b,
-                         const std::string& label) {
+                        const std::string& label) {
   t.expectFalse(naturalLess(a, b), label + ": !(" + a + " < " + b + ")");
   t.expectFalse(naturalLess(b, a), label + ": !(" + b + " < " + a + ")");
 }
@@ -80,9 +80,7 @@ int main() {
   // --- Chapter/book style filenames ---
   {
     std::vector<std::string> input = {"Chapter 10", "Chapter 1", "Chapter 20", "Chapter 2", "Chapter 3"};
-    std::sort(input.begin(), input.end(), [](const std::string& a, const std::string& b) {
-      return naturalLess(a, b);
-    });
+    std::sort(input.begin(), input.end(), [](const std::string& a, const std::string& b) { return naturalLess(a, b); });
     std::vector<std::string> expected = {"Chapter 1", "Chapter 2", "Chapter 3", "Chapter 10", "Chapter 20"};
     t.expectTrue(input == expected, "chapter sort order");
   }
@@ -90,9 +88,7 @@ int main() {
   // --- Typical filenames ---
   {
     std::vector<std::string> input = {"img100.jpg", "img2.jpg", "img1.jpg", "img10.jpg", "img20.jpg"};
-    std::sort(input.begin(), input.end(), [](const std::string& a, const std::string& b) {
-      return naturalLess(a, b);
-    });
+    std::sort(input.begin(), input.end(), [](const std::string& a, const std::string& b) { return naturalLess(a, b); });
     std::vector<std::string> expected = {"img1.jpg", "img2.jpg", "img10.jpg", "img20.jpg", "img100.jpg"};
     t.expectTrue(input == expected, "image filename sort order");
   }
@@ -101,6 +97,16 @@ int main() {
   t.expectFalse(naturalLess("abc", "abc"), "irreflexivity: abc");
   t.expectFalse(naturalLess("file10", "file10"), "irreflexivity: file10");
   t.expectFalse(naturalLess("", ""), "irreflexivity: empty");
+
+  // --- Explicit API boundaries ---
+  t.expectEq(0, FsHelpers::naturalCompare(nullptr, nullptr), "two null names compare equal");
+  t.expectTrue(FsHelpers::naturalCompare(nullptr, "a") < 0, "null name sorts before text");
+  t.expectTrue(FsHelpers::naturalCompare("a", nullptr) > 0, "text sorts after null name");
+  t.expectTrue(FsHelpers::naturalCompare("Apple", u8"épisode") < 0, "ASCII sorts before higher UTF-8 bytes");
+  t.expectTrue(FsHelpers::naturalCompare(u8"épisode2", u8"épisode10") < 0,
+               "natural digit runs apply after equal UTF-8 bytes");
+  t.expectTrue(FsHelpers::naturalCompare(u8"épisode", u8"Книга") < 0,
+               "non-ASCII names use deterministic UTF-8 byte order");
 
   // --- Transitivity spot check ---
   {

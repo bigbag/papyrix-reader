@@ -1,44 +1,9 @@
-#include "test_utils.h"
-
 #include <cstdint>
-#include <cstring>
 
-// Inline ReaderMenuView to avoid firmware/graphics dependencies
-struct ReaderMenuView {
-  static constexpr const char* const ITEMS[] = {"Chapters", "Bookmarks", "Book stats"};
-  static constexpr int ITEM_COUNT = 3;
+#include "test_utils.h"
+#include "ui/views/ReaderViews.h"
 
-  int8_t selected = 0;
-  bool visible = false;
-  bool needsRender = true;
-
-  void show() {
-    visible = true;
-    selected = 0;
-    needsRender = true;
-  }
-
-  void hide() {
-    visible = false;
-    needsRender = true;
-  }
-
-  void moveUp() {
-    if (selected > 0) {
-      selected--;
-      needsRender = true;
-    }
-  }
-
-  void moveDown() {
-    if (selected < ITEM_COUNT - 1) {
-      selected++;
-      needsRender = true;
-    }
-  }
-};
-
-constexpr const char* const ReaderMenuView::ITEMS[];
+using ui::ReaderMenuView;
 
 int main() {
   TestUtils::TestRunner runner("ReaderMenuViewTest");
@@ -51,12 +16,12 @@ int main() {
     runner.expectTrue(view.needsRender, "default needsRender is true");
   }
 
-  // --- ITEM_COUNT matches ITEMS ---
+  // --- production item contract ---
   {
     runner.expectEq(3, ReaderMenuView::ITEM_COUNT, "ITEM_COUNT is 3");
-    runner.expectTrue(strcmp(ReaderMenuView::ITEMS[0], "Chapters") == 0, "first item is Chapters");
-    runner.expectTrue(strcmp(ReaderMenuView::ITEMS[1], "Bookmarks") == 0, "second item is Bookmarks");
-    runner.expectTrue(strcmp(ReaderMenuView::ITEMS[2], "Book stats") == 0, "third item is Book stats");
+    runner.expectEq(0, static_cast<int>(ReaderMenuView::Item::Chapters), "Chapters is first");
+    runner.expectEq(1, static_cast<int>(ReaderMenuView::Item::Bookmarks), "Bookmarks is second");
+    runner.expectEq(2, static_cast<int>(ReaderMenuView::Item::BookStats), "Book stats is third");
   }
 
   // --- show ---
@@ -93,6 +58,7 @@ int main() {
     view.needsRender = false;
     view.moveDown();
     runner.expectEq(int8_t(2), view.selected, "second moveDown reaches Book stats");
+    runner.expectTrue(view.selectedItem() == ReaderMenuView::Item::BookStats, "selectedItem returns production enum");
     runner.expectTrue(view.needsRender, "second moveDown sets needsRender");
 
     view.needsRender = false;

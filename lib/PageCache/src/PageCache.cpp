@@ -482,15 +482,15 @@ bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const Ab
         },
         chunk, shouldAbort);
 
-    isPartial_ = parser.hasMoreContent();
-    bytesConsumed_ = parser.bytesConsumed();
-    totalBytes_ = parser.totalBytes();
-
-    if (!parseOk && pageCount_ == pagesBefore) {
+    if (!page_cache::hotExtendShouldCommit(parseOk, pageCount_ != pagesBefore)) {
       file_.close();
       LOG_ERR(TAG, "Hot extend failed with no new pages");
       return false;
     }
+
+    isPartial_ = page_cache::hotExtendIsPartial(parseOk, parser.hasMoreContent());
+    bytesConsumed_ = parser.bytesConsumed();
+    totalBytes_ = parser.totalBytes();
 
     // Copy old LUT entries to after the new pages using a small buffer (no heap alloc)
     const uint32_t newLutOffset = file_.position();

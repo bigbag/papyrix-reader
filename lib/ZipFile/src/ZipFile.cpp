@@ -612,11 +612,9 @@ StreamReadResult ZipFile::readFileToStreamDetailed(const char* filename, Print& 
     uint8_t* outputBuffer = nullptr;
     uint8_t* arenaDictionary = nullptr;
 
-    size_t requiredBytes = SIZE_MAX;
-    if (chunkSize <= (SIZE_MAX - InflateReader::STREAMING_DICTIONARY_SIZE) / 2) {
-      requiredBytes = chunkSize * 2 + InflateReader::STREAMING_DICTIONARY_SIZE;
-    }
-    if (scratch && requiredBytes != SIZE_MAX) {
+    const bool scratchSizeOverflow = chunkSize > (SIZE_MAX - InflateReader::STREAMING_DICTIONARY_SIZE) / 2;
+    const size_t requiredBytes = scratchSizeOverflow ? 0 : chunkSize * 2 + InflateReader::STREAMING_DICTIONARY_SIZE;
+    if (scratch && !scratchSizeOverflow) {
       fileReadBuffer = scratch->allocArray<uint8_t>(chunkSize);
       outputBuffer = scratch->allocArray<uint8_t>(chunkSize);
       arenaDictionary = scratch->allocArray<uint8_t>(InflateReader::STREAMING_DICTIONARY_SIZE);
@@ -625,7 +623,10 @@ StreamReadResult ZipFile::readFileToStreamDetailed(const char* filename, Print& 
     if (!arenaBacked) {
       if (scratch) {
         arenaScope.release();
-        scratch->noteFallback(requiredBytes);
+        scratch->noteFallback(scratchSizeOverflow ? chunkSize : requiredBytes);
+      }
+      if (scratchSizeOverflow) {
+        LOG_ERR(TAG, "ZIP scratch size overflow for chunk %zu", chunkSize);
       }
       fileReadBuffer = static_cast<uint8_t*>(malloc(chunkSize));
       if (!fileReadBuffer) {

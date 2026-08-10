@@ -1,8 +1,10 @@
 #pragma once
 
+#include <cstring>
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "SdFat.h"
@@ -63,6 +65,7 @@ class SDCardManager {
     writeLimit_ = 0;
     writeLimitActive_ = false;
     syncResult_ = true;
+    renameResult_ = true;
   }
 
   bool exists(const char* path) {
@@ -105,6 +108,7 @@ class SDCardManager {
   }
 
   void setSyncResult(bool result) { syncResult_ = result; }
+  void setRenameResult(bool result) { renameResult_ = result; }
 
   FsFile open(const char* path, int mode = O_RDONLY) {
     FsFile file;
@@ -190,6 +194,8 @@ class SDCardManager {
   }
 
   bool rename(const char* oldPath, const char* newPath) {
+    if (!renameResult_) return false;
+    if (std::strcmp(oldPath, newPath) == 0) return exists(oldPath);
     auto it = files_.find(oldPath);
     if (it != files_.end()) {
       files_[newPath] = it->second;
@@ -199,6 +205,11 @@ class SDCardManager {
     if (wit != writtenFiles_.end()) {
       writtenFiles_[newPath] = wit->second;
       writtenFiles_.erase(wit);
+    }
+    auto directory = directories_.find(oldPath);
+    if (directory != directories_.end()) {
+      directories_[newPath] = std::move(directory->second);
+      directories_.erase(directory);
     }
     return true;
   }
@@ -244,6 +255,7 @@ class SDCardManager {
   size_t writeLimit_ = 0;
   bool writeLimitActive_ = false;
   bool syncResult_ = true;
+  bool renameResult_ = true;
 };
 
 #define SdMan SDCardManager::getInstance()

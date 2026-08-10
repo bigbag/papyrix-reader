@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "ContentParser.h"  // For AbortCallback
+#include "PageCachePolicy.h"
 
 class ContentParser;
 class GfxRenderer;
@@ -23,7 +24,7 @@ class PageCache {
   // Default number of pages to cache initially
   static constexpr uint16_t DEFAULT_CACHE_CHUNK = 5;
   // Extend cache when within this many pages of the end
-  static constexpr uint16_t EXTEND_THRESHOLD = 3;
+  static constexpr uint16_t EXTEND_THRESHOLD = page_cache::EXTEND_THRESHOLD;
 
  private:
   std::string cachePath_;
@@ -106,7 +107,9 @@ class PageCache {
   // Accessors
   uint16_t pageCount() const { return pageCount_; }
   bool isPartial() const { return isPartial_; }
-  bool needsExtension(uint16_t currentPage) const { return isPartial_ && currentPage >= pageCount_ - EXTEND_THRESHOLD; }
+  bool needsExtension(uint16_t currentPage) const {
+    return page_cache::needsExtension(pageCount_, isPartial_, currentPage);
+  }
   const std::string& path() const { return cachePath_; }
 
 #ifndef ARDUINO
