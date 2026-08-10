@@ -1,5 +1,3 @@
-#include "test_utils.h"
-
 #include <cstring>
 #include <string>
 
@@ -7,6 +5,7 @@
 #include "PapyrixSettings.h"
 #include "Serialization.h"
 #include "SettingsSerialization.h"
+#include "test_utils.h"
 
 namespace {
 
@@ -170,6 +169,7 @@ int main() {
     expected.frontButtonLayout = Settings::FrontLRBC;
     expected.fullBookProcess = 1;
     expected.showRecents = 0;
+    expected.recycleBinEnabled = 0;
 
     FsFile file;
     file.setBuffer("");
@@ -182,8 +182,7 @@ int main() {
         decoded.sleepScreen == expected.sleepScreen && decoded.textLayout == expected.textLayout &&
         decoded.shortPwrBtn == expected.shortPwrBtn && decoded.statusBar == expected.statusBar &&
         decoded.orientation == expected.orientation && decoded.fontSize == expected.fontSize &&
-        decoded.pagesPerRefresh == expected.pagesPerRefresh &&
-        decoded.sideButtonLayout == expected.sideButtonLayout &&
+        decoded.pagesPerRefresh == expected.pagesPerRefresh && decoded.sideButtonLayout == expected.sideButtonLayout &&
         decoded.autoSleepMinutes == expected.autoSleepMinutes &&
         decoded.paragraphAlignment == expected.paragraphAlignment && decoded.hyphenation == expected.hyphenation &&
         decoded.textAntiAliasing == expected.textAntiAliasing && decoded.showImages == expected.showImages &&
@@ -193,7 +192,8 @@ int main() {
         decoded.sunlightFadingFix == expected.sunlightFadingFix &&
         decoded.fileListSelectedIndex == expected.fileListSelectedIndex &&
         decoded.frontButtonLayout == expected.frontButtonLayout &&
-        decoded.fullBookProcess == expected.fullBookProcess && decoded.showRecents == expected.showRecents;
+        decoded.fullBookProcess == expected.fullBookProcess && decoded.showRecents == expected.showRecents &&
+        decoded.recycleBinEnabled == expected.recycleBinEnabled;
     runner.expectTrue(scalarMatch, "full_settings_scalar_roundtrip");
     runner.expectTrue(memcmp(decoded.themeName, expected.themeName, sizeof(expected.themeName)) == 0,
                       "full_settings_theme_roundtrip");
@@ -201,9 +201,28 @@ int main() {
                       "full_settings_book_path_roundtrip");
     runner.expectTrue(memcmp(decoded.fileListDir, expected.fileListDir, sizeof(expected.fileListDir)) == 0,
                       "full_settings_directory_roundtrip");
-    runner.expectTrue(memcmp(decoded.fileListSelectedName, expected.fileListSelectedName,
-                             sizeof(expected.fileListSelectedName)) == 0,
-                      "full_settings_selected_name_roundtrip");
+    runner.expectTrue(
+        memcmp(decoded.fileListSelectedName, expected.fileListSelectedName, sizeof(expected.fileListSelectedName)) == 0,
+        "full_settings_selected_name_roundtrip");
+  }
+
+  {
+    Settings previous;
+    previous.recycleBinEnabled = 0;
+    FsFile file;
+    file.setBuffer("");
+    runner.expectTrue(writeSettingsFile(file, previous), "previous_settings_fixture_write");
+    file.seek(sizeof(kSettingsMagic));
+    serialization::writePod(file, uint8_t(13));
+    serialization::writePod(file, uint8_t(27));
+    file.seek(0);
+
+    Settings defaults;
+    defaults.recycleBinEnabled = 1;
+    Settings decoded;
+    expectStatus(runner, SettingsReadStatus::Ok, readSettingsFile(file, defaults, decoded),
+                 "previous_settings_version_accepted");
+    runner.expectEq(uint8_t(1), decoded.recycleBinEnabled, "previous_settings_default_recycle_bin_enabled");
   }
 
   {

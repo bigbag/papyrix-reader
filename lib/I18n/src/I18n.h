@@ -243,6 +243,7 @@ enum class StrId : uint8_t {
   STR_RECENT_NETWORK,
 
   // Recycle bin
+  STR_RECYCLE_BIN,
   STR_RESTORE,
   STR_EMPTY_TRASH,
   STR_EMPTY_TRASH_Q,

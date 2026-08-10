@@ -240,6 +240,7 @@ BOOKMARK_ADDED=Marcador añadido
 RECENT_NETWORK=Reciente
 
 # Recycle bin
+RECYCLE_BIN=Papelera
 RESTORE=Restaurar
 EMPTY_TRASH=Vaciar papelera
 EMPTY_TRASH_Q=¿Vaciar papelera?

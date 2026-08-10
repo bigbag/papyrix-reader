@@ -1,10 +1,10 @@
-#include "test_utils.h"
-
 #include <TrashPaths.h>
 #include <Types.h>
 
 #include <set>
 #include <string>
+
+#include "test_utils.h"
 
 int main() {
   TestUtils::TestRunner t("Trash Paths");
@@ -16,6 +16,17 @@ int main() {
   t.expectTrue(papyrix::trash::isDirectoryName("Trash"), "recognizes mixed-case trash root entry");
   t.expectTrue(papyrix::trash::isPath("/Trash/books/Book.epub"), "recognizes mixed-case trash descendant");
   t.expectFalse(papyrix::trash::isPath("/trash-old/Book.epub"), "does not match trash prefix");
+
+  t.expectTrue(papyrix::trash::containsPath("/books", "/books/Book.epub"), "directory contains a direct child book");
+  t.expectTrue(papyrix::trash::containsPath("/books/", "/books/series/Book.epub"),
+               "trailing slash directory contains nested book");
+  t.expectTrue(papyrix::trash::containsPath("/", "/books/Book.epub"), "root contains every absolute book path");
+  t.expectFalse(papyrix::trash::containsPath("/books", "/bookstore/Book.epub"),
+                "directory prefix does not match a sibling path");
+  t.expectTrue(papyrix::trash::containsPath("/books/series", "/Books/Series/Book.epub"),
+               "directory containment is case insensitive");
+  t.expectFalse(papyrix::trash::containsPath("/books", "/BookStore/Book.epub"),
+                "case-insensitive prefix does not match a sibling path");
 
   t.expectTrue(papyrix::trash::buildTrashParent(path, sizeof(path), "/books/scifi/Book.epub"),
                "builds nested trash parent");
@@ -36,8 +47,7 @@ int main() {
 
   const std::string maximumFilename = "b.epub";
   const std::string maximumSource =
-      "/" + std::string(papyrix::BufferSize::FilePath - 1 - 2 - maximumFilename.size(), 'a') + "/" +
-      maximumFilename;
+      "/" + std::string(papyrix::BufferSize::FilePath - 1 - 2 - maximumFilename.size(), 'a') + "/" + maximumFilename;
   char maximumParent[papyrix::BufferSize::TrashPath];
   char maximumCandidate[papyrix::BufferSize::TrashPath];
   char restoredParent[papyrix::BufferSize::FilePath];
@@ -54,8 +64,7 @@ int main() {
   t.expectTrue(papyrix::trash::buildSourceParent(restoredParent, sizeof(restoredParent), maximumSource.c_str()),
                "reconstructs maximum source parent");
 
-  t.expectTrue(papyrix::trash::buildCandidate(path, sizeof(path), "/trash", "Book.epub", 1),
-               "builds first candidate");
+  t.expectTrue(papyrix::trash::buildCandidate(path, sizeof(path), "/trash", "Book.epub", 1), "builds first candidate");
   t.expectEqual(std::string(path), std::string("/trash/Book.epub"), "first candidate keeps name");
 
   t.expectTrue(papyrix::trash::buildCandidate(path, sizeof(path), "/trash", "Book.epub", 2),
@@ -84,8 +93,7 @@ int main() {
                 "aborts vacant search on probe failure");
   t.expectEq(1u, probeCalls, "probe failure does not scan remaining suffixes");
 
-  t.expectTrue(papyrix::trash::buildCandidate(path, sizeof(path), "/", "Book.epub", 1),
-               "builds root candidate");
+  t.expectTrue(papyrix::trash::buildCandidate(path, sizeof(path), "/", "Book.epub", 1), "builds root candidate");
   t.expectEqual(std::string(path), std::string("/Book.epub"), "root candidate has no double slash");
 
   t.expectTrue(papyrix::trash::buildCandidate(path, sizeof(path), "/", "Book.epub", 2),
@@ -104,20 +112,24 @@ int main() {
 
   using DeleteAction = papyrix::trash::DeleteAction;
   t.expectEq(static_cast<int>(DeleteAction::MoveToTrash),
-             static_cast<int>(papyrix::trash::deleteAction(false, false)), "non-trash file moves to trash");
+             static_cast<int>(papyrix::trash::deleteAction(false, false, true)),
+             "regular file moves to trash when recycle bin is enabled");
   t.expectEq(static_cast<int>(DeleteAction::PermanentlyDelete),
-             static_cast<int>(papyrix::trash::deleteAction(false, true)), "trash file is deleted permanently");
-  t.expectEq(static_cast<int>(DeleteAction::DeleteEmptyDirectory),
-             static_cast<int>(papyrix::trash::deleteAction(true, false)),
-             "regular directory is removed only when empty");
-  t.expectEq(static_cast<int>(DeleteAction::DeleteEmptyDirectory),
-             static_cast<int>(papyrix::trash::deleteAction(true, true)),
-             "trash directory is removed only when empty");
+             static_cast<int>(papyrix::trash::deleteAction(false, false, false)),
+             "regular file is deleted permanently when recycle bin is disabled");
+  t.expectEq(static_cast<int>(DeleteAction::PermanentlyDelete),
+             static_cast<int>(papyrix::trash::deleteAction(false, true, true)), "trash file is deleted permanently");
+  t.expectEq(static_cast<int>(DeleteAction::PermanentlyDeleteDirectory),
+             static_cast<int>(papyrix::trash::deleteAction(true, false, true)),
+             "regular directory is deleted recursively");
+  t.expectEq(static_cast<int>(DeleteAction::PermanentlyDeleteDirectory),
+             static_cast<int>(papyrix::trash::deleteAction(true, true, true)),
+             "trash directory is deleted recursively");
 
   char restoreParent[64];
   const auto missingParent = [](const char*) { return false; };
   t.expectTrue(papyrix::trash::findRestorePath(path, sizeof(path), restoreParent, sizeof(restoreParent),
-                                                "/trash/books/Book.epub", "Book.epub", missingParent, exists),
+                                               "/trash/books/Book.epub", "Book.epub", missingParent, exists),
                "falls back to root when original parent is unavailable");
   t.expectEqual(std::string(path), std::string("/Book.epub"), "restores to root only after parent failure");
 
@@ -127,7 +139,7 @@ int main() {
     return restoredOccupied.count(candidate) != 0 ? PathProbe::Occupied : PathProbe::Vacant;
   };
   t.expectTrue(papyrix::trash::findRestorePath(path, sizeof(path), restoreParent, sizeof(restoreParent),
-                                                "/trash/books/Book.epub", "Book.epub", parentReady, restoredExists),
+                                               "/trash/books/Book.epub", "Book.epub", parentReady, restoredExists),
                "finds collision suffix in ready original parent");
   t.expectEqual(std::string(path), std::string("/books/Book (3).epub"),
                 "does not fall back while original parent is ready");
@@ -137,27 +149,26 @@ int main() {
     return rootOccupied.count(candidate) != 0 ? PathProbe::Occupied : PathProbe::Vacant;
   };
   t.expectTrue(papyrix::trash::findRestorePath(path, sizeof(path), restoreParent, sizeof(restoreParent),
-                                                "/trash/books/Book.epub", "Book.epub", missingParent, rootExists),
+                                               "/trash/books/Book.epub", "Book.epub", missingParent, rootExists),
                "suffixes collision in root fallback");
   t.expectEqual(std::string(path), std::string("/Book (2).epub"), "root fallback preserves collision handling");
 
   // FileListState reports a parent occupied by a file as unavailable.
   const auto blockedParent = [](const char*) { return false; };
   t.expectTrue(papyrix::trash::findRestorePath(path, sizeof(path), restoreParent, sizeof(restoreParent),
-                                                "/trash/books/Book.epub", "Book.epub", blockedParent, rootExists),
+                                               "/trash/books/Book.epub", "Book.epub", blockedParent, rootExists),
                "falls back to root when original parent is blocked by a file");
-  t.expectEqual(std::string(path), std::string("/Book (2).epub"),
-                "blocked parent uses root collision suffixing");
+  t.expectEqual(std::string(path), std::string("/Book (2).epub"), "blocked parent uses root collision suffixing");
 
   unsigned restoreProbeCalls = 0;
   const auto restoreFailingProbe = [&restoreProbeCalls](const char*) {
     restoreProbeCalls++;
     return PathProbe::Failed;
   };
-  t.expectFalse(papyrix::trash::findRestorePath(path, sizeof(path), restoreParent, sizeof(restoreParent),
-                                                 "/trash/books/Book.epub", "Book.epub", parentReady,
-                                                 restoreFailingProbe),
-                "aborts restore search on probe failure");
+  t.expectFalse(
+      papyrix::trash::findRestorePath(path, sizeof(path), restoreParent, sizeof(restoreParent),
+                                      "/trash/books/Book.epub", "Book.epub", parentReady, restoreFailingProbe),
+      "aborts restore search on probe failure");
   t.expectEq(1u, restoreProbeCalls, "restore probe failure does not scan remaining suffixes");
 
   return t.allPassed() ? 0 : 1;

@@ -219,6 +219,7 @@ static constexpr KeyMapping KEY_MAP[] = {
     {"BOOKMARK_ADDED", StrId::STR_BOOKMARK_ADDED},
     {"RECENT_NETWORK", StrId::STR_RECENT_NETWORK},
     // Recycle bin
+    {"RECYCLE_BIN", StrId::STR_RECYCLE_BIN},
     {"RESTORE", StrId::STR_RESTORE},
     {"EMPTY_TRASH", StrId::STR_EMPTY_TRASH},
     {"EMPTY_TRASH_Q", StrId::STR_EMPTY_TRASH_Q},

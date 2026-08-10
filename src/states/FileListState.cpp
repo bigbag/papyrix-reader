@@ -289,8 +289,8 @@ void FileListState::promptPermanentDelete() {
   setupFileConfirm(Screen::ConfirmPermanentDelete, tr(CONFIRM_DELETE), tr(DELETE_PERMANENTLY_Q));
 }
 
-void FileListState::promptDeleteEmptyDirectory() {
-  setupFileConfirm(Screen::ConfirmDeleteEmptyDirectory, tr(CONFIRM_DELETE), tr(DELETE_FOLDER_Q));
+void FileListState::promptDeleteDirectory() {
+  setupFileConfirm(Screen::ConfirmDeleteDirectory, tr(CONFIRM_DELETE), tr(DELETE_FOLDER_Q));
 }
 
 void FileListState::executeConfirmedAction(Core& core) {
@@ -313,9 +313,13 @@ void FileListState::executeConfirmedAction(Core& core) {
     return;
   }
 
-  const bool destructive =
-      currentScreen_ == Screen::ConfirmMoveToTrash || currentScreen_ == Screen::ConfirmPermanentDelete;
-  if (destructive && core.settings.lastBookPath[0] != '\0' && strcmp(selectedPath_, core.settings.lastBookPath) == 0) {
+  const bool deletesDirectory = currentScreen_ == Screen::ConfirmDeleteDirectory;
+  const bool destructive = currentScreen_ == Screen::ConfirmMoveToTrash ||
+                           currentScreen_ == Screen::ConfirmPermanentDelete || deletesDirectory;
+  const bool deletesActiveBook = core.settings.lastBookPath[0] != '\0' &&
+                                 (deletesDirectory ? trash::containsPath(selectedPath_, core.settings.lastBookPath)
+                                                   : strcmp(selectedPath_, core.settings.lastBookPath) == 0);
+  if (destructive && deletesActiveBook) {
     ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(CANNOT_DELETE_ACTIVE));
     vTaskDelay(1500 / portTICK_PERIOD_MS);
   } else {
@@ -364,9 +368,12 @@ void FileListState::executeConfirmedAction(Core& core) {
       ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(DELETING));
       success = core.storage.remove(selectedPath_).ok();
       status = success ? tr(DELETED) : tr(DELETE_FAILED);
-    } else if (currentScreen_ == Screen::ConfirmDeleteEmptyDirectory) {
+      if (success) {
+        RecentBooksStore::instance().remove(selectedPath_);
+      }
+    } else if (currentScreen_ == Screen::ConfirmDeleteDirectory) {
       ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(DELETING));
-      success = core.storage.rmdirEmpty(selectedPath_).ok();
+      success = core.storage.rmdir(selectedPath_).ok();
       status = success ? tr(DELETED) : tr(DELETE_FAILED);
     }
 
@@ -440,15 +447,15 @@ StateTransition FileListState::update(Core& core) {
                 vTaskDelay(1000 / portTICK_PERIOD_MS);
                 needsRender_ = true;
               } else {
-                switch (trash::deleteAction(entry.isDir, isTrashDirectory())) {
+                switch (trash::deleteAction(entry.isDir, isTrashDirectory(), core.settings.recycleBinEnabled != 0)) {
                   case trash::DeleteAction::MoveToTrash:
                     promptMoveToTrash();
                     break;
                   case trash::DeleteAction::PermanentlyDelete:
                     promptPermanentDelete();
                     break;
-                  case trash::DeleteAction::DeleteEmptyDirectory:
-                    promptDeleteEmptyDirectory();
+                  case trash::DeleteAction::PermanentlyDeleteDirectory:
+                    promptDeleteDirectory();
                     break;
                 }
               }

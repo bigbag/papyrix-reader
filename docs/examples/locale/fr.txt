@@ -240,6 +240,7 @@ BOOKMARK_ADDED=Signet ajouté
 RECENT_NETWORK=Récent
 
 # Recycle bin
+RECYCLE_BIN=Corbeille
 RESTORE=Restaurer
 EMPTY_TRASH=Vider la corbeille
 EMPTY_TRASH_Q=Vider la corbeille ?

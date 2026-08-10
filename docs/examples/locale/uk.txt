@@ -240,6 +240,7 @@ BOOKMARK_ADDED=Закладку збережено
 RECENT_NETWORK=Остання
 
 # Recycle bin
+RECYCLE_BIN=Кошик
 RESTORE=Відновити
 EMPTY_TRASH=Кошик
 EMPTY_TRASH_Q=Очистити?

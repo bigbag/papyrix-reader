@@ -243,6 +243,7 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "Recent",               // RECENT_NETWORK
 
     // Recycle bin
+    "Recycle bin",                     // RECYCLE_BIN
     "Restore",                         // RESTORE
     "Empty Trash",                     // EMPTY_TRASH
     "Empty Trash?",                    // EMPTY_TRASH_Q

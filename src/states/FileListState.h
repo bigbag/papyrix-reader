@@ -24,7 +24,7 @@ class FileListState : public State {
     ConfirmMoveToTrash,
     ConfirmRestore,
     ConfirmPermanentDelete,
-    ConfirmDeleteEmptyDirectory,
+    ConfirmDeleteDirectory,
   };
 
  public:
@@ -85,7 +85,7 @@ class FileListState : public State {
   void promptMoveToTrash();
   void promptRestore();
   void promptPermanentDelete();
-  void promptDeleteEmptyDirectory();
+  void promptDeleteDirectory();
   void executeConfirmedAction(Core& core);
   void navigateUp(Core& core);
   void navigateDown(Core& core);

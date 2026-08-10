@@ -97,19 +97,6 @@ Result<void> Storage::rename(const char* oldPath, const char* newPath) {
   return Ok();
 }
 
-Result<void> Storage::rmdirEmpty(const char* path) {
-  if (!mounted_) {
-    return ErrVoid(Error::SdCardNotFound);
-  }
-  if (!path || path[0] == '\0') {
-    return ErrVoid(Error::InvalidOperation);
-  }
-  if (!SdMan.rmdir(path)) {
-    return ErrVoid(Error::IOError);
-  }
-  return Ok();
-}
-
 Result<void> Storage::commitFile(const char* tmpPath, const char* finalPath) {
   if (!mounted_) {
     return ErrVoid(Error::SdCardNotFound);

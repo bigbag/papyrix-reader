@@ -690,6 +690,9 @@ void SettingsState::loadDeviceSettings() {
 
   // Index 8: Show Recents (Off=0, On=1)
   deviceView_.values[8] = settings.showRecents;
+
+  // Index 9: Recycle Bin (Off=permanent delete, On=move files to trash)
+  deviceView_.values[9] = settings.recycleBinEnabled;
 }
 
 void SettingsState::saveDeviceSettings() {
@@ -715,6 +718,9 @@ void SettingsState::saveDeviceSettings() {
 
   // Index 8: Show Recents
   settings.showRecents = deviceView_.values[8];
+
+  // Index 9: Recycle Bin
+  settings.recycleBinEnabled = deviceView_.values[9];
 
   // Index 6: Front Buttons - deferred to goBack() on screen exit.
   // Changing layout while navigating causes ghost button events because the

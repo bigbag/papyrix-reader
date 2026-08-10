@@ -240,6 +240,7 @@ BOOKMARK_ADDED=Lesezeichen hinzugefügt
 RECENT_NETWORK=Zuletzt
 
 # Recycle bin
+RECYCLE_BIN=Papierkorb
 RESTORE=Wiederherstellen
 EMPTY_TRASH=Papierkorb leeren
 EMPTY_TRASH_Q=Papierkorb leeren?

@@ -240,6 +240,7 @@ BOOKMARK_ADDED=Bookmark added
 RECENT_NETWORK=Recent
 
 # Recycle bin
+RECYCLE_BIN=Recycle bin
 RESTORE=Restore
 EMPTY_TRASH=Empty Trash
 EMPTY_TRASH_Q=Empty Trash?

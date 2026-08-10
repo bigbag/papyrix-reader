@@ -89,7 +89,7 @@ The Files screen acts as a folder and file browser.
 * **Navigate List:** Use **Left** (or **Volume Up**), or **Right** (or **Volume Down**) to move the selection cursor up
   and down through folders and books.
 * **Open Selection:** Press **Confirm** to open a folder or read a selected book.
-* **Delete Item:** Press the **Right** button on a book to move it to the recycle bin (`/trash`) instead of deleting it permanently. A confirmation dialog appears; select **Yes** to confirm or **No** to cancel. Folders are not moved to the recycle bin — deleting a folder removes it only if it is empty.
+* **Delete Item:** Press **Right** on an item and confirm the action. Folders are always deleted permanently with all their contents. Files move to the recycle bin (`/trash`) by default; turn off **Recycle bin** under **Settings → Device** to delete files permanently instead.
 
 > **Note:** The recycle bin is a regular folder named `trash` at the root of the SD card. It mirrors the original folder structure of trashed books. Open its folders and press **Confirm** on a book to restore it to its original folder (or the root if that folder cannot be recreated); press **Right** to delete it permanently. The `trash` folder itself cannot be deleted from the file browser; use **Empty Trash** in the Cleanup menu to clear it.
 
@@ -265,13 +265,19 @@ Power and device behavior settings:
   - **ON:** The Home screen shows a **Books** button that opens your recently opened books (with a **Files** button to browse the SD card).
   - **OFF:** The Home screen shows a **Files** button that opens the file browser directly (the pre-#141 behavior). Recently opened books are still recorded in the background, so switching back to ON shows full history. Book Stats remains available from the Reader Menu.
 
+- **Recycle bin** (default: ON)
+  - Options: OFF, ON
+  - **ON:** Deleting a file from the Files screen moves it to `/trash`, where it can be restored or permanently deleted.
+  - **OFF:** Deleting a file from the Files screen permanently removes it; recovery is not available.
+  - Folders are always deleted permanently with all their contents, regardless of this setting.
+
 #### Cleanup
 
 Maintenance actions for the device:
 
 - **Clear Book Cache** — Delete all cached book data and reading progress
 - **Clear recent books** — Clear the Books history only. Book files, reading progress, bookmarks, caches, and reading statistics are kept.
-- **Empty Trash** — Permanently delete all books in the recycle bin (`/trash`)
+- **Empty Trash** — Permanently delete all contents of the recycle bin (`/trash`)
 - **Clear Device Storage** — Erase internal flash storage (requires restart)
 - **Factory Reset** — Erase ALL data (caches, settings, WiFi credentials, fonts) and restart device
 

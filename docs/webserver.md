@@ -150,9 +150,11 @@ This is useful for organizing your ebooks by genre, author, or series.
 1. Click the trash icon next to any file or folder
 2. Confirm the deletion in the popup dialog
 
-**Warning:** Deletion is permanent and cannot be undone!
+**Warning:** Web File Manager deletion is permanent and cannot be undone. The device's **Recycle bin** setting only
+affects deletion from the on-device Files screen.
 
-**Note:** Folders must be empty before they can be deleted.
+**Note:** Web File Manager folders must be empty before they can be deleted. Use the on-device Files screen to delete
+a non-empty folder recursively.
 
 ### Unicode filenames
 

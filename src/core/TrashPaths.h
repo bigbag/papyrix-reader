@@ -15,7 +15,7 @@ inline constexpr unsigned MAX_SUFFIX = 9999;
 enum class DeleteAction : uint8_t {
   MoveToTrash,
   PermanentlyDelete,
-  DeleteEmptyDirectory,
+  PermanentlyDeleteDirectory,
 };
 
 // Result of probing whether a candidate path can be used.
@@ -25,9 +25,20 @@ enum class PathProbe : uint8_t {
   Failed,  // I/O or lookup error — abort search immediately
 };
 
-inline DeleteAction deleteAction(bool isDirectory, bool isTrashPath) {
-  if (isDirectory) return DeleteAction::DeleteEmptyDirectory;
-  return isTrashPath ? DeleteAction::PermanentlyDelete : DeleteAction::MoveToTrash;
+inline DeleteAction deleteAction(bool isDirectory, bool isTrashPath, bool recycleBinEnabled) {
+  if (isDirectory) return DeleteAction::PermanentlyDeleteDirectory;
+  return isTrashPath || !recycleBinEnabled ? DeleteAction::PermanentlyDelete : DeleteAction::MoveToTrash;
+}
+
+inline bool containsPath(const char* directory, const char* path) {
+  if (!directory || !path || directory[0] != '/' || path[0] != '/') return false;
+
+  size_t directoryLength = strlen(directory);
+  while (directoryLength > 1 && directory[directoryLength - 1] == '/') directoryLength--;
+  if (directoryLength == 1) return true;
+
+  return strncasecmp(directory, path, directoryLength) == 0 &&
+         (path[directoryLength] == '\0' || path[directoryLength] == '/');
 }
 
 inline bool isDirectory(const char* path) { return path && strcasecmp(path, DIRECTORY) == 0; }

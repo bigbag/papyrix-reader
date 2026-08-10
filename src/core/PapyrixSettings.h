@@ -87,7 +87,8 @@ struct Settings {
   uint16_t fileListSelectedIndex = 0;             // FileListState: last selected index
   uint8_t frontButtonLayout = FrontBCLR;
   uint8_t fullBookProcess = 0;
-  uint8_t showRecents = 1;  // 1=Show Books (Recent) on home, 0=show Files instead
+  uint8_t showRecents = 1;        // 1=Show Books (Recent) on home, 0=show Files instead
+  uint8_t recycleBinEnabled = 1;  // 1=Move deleted files to /trash, 0=delete permanently
 
   // Persistence (using drivers::Storage wrapper)
   Result<void> load(drivers::Storage& storage);

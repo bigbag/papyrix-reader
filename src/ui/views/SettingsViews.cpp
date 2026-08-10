@@ -105,6 +105,7 @@ void DeviceSettingsView::initDefs() {
   DEFS[6] = {tr(FRONT_BUTTONS), frontButtonValues, 2};
   DEFS[7] = {tr(SIDE_BUTTONS), sideButtonValues, 2};
   DEFS[8] = {tr(SHOW_RECENTS), toggleValues, 2};
+  DEFS[9] = {tr(RECYCLE_BIN), toggleValues, 2};
 }
 
 // Render functions
