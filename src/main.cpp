@@ -76,8 +76,9 @@
 
 #define SD_SPI_MISO 7
 
-#define SERIAL_INIT_DELAY_MS 10
-#define SERIAL_READY_TIMEOUT_MS 250
+constexpr uint32_t kSerialBaudRate = 115200;
+constexpr uint32_t kSerialEnumerationDelayMs = 250;
+constexpr uint32_t kSerialTxTimeoutMs = 1;
 
 EInkDisplay einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_RST, EPD_BUSY);
 InputManager inputManager;
@@ -360,16 +361,6 @@ bool earlyInit() {
     esp_deep_sleep_start();
   }
 
-  // Only start serial if USB connected
-  if (isUsbConnected()) {
-    Serial.begin(115200);
-    delay(SERIAL_INIT_DELAY_MS);  // Allow USB CDC to initialize
-    unsigned long start = millis();
-    while (!Serial && (millis() - start) < SERIAL_READY_TIMEOUT_MS) {
-      delay(SERIAL_INIT_DELAY_MS);
-    }
-  }
-
   // Initialize SPI and SD card before wakeup verification so settings are available
   SPI.begin(EPD_SCLK, SD_SPI_MISO, EPD_MOSI, EPD_CS);
   if (!SdMan.begin()) {
@@ -563,6 +554,14 @@ void initReaderMode() {
 }
 
 void setup() {
+#ifdef ENABLE_SERIAL_LOG
+  // Let USB Serial/JTAG and the host enumerate before initializing HWCDC.
+  // Gating begin() on a single GPIO sample makes cold-boot logging intermittent.
+  delay(kSerialEnumerationDelayMs);
+  Serial.begin(kSerialBaudRate);
+  logSerial.setTxTimeoutMs(kSerialTxTimeoutMs);
+#endif
+
   // Early initialization (common to both modes)
   if (!earlyInit()) {
     return;  // Critical failure
