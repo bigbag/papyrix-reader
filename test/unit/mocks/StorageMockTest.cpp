@@ -49,5 +49,27 @@ int main() {
   runner.expectTrue(SdMan.exists("/same"), "same-path directory rename preserves directory");
   runner.expectFalse(SdMan.rename("/missing", "/missing"), "same-path rename rejects missing source");
 
+  // Missing source under a distinct destination fails (matches SdFat)
+  SdMan.reset();
+  SdMan.registerFile("/dst.bin", "existing");
+  runner.expectFalse(SdMan.rename("/missing.bin", "/dst.bin"), "missing-source rename fails");
+  runner.expectTrue(SdMan.exists("/dst.bin"), "missing-source rename preserves destination");
+
+  // commitFile with a missing temp file must fail (previously the lenient
+  // rename reported success). The destination is removed by design: the real
+  // commitFile removes the target first so a failed publish leaves no file
+  // rather than a stale one ("complete file or none" on power loss).
+  SdMan.reset();
+  SdMan.registerFile("/final.bmp", "keep");
+  runner.expectFalse(SdMan.commitFile("/gone.part", "/final.bmp"), "missing-part commitFile fails");
+  runner.expectFalse(SdMan.exists("/final.bmp"), "missing-part commitFile leaves no stale destination");
+
+  // Normal publish still works and consumes the temporary file
+  SdMan.reset();
+  SdMan.registerFile("/ok.part", "data");
+  runner.expectTrue(SdMan.commitFile("/ok.part", "/ok.bmp"), "normal commitFile succeeds");
+  runner.expectFalse(SdMan.exists("/ok.part"), "normal commitFile consumes temporary file");
+  runner.expectTrue(SdMan.exists("/ok.bmp"), "normal commitFile publishes destination");
+
   return runner.allPassed() ? 0 : 1;
 }

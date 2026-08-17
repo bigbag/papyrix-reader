@@ -165,6 +165,7 @@ class FsFile : public Print {
   }
 
   bool isDirectory() const { return isDirectory_; }
+  bool isOpen() const { return isOpen_; }
   uint32_t fileSize() const { return isOpen_ ? static_cast<uint32_t>(buffer_.size()) : 0; }
   uint64_t fileSize64() const { return isOpen_ ? buffer_.size() : 0; }
   size_t size() const { return isOpen_ ? buffer_.size() : 0; }
@@ -234,6 +235,10 @@ class FsFile : public Print {
     totalWritten_++;
     return 1;
   }
+
+  // Arduino Print compatibility: char-pointer overload delegating to the
+  // byte-oriented write (real HardwareSDK Print provides this).
+  size_t write(const char* str, size_t len) { return write(reinterpret_cast<const uint8_t*>(str), len); }
 
   size_t write(const uint8_t* buf, size_t len) {
     if (!isOpen_) return 0;

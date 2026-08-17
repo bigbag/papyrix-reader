@@ -37,6 +37,7 @@
 #include "../core/BootMode.h"
 #include "../core/Core.h"
 #include "../core/EmergencyBootTransition.h"
+#include "../core/ExitToUiTransition.h"
 #include "../drivers/Device.h"
 #include "../ui/Elements.h"
 #include "../ui/views/ReaderViews.h"
@@ -676,8 +677,7 @@ void ReaderState::enter(Core& core) {
   contentLoaded_ = false;
   loadFailed_ = false;
   needsRender_ = true;
-  holdNavigated_ = false;
-  powerPressStartedMs_ = 0;
+  readerButtons_ = {};
   indexingInProgress_ = false;
   indexingCancelled_ = false;
   indexingFailed_ = false;
@@ -1006,85 +1006,42 @@ StateTransition ReaderState::update(Core& core) {
       continue;
     }
 
-    switch (e.type) {
-      case EventType::ButtonPress:
-        switch (e.button) {
-          case Button::Center:
-            enterMenuMode(core);
-            break;
-          case Button::Back:
-            exitToUI(core);
-            // Won't reach here after restart
-            return StateTransition::stay(StateId::Reader);
-          case Button::Power:
-            if (core.settings.shortPwrBtn == Settings::PowerPageTurn ||
-                core.settings.shortPwrBtn == Settings::PowerBookmark) {
-              powerPressStartedMs_ = millis();
-            }
-            break;
-          default:
-            break;
+    const ReaderButtonConfig buttonConfig{core.settings.shortPwrBtn == Settings::PowerPageTurn,
+                                          core.settings.shortPwrBtn == Settings::PowerBookmark,
+                                          core.settings.getPowerButtonDuration()};
+    switch (readerButtons_.processEvent(e, millis(), buttonConfig)) {
+      case ReaderButtonAction::Menu:
+        enterMenuMode(core);
+        break;
+      case ReaderButtonAction::Exit:
+        exitToUI(core);
+        // Won't reach here after restart
+        return StateTransition::stay(StateId::Reader);
+      case ReaderButtonAction::Next:
+        navigateNext(core);
+        break;
+      case ReaderButtonAction::Prev:
+        navigatePrev(core);
+        break;
+      case ReaderButtonAction::NextChapter:
+        navigateNextChapter(core);
+        break;
+      case ReaderButtonAction::PrevChapter:
+        navigatePrevChapter(core);
+        break;
+      case ReaderButtonAction::ShortPowerPageTurn:
+        navigateNext(core);
+        break;
+      case ReaderButtonAction::ShortPowerBookmark: {
+        int prevCount = bookmarkCount_;
+        addBookmark(core);
+        if (bookmarkCount_ > prevCount) {
+          showBookmarkNotification(core);
+          needsRender_ = false;
         }
         break;
-
-      case EventType::ButtonRepeat:
-        if (!holdNavigated_) {
-          switch (e.button) {
-            case Button::Right:
-            case Button::Down:
-              navigateNextChapter(core);
-              holdNavigated_ = true;
-              break;
-            case Button::Left:
-            case Button::Up:
-              navigatePrevChapter(core);
-              holdNavigated_ = true;
-              break;
-            default:
-              break;
-          }
-        }
-        break;
-
-      case EventType::ButtonRelease:
-        if (!holdNavigated_) {
-          switch (e.button) {
-            case Button::Right:
-            case Button::Down:
-              navigateNext(core);
-              break;
-            case Button::Left:
-            case Button::Up:
-              navigatePrev(core);
-              break;
-            case Button::Power:
-              if (powerPressStartedMs_ != 0) {
-                const uint32_t heldMs = millis() - powerPressStartedMs_;
-                if (heldMs < core.settings.getPowerButtonDuration()) {
-                  if (core.settings.shortPwrBtn == Settings::PowerPageTurn) {
-                    navigateNext(core);
-                  } else if (core.settings.shortPwrBtn == Settings::PowerBookmark) {
-                    int prevCount = bookmarkCount_;
-                    addBookmark(core);
-                    if (bookmarkCount_ > prevCount) {
-                      showBookmarkNotification(core);
-                      needsRender_ = false;
-                    }
-                  }
-                }
-              }
-              break;
-            default:
-              break;
-          }
-        }
-        if (e.button == Button::Power) {
-          powerPressStartedMs_ = 0;
-        }
-        holdNavigated_ = false;
-        break;
-
-      default:
+      }
+      case ReaderButtonAction::None:
         break;
     }
   }
@@ -2571,57 +2528,44 @@ void ReaderState::exitTocMode() {
 }
 
 void ReaderState::handleTocInput(Core& core, const Event& e) {
-  if (e.button == Button::Power && e.type == EventType::ButtonRelease) {
-    if (powerPressStartedMs_ != 0) {
-      const uint32_t heldMs = millis() - powerPressStartedMs_;
-      if (heldMs < core.settings.getPowerButtonDuration()) {
-        if (core.settings.shortPwrBtn == Settings::PowerPageTurn) {
-          tocView_.moveDown();
-          needsRender_ = true;
-        }
-      }
-    }
-    powerPressStartedMs_ = 0;
-    return;
-  }
+  const ReaderButtonConfig buttonConfig{core.settings.shortPwrBtn == Settings::PowerPageTurn,
+                                        core.settings.shortPwrBtn == Settings::PowerBookmark,
+                                        core.settings.getPowerButtonDuration()};
+  uint32_t powerPressStartedMs = readerButtons_.powerPressStartedMs();
+  const TocInputAction action = tocInput_.processEvent(e, millis(), buttonConfig, powerPressStartedMs);
+  readerButtons_.setPowerPressStartedMs(powerPressStartedMs);
 
-  if (e.type != EventType::ButtonPress && e.type != EventType::ButtonRepeat) return;
-
-  switch (e.button) {
-    case Button::Up:
+  switch (action) {
+    case TocInputAction::MoveUp:
       tocView_.moveUp();
       needsRender_ = true;
       break;
 
-    case Button::Down:
+    case TocInputAction::MoveDown:
       tocView_.moveDown();
       needsRender_ = true;
       break;
 
-    case Button::Left:
+    case TocInputAction::PageUp:
       tocView_.movePageUp(tocVisibleCount());
       needsRender_ = true;
       break;
 
-    case Button::Right:
+    case TocInputAction::PageDown:
       tocView_.movePageDown(tocVisibleCount());
       needsRender_ = true;
       break;
 
-    case Button::Center:
+    case TocInputAction::Select:
       jumpToTocEntry(core, tocView_.selected);
       exitTocMode();
       break;
 
-    case Button::Back:
+    case TocInputAction::Exit:
       exitTocMode();
       break;
 
-    case Button::Power:
-      if (e.type == EventType::ButtonPress && (core.settings.shortPwrBtn == Settings::PowerPageTurn ||
-                                               core.settings.shortPwrBtn == Settings::PowerBookmark)) {
-        powerPressStartedMs_ = millis();
-      }
+    case TocInputAction::None:
       break;
   }
 }
@@ -2893,17 +2837,13 @@ void ReaderState::exitToUI(Core& core) {
   LOG_INF(TAG, "Exiting to UI mode via restart");
 
   // Determine return destination from cached transition or fall back to sourceState_
-  ReturnTo returnTo = ReturnTo::HOME;
   const auto& transition = getTransition();
-  if (transition.isValid()) {
-    returnTo = transition.returnTo;
-  } else if (sourceState_ == StateId::FileList) {
-    returnTo = ReturnTo::FILE_MANAGER;
-  }
+  const ExitToUiPlan plan = planExitToUi(stopBackgroundCaching(), transition.isValid(), transition.returnTo,
+                                         sourceState_ == StateId::FileList);
 
-  if (!stopBackgroundCaching()) {
+  if (plan.mode == ExitToUiMode::Emergency) {
     LOG_ERR(TAG, "Cache task stop timed out; restarting to UI without SD writes");
-    saveEmergencyUiTransition(returnTo);
+    saveEmergencyUiTransition(plan.returnTo);
     ESP.restart();
     return;
   }
@@ -2923,7 +2863,7 @@ void ReaderState::exitToUI(Core& core) {
 
   // Show notification and restart
   showTransitionNotification(tr(RETURNING_TO_LIBRARY));
-  saveTransition(BootMode::UI, nullptr, returnTo);
+  saveTransition(BootMode::UI, nullptr, plan.returnTo);
 
   // Brief delay to ensure SD writes complete before restart
   vTaskDelay(50 / portTICK_PERIOD_MS);

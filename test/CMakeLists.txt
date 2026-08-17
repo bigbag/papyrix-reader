@@ -142,6 +142,11 @@ foreach(TEST_SRC ${TEST_SOURCES})
     target_include_directories(${TEST_NAME} PRIVATE
       ${PROJECT_ROOT}/lib/Hyphenation/src
       ${PROJECT_ROOT}/lib/Encoding/src
+      ${PROJECT_ROOT}/lib/Hyphenation/src
+      ${PROJECT_ROOT}/lib/ExternalFont/src
+      ${PROJECT_ROOT}/lib/RenderTypes/src
+      ${PROJECT_ROOT}/lib/RenderTypes/src/blocks
+      ${PROJECT_ROOT}/lib/PageCache/src
       ${PROJECT_ROOT}/lib/ExternalFont/src
       ${PROJECT_ROOT}/lib/ArabicShaper/src
       ${PROJECT_ROOT}/lib/ThaiShaper/src
@@ -170,6 +175,11 @@ foreach(TEST_SRC ${TEST_SOURCES})
     target_include_directories(${TEST_NAME} PRIVATE
       ${PROJECT_ROOT}/lib/Hyphenation/src
       ${PROJECT_ROOT}/lib/Encoding/src
+      ${PROJECT_ROOT}/lib/Hyphenation/src
+      ${PROJECT_ROOT}/lib/ExternalFont/src
+      ${PROJECT_ROOT}/lib/RenderTypes/src
+      ${PROJECT_ROOT}/lib/RenderTypes/src/blocks
+      ${PROJECT_ROOT}/lib/PageCache/src
       ${PROJECT_ROOT}/lib/ExternalFont/src
       ${PROJECT_ROOT}/lib/ArabicShaper/src
       ${PROJECT_ROOT}/lib/ThaiShaper/src
@@ -196,7 +206,130 @@ foreach(TEST_SRC ${TEST_SOURCES})
     )
     target_include_directories(${TEST_NAME} PRIVATE
       ${PROJECT_ROOT}/lib/Xtc/src
+      ${PROJECT_ROOT}/lib/Fb2/src
+      ${PROJECT_ROOT}/lib/Html/src
+      ${PROJECT_ROOT}/lib/Markdown/src
+      ${PROJECT_ROOT}/lib/Txt/src
       ${PROJECT_ROOT}/lib/Xtc/src/Xtc
+    )
+  elseif(TEST_NAME STREQUAL "ExitToUiTransitionTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/src/core/ExitToUiTransition.cpp
+      ${TEST_HELPERS}
+    )
+  elseif(TEST_NAME STREQUAL "ReaderButtonDispatchTest" OR TEST_NAME STREQUAL "TocPowerButtonTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/src/core/ReaderButtonDispatcher.cpp
+      ${TEST_HELPERS}
+    )
+  elseif(TEST_NAME STREQUAL "ContentHandleThumbnailTest")
+    find_package(EXPAT REQUIRED)
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/src/content/ContentHandle.cpp
+      ${PROJECT_ROOT}/src/content/ContentTypes.cpp
+      ${PROJECT_ROOT}/src/content/EpubProvider.cpp
+      ${PROJECT_ROOT}/src/content/XtcProvider.cpp
+      ${PROJECT_ROOT}/src/content/TxtProvider.cpp
+      ${PROJECT_ROOT}/src/content/MarkdownProvider.cpp
+      ${PROJECT_ROOT}/src/content/Fb2Provider.cpp
+      ${PROJECT_ROOT}/src/content/HtmlProvider.cpp
+      ${PROJECT_ROOT}/lib/Xtc/src/Xtc/XtcParser.cpp
+      ${PROJECT_ROOT}/lib/Xtc/src/XtcCoverHelper.cpp
+      # Content handlers
+      ${PROJECT_ROOT}/lib/Txt/src/Txt.cpp
+      ${PROJECT_ROOT}/lib/Markdown/src/Markdown.cpp
+      ${PROJECT_ROOT}/lib/Markdown/src/MarkdownParser.cpp
+      ${PROJECT_ROOT}/lib/Markdown/src/md_parser.c
+      ${PROJECT_ROOT}/lib/Fb2/src/Fb2.cpp
+      ${PROJECT_ROOT}/lib/Fb2/src/Fb2Parser.cpp
+      ${PROJECT_ROOT}/lib/Html/src/Html.cpp
+      # EPUB chain
+      ${PROJECT_ROOT}/lib/Epub/src/Epub.cpp
+      ${PROJECT_ROOT}/lib/Epub/src/Epub/BookMetadataCache.cpp
+      ${PROJECT_ROOT}/lib/Epub/src/Epub/parsers/ChapterHtmlSlimParser.cpp
+      ${PROJECT_ROOT}/lib/Epub/src/Epub/parsers/ContainerParser.cpp
+      ${PROJECT_ROOT}/lib/Epub/src/Epub/parsers/ContentOpfParser.cpp
+      ${PROJECT_ROOT}/lib/Epub/src/Epub/parsers/TocNcxParser.cpp
+      ${PROJECT_ROOT}/lib/Epub/src/Epub/parsers/TocNavParser.cpp
+      ${PROJECT_ROOT}/lib/Epub/src/Epub/htmlEntities.cpp
+      ${PROJECT_ROOT}/lib/Epub/src/Epub/css/CssParser.cpp
+      # Cover / thumbnail / image chain
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/CoverHelpers.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/HomeThumbnail.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/PackedCoverReducer.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/Bitmap.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/BitmapHelpers.cpp
+      ${PROJECT_ROOT}/lib/ImageConverter/src/ImageConverter.cpp
+      ${PROJECT_ROOT}/lib/PngToBmpConverter/src/PngToBmpConverter.cpp
+      ${PROJECT_ROOT}/lib/JpegToBmpConverter/src/JpegToBmpConverter.cpp
+      # Text layout / fonts / hyphenation (needed by the EPUB chapter parser)
+      ${PROJECT_ROOT}/lib/PageCache/src/HtmlParser.cpp
+      ${PROJECT_ROOT}/lib/PageCache/src/EpubChapterParser.cpp
+      ${PROJECT_ROOT}/lib/PageCache/src/PlainTextParser.cpp
+      ${PROJECT_ROOT}/lib/PageCache/src/PageCache.cpp
+      ${PROJECT_ROOT}/lib/RenderTypes/src/ParsedText.cpp
+      ${PROJECT_ROOT}/lib/RenderTypes/src/blocks/TextBlock.cpp
+      ${PROJECT_ROOT}/lib/RenderTypes/src/blocks/ImageBlock.cpp
+      ${PROJECT_ROOT}/lib/RenderTypes/src/Page.cpp
+      ${PROJECT_ROOT}/lib/EpdFont/src/EpdFont.cpp
+      ${PROJECT_ROOT}/lib/EpdFont/src/EpdFontFamily.cpp
+      ${PROJECT_ROOT}/lib/EpdFont/src/EpdFontLoader.cpp
+      ${PROJECT_ROOT}/lib/ExternalFont/src/ExternalFont.cpp
+      ${PROJECT_ROOT}/lib/Hyphenation/src/Hyphenation.cpp
+      ${PROJECT_ROOT}/lib/Hyphenation/src/HyphenationCommon.cpp
+      ${PROJECT_ROOT}/lib/Hyphenation/src/Hyphenator.cpp
+      ${PROJECT_ROOT}/lib/Hyphenation/src/LanguageRegistry.cpp
+      ${PROJECT_ROOT}/lib/Hyphenation/src/LiangHyphenation.cpp
+      # Encoding / zip support
+      ${PROJECT_ROOT}/lib/Html5/src/Html5Normalizer.cpp
+      ${PROJECT_ROOT}/lib/Html5/src/HtmlSplitter.cpp
+      ${PROJECT_ROOT}/lib/ZipFile/src/ZipFile.cpp
+      ${PROJECT_ROOT}/lib/InflateReader/src/InflateReader.cpp
+      ${PROJECT_ROOT}/lib/uzlib/src/tinflate.c
+      ${PROJECT_ROOT}/lib/uzlib/src/adler32.c
+      ${PROJECT_ROOT}/lib/uzlib/src/crc32.c
+      ${PROJECT_ROOT}/lib/ScriptDetector/src/ScriptDetector.cpp
+      ${PROJECT_ROOT}/lib/Utf8/src/Utf8.cpp
+      ${PROJECT_ROOT}/lib/Utf8/src/Utf8Nfc.cpp
+      ${PROJECT_ROOT}/lib/FsHelpers/src/FsHelpers.cpp
+      ${TEST_HELPERS}
+    )
+    target_compile_definitions(${TEST_NAME} PRIVATE XML_GE=0 XML_DTD)
+    target_link_libraries(${TEST_NAME} PRIVATE EXPAT::EXPAT)
+    target_compile_options(${TEST_NAME} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-include Arduino.h>)
+    target_include_directories(${TEST_NAME} BEFORE PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/unit/content/mocks
+      ${CMAKE_CURRENT_SOURCE_DIR}/unit/imageconverter/mocks
+      ${CMAKE_CURRENT_SOURCE_DIR}/unit/jpegconverter/mocks
+      ${PROJECT_ROOT}/lib/PngToBmpConverter/src
+      ${PROJECT_ROOT}/lib/JpegToBmpConverter/src
+    )
+    target_include_directories(${TEST_NAME} PRIVATE
+      ${PROJECT_ROOT}/src/content
+      ${PROJECT_ROOT}/lib/Xtc/src
+      ${PROJECT_ROOT}/lib/Fb2/src
+      ${PROJECT_ROOT}/lib/Html/src
+      ${PROJECT_ROOT}/lib/Markdown/src
+      ${PROJECT_ROOT}/lib/Txt/src
+      ${PROJECT_ROOT}/lib/Xtc/src/Xtc
+      ${PROJECT_ROOT}/lib/Epub/src
+      ${PROJECT_ROOT}/lib/Epub/src/Epub
+      ${PROJECT_ROOT}/lib/Epub/src/Epub/parsers
+      ${PROJECT_ROOT}/lib/Epub/src/Epub/css
+      ${PROJECT_ROOT}/lib/ZipFile/src
+      ${PROJECT_ROOT}/lib/InflateReader/src
+      ${PROJECT_ROOT}/lib/uzlib/src
+      ${PROJECT_ROOT}/lib/Encoding/src
+      ${PROJECT_ROOT}/lib/Hyphenation/src
+      ${PROJECT_ROOT}/lib/ExternalFont/src
+      ${PROJECT_ROOT}/lib/RenderTypes/src
+      ${PROJECT_ROOT}/lib/RenderTypes/src/blocks
+      ${PROJECT_ROOT}/lib/PageCache/src
+      ${PROJECT_ROOT}/lib/Html5/src
+      ${PROJECT_ROOT}/lib/ImageConverter/src
     )
   elseif(TEST_NAME STREQUAL "XtcProviderCoverTest")
     add_executable(${TEST_NAME}
@@ -213,6 +346,10 @@ foreach(TEST_SRC ${TEST_SOURCES})
     )
     target_include_directories(${TEST_NAME} PRIVATE
       ${PROJECT_ROOT}/lib/Xtc/src
+      ${PROJECT_ROOT}/lib/Fb2/src
+      ${PROJECT_ROOT}/lib/Html/src
+      ${PROJECT_ROOT}/lib/Markdown/src
+      ${PROJECT_ROOT}/lib/Txt/src
       ${PROJECT_ROOT}/lib/Xtc/src/Xtc
       ${PROJECT_ROOT}/src/content
       ${PROJECT_ROOT}/lib/Utf8/src
@@ -225,6 +362,10 @@ foreach(TEST_SRC ${TEST_SOURCES})
     )
     target_include_directories(${TEST_NAME} PRIVATE
       ${PROJECT_ROOT}/lib/Xtc/src
+      ${PROJECT_ROOT}/lib/Fb2/src
+      ${PROJECT_ROOT}/lib/Html/src
+      ${PROJECT_ROOT}/lib/Markdown/src
+      ${PROJECT_ROOT}/lib/Txt/src
       ${PROJECT_ROOT}/lib/Xtc/src/Xtc
     )
   elseif(TEST_NAME STREQUAL "XtcPageRendererTest")
@@ -240,6 +381,10 @@ foreach(TEST_SRC ${TEST_SOURCES})
     target_include_directories(${TEST_NAME} PRIVATE
       ${PROJECT_ROOT}/src/rendering
       ${PROJECT_ROOT}/lib/Xtc/src
+      ${PROJECT_ROOT}/lib/Fb2/src
+      ${PROJECT_ROOT}/lib/Html/src
+      ${PROJECT_ROOT}/lib/Markdown/src
+      ${PROJECT_ROOT}/lib/Txt/src
       ${PROJECT_ROOT}/lib/Xtc/src/Xtc
     )
   elseif(TEST_NAME STREQUAL "HyphenationTest")
@@ -280,6 +425,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
     )
     target_compile_definitions(${TEST_NAME} PRIVATE XML_GE=0 XML_DTD)
     target_link_libraries(${TEST_NAME} PRIVATE EXPAT::EXPAT)
+    target_compile_options(${TEST_NAME} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-include Arduino.h>)
   elseif(TEST_NAME STREQUAL "TocParserTest")
     find_package(EXPAT REQUIRED)
     add_executable(${TEST_NAME}
@@ -581,6 +727,11 @@ foreach(TEST_SRC ${TEST_SOURCES})
     target_include_directories(${TEST_NAME} PRIVATE
       ${PROJECT_ROOT}/lib/Hyphenation/src
       ${PROJECT_ROOT}/lib/Encoding/src
+      ${PROJECT_ROOT}/lib/Hyphenation/src
+      ${PROJECT_ROOT}/lib/ExternalFont/src
+      ${PROJECT_ROOT}/lib/RenderTypes/src
+      ${PROJECT_ROOT}/lib/RenderTypes/src/blocks
+      ${PROJECT_ROOT}/lib/PageCache/src
       ${PROJECT_ROOT}/lib/ExternalFont/src
       ${PROJECT_ROOT}/lib/ArabicShaper/src
       ${PROJECT_ROOT}/lib/ThaiShaper/src
@@ -608,6 +759,11 @@ foreach(TEST_SRC ${TEST_SOURCES})
     target_include_directories(${TEST_NAME} PRIVATE
       ${PROJECT_ROOT}/lib/Hyphenation/src
       ${PROJECT_ROOT}/lib/Encoding/src
+      ${PROJECT_ROOT}/lib/Hyphenation/src
+      ${PROJECT_ROOT}/lib/ExternalFont/src
+      ${PROJECT_ROOT}/lib/RenderTypes/src
+      ${PROJECT_ROOT}/lib/RenderTypes/src/blocks
+      ${PROJECT_ROOT}/lib/PageCache/src
       ${PROJECT_ROOT}/lib/ExternalFont/src
       ${PROJECT_ROOT}/lib/ArabicShaper/src
       ${PROJECT_ROOT}/lib/ThaiShaper/src

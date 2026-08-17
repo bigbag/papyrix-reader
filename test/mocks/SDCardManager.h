@@ -223,6 +223,10 @@ class SDCardManager {
   bool rename(const char* oldPath, const char* newPath) {
     if (!renameResult_) return false;
     if (std::strcmp(oldPath, newPath) == 0) return exists(oldPath);
+    const bool knownSource =
+        files_.count(oldPath) != 0 || writtenFiles_.count(oldPath) != 0 || directories_.count(oldPath) != 0 ||
+        modifyDateTimes_.count(oldPath) != 0;
+    if (!knownSource) return false;
     auto it = files_.find(oldPath);
     if (it != files_.end()) {
       files_[newPath] = it->second;

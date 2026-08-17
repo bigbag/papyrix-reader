@@ -15,9 +15,13 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include <algorithm>
+
 #include "LayoutCancellation.h"
 
 #define TAG "HTML_PARSER"
+
+using std::min;  // ESP32 Arduino.h provides this via using-declaration
 
 #include "../htmlEntities.h"
 

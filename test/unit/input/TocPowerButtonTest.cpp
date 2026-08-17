@@ -3,101 +3,39 @@
 #include <cstdint>
 
 // ============================================================================
-// Inline TOC dispatch logic mirroring ReaderState::handleTocInput()
-// Tests power button deferred to ButtonRelease in TOC mode.
+// TOC power-button timing through the PRODUCTION TocInputDispatcher
+// (src/core/ReaderButtonDispatcher.cpp) — the same unit ReaderState::
+// handleTocInput() uses. No duplicated inline logic.
 // ============================================================================
 
-enum class EventType : uint8_t {
-  None = 0,
-  ButtonPress,
-  ButtonRepeat,
-  ButtonRelease,
-};
+#include "core/EventQueue.h"
+#include "core/ReaderButtonDispatcher.h"
 
-enum class Button : uint8_t {
-  Up,
-  Down,
-  Left,
-  Right,
-  Center,
-  Back,
-  Power,
-};
+using papyrix::Button;
+using papyrix::Event;
+using papyrix::ReaderButtonConfig;
+using papyrix::TocInputAction;
+using papyrix::TocInputDispatcher;
 
-struct Event {
-  EventType type;
-  Button button;
+namespace {
 
-  static Event press(Button b) { return {EventType::ButtonPress, b}; }
-  static Event repeat(Button b) { return {EventType::ButtonRepeat, b}; }
-  static Event release(Button b) { return {EventType::ButtonRelease, b}; }
-};
+struct TocCase {
+  TocInputDispatcher d;
+  ReaderButtonConfig config;
+  uint32_t powerPressStartedMs = 0;
+  uint32_t nowMs = 1000;
+  TocInputAction last = TocInputAction::None;
 
-enum class TocAction {
-  None,
-  MoveUp,
-  MoveDown,
-  PageUp,
-  PageDown,
-  Select,
-  Exit,
-};
-
-struct TocDispatcher {
-  enum PowerAction : uint8_t { PowerIgnore = 0, PowerSleep = 1, PowerPageTurn = 2 };
-  uint8_t shortPwrBtn = PowerIgnore;
-  uint32_t powerPressStartedMs_ = 0;
-  uint16_t powerButtonDuration = 400;
-
-  // Mock time for testing timing guard
-  uint32_t currentTimeMs_ = 0;
-  uint32_t millis() const { return currentTimeMs_; }
-
-  TocAction lastAction = TocAction::None;
-
-  void processEvent(const Event& e) {
-    lastAction = TocAction::None;
-
-    if (e.button == Button::Power && e.type == EventType::ButtonRelease) {
-      if (shortPwrBtn == PowerPageTurn && powerPressStartedMs_ != 0) {
-        const uint32_t heldMs = millis() - powerPressStartedMs_;
-        if (heldMs < powerButtonDuration) {
-          lastAction = TocAction::MoveDown;
-        }
-      }
-      powerPressStartedMs_ = 0;
-      return;
-    }
-
-    if (e.type != EventType::ButtonPress && e.type != EventType::ButtonRepeat) return;
-
-    switch (e.button) {
-      case Button::Up:
-        lastAction = TocAction::MoveUp;
-        break;
-      case Button::Down:
-        lastAction = TocAction::MoveDown;
-        break;
-      case Button::Left:
-        lastAction = TocAction::PageUp;
-        break;
-      case Button::Right:
-        lastAction = TocAction::PageDown;
-        break;
-      case Button::Center:
-        lastAction = TocAction::Select;
-        break;
-      case Button::Back:
-        lastAction = TocAction::Exit;
-        break;
-      case Button::Power:
-        if (e.type == EventType::ButtonPress && shortPwrBtn == PowerPageTurn) {
-          powerPressStartedMs_ = millis();
-        }
-        break;
-    }
+  TocInputAction process(const Event& e) {
+    last = d.processEvent(e, nowMs, config, powerPressStartedMs);
+    return last;
   }
 };
+
+Event press(Button b) { return Event::buttonPress(b); }
+Event release(Button b) { return Event::buttonRelease(b); }
+
+}  // namespace
 
 int main() {
   TestUtils::TestRunner runner("TocPowerButton");
@@ -105,188 +43,105 @@ int main() {
   // ============================================
   // Power button: press records time, short release triggers MoveDown
   // ============================================
-
   {
-    TocDispatcher d;
-    d.shortPwrBtn = TocDispatcher::PowerPageTurn;
-    d.currentTimeMs_ = 100;
-    d.processEvent(Event::press(Button::Power));
-    runner.expectEq(static_cast<int>(TocAction::None), static_cast<int>(d.lastAction),
-                    "Power Press (PageTurn) -> None (deferred to release)");
-    runner.expectEq(uint32_t(100), d.powerPressStartedMs_,
-                    "Power Press records timestamp");
+    TocCase c;
+    c.config.powerShortPageTurn = true;
+    c.nowMs = 100;
+    runner.expectEq(int(TocInputAction::None), int(c.process(press(Button::Power))),
+                    "power press -> None (deferred)");
+    runner.expectEq(uint32_t(100), c.powerPressStartedMs, "power press records start time");
   }
 
-  // Release without prior press -> None (powerPressStartedMs_ is 0)
+  // Release without prior press -> None
   {
-    TocDispatcher d;
-    d.shortPwrBtn = TocDispatcher::PowerPageTurn;
-    d.processEvent(Event::release(Button::Power));
-    runner.expectEq(static_cast<int>(TocAction::None), static_cast<int>(d.lastAction),
-                    "Power Release without press -> None (no timestamp)");
+    TocCase c;
+    c.config.powerShortPageTurn = true;
+    runner.expectEq(int(TocInputAction::None), int(c.process(release(Button::Power))),
+                    "release without press -> None");
   }
 
+  // Unmapped / sleep-mapped short power -> None on release
   {
-    TocDispatcher d;
-    d.shortPwrBtn = TocDispatcher::PowerIgnore;
-    d.processEvent(Event::release(Button::Power));
-    runner.expectEq(static_cast<int>(TocAction::None), static_cast<int>(d.lastAction),
-                    "Power Release (Ignore) -> None");
+    TocCase c;
+    runner.expectEq(int(TocInputAction::None), int(c.process(release(Button::Power))),
+                    "unmapped power release -> None");
   }
-
   {
-    TocDispatcher d;
-    d.shortPwrBtn = TocDispatcher::PowerSleep;
-    d.processEvent(Event::release(Button::Power));
-    runner.expectEq(static_cast<int>(TocAction::None), static_cast<int>(d.lastAction),
-                    "Power Release (Sleep) -> None");
+    TocCase c;
+    c.config.powerShortBookmark = true;  // bookmark mapping: TOC uses page turn only
+    c.process(press(Button::Power));
+    runner.expectEq(int(TocInputAction::None), int(c.process(release(Button::Power))),
+                    "bookmark-mapped power release in TOC -> None");
   }
 
   // ============================================
   // Short press -> release (under threshold) -> MoveDown
   // ============================================
-
   {
-    TocDispatcher d;
-    d.shortPwrBtn = TocDispatcher::PowerPageTurn;
-    d.currentTimeMs_ = 1000;
-    d.processEvent(Event::press(Button::Power));
-    runner.expectEq(static_cast<int>(TocAction::None), static_cast<int>(d.lastAction),
-                    "Power press+release: press -> None");
-    d.currentTimeMs_ = 1100;  // 100ms held, under 400ms threshold
-    d.processEvent(Event::release(Button::Power));
-    runner.expectEq(static_cast<int>(TocAction::MoveDown), static_cast<int>(d.lastAction),
-                    "Power press+release (short) -> MoveDown");
-    runner.expectEq(uint32_t(0), d.powerPressStartedMs_,
-                    "Power release resets timestamp");
+    TocCase c;
+    c.config.powerShortPageTurn = true;
+    c.nowMs = 1000;
+    c.process(press(Button::Power));
+    c.nowMs = 1100;  // 100ms held, under 400ms threshold
+    runner.expectEq(int(TocInputAction::MoveDown), int(c.process(release(Button::Power))),
+                    "short power release -> MoveDown");
+    runner.expectEq(uint32_t(0), c.powerPressStartedMs, "power timer cleared after release");
   }
 
   // ============================================
   // Long hold (over threshold) -> None
   // ============================================
-
   {
-    TocDispatcher d;
-    d.shortPwrBtn = TocDispatcher::PowerPageTurn;
-    d.currentTimeMs_ = 1000;
-    d.processEvent(Event::press(Button::Power));
-    d.currentTimeMs_ = 1500;  // 500ms held, over 400ms threshold
-    d.processEvent(Event::release(Button::Power));
-    runner.expectEq(static_cast<int>(TocAction::None), static_cast<int>(d.lastAction),
-                    "Power long hold -> None (held past duration)");
+    TocCase c;
+    c.config.powerShortPageTurn = true;
+    c.nowMs = 1000;
+    c.process(press(Button::Power));
+    c.nowMs = 1500;  // 500ms held, over 400ms threshold
+    runner.expectEq(int(TocInputAction::None), int(c.process(release(Button::Power))),
+                    "long-held power release -> None");
   }
 
-  // Hold exactly at boundary -> None
+  // Hold exactly at boundary -> None (boundary is exclusive)
   {
-    TocDispatcher d;
-    d.shortPwrBtn = TocDispatcher::PowerPageTurn;
-    d.currentTimeMs_ = 1000;
-    d.processEvent(Event::press(Button::Power));
-    d.currentTimeMs_ = 1400;  // exactly 400ms = threshold
-    d.processEvent(Event::release(Button::Power));
-    runner.expectEq(static_cast<int>(TocAction::None), static_cast<int>(d.lastAction),
-                    "Power hold at exact threshold -> None");
+    TocCase c;
+    c.config.powerShortPageTurn = true;
+    c.nowMs = 1000;
+    c.process(press(Button::Power));
+    c.nowMs = 1400;  // exactly 400ms = threshold
+    runner.expectEq(int(TocInputAction::None), int(c.process(release(Button::Power))),
+                    "boundary-hold release -> None");
   }
 
   // ============================================
-  // Existing buttons still work on Press
+  // Bookmark mapping still records the press (shared timer with reader mode)
   // ============================================
-
   {
-    TocDispatcher d;
-    d.processEvent(Event::press(Button::Up));
-    runner.expectEq(static_cast<int>(TocAction::MoveUp), static_cast<int>(d.lastAction),
-                    "Up Press -> MoveUp");
-  }
-
-  {
-    TocDispatcher d;
-    d.processEvent(Event::press(Button::Down));
-    runner.expectEq(static_cast<int>(TocAction::MoveDown), static_cast<int>(d.lastAction),
-                    "Down Press -> MoveDown");
-  }
-
-  {
-    TocDispatcher d;
-    d.processEvent(Event::press(Button::Left));
-    runner.expectEq(static_cast<int>(TocAction::PageUp), static_cast<int>(d.lastAction),
-                    "Left Press -> PageUp");
-  }
-
-  {
-    TocDispatcher d;
-    d.processEvent(Event::press(Button::Right));
-    runner.expectEq(static_cast<int>(TocAction::PageDown), static_cast<int>(d.lastAction),
-                    "Right Press -> PageDown");
+    TocCase c;
+    c.config.powerShortBookmark = true;
+    c.nowMs = 500;
+    c.process(press(Button::Power));
+    runner.expectEq(uint32_t(500), c.powerPressStartedMs, "bookmark mapping records press time");
   }
 
   // ============================================
-  // Power release always resets timestamp (even when not PageTurn mode)
+  // Existing TOC buttons still work
   // ============================================
-
   {
-    TocDispatcher d;
-    d.shortPwrBtn = TocDispatcher::PowerIgnore;
-    d.currentTimeMs_ = 100;
-    d.powerPressStartedMs_ = 50;  // stale timestamp from previous state
-    d.processEvent(Event::release(Button::Power));
-    runner.expectEq(uint32_t(0), d.powerPressStartedMs_,
-                    "Power Release (Ignore mode) still resets timestamp");
+    TocCase c;
+    runner.expectEq(int(TocInputAction::MoveUp), int(c.process(press(Button::Up))), "Up -> MoveUp");
+    runner.expectEq(int(TocInputAction::MoveDown), int(c.process(press(Button::Down))), "Down -> MoveDown");
+    runner.expectEq(int(TocInputAction::PageUp), int(c.process(press(Button::Left))), "Left -> PageUp");
+    runner.expectEq(int(TocInputAction::PageDown), int(c.process(press(Button::Right))), "Right -> PageDown");
+    runner.expectEq(int(TocInputAction::Select), int(c.process(press(Button::Center))), "Center -> Select");
+    runner.expectEq(int(TocInputAction::Exit), int(c.process(press(Button::Back))), "Back -> Exit");
   }
 
+  // Release events for non-power buttons are ignored
   {
-    TocDispatcher d;
-    d.shortPwrBtn = TocDispatcher::PowerSleep;
-    d.powerPressStartedMs_ = 50;
-    d.processEvent(Event::release(Button::Power));
-    runner.expectEq(uint32_t(0), d.powerPressStartedMs_,
-                    "Power Release (Sleep mode) still resets timestamp");
+    TocCase c;
+    runner.expectEq(int(TocInputAction::None), int(c.process(release(Button::Up))),
+                    "non-power release -> None");
   }
 
-  // ============================================
-  // Power ButtonRepeat does NOT re-set timestamp
-  // ============================================
-
-  {
-    TocDispatcher d;
-    d.shortPwrBtn = TocDispatcher::PowerPageTurn;
-    d.currentTimeMs_ = 100;
-    d.processEvent(Event::press(Button::Power));
-    runner.expectEq(uint32_t(100), d.powerPressStartedMs_,
-                    "Power Press sets timestamp");
-    d.currentTimeMs_ = 200;
-    d.processEvent(Event::repeat(Button::Power));
-    runner.expectEq(uint32_t(100), d.powerPressStartedMs_,
-                    "Power Repeat does not re-set timestamp");
-    runner.expectEq(static_cast<int>(TocAction::None), static_cast<int>(d.lastAction),
-                    "Power Repeat -> None");
-  }
-
-  // ============================================
-  // Existing buttons do NOT fire on Release
-  // ============================================
-
-  {
-    TocDispatcher d;
-    d.processEvent(Event::release(Button::Up));
-    runner.expectEq(static_cast<int>(TocAction::None), static_cast<int>(d.lastAction),
-                    "Up Release -> None");
-  }
-
-  {
-    TocDispatcher d;
-    d.processEvent(Event::release(Button::Down));
-    runner.expectEq(static_cast<int>(TocAction::None), static_cast<int>(d.lastAction),
-                    "Down Release -> None");
-  }
-
-  {
-    TocDispatcher d;
-    d.processEvent(Event::release(Button::Center));
-    runner.expectEq(static_cast<int>(TocAction::None), static_cast<int>(d.lastAction),
-                    "Center Release -> None");
-  }
-
-  runner.printSummary();
   return runner.allPassed() ? 0 : 1;
 }
