@@ -27,20 +27,29 @@ void Cpu::releasePerformanceLock() {
 }
 
 void Cpu::throttle() {
+  std::lock_guard<std::mutex> lock(mutex_);
   if (performanceLockCount_.load(std::memory_order_acquire) != 0) {
-    unthrottle();
+    unthrottleLocked();
     return;
   }
 
   bool expected = false;
   if (throttled_.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+#ifdef TEST_BUILD
+    if (throttleCasHook) throttleCasHook();
+#endif
     setCpuFrequencyMhz(kIdleFreqMhz);
   }
 
-  if (performanceLockCount_.load(std::memory_order_acquire) != 0) unthrottle();
+  if (performanceLockCount_.load(std::memory_order_acquire) != 0) unthrottleLocked();
 }
 
 void Cpu::unthrottle() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  unthrottleLocked();
+}
+
+void Cpu::unthrottleLocked() {
   if (throttled_.exchange(false, std::memory_order_acq_rel)) setCpuFrequencyMhz(kActiveFreqMhz);
 }
 
