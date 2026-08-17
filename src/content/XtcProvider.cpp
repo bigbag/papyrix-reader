@@ -46,6 +46,10 @@ Result<void> XtcProvider::open(const char* path, const char* cacheDir) {
     size_t hash = std::hash<std::string>{}(pathStr);
     snprintf(meta.cachePath, sizeof(meta.cachePath), "%s/xtc_%zu", cacheDir, hash);
     SdMan.mkdir(meta.cachePath);
+
+    // One-time invalidation of failure markers persisted by the old
+    // page-buffer cover generator (structural 96KB allocation failure).
+    xtc::migrateStaleFailureMarkers(meta.cachePath);
   } else {
     meta.cachePath[0] = '\0';
   }
@@ -98,16 +102,19 @@ bool XtcProvider::generateCoverBmp(const std::function<bool()>& shouldAbort) {
   if (SdMan.exists(coverPath.c_str())) SdMan.remove(coverPath.c_str());
   if (SdMan.exists(failedMarkerPath.c_str())) return false;
 
-  const bool generated = xtc::generateCoverBmpFromParser(parser, coverPath, shouldAbort);
+  const xtc::CoverResult generated = xtc::generateCoverBmpFromParser(parser, coverPath, shouldAbort);
   const bool cancelled = shouldAbort && shouldAbort();
-  const bool valid = generated && !cancelled && home_thumbnail::validateCover(coverPath);
+  const bool valid = generated == xtc::CoverResult::Generated && !cancelled && home_thumbnail::validateCover(coverPath);
   if (cancelled) {
     SdMan.remove(coverPath.c_str());
-  } else if (!valid) {
+  } else if (valid) {
+    SdMan.remove(failedMarkerPath.c_str());
+  } else if (generated == xtc::CoverResult::InvalidFile) {
     FsFile marker;
     if (SdMan.openFileForWrite("XTC", failedMarkerPath, marker)) marker.close();
   } else {
-    SdMan.remove(failedMarkerPath.c_str());
+    // Transient failure (heap/IO): no marker so a later attempt can retry.
+    SdMan.remove(coverPath.c_str());
   }
   return valid;
 }

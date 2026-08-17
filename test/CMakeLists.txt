@@ -198,6 +198,25 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/Xtc/src
       ${PROJECT_ROOT}/lib/Xtc/src/Xtc
     )
+  elseif(TEST_NAME STREQUAL "XtcProviderCoverTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/src/content/XtcProvider.cpp
+      ${PROJECT_ROOT}/lib/Xtc/src/Xtc/XtcParser.cpp
+      ${PROJECT_ROOT}/lib/Xtc/src/XtcCoverHelper.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/HomeThumbnail.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/PackedCoverReducer.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/Bitmap.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/BitmapHelpers.cpp
+      ${PROJECT_ROOT}/lib/Utf8/src/Utf8.cpp
+      ${TEST_HELPERS}
+    )
+    target_include_directories(${TEST_NAME} PRIVATE
+      ${PROJECT_ROOT}/lib/Xtc/src
+      ${PROJECT_ROOT}/lib/Xtc/src/Xtc
+      ${PROJECT_ROOT}/src/content
+      ${PROJECT_ROOT}/lib/Utf8/src
+    )
   elseif(TEST_NAME STREQUAL "XtcParserTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}

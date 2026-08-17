@@ -63,6 +63,8 @@ void Xtc::setupCacheDir() const {
   SdMan.mkdir(cachePath.c_str());
 }
 
+void Xtc::migrateStaleFailureMarkers() const { xtc::migrateStaleFailureMarkers(cachePath); }
+
 std::string Xtc::getTitle() const {
   if (!loaded || !parser) {
     return "";
@@ -126,11 +128,16 @@ bool Xtc::generateCoverBmp() const {
   }
 
   setupCacheDir();
-  const bool generated = xtc::generateCoverBmpFromParser(*const_cast<xtc::XtcParser*>(parser.get()), coverPath);
-  const bool valid = generated && home_thumbnail::validateCover(coverPath);
-  if (!valid) {
+  migrateStaleFailureMarkers();
+  const xtc::CoverResult generated =
+      xtc::generateCoverBmpFromParser(*const_cast<xtc::XtcParser*>(parser.get()), coverPath);
+  const bool valid = generated == xtc::CoverResult::Generated && home_thumbnail::validateCover(coverPath);
+  if (!valid && generated == xtc::CoverResult::InvalidFile) {
     FsFile marker;
     if (SdMan.openFileForWrite("XTC", failedMarkerPath, marker)) marker.close();
+  } else if (!valid) {
+    // Transient failure (heap/IO): no marker so a later attempt can retry.
+    SdMan.remove(coverPath.c_str());
   } else {
     SdMan.remove(failedMarkerPath.c_str());
   }

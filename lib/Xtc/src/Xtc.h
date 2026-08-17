@@ -49,6 +49,7 @@ class Xtc {
    * Setup cache directory
    */
   void setupCacheDir() const;
+  void migrateStaleFailureMarkers() const;
 
   // Path accessors
   const std::string& getCachePath() const { return cachePath; }
