@@ -10,6 +10,7 @@
 
 #include <EInkDisplay.h>
 #include <EpdFont.h>
+#include <HomeThumbnail.h>
 #include <EpdFontLoader.h>
 #include <ExternalFont.h>
 #include <Epub.h>
@@ -151,6 +152,49 @@ static void dumpCacheDir(const std::string& dir, const GfxRenderer& gfx, int fon
   fprintf(stderr, "Total: %d pages\n", totalPages);
 }
 
+// Drives the configurable HomeThumbnail mock through the Home selection
+// order (thumbnail first, cover fallback, disabled images) so the tool's
+// selection behavior stays observable and locked to the real pipeline.
+static int checkThumbnailMockScenarios() {
+  int failures = 0;
+  auto check = [&failures](const char* name, bool ok) {
+    printf("%s %s\n", ok ? "ok:" : "FAIL:", name);
+    if (!ok) failures++;
+  };
+
+  home_thumbnail::resetMockState();
+  home_thumbnail::g_mockState.thumbnailValid = true;
+  home_thumbnail::g_mockState.coverValid = true;
+  auto selection = home_thumbnail::selectForHome(true, "/cache/thumb.bmp", "/cache/cover.bmp");
+  check("thumbnail preferred when valid", selection.type == home_thumbnail::HomeImageType::Thumbnail);
+
+  home_thumbnail::g_mockState.thumbnailValid = false;
+  selection = home_thumbnail::selectForHome(true, "/cache/thumb.bmp", "/cache/cover.bmp");
+  check("cover used as fallback", selection.type == home_thumbnail::HomeImageType::Cover);
+
+  home_thumbnail::g_mockState.coverValid = false;
+  selection = home_thumbnail::selectForHome(true, "/cache/thumb.bmp", "/cache/cover.bmp");
+  check("no image when nothing valid", selection.type == home_thumbnail::HomeImageType::None);
+
+  home_thumbnail::g_mockState.thumbnailValid = true;
+  selection = home_thumbnail::selectForHome(false, "/cache/thumb.bmp", "/cache/cover.bmp");
+  check("disabled images select nothing", selection.type == home_thumbnail::HomeImageType::None);
+
+  home_thumbnail::resetMockState();
+  home_thumbnail::g_mockState.generateResult = home_thumbnail::Result::Ready;
+  const auto generated = home_thumbnail::generateFromCover("/cache/cover.bmp", "/cache/thumb.bmp");
+  check("generation result is configurable", generated == home_thumbnail::Result::Ready);
+  check("generation was called", home_thumbnail::g_mockState.generateWasCalled);
+
+  home_thumbnail::resetMockState();
+  if (failures == 0) {
+    printf("all thumbnail mock scenarios passed\n");
+  } else {
+    printf("%d scenario(s) failed\n", failures);
+  }
+  return failures == 0 ? 0 : 1;
+}
+
 static void usage() {
   fprintf(stderr, "Usage: reader-test [--dump] [--batch N] [--cold-extend] [--no-statusbar] [--font DIR] [--cjk-font PATH] <file.epub|.md|.txt|.fb2|.html|.htm> [output_dir]\n");
   fprintf(stderr, "       reader-test --cache-dump <cache_dir>\n");
@@ -162,6 +206,7 @@ static void usage() {
   fprintf(stderr, "  --font DIR          Load .epdfont font family from DIR (regular.epdfont, bold.epdfont, italic.epdfont)\n");
   fprintf(stderr, "  --cjk-font PATH     Load external CJK font (.bin) for text width measurement\n");
   fprintf(stderr, "  --cache-dump        Dump text from existing device cache directory\n");
+  fprintf(stderr, "  --check-thumb-mock  Run Home selection scenario checks and exit\n");
   fprintf(stderr, "  --fail-serialize N  Simulate serialize failure every N pages\n");
   fprintf(stderr, "  --sim-heap SIZE     Simulate device heap size in bytes\n");
   fprintf(stderr, "  output_dir defaults to /tmp/papyrix-cache/\n");
@@ -171,6 +216,10 @@ int main(int argc, char* argv[]) {
   if (argc < 2) {
     usage();
     return 1;
+  }
+
+  if (strcmp(argv[1], "--check-thumb-mock") == 0) {
+    return checkThumbnailMockScenarios();
   }
 
   bool dump = false;
