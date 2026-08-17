@@ -63,7 +63,9 @@ void Xtc::setupCacheDir() const {
   SdMan.mkdir(cachePath.c_str());
 }
 
-void Xtc::migrateStaleFailureMarkers() const { xtc::migrateStaleFailureMarkers(cachePath); }
+void Xtc::migrateStaleFailureMarkers() const {
+  xtc::migrateStaleFailureMarkers(cachePath, parser && parser->getBitDepth() == 2);
+}
 
 std::string Xtc::getTitle() const {
   if (!loaded || !parser) {

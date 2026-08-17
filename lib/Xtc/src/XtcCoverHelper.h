@@ -21,8 +21,11 @@ CoverResult generateCoverBmpFromParser(XtcParser& parser, const std::string& cov
                                        const std::function<bool()>& shouldAbort = nullptr);
 
 // One-time invalidation of failure markers persisted by the old
-// page-buffer cover generator (structural 96KB allocation failure).
-// Idempotent: guarded by a .cover.migrated sentinel in the cache directory.
-void migrateStaleFailureMarkers(const std::string& cachePath);
+// page-buffer cover generator (structural 96KB allocation failure), and of
+// cover/thumb artifacts produced by the short-lived >=2 threshold build.
+// Idempotent: guarded by a .cover.v2 sentinel in the cache directory. When
+// purgeArtifacts is set (2-bit source), stale cover.bmp/thumb.bmp are removed
+// so the restored threshold regenerates them.
+void migrateStaleFailureMarkers(const std::string& cachePath, bool purgeArtifacts = false);
 
 }  // namespace xtc

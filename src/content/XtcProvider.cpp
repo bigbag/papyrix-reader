@@ -49,7 +49,7 @@ Result<void> XtcProvider::open(const char* path, const char* cacheDir) {
 
     // One-time invalidation of failure markers persisted by the old
     // page-buffer cover generator (structural 96KB allocation failure).
-    xtc::migrateStaleFailureMarkers(meta.cachePath);
+    xtc::migrateStaleFailureMarkers(meta.cachePath, parser.getBitDepth() == 2);
   } else {
     meta.cachePath[0] = '\0';
   }
