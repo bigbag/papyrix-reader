@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <string>
 
 class Html {
@@ -23,10 +24,8 @@ class Html {
   size_t getFileSize() const { return fileSize; }
 
   std::string getCoverBmpPath() const;
-  bool generateCoverBmp(bool use1BitDithering = false) const;
-  std::string getThumbBmpPath() const;
-  bool generateThumbBmp() const;
-  std::string findCoverImage() const;
+  bool generateCoverBmp(bool use1BitDithering = false, const std::function<bool()>& shouldAbort = nullptr) const;
+  std::string findCoverImage(const std::function<bool()>& shouldAbort = nullptr) const;
 
   bool isLoaded() const { return loaded; }
 };

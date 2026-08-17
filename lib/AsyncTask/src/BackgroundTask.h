@@ -2,6 +2,7 @@
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/event_groups.h>
+#include <freertos/semphr.h>
 #include <freertos/task.h>
 
 #include <atomic>
@@ -79,16 +80,13 @@ class BackgroundTask {
   }
 
   /** Check if task is currently running. */
-  bool isRunning() const {
-    State s = state_.load(std::memory_order_acquire);
-    return s == State::RUNNING || s == State::STOPPING;
-  }
+  bool isRunning() const;
 
   /** Get current task state. */
-  State getState() const { return state_.load(std::memory_order_acquire); }
+  State getState() const;
 
   /** Get task handle (for advanced FreeRTOS operations). */
-  TaskHandle_t getHandle() const { return handle_; }
+  TaskHandle_t getHandle() const { return handle_.load(std::memory_order_acquire); }
 
  private:
   static void trampoline(void* param);
@@ -97,10 +95,13 @@ class BackgroundTask {
   // Event bits for signaling
   static constexpr EventBits_t EVENT_EXITED = (1 << 0);
 
-  TaskHandle_t handle_ = nullptr;
+  std::atomic<TaskHandle_t> handle_{nullptr};
   EventGroupHandle_t eventGroup_ = nullptr;
+  SemaphoreHandle_t lifecycleMutex_ = nullptr;
   std::atomic<bool> stopRequested_{false};
   std::atomic<State> state_{State::IDLE};
+  std::atomic<uint32_t> generation_{0};
+  std::atomic<uint32_t> exitedGeneration_{0};
   TaskFunction func_;
   std::string name_;  // Stored copy for debugging (prevents use-after-free)
 };

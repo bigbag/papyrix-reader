@@ -88,7 +88,7 @@ XtcPageRenderer::RenderResult XtcPageRenderer::render(xtc::XtcParser& parser, ui
         [&](const uint8_t* data, size_t size, size_t offset) {
           if (offset > bufferSize || size > bufferSize - offset) {
             streamOverflow = true;
-            return;
+            return false;
           }
 
           size_t plane1Bytes = 0;
@@ -103,6 +103,7 @@ XtcPageRenderer::RenderResult XtcPageRenderer::render(xtc::XtcParser& parser, ui
             memcpy(plane2Buffer + plane2Offset, data + plane1Bytes, plane2Bytes);
           }
           bytesRead += size;
+          return true;
         },
         4096);
 

@@ -1,6 +1,5 @@
 #include "HomeView.h"
 
-#include <CoverHelpers.h>
 #include <I18n.h>
 
 #include <algorithm>
@@ -30,17 +29,10 @@ void render(const GfxRenderer& r, const Theme& t, const HomeView& v) {
   const int cardWidth = card.width;
   const int cardHeight = card.height;
 
-  const bool hasCover = v.coverData != nullptr || v.hasCoverBmp;
+  const bool hasCover = v.hasCoverBmp;
 
   if (v.hasBook) {
-    // Draw cover image if available (in-memory version; BMP cover rendered by HomeState)
     const auto coverArea = card.getCoverArea();
-    if (v.coverData != nullptr && v.coverWidth > 0 && v.coverHeight > 0) {
-      const auto rect = CoverHelpers::calculateCenteredRect(v.coverWidth, v.coverHeight, coverArea.x, coverArea.y,
-                                                            coverArea.width, coverArea.height);
-      r.drawImage(v.coverData, rect.x, rect.y, v.coverWidth, v.coverHeight);
-    }
-
     // Draw book placeholder when no cover available
     if (!hasCover) {
       bookPlaceholder(r, t, coverArea.x, coverArea.y, coverArea.width, coverArea.height);
@@ -97,8 +89,7 @@ void render(const GfxRenderer& r, const Theme& t, const HomeView& v) {
   ButtonBar btns{v.hasBook ? tr(READ) : "", v.showRecents ? tr(BOOKS) : tr(FILES), tr(APPS), tr(SETTINGS)};
   buttonBar(r, t, btns);
 
-  // Note: displayBuffer() is NOT called here; HomeState will call it
-  // after rendering the cover image on top of the card area
+  // HomeState presents the completed frame.
 }
 
 BatteryRegion renderBatteryOnly(const GfxRenderer& r, const Theme& t, const HomeView& v) {

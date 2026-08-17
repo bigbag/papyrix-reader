@@ -1,6 +1,7 @@
 #pragma once
 
 #include <GfxRenderer.h>
+#include <HomeThumbnail.h>
 #include <I18n.h>
 #include <Theme.h>
 
@@ -22,7 +23,7 @@ struct CardDimensions {
     int x, y, width, height;
   };
 
-  static CardDimensions calculate(int screenWidth, int screenHeight) {
+  static constexpr CardDimensions calculate(int screenWidth, int screenHeight) {
     const int w = screenWidth * 7 / 10;  // 70% width for larger cover
     const int h = screenHeight / 2 + 100;
     const int x = (screenWidth - w) / 2;
@@ -30,11 +31,15 @@ struct CardDimensions {
     return {x, y, w, h};
   }
 
-  CoverArea getCoverArea() const {
-    constexpr int padding = 10;
-    return {x + padding, y + padding, width - 2 * padding, height - 2 * padding};
+  constexpr CoverArea getCoverArea() const {
+    const int coverWidth = width < home_thumbnail::MAX_WIDTH ? width : home_thumbnail::MAX_WIDTH;
+    const int coverHeight = height < home_thumbnail::MAX_HEIGHT ? height : home_thumbnail::MAX_HEIGHT;
+    return {x + (width - coverWidth) / 2, y + (height - coverHeight) / 2, coverWidth, coverHeight};
   }
 };
+
+static_assert(CardDimensions::calculate(480, 800).getCoverArea().width == 320);
+static_assert(CardDimensions::calculate(480, 800).getCoverArea().height == 440);
 
 struct HomeView {
   static constexpr int MAX_TITLE_LEN = 256;
@@ -51,12 +56,7 @@ struct HomeView {
   bool hasBook = false;
   bool showRecents = true;  // home entry: Books (Recent) when true, Files when false
 
-  // Cover image (external pointer - not owned)
-  const uint8_t* coverData = nullptr;
-  int16_t coverWidth = 0;
-  int16_t coverHeight = 0;
-
-  // Cover from BMP file (rendered by HomeState after ui::render)
+  // Cover from BMP file rendered by HomeState
   bool hasCoverBmp = false;
 
   // Font override for title/author (resolved by state, -1 = use theme default)
@@ -110,18 +110,8 @@ struct HomeView {
     bookAuthor[0] = '\0';
     bookPath[0] = '\0';
     hasBook = false;
-    coverData = nullptr;
-    coverWidth = 0;
-    coverHeight = 0;
     hasCoverBmp = false;
     buttons.labels[0] = "";
-    needsRender = true;
-  }
-
-  void setCover(const uint8_t* data, int w, int h) {
-    coverData = data;
-    coverWidth = static_cast<int16_t>(w);
-    coverHeight = static_cast<int16_t>(h);
     needsRender = true;
   }
 

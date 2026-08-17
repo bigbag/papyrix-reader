@@ -17,10 +17,11 @@
 #ifndef ARDUINO
 uint16_t PageCache::failSerializeInterval_ = 0;
 uint16_t PageCache::failSerializeCounter_ = 0;
+bool PageCache::failHeaderCommitOnce_ = false;
 #endif
 
 namespace {
-constexpr uint8_t CACHE_FILE_VERSION = 20;  // v20: CSS block-level margins/padding change page layout
+constexpr uint8_t CACHE_FILE_VERSION = 22;  // v22: source/font fingerprints; 32-bit indexes
 
 // Header layout (offsets are absolute from start of file):
 // - version (1 byte)        @ 0
@@ -33,18 +34,20 @@ constexpr uint8_t CACHE_FILE_VERSION = 20;  // v20: CSS block-level margins/padd
 // - showImages (1)          @ 13
 // - viewportWidth (2)       @ 14
 // - viewportHeight (2)      @ 16
-// - pageCount (2)           @ 18
-// - isPartial (1)           @ 20
-// - lutOffset (4)           @ 21
-// - bytesConsumed (4)       @ 25  (v19+)
-// - totalBytes (4)          @ 29  (v19+)
+// - pageCount (4)           @ 18
+// - isPartial (1)           @ 22
+// - lutOffset (4)           @ 23
+// - bytesConsumed (4)       @ 27
+// - totalBytes (4)          @ 31
+// - sourceFingerprint (4)   @ 35
+// - fontFingerprint (4)     @ 39
 constexpr uint32_t kPageCountOffset = 18;
-constexpr uint32_t kHeaderSize = 33;
+constexpr uint32_t kHeaderSize = 43;
 
 struct CacheHeader {
   uint8_t version = 0;
   RenderConfig config{};
-  uint16_t pageCount = 0;
+  uint32_t pageCount = 0;
   uint8_t partial = 0;
   uint32_t lutOffset = 0;
   uint32_t bytesConsumed = 0;
@@ -65,13 +68,14 @@ bool readCacheHeader(FsFile& file, CacheHeader& header) {
          serialization::readPodChecked(file, header.pageCount) && serialization::readPodChecked(file, header.partial) &&
          serialization::readPodChecked(file, header.lutOffset) &&
          serialization::readPodChecked(file, header.bytesConsumed) &&
-         serialization::readPodChecked(file, header.totalBytes);
+         serialization::readPodChecked(file, header.totalBytes) &&
+         serialization::readPodChecked(file, header.config.sourceFingerprint) &&
+         serialization::readPodChecked(file, header.config.fontFingerprint);
 }
 
 bool hasValidLutSpan(const CacheHeader& header, size_t fileSize) {
   if (header.partial > 1 || header.lutOffset < kHeaderSize || header.lutOffset > fileSize) return false;
-  const size_t lutSize = static_cast<size_t>(header.pageCount) * sizeof(uint32_t);
-  return lutSize <= fileSize - header.lutOffset;
+  return page_cache::lutFitsFile(header.pageCount, fileSize - header.lutOffset);
 }
 }  // namespace
 
@@ -92,7 +96,23 @@ bool PageCache::writeHeader(bool isPartial) {
          serialization::writePodChecked(file_, config_.viewportHeight) &&
          serialization::writePodChecked(file_, pageCount_) && serialization::writePodChecked(file_, partial) &&
          serialization::writePodChecked(file_, lutOffset) && serialization::writePodChecked(file_, bytesConsumed_) &&
-         serialization::writePodChecked(file_, totalBytes_);
+         serialization::writePodChecked(file_, totalBytes_) &&
+         serialization::writePodChecked(file_, config_.sourceFingerprint) &&
+         serialization::writePodChecked(file_, config_.fontFingerprint);
+}
+
+bool PageCache::writeMutableHeader(uint32_t pageCount, bool isPartial, uint32_t lutOffset, uint32_t bytesConsumed,
+                                   uint32_t totalBytes, bool allowInjectedFailure) {
+  const uint8_t partial = isPartial ? 1 : 0;
+  if (!file_.seek(kPageCountOffset) || !serialization::writePodChecked(file_, pageCount)) return false;
+#ifndef ARDUINO
+  if (allowInjectedFailure && failHeaderCommitOnce_) {
+    failHeaderCommitOnce_ = false;
+    return false;
+  }
+#endif
+  return serialization::writePodChecked(file_, partial) && serialization::writePodChecked(file_, lutOffset) &&
+         serialization::writePodChecked(file_, bytesConsumed) && serialization::writePodChecked(file_, totalBytes);
 }
 
 bool PageCache::writeLut(const std::vector<uint32_t>& lut) {
@@ -111,58 +131,7 @@ bool PageCache::writeLut(const std::vector<uint32_t>& lut) {
     if (!serialization::writePodChecked(file_, pos)) return false;
   }
 
-  // Update header with final values
-  const uint8_t partial = isPartial_ ? 1 : 0;
-  return file_.seek(kPageCountOffset) && serialization::writePodChecked(file_, pageCount_) &&
-         serialization::writePodChecked(file_, partial) && serialization::writePodChecked(file_, lutOffset) &&
-         serialization::writePodChecked(file_, bytesConsumed_) && serialization::writePodChecked(file_, totalBytes_);
-}
-
-bool PageCache::loadLut(std::vector<uint32_t>& lut) {
-  if (!SdMan.openFileForRead("CACHE", cachePath_, file_)) {
-    return false;
-  }
-
-  const size_t fileSize = file_.size();
-  if (fileSize < kHeaderSize) {
-    LOG_ERR(TAG, "File too small: %zu (need %u)", fileSize, kHeaderSize);
-    file_.close();
-    return false;
-  }
-
-  CacheHeader header;
-  if (!readCacheHeader(file_, header) || header.version != CACHE_FILE_VERSION || !hasValidLutSpan(header, fileSize)) {
-    LOG_ERR(TAG, "Invalid cache header");
-    file_.close();
-    return false;
-  }
-  lutOffset_ = header.lutOffset;
-  pageCount_ = header.pageCount;
-
-  // Read existing LUT entries
-  if (!file_.seek(lutOffset_)) {
-    file_.close();
-    return false;
-  }
-  lut.reserve(pageCount_);
-  for (uint16_t i = 0; i < pageCount_; i++) {
-    uint32_t pos;
-    if (!serialization::readPodChecked(file_, pos)) {
-      file_.close();
-      lut.clear();
-      return false;
-    }
-    if (pos == 0 || pos < kHeaderSize || pos >= lutOffset_) {
-      LOG_ERR(TAG, "Corrupt LUT entry %d: position %u", i, pos);
-      file_.close();
-      lut.clear();
-      return false;
-    }
-    lut.push_back(pos);
-  }
-
-  file_.close();
-  return true;
+  return writeMutableHeader(pageCount_, isPartial_, lutOffset, bytesConsumed_, totalBytes_);
 }
 
 bool PageCache::loadRaw() {
@@ -218,17 +187,19 @@ bool PageCache::load(const RenderConfig& config) {
   config_ = config;
 
   file_.close();
-  LOG_INF(TAG, "Loaded: %d pages, partial=%d", pageCount_, isPartial_);
+  LOG_INF(TAG, "Loaded: %u pages, partial=%d", pageCount_, isPartial_);
   return true;
 }
 
-bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16_t maxPages, uint16_t skipPages,
+bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint32_t maxPages, uint32_t skipPages,
                        const AbortCallback& shouldAbort) {
   const unsigned long startMs = millis();
 
-  // For extends with existing pages, track old LUT position for disk-to-disk copy
+  // For extends with existing pages, track the committed header so any failed
+  // append can leave the previous cache readable.
+  CacheHeader oldHeader;
   uint32_t oldLutOffset = 0;
-  uint16_t oldPageCount = 0;
+  uint32_t oldPageCount = 0;
   std::vector<uint32_t> lut;
 
   if (skipPages > 0) {
@@ -239,19 +210,19 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
         LOG_ERR(TAG, "Failed to read header for extend");
         return false;
       }
-      CacheHeader header;
-      const bool validHeader = readCacheHeader(hdr, header) && header.version == CACHE_FILE_VERSION &&
-                               hasValidLutSpan(header, hdr.size()) && header.pageCount == skipPages;
+      const bool validHeader = readCacheHeader(hdr, oldHeader) && oldHeader.version == CACHE_FILE_VERSION &&
+                               hasValidLutSpan(oldHeader, hdr.size()) && oldHeader.pageCount == skipPages;
       hdr.close();
       if (!validHeader) {
         LOG_ERR(TAG, "Invalid header for extend");
         return false;
       }
-      oldLutOffset = header.lutOffset;
-      oldPageCount = header.pageCount;
+      oldLutOffset = oldHeader.lutOffset;
+      oldPageCount = oldHeader.pageCount;
     }
 
-    if (!file_.open(cachePath_.c_str(), O_RDWR)) {
+    file_ = SdMan.open(cachePath_.c_str(), O_RDWR);
+    if (!file_) {
       LOG_ERR(TAG, "Failed to open cache file for append");
       return false;
     }
@@ -282,12 +253,13 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
     return false;
   }
 
-  uint16_t parsedPages = 0;
+  uint32_t parsedPages = 0;
   bool hitMaxPages = false;
   bool aborted = false;
+  bool serializeFailed = false;
 
   bool success = parser.parsePages(
-      [this, &lut, &hitMaxPages, &parsedPages, maxPages, skipPages](std::unique_ptr<Page> page) {
+      [this, &lut, &hitMaxPages, &serializeFailed, &parsedPages, maxPages, skipPages](std::unique_ptr<Page> page) {
         if (hitMaxPages) return;
 
         parsedPages++;
@@ -302,12 +274,14 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
 #ifndef ARDUINO
         if (failSerializeInterval_ > 0 && ++failSerializeCounter_ % failSerializeInterval_ == 0) {
           LOG_ERR(TAG, "Simulated serialize failure (page %u)", pageCount_);
+          serializeFailed = true;
           hitMaxPages = true;
           return;
         }
 #endif
         if (!page->serialize(file_)) {
           LOG_ERR(TAG, "Failed to serialize page %u, stopping", pageCount_);
+          serializeFailed = true;
           hitMaxPages = true;
           return;
         }
@@ -332,12 +306,43 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
     LOG_INF(TAG, "Aborted during parsing");
   }
 
-  if ((!success && pageCount_ == 0) || aborted) {
+  if (serializeFailed) {
+    parser.reset();
     file_.close();
     if (skipPages == 0) {
+      pageCount_ = 0;
+      isPartial_ = false;
+      bytesConsumed_ = 0;
+      totalBytes_ = 0;
       SdMan.remove(cachePath_.c_str());
+    } else {
+      pageCount_ = oldHeader.pageCount;
+      isPartial_ = oldHeader.partial != 0;
+      lutOffset_ = oldHeader.lutOffset;
+      bytesConsumed_ = oldHeader.bytesConsumed;
+      totalBytes_ = oldHeader.totalBytes;
     }
-    LOG_ERR(TAG, "Parsing failed or aborted with %d pages (extend=%d)", pageCount_, skipPages > 0);
+    LOG_ERR(TAG, "Page serialization failed; previous cache state preserved");
+    return false;
+  }
+
+  if ((!success && pageCount_ == 0) || aborted) {
+    file_.close();
+    parser.reset();
+    if (skipPages == 0) {
+      pageCount_ = 0;
+      isPartial_ = false;
+      bytesConsumed_ = 0;
+      totalBytes_ = 0;
+      SdMan.remove(cachePath_.c_str());
+    } else {
+      pageCount_ = oldHeader.pageCount;
+      isPartial_ = oldHeader.partial != 0;
+      lutOffset_ = oldHeader.lutOffset;
+      bytesConsumed_ = oldHeader.bytesConsumed;
+      totalBytes_ = oldHeader.totalBytes;
+    }
+    LOG_ERR(TAG, "Parsing failed or aborted with %u pages (extend=%d)", pageCount_, skipPages > 0);
     return false;
   }
 
@@ -367,8 +372,12 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
     }
     if (!copyOk) {
       file_.close();
-      pageCount_ = skipPages;
-      SdMan.remove(cachePath_.c_str());
+      parser.reset();
+      pageCount_ = oldHeader.pageCount;
+      isPartial_ = oldHeader.partial != 0;
+      lutOffset_ = oldHeader.lutOffset;
+      bytesConsumed_ = oldHeader.bytesConsumed;
+      totalBytes_ = oldHeader.totalBytes;
       return false;
     }
     // Append new entries and update header
@@ -376,20 +385,29 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
     for (const uint32_t pos : lut) {
       writeOk = writeOk && serialization::writePodChecked(file_, pos);
     }
-    const uint8_t partial = isPartial_ ? 1 : 0;
-    writeOk = writeOk && file_.seek(kPageCountOffset) && serialization::writePodChecked(file_, pageCount_) &&
-              serialization::writePodChecked(file_, partial) && serialization::writePodChecked(file_, newLutOffset) &&
-              serialization::writePodChecked(file_, bytesConsumed_) &&
-              serialization::writePodChecked(file_, totalBytes_);
+    writeOk = writeOk && writeMutableHeader(pageCount_, isPartial_, newLutOffset, bytesConsumed_, totalBytes_) &&
+              file_.sync();
     if (!writeOk) {
+      const bool rollbackOk = writeMutableHeader(oldHeader.pageCount, oldHeader.partial != 0, oldHeader.lutOffset,
+                                                 oldHeader.bytesConsumed, oldHeader.totalBytes, false) &&
+                              file_.sync();
       file_.close();
-      pageCount_ = skipPages;
-      SdMan.remove(cachePath_.c_str());
+      parser.reset();
+      pageCount_ = oldHeader.pageCount;
+      isPartial_ = oldHeader.partial != 0;
+      lutOffset_ = oldHeader.lutOffset;
+      bytesConsumed_ = oldHeader.bytesConsumed;
+      totalBytes_ = oldHeader.totalBytes;
+      if (!rollbackOk) SdMan.remove(cachePath_.c_str());
       return false;
     }
     lutOffset_ = newLutOffset;
+    file_.close();
+    LOG_INF(TAG, "Created in %lu ms: %u pages, partial=%d", millis() - startMs, pageCount_, isPartial_);
+    return true;
   } else if (!writeLut(lut)) {
     file_.close();
+    parser.reset();
     if (skipPages == 0) {
       pageCount_ = 0;
       isPartial_ = false;
@@ -405,10 +423,11 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint16
   const bool synced = file_.sync();
   file_.close();
   if (!synced) {
+    parser.reset();
     SdMan.remove(cachePath_.c_str());
     return false;
   }
-  LOG_INF(TAG, "Created in %lu ms: %d pages, partial=%d", millis() - startMs, pageCount_, isPartial_);
+  LOG_INF(TAG, "Created in %lu ms: %u pages, partial=%d", millis() - startMs, pageCount_, isPartial_);
   return true;
 }
 
@@ -418,20 +437,25 @@ bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const Ab
     return true;
   }
 
-  const uint16_t chunk = pageCount_ >= 30 ? 50 : additionalPages;
-  const uint16_t currentPages = pageCount_;
+  const uint16_t chunk = page_cache::extensionChunk(pageCount_, additionalPages);
+  const uint32_t currentPages = pageCount_;
+  if (chunk == 0) {
+    LOG_ERR(TAG, "Cache reached the page-count limit (%u)", pageCount_);
+    return false;
+  }
 
   if (parser.canResume()) {
     // HOT PATH: Parser has live session from previous extend, just append new pages.
     // No re-parsing — O(chunk) work instead of O(totalPages).
     // Uses disk-to-disk LUT copy with small buffer to avoid large heap allocations
     // that fragment memory on spines with thousands of pages.
-    LOG_INF(TAG, "Hot extend from %d pages (+%d)", currentPages, chunk);
+    LOG_INF(TAG, "Hot extend from %u pages (+%u)", currentPages, static_cast<unsigned>(chunk));
 
     bool opened = false;
     for (int attempt = 0; attempt < 3; attempt++) {
       if (attempt > 0) delay(50);
-      if (file_.open(cachePath_.c_str(), O_RDWR)) {
+      file_ = SdMan.open(cachePath_.c_str(), O_RDWR);
+      if (file_) {
         opened = true;
         break;
       }
@@ -450,30 +474,40 @@ bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const Ab
       return false;
     }
     const uint32_t oldLutOffset = header.lutOffset;
+    const auto restoreCommittedState = [this, &header]() {
+      pageCount_ = header.pageCount;
+      isPartial_ = header.partial != 0;
+      lutOffset_ = header.lutOffset;
+      bytesConsumed_ = header.bytesConsumed;
+      totalBytes_ = header.totalBytes;
+    };
 
     if (!file_.seekEnd()) {
       file_.close();
       return false;
     }
 
-    const uint16_t pagesBefore = pageCount_;
-    const uint16_t oldPageCount = pageCount_;
+    const uint32_t pagesBefore = pageCount_;
+    const uint32_t oldPageCount = pageCount_;
     uint32_t newOffsets[50];
     uint16_t newCount = 0;
     bool hitMaxPages = false;
+    bool serializeFailed = false;
     bool parseOk = parser.parsePages(
-        [this, &newOffsets, &newCount, &hitMaxPages](std::unique_ptr<Page> page) {
+        [this, &newOffsets, &newCount, &hitMaxPages, &serializeFailed](std::unique_ptr<Page> page) {
           if (hitMaxPages || newCount >= 50) return;
           const uint32_t position = file_.position();
 #ifndef ARDUINO
           if (failSerializeInterval_ > 0 && ++failSerializeCounter_ % failSerializeInterval_ == 0) {
             LOG_ERR(TAG, "Simulated serialize failure (page %u)", pageCount_);
+            serializeFailed = true;
             hitMaxPages = true;
             return;
           }
 #endif
           if (!page->serialize(file_)) {
             LOG_ERR(TAG, "Failed to serialize page %u, stopping", pageCount_);
+            serializeFailed = true;
             hitMaxPages = true;
             return;
           }
@@ -482,7 +516,16 @@ bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const Ab
         },
         chunk, shouldAbort);
 
+    if (serializeFailed) {
+      parser.reset();
+      file_.close();
+      restoreCommittedState();
+      LOG_ERR(TAG, "Page serialization failed; previous cache state preserved");
+      return false;
+    }
+
     if (!page_cache::hotExtendShouldCommit(parseOk, pageCount_ != pagesBefore)) {
+      parser.reset();
       file_.close();
       LOG_ERR(TAG, "Hot extend failed with no new pages");
       return false;
@@ -503,18 +546,18 @@ bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const Ab
       while (remaining > 0) {
         uint32_t toRead = remaining < kCopyBuf ? remaining : kCopyBuf;
         if (!file_.seek(srcPos)) {
+          parser.reset();
           LOG_ERR(TAG, "LUT copy seek failed at %u", srcPos);
-          pageCount_ = pagesBefore;
           file_.close();
-          SdMan.remove(cachePath_.c_str());
+          restoreCommittedState();
           return false;
         }
         const size_t n = file_.read(buf, toRead);
         if (n != toRead || !file_.seek(dstPos) || file_.write(buf, n) != n) {
+          parser.reset();
           LOG_ERR(TAG, "LUT copy failed at %u", srcPos);
-          pageCount_ = pagesBefore;
           file_.close();
-          SdMan.remove(cachePath_.c_str());
+          restoreCommittedState();
           return false;
         }
         srcPos += static_cast<uint32_t>(n);
@@ -529,32 +572,29 @@ bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const Ab
       writeOk = writeOk && serialization::writePodChecked(file_, newOffsets[i]);
     }
 
-    lutOffset_ = newLutOffset;
-    const uint8_t partial = isPartial_ ? 1 : 0;
-    writeOk = writeOk && file_.seek(kPageCountOffset) && serialization::writePodChecked(file_, pageCount_) &&
-              serialization::writePodChecked(file_, partial) && serialization::writePodChecked(file_, newLutOffset) &&
-              serialization::writePodChecked(file_, bytesConsumed_) &&
-              serialization::writePodChecked(file_, totalBytes_) && file_.sync();
-    file_.close();
+    writeOk = writeOk && writeMutableHeader(pageCount_, isPartial_, newLutOffset, bytesConsumed_, totalBytes_) &&
+              file_.sync();
     if (!writeOk) {
-      pageCount_ = pagesBefore;
-      SdMan.remove(cachePath_.c_str());
+      const bool rollbackOk = writeMutableHeader(header.pageCount, header.partial != 0, header.lutOffset,
+                                                 header.bytesConsumed, header.totalBytes, false) &&
+                              file_.sync();
+      file_.close();
+      parser.reset();
+      restoreCommittedState();
+      if (!rollbackOk) SdMan.remove(cachePath_.c_str());
       return false;
     }
-    LOG_INF(TAG, "Hot extend done: %d pages, partial=%d", pageCount_, isPartial_);
+    lutOffset_ = newLutOffset;
+    file_.close();
+    LOG_INF(TAG, "Hot extend done: %u pages, partial=%d", pageCount_, isPartial_);
     return true;
   }
 
-  // COLD PATH: Fresh parser (after exit/reboot) — re-parse from start, skip cached pages.
-  // For large caches, cold re-parsing thousands of skipped pages fragments the heap.
-  // Skip the cold extend and let on-demand caching handle the rest.
-  if (pageCount_ >= 1000) {
-    LOG_INF(TAG, "Skipping cold extend at %d pages (too expensive), deferring to on-demand", pageCount_);
-    isPartial_ = false;
-    return true;
-  }
-  const uint16_t targetPages = pageCount_ + chunk;
-  LOG_INF(TAG, "Cold extend from %d to %d pages", currentPages, targetPages);
+  // COLD PATH: Fresh parser (after exit/reboot) — re-parse from start, skip
+  // cached pages, then append the next chunk. This is slower than hot resume,
+  // but it must remain correct for interrupted large books.
+  const uint32_t targetPages = pageCount_ + chunk;
+  LOG_INF(TAG, "Cold extend from %u to %u pages", currentPages, targetPages);
 
   parser.reset();
   bool result = create(parser, config_, targetPages, currentPages, shouldAbort);
@@ -563,16 +603,16 @@ bool PageCache::extend(ContentParser& parser, uint16_t additionalPages, const Ab
   // Without the hasMoreContent() check, an aborted extend (timeout/memory pressure)
   // would permanently mark the chapter as complete, truncating it.
   if (result && pageCount_ <= currentPages && !parser.hasMoreContent()) {
-    LOG_INF(TAG, "No progress during extend (%d pages), marking complete", pageCount_);
+    LOG_INF(TAG, "No progress during extend (%u pages), marking complete", pageCount_);
     isPartial_ = false;
   }
 
   return result;
 }
 
-std::unique_ptr<Page> PageCache::loadPage(uint16_t pageNum) {
+std::unique_ptr<Page> PageCache::loadPage(uint32_t pageNum) {
   if (pageNum >= pageCount_) {
-    LOG_ERR(TAG, "Page %d out of range (max %d)", pageNum, pageCount_);
+    LOG_ERR(TAG, "Page %u out of range (max %u)", pageNum, pageCount_);
     return nullptr;
   }
 
@@ -602,30 +642,41 @@ std::unique_ptr<Page> PageCache::loadPage(uint16_t pageNum) {
       continue;
     }
 
-    // Read page position from LUT
+    // Read this page's start and the following page's start. The next LUT
+    // entry (or LUT start for the final page) is the exact record boundary.
     if (!file_.seek(lutOffset + static_cast<size_t>(pageNum) * sizeof(uint32_t))) {
       file_.close();
       continue;
     }
-    uint32_t pagePos;
+    uint32_t pagePos = 0;
     if (!serialization::readPodChecked(file_, pagePos)) {
       file_.close();
       continue;
     }
-
-    // Validate page position
-    if (pagePos < kHeaderSize || pagePos >= lutOffset) {
-      LOG_ERR(TAG, "Invalid page position: %u (LUT offset: %u)", pagePos, lutOffset);
+    uint32_t pageEnd = lutOffset;
+    if (pageNum + 1 < header.pageCount && !serialization::readPodChecked(file_, pageEnd)) {
       file_.close();
       continue;
     }
 
-    // Read page
-    file_.seek(pagePos);
+    if (pagePos < kHeaderSize || pagePos >= pageEnd || pageEnd > lutOffset) {
+      LOG_ERR(TAG, "Invalid page span: %u..%u (LUT offset: %u)", pagePos, pageEnd, lutOffset);
+      file_.close();
+      continue;
+    }
+
+    if (!file_.seek(pagePos)) {
+      file_.close();
+      continue;
+    }
     auto page = Page::deserialize(file_);
+    const uint32_t recordEnd = file_.position();
     file_.close();
 
-    if (page) return page;
+    if (page && recordEnd <= pageEnd) return page;
+    if (page) {
+      LOG_ERR(TAG, "Page %u record overruns boundary: ended at %u, boundary %u", pageNum, recordEnd, pageEnd);
+    }
   }
 
   return nullptr;

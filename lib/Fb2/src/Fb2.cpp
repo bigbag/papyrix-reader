@@ -10,6 +10,7 @@
 #include <EncodingDetector.h>
 #include <ExpatEncodingHandler.h>
 #include <FsHelpers.h>
+#include <ImageConverter.h>
 #include <Logging.h>
 
 #include "Base64Decoder.h"
@@ -887,7 +888,7 @@ void Fb2::setupCacheDir() const {
 
 std::string Fb2::getCoverBmpPath() const { return cachePath + "/cover.bmp"; }
 
-std::string Fb2::findCoverImage() const {
+std::string Fb2::findCoverImage(const std::function<bool()>& shouldAbort) const {
   // Extract directory path
   size_t lastSlash = filepath.find_last_of('/');
   std::string dirPath = (lastSlash == std::string::npos) ? "/" : filepath.substr(0, lastSlash);
@@ -895,11 +896,11 @@ std::string Fb2::findCoverImage() const {
     dirPath = "/";
   }
 
-  return CoverHelpers::findCoverImage(dirPath, title);
+  return CoverHelpers::findCoverImage(dirPath, title, shouldAbort);
 }
 
-bool Fb2::extractEmbeddedCover(const std::string& outputPath) const {
-  if (coverRef.empty() || coverBinaryOffset_ < 0) return false;
+bool Fb2::extractEmbeddedCover(const std::string& outputPath, const std::function<bool()>& shouldAbort) const {
+  if (CoverHelpers::isAbortRequested(shouldAbort) || coverRef.empty() || coverBinaryOffset_ < 0) return false;
 
   FsFile fb2File;
   if (!SdMan.openFileForRead("FB2", filepath, fb2File)) {
@@ -920,6 +921,10 @@ bool Fb2::extractEmbeddedCover(const std::string& outputPath) const {
   int scanLimit = 512;
 
   while (!foundTagEnd && scanLimit > 0 && fb2File.available() > 0) {
+    if (CoverHelpers::isAbortRequested(shouldAbort)) {
+      fb2File.close();
+      return false;
+    }
     size_t toRead = static_cast<size_t>(scanLimit) < kBufSize ? static_cast<size_t>(scanLimit) : kBufSize;
     size_t n = fb2File.read(buf, toRead);
     if (n == 0) break;
@@ -955,6 +960,7 @@ bool Fb2::extractEmbeddedCover(const std::string& outputPath) const {
   auto writeCallback = [&outFile](const uint8_t* data, size_t sz) { return outFile.write(data, sz) == sz; };
 
   while (!done && fb2File.available() > 0) {
+    if (CoverHelpers::isAbortRequested(shouldAbort)) break;
     size_t n = fb2File.read(buf, kBufSize);
     if (n == 0) break;
 
@@ -975,7 +981,7 @@ bool Fb2::extractEmbeddedCover(const std::string& outputPath) const {
     if (decoder.failed()) break;
   }
 
-  if (done && !decoder.failed()) {
+  if (done && !decoder.failed() && !CoverHelpers::isAbortRequested(shouldAbort)) {
     success = decoder.finish(writeCallback);
   }
 
@@ -990,102 +996,65 @@ bool Fb2::extractEmbeddedCover(const std::string& outputPath) const {
   return success;
 }
 
-bool Fb2::generateCoverBmp(bool use1BitDithering) const {
-  const auto coverBmpPath = getCoverBmpPath();
-  const auto failedMarkerPath = cachePath + "/.cover.failed";
+home_thumbnail::Result Fb2::prepareCoverSource(std::string& sourcePath, bool& temporary,
+                                               const std::function<bool()>& shouldAbort) const {
+  temporary = false;
+  sourcePath = findCoverImage(shouldAbort);
+  if (CoverHelpers::isAbortRequested(shouldAbort)) return home_thumbnail::Result::Cancelled;
+  if (!sourcePath.empty()) return home_thumbnail::Result::Ready;
 
-  // Already generated
-  if (SdMan.exists(coverBmpPath.c_str())) {
-    return true;
-  }
-
-  // Previously failed, don't retry
-  if (SdMan.exists(failedMarkerPath.c_str())) {
-    return false;
-  }
-
-  // Find a cover image (external file in same directory)
-  std::string coverImagePath = findCoverImage();
-
-  // Try extracting embedded cover if no external image found
-  std::string tmpCoverPath;
-  if (coverImagePath.empty() && !coverRef.empty()) {
-    std::string ext = ".jpg";
-    if (coverContentType == "image/png") {
-      ext = ".png";
-    } else if (coverContentType == "image/bmp") {
-      ext = ".bmp";
-    }
-    tmpCoverPath = cachePath + "/.tmp_cover" + ext;
-    setupCacheDir();
-    if (extractEmbeddedCover(tmpCoverPath)) {
-      coverImagePath = tmpCoverPath;
-    }
-  }
-
-  if (coverImagePath.empty()) {
-    LOG_INF(TAG, "No cover image found");
-    FsFile marker;
-    if (SdMan.openFileForWrite("FB2", failedMarkerPath, marker)) {
-      marker.close();
-    }
-    return false;
-  }
-
-  // Setup cache directory
   setupCacheDir();
+  if (coverRef.empty()) return home_thumbnail::Result::Unavailable;
 
-  // Convert to BMP using shared helper
-  const bool success = CoverHelpers::convertImageToBmp(coverImagePath, coverBmpPath, "FB2", use1BitDithering);
-
-  // Clean up temp file
-  if (!tmpCoverPath.empty()) {
-    SdMan.remove(tmpCoverPath.c_str());
+  sourcePath = cachePath + "/.cover-source.tmp";
+  SdMan.remove(sourcePath.c_str());
+  if (!extractEmbeddedCover(sourcePath, shouldAbort)) {
+    if (CoverHelpers::isAbortRequested(shouldAbort)) return home_thumbnail::Result::Cancelled;
+    return home_thumbnail::Result::Unavailable;
+  }
+  if (ImageConverterFactory::detectFormat(sourcePath) == ImageFormat::Unknown) {
+    SdMan.remove(sourcePath.c_str());
+    return home_thumbnail::Result::Unavailable;
   }
 
-  if (!success) {
-    // Create failure marker
-    FsFile marker;
-    if (SdMan.openFileForWrite("FB2", failedMarkerPath, marker)) {
-      marker.close();
-    }
-  }
-  return success;
+  temporary = true;
+  return home_thumbnail::Result::Ready;
 }
 
-std::string Fb2::getThumbBmpPath() const { return cachePath + "/thumb.bmp"; }
-
-bool Fb2::generateThumbBmp() const {
-  const auto thumbPath = getThumbBmpPath();
-  const auto failedMarkerPath = cachePath + "/.thumb.failed";
-
-  if (SdMan.exists(thumbPath.c_str())) {
+bool Fb2::generateCoverBmp(const bool use1BitDithering, const std::function<bool()>& shouldAbort) const {
+  const std::string coverBmpPath = getCoverBmpPath();
+  const std::string failedMarkerPath = cachePath + "/.cover.failed";
+  if (home_thumbnail::validateCover(coverBmpPath)) {
+    SdMan.remove(failedMarkerPath.c_str());
     return true;
   }
+  if (SdMan.exists(coverBmpPath.c_str())) SdMan.remove(coverBmpPath.c_str());
+  if (SdMan.exists(failedMarkerPath.c_str())) return false;
 
-  // Previously failed, don't retry
-  if (SdMan.exists(failedMarkerPath.c_str())) {
-    return false;
-  }
-
-  if (!SdMan.exists(getCoverBmpPath().c_str()) && !generateCoverBmp(true)) {
-    // Create failure marker
-    FsFile marker;
-    if (SdMan.openFileForWrite("FB2", failedMarkerPath, marker)) {
-      marker.close();
+  std::string sourcePath;
+  bool temporary = false;
+  const auto sourceResult = prepareCoverSource(sourcePath, temporary, shouldAbort);
+  if (sourceResult != home_thumbnail::Result::Ready) {
+    if (sourceResult == home_thumbnail::Result::Unavailable) {
+      FsFile marker;
+      if (SdMan.openFileForWrite("FB2", failedMarkerPath, marker)) marker.close();
     }
     return false;
   }
 
-  setupCacheDir();
+  const bool converted =
+      CoverHelpers::convertImageToBmp(sourcePath, coverBmpPath, "FB2", use1BitDithering, shouldAbort);
+  if (temporary) SdMan.remove(sourcePath.c_str());
 
-  const bool success = CoverHelpers::generateThumbFromCover(getCoverBmpPath(), thumbPath, "FB2");
-  if (!success) {
-    // Create failure marker
+  const bool cancelled = CoverHelpers::isAbortRequested(shouldAbort);
+  const bool success = converted && !cancelled && home_thumbnail::validateCover(coverBmpPath);
+  if (cancelled) {
+    SdMan.remove(coverBmpPath.c_str());
+  } else if (!success) {
     FsFile marker;
-    if (SdMan.openFileForWrite("FB2", failedMarkerPath, marker)) {
-      marker.close();
-    }
+    if (SdMan.openFileForWrite("FB2", failedMarkerPath, marker)) marker.close();
+  } else {
+    SdMan.remove(failedMarkerPath.c_str());
   }
   return success;
 }

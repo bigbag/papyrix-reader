@@ -9,8 +9,7 @@
 #include <string>
 #include <vector>
 
-// Forward declare Print (defined in platform_stubs.h)
-class Print;
+#include "Print.h"
 
 // File open mode flags
 #define O_RDONLY 0x00
@@ -25,7 +24,7 @@ struct MockDirectoryEntry {
 };
 
 // Mock FsFile for testing serialization
-class FsFile {
+class FsFile : public Print {
  public:
   FsFile() = default;
 
@@ -44,6 +43,8 @@ class FsFile {
     totalWritten_ = 0;
     writeLimitActive_ = false;
     syncResult_ = true;
+    seekEndResult_ = true;
+    hasModifyDateTime_ = false;
   }
 
   // For write-mode: use a shared buffer so data survives after FsFile destruction
@@ -61,6 +62,8 @@ class FsFile {
     totalWritten_ = 0;
     writeLimitActive_ = false;
     syncResult_ = true;
+    seekEndResult_ = true;
+    hasModifyDateTime_ = false;
   }
 
   void setDirectory(const std::vector<MockDirectoryEntry>& entries) {
@@ -97,6 +100,20 @@ class FsFile {
   }
 
   void setSyncResult(bool result) { syncResult_ = result; }
+  void setSeekEndResult(bool result) { seekEndResult_ = result; }
+
+  void setModifyDateTime(uint16_t date, uint16_t time) {
+    modifyDate_ = date;
+    modifyTime_ = time;
+    hasModifyDateTime_ = true;
+  }
+
+  bool getModifyDateTime(uint16_t* date, uint16_t* time) const {
+    if (!hasModifyDateTime_ || !date || !time) return false;
+    *date = modifyDate_;
+    *time = modifyTime_;
+    return true;
+  }
 
   std::string getBuffer() const { return buffer_; }
 
@@ -127,6 +144,10 @@ class FsFile {
     writeLimitActive_ = false;
     totalWritten_ = 0;
     syncResult_ = true;
+    seekEndResult_ = true;
+    modifyDate_ = 0;
+    modifyTime_ = 0;
+    hasModifyDateTime_ = false;
   }
 
   FsFile openNextFile() {
@@ -157,6 +178,11 @@ class FsFile {
   }
 
   bool seekSet(size_t pos) { return seek(pos); }
+  bool seekEnd(int64_t offset = 0) {
+    if (!seekEndResult_) return false;
+    const int64_t position = static_cast<int64_t>(buffer_.size()) + offset;
+    return position >= 0 && seek(static_cast<size_t>(position));
+  }
 
   bool seekCur(int offset) {
     const auto newPos = static_cast<int64_t>(pos_) + offset;
@@ -250,4 +276,8 @@ class FsFile {
   bool writeLimitActive_ = false;
   size_t totalWritten_ = 0;
   bool syncResult_ = true;
+  bool seekEndResult_ = true;
+  uint16_t modifyDate_ = 0;
+  uint16_t modifyTime_ = 0;
+  bool hasModifyDateTime_ = false;
 };

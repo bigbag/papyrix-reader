@@ -7,6 +7,8 @@
 #include <cstring>
 #include <math.h>  // global ::round used by Arduino-style code
 
+#include "Print.h"
+
 // ESP32 heap caps stubs
 #ifndef MALLOC_CAP_8BIT
 #define MALLOC_CAP_8BIT 0x01
@@ -68,7 +70,22 @@ class String;
 inline void pinMode(int, int) {}
 inline void digitalWrite(int, int) {}
 inline int digitalRead(int) { return 0; }
-inline void delay(unsigned long) {}
+inline uint32_t& testDelayCallCount() {
+  static uint32_t value = 0;
+  return value;
+}
+inline uint32_t& testDelayTotalMs() {
+  static uint32_t value = 0;
+  return value;
+}
+inline void testResetDelayStats() {
+  testDelayCallCount() = 0;
+  testDelayTotalMs() = 0;
+}
+inline void delay(unsigned long ms) {
+  testDelayCallCount()++;
+  testDelayTotalMs() += static_cast<uint32_t>(ms);
+}
 inline uint32_t analogReadMilliVolts(uint8_t) { return 0; }
 inline uint32_t g_mockCpuFreqMhz = 160;
 inline void setCpuFrequencyMhz(uint32_t freq) { g_mockCpuFreqMhz = freq; }
@@ -86,20 +103,6 @@ inline void setCpuFrequencyMhz(uint32_t freq) { g_mockCpuFreqMhz = freq; }
 #ifndef LOW
 #define LOW 0
 #endif
-
-// Minimal Print class
-class Print {
- public:
-  virtual size_t write(const uint8_t* buf, size_t size) {
-    (void)buf;
-    return size;
-  }
-  virtual size_t write(uint8_t c) {
-    (void)c;
-    return 1;
-  }
-  virtual ~Print() = default;
-};
 
 // Mock Serial for test output
 struct MockSerial : public Print {
@@ -138,6 +141,7 @@ unsigned long millis();
 #endif
 #define ENABLE_SERIAL_LOG
 #define LOG_ERR(origin, format, ...) ::printf("[ERR] [%s] " format "\n", origin, ##__VA_ARGS__)
+#define LOG_WRN(origin, format, ...) ::printf("[WRN] [%s] " format "\n", origin, ##__VA_ARGS__)
 #define LOG_INF(origin, format, ...) ::printf("[INF] [%s] " format "\n", origin, ##__VA_ARGS__)
 #define LOG_DBG(origin, format, ...) ::printf("[DBG] [%s] " format "\n", origin, ##__VA_ARGS__)
 

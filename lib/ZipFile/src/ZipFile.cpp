@@ -351,8 +351,8 @@ int ZipFile::fillUncompressedSizes(std::vector<SizeTarget>& targets, std::vector
   return matched;
 }
 
-int ZipFile::findFirstExisting(const char* const* paths, int pathCount) {
-  if (!paths || pathCount <= 0 || pathCount > 65535) return -1;
+int ZipFile::findFirstExisting(const char* const* paths, int pathCount, const std::function<bool()>& shouldAbort) {
+  if (!paths || pathCount <= 0 || pathCount > 65535 || (shouldAbort && shouldAbort())) return -1;
 
   const bool wasOpen = isOpen();
   if ((!wasOpen && !open()) || !loadZipDetails()) {
@@ -379,6 +379,10 @@ int ZipFile::findFirstExisting(const char* const* paths, int pathCount) {
   int foundIndex = -1;
   int lowestPriority = pathCount;
   for (uint16_t entry = 0; entry < zipDetails.totalEntries; entry++) {
+    if (shouldAbort && shouldAbort()) {
+      foundIndex = -1;
+      break;
+    }
     FileStatSlim stat = {};
     const CentralEntryResult result = readCentralEntry(file, stat, itemName, sizeof(itemName));
     if (result == CentralEntryResult::Skip) continue;

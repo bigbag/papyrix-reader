@@ -1,6 +1,7 @@
 #include "BackgroundTask.h"
 
 #include <Logging.h>
+#include <ScopedMutex.h>
 
 #define TAG "TASK"
 
@@ -8,131 +9,201 @@ BackgroundTask::BackgroundTask() {
   // Create event group upfront - it must exist before task starts
   // and outlive the task for safe signaling
   eventGroup_ = xEventGroupCreate();
-  if (!eventGroup_) {
-    LOG_ERR(TAG, "WARNING: Failed to create event group");
+  lifecycleMutex_ = xSemaphoreCreateMutex();
+  if (!eventGroup_ || !lifecycleMutex_) {
+    LOG_ERR(TAG, "WARNING: Failed to create task synchronization primitives");
   }
 }
 
 BackgroundTask::~BackgroundTask() {
+  if (!eventGroup_ || !lifecycleMutex_) {
+    if (eventGroup_) vEventGroupDelete(eventGroup_);
+    if (lifecycleMutex_) vSemaphoreDelete(lifecycleMutex_);
+    return;
+  }
+
   const bool stopped = stop(0);
 
-  // Safe to delete event group only after task has fully exited
+  // The worker has finished using both synchronization primitives.
   if (eventGroup_ && stopped) {
     vEventGroupDelete(eventGroup_);
     eventGroup_ = nullptr;
   }
+  if (lifecycleMutex_ && stopped) {
+    vSemaphoreDelete(lifecycleMutex_);
+    lifecycleMutex_ = nullptr;
+  }
 }
 
 bool BackgroundTask::start(const char* name, uint32_t stackSize, TaskFunction func, int priority) {
-  // Transition from any of {IDLE, COMPLETE, ERROR} to STARTING.
-  // compare_exchange_weak can fail spuriously even when state_ == expected;
-  // always re-check the observed state before deciding (spurious IDLE fail
-  // used to log "already running (state=0)" and refuse to start).
-  State expected = state_.load(std::memory_order_acquire);
-  while (true) {
-    if (expected != State::IDLE && expected != State::COMPLETE && expected != State::ERROR) {
-      LOG_ERR(TAG, "%s: already running (state=%d)", name, static_cast<int>(expected));
+  const char* taskName = name ? name : "?";
+  if (!eventGroup_ || !lifecycleMutex_) {
+    LOG_ERR(TAG, "%s: task synchronization unavailable", taskName);
+    state_.store(State::ERROR, std::memory_order_release);
+    return false;
+  }
+
+  uint32_t generation = 0;
+  {
+    ScopedMutex lock(lifecycleMutex_);
+    if (!lock) {
+      LOG_ERR(TAG, "%s: failed to lock task lifecycle", taskName);
       return false;
     }
-    if (state_.compare_exchange_weak(expected, State::STARTING, std::memory_order_acq_rel, std::memory_order_acquire)) {
-      break;
+
+    const State current = state_.load(std::memory_order_acquire);
+    const uint32_t currentGeneration = generation_.load(std::memory_order_acquire);
+    const bool previousExited =
+        currentGeneration != 0 && exitedGeneration_.load(std::memory_order_acquire) == currentGeneration;
+    const bool terminal = current == State::IDLE || current == State::COMPLETE || current == State::ERROR;
+    if (current == State::STOPPING || (!terminal && !previousExited)) {
+      LOG_ERR(TAG, "%s: already running (state=%d)", taskName, static_cast<int>(current));
+      return false;
     }
-    // CAS failed — expected now holds the latest observed state; loop again.
+
+    generation = currentGeneration + 1;
+    if (generation == 0) generation = 1;
+    generation_.store(generation, std::memory_order_release);
+    state_.store(State::STARTING, std::memory_order_release);
+    handle_.store(nullptr, std::memory_order_release);
+    xEventGroupClearBits(eventGroup_, EVENT_EXITED);
+    func_ = std::move(func);
+    name_ = name ? name : "";
+    stopRequested_.store(false, std::memory_order_release);
   }
 
-  if (!eventGroup_) {
-    LOG_ERR(TAG, "%s: no event group", name);
-    state_.store(State::ERROR, std::memory_order_release);
-    return false;
+  TaskHandle_t newHandle = nullptr;
+  const BaseType_t result = xTaskCreate(&BackgroundTask::trampoline, name, stackSize, this, priority, &newHandle);
+
+  {
+    ScopedMutex lock(lifecycleMutex_);
+    if (!lock) {
+      LOG_ERR(TAG, "%s: failed to publish task creation", taskName);
+      return false;
+    }
+    if (result != pdPASS || !newHandle) {
+      LOG_ERR(TAG, "%s: creation failed", taskName);
+      if (generation_.load(std::memory_order_acquire) == generation) {
+        handle_.store(nullptr, std::memory_order_release);
+        state_.store(State::ERROR, std::memory_order_release);
+        exitedGeneration_.store(generation, std::memory_order_release);
+        xEventGroupSetBits(eventGroup_, EVENT_EXITED);
+      }
+      return false;
+    }
+    if (generation_.load(std::memory_order_acquire) == generation &&
+        exitedGeneration_.load(std::memory_order_acquire) != generation) {
+      handle_.store(newHandle, std::memory_order_release);
+    }
   }
 
-  // Clear any stale exit event from previous run
-  xEventGroupClearBits(eventGroup_, EVENT_EXITED);
-
-  func_ = std::move(func);
-  name_ = name ? name : "";  // Store copy to prevent use-after-free
-  stopRequested_.store(false, std::memory_order_release);
-
-  BaseType_t result = xTaskCreate(&BackgroundTask::trampoline, name, stackSize, this, priority, &handle_);
-
-  if (result != pdPASS || !handle_) {
-    LOG_ERR(TAG, "%s: creation failed", name);
-    state_.store(State::ERROR, std::memory_order_release);
-    return false;
-  }
-
-  state_.store(State::RUNNING, std::memory_order_release);
-  LOG_INF(TAG, "%s: started (handle=%p)", name, handle_);
+  LOG_INF(TAG, "%s: started (handle=%p)", taskName, handle_.load(std::memory_order_acquire));
   return true;
 }
 
-bool BackgroundTask::stop(uint32_t maxWaitMs) {
-  State current = state_.load(std::memory_order_acquire);
-
-  // Already stopped or never started
-  if (current == State::IDLE || current == State::COMPLETE || current == State::ERROR) {
-    handle_ = nullptr;
-    return true;
+BackgroundTask::State BackgroundTask::getState() const {
+  const State state = state_.load(std::memory_order_acquire);
+  if (state == State::STARTING || state == State::RUNNING) {
+    const uint32_t generation = generation_.load(std::memory_order_acquire);
+    if (generation != 0 && exitedGeneration_.load(std::memory_order_acquire) == generation) {
+      return State::COMPLETE;
+    }
   }
+  return state;
+}
 
-  // Check event group exists (could have failed in constructor)
-  if (!eventGroup_) {
-    LOG_ERR(TAG, "stop: no event group, cannot wait for task");
-    // Set stop flag anyway so task exits on next shouldStop() check
+bool BackgroundTask::isRunning() const {
+  const State state = getState();
+  return state == State::STARTING || state == State::RUNNING || state == State::STOPPING;
+}
+
+bool BackgroundTask::stop(uint32_t maxWaitMs) {
+  if (!eventGroup_ || !lifecycleMutex_) {
+    LOG_ERR(TAG, "stop: task synchronization unavailable");
     stopRequested_.store(true, std::memory_order_release);
     return false;
   }
 
-  // Signal task to stop
-  state_.store(State::STOPPING, std::memory_order_release);
-  stopRequested_.store(true, std::memory_order_release);
+  uint32_t targetGeneration = 0;
+  std::string taskName;
+  {
+    ScopedMutex lock(lifecycleMutex_);
+    if (!lock) return false;
 
-  const char* taskName = name_.empty() ? "?" : name_.c_str();
-  LOG_INF(TAG, "%s: requesting stop (handle=%p)", taskName, handle_);
+    const State current = state_.load(std::memory_order_acquire);
+    if (current == State::IDLE || current == State::ERROR) {
+      handle_.store(nullptr, std::memory_order_release);
+      return true;
+    }
 
-  // Wait for task to signal exit via event group (efficient, no polling)
-  TickType_t waitTicks = (maxWaitMs == 0) ? portMAX_DELAY : pdMS_TO_TICKS(maxWaitMs);
+    targetGeneration = generation_.load(std::memory_order_acquire);
+    taskName = name_.empty() ? "?" : name_;
+    if (exitedGeneration_.load(std::memory_order_acquire) == targetGeneration) {
+      handle_.store(nullptr, std::memory_order_release);
+      state_.store(State::COMPLETE, std::memory_order_release);
+      return true;
+    }
 
-  EventBits_t bits = xEventGroupWaitBits(eventGroup_, EVENT_EXITED,
-                                         pdFALSE,  // Don't clear on exit (destructor handles)
-                                         pdTRUE,   // Wait for all bits
-                                         waitTicks);
+    if (current != State::STOPPING) {
+      state_.store(State::STOPPING, std::memory_order_release);
+      stopRequested_.store(true, std::memory_order_release);
+      LOG_INF(TAG, "%s: requesting stop (handle=%p)", taskName.c_str(), handle_.load(std::memory_order_acquire));
+    }
+  }
 
-  if (bits & EVENT_EXITED) {
-    handle_ = nullptr;
-    LOG_INF(TAG, "%s: stopped cleanly via self-delete", taskName);
+  const uint32_t waitStarted = millis();
+  while (exitedGeneration_.load(std::memory_order_acquire) != targetGeneration) {
+    TickType_t waitTicks = portMAX_DELAY;
+    if (maxWaitMs != 0) {
+      const uint32_t elapsed = millis() - waitStarted;
+      if (elapsed >= maxWaitMs) break;
+      waitTicks = pdMS_TO_TICKS(maxWaitMs - elapsed);
+      if (waitTicks == 0) waitTicks = 1;
+    }
+
+    const EventBits_t bits = xEventGroupWaitBits(eventGroup_, EVENT_EXITED, pdFALSE, pdTRUE, waitTicks);
+    if (!(bits & EVENT_EXITED)) break;
+    if (exitedGeneration_.load(std::memory_order_acquire) != targetGeneration) {
+      vTaskDelay(1);
+    }
+  }
+
+  if (exitedGeneration_.load(std::memory_order_acquire) == targetGeneration) {
+    ScopedMutex lock(lifecycleMutex_);
+    if (lock && generation_.load(std::memory_order_acquire) == targetGeneration) {
+      handle_.store(nullptr, std::memory_order_release);
+      state_.store(State::COMPLETE, std::memory_order_release);
+    }
+    LOG_INF(TAG, "%s: generation stopped cleanly", taskName.c_str());
     return true;
   }
 
-  LOG_ERR(TAG, "%s: WARNING - stop timeout, task may be stuck", taskName);
+  LOG_ERR(TAG, "%s: WARNING - stop timeout, task may be stuck", taskName.c_str());
   LOG_ERR(TAG, "NOT force-deleting to prevent mutex corruption");
-  // DO NOT call vTaskDelete(handle_) - this causes crashes!
   return false;
 }
 
 void BackgroundTask::trampoline(void* param) { static_cast<BackgroundTask*>(param)->run(); }
 
 void BackgroundTask::run() {
+  const uint32_t generation = generation_.load(std::memory_order_acquire);
+  State expected = State::STARTING;
+  state_.compare_exchange_strong(expected, State::RUNNING, std::memory_order_acq_rel, std::memory_order_acquire);
   // Execute user function
   if (func_) {
     func_();
   }
 
-  // Update state BEFORE signaling (memory order matters)
-  state_.store(State::COMPLETE, std::memory_order_release);
-
-  // CRITICAL: Capture event group pointer locally BEFORE checking/using
-  // This prevents race with destructor which could delete eventGroup_ between
-  // our null check and the xEventGroupSetBits call
+  // The event wakes waiters; generation equality is the completion condition.
   EventGroupHandle_t eg = eventGroup_;
-
-  // Signal completion via event group (stop() is waiting on this)
-  // This MUST happen before vTaskDelete to avoid race condition
   if (eg) {
     xEventGroupSetBits(eg, EVENT_EXITED);
   }
 
-  // Self-delete (FreeRTOS recommended pattern)
-  // Safe: idle task will free our stack, event group already signaled
+  // Final access to this object. A successful stop may now transfer ownership
+  // and the destructor may release synchronization primitives.
+  exitedGeneration_.store(generation, std::memory_order_release);
+
+  // Only the task's own FreeRTOS state remains to be reclaimed.
   vTaskDelete(nullptr);
 }

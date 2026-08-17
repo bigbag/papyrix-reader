@@ -406,9 +406,8 @@ size_t XtcParser::loadPage(uint32_t pageIndex, uint8_t* buffer, size_t bufferSiz
   return bytesRead;
 }
 
-XtcError XtcParser::loadPageStreaming(uint32_t pageIndex,
-                                      std::function<void(const uint8_t* data, size_t size, size_t offset)> callback,
-                                      size_t chunkSize) {
+XtcError XtcParser::loadPageStreaming(uint32_t pageIndex, PageChunkCallback callback, size_t chunkSize,
+                                      const std::function<bool()>& shouldAbort) {
   if (!m_isOpen) return XtcError::FILE_NOT_FOUND;
   if (pageIndex >= m_header.pageCount) return XtcError::PAGE_OUT_OF_RANGE;
   if (!callback || chunkSize == 0) return XtcError::CORRUPTED_HEADER;
@@ -429,6 +428,10 @@ XtcError XtcParser::loadPageStreaming(uint32_t pageIndex,
 
   size_t totalRead = 0;
   while (totalRead < bitmapSize) {
+    if (shouldAbort && shouldAbort()) {
+      m_lastError = XtcError::CANCELLED;
+      return m_lastError;
+    }
     const size_t toRead = std::min(chunkSize, bitmapSize - totalRead);
     const int bytesRead = m_file.read(chunk.get(), toRead);
     if (bytesRead < 0 || static_cast<size_t>(bytesRead) != toRead) {
@@ -436,8 +439,11 @@ XtcError XtcParser::loadPageStreaming(uint32_t pageIndex,
       return m_lastError;
     }
 
-    callback(chunk.get(), bytesRead, totalRead);
-    totalRead += bytesRead;
+    if (!callback(chunk.get(), static_cast<size_t>(bytesRead), totalRead)) {
+      m_lastError = XtcError::READ_ERROR;
+      return m_lastError;
+    }
+    totalRead += static_cast<size_t>(bytesRead);
   }
 
   m_lastError = XtcError::OK;

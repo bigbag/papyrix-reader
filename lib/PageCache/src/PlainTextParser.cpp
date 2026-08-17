@@ -37,7 +37,7 @@ void PlainTextParser::reset() {
   pendingPageY_ = 0;
 }
 
-bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint16_t maxPages,
+bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint32_t maxPages,
                                  const AbortCallback& shouldAbort) {
   FsFile file;
   if (!SdMan.openFileForRead("TXT", filepath_, file)) {
@@ -65,7 +65,7 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
   std::unique_ptr<ParsedText> currentBlock;
   std::unique_ptr<Page> currentPage;
   int16_t currentPageY = 0;
-  uint16_t pagesCreated = 0;
+  uint32_t pagesCreated = 0;
   std::string partialWord = std::move(pendingPartialWord_);
   uint16_t abortCheckCounter = 0;
   bool sawNewline = pendingSawNewline_;
@@ -373,6 +373,6 @@ bool PlainTextParser::parsePages(const std::function<void(std::unique_ptr<Page>)
   currentOffset_ = fileSize_;
   hasMore_ = false;
 
-  LOG_INF(TAG, "Parsed %d pages from %s", pagesCreated, filepath_.c_str());
+  LOG_INF(TAG, "Parsed %u pages from %s", pagesCreated, filepath_.c_str());
   return true;
 }

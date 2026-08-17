@@ -19,7 +19,7 @@ using SectionPageMetric = Section;
 
 uint32_t recomputeTotal(const std::vector<SectionPageMetric>& metrics) { return total(metrics); }
 
-void applyProbe(SectionPageMetric& metric, uint16_t pageCount, bool partial) {
+void applyProbe(SectionPageMetric& metric, uint32_t pageCount, bool partial) {
   applyCache(metric, pageCount, partial);
 }
 
@@ -35,23 +35,24 @@ int main() {
   // estimatePagesForBytes
   // ============================================
 
-  runner.expectEq<uint16_t>(1, estimatePagesForBytes(0), "zero_bytes_yields_one_page");
-  runner.expectEq<uint16_t>(1, estimatePagesForBytes(1), "one_byte_yields_one_page");
-  runner.expectEq<uint16_t>(1, estimatePagesForBytes(2048), "exact_one_page");
-  runner.expectEq<uint16_t>(2, estimatePagesForBytes(2049), "one_byte_over_yields_two");
-  runner.expectEq<uint16_t>(5, estimatePagesForBytes(10240), "exact_five_pages");
-  runner.expectEq<uint16_t>(5, estimatePagesForBytes(10000), "rounded_up_to_five");
+  runner.expectEq<uint32_t>(1, estimatePagesForBytes(0), "zero_bytes_yields_one_page");
+  runner.expectEq<uint32_t>(1, estimatePagesForBytes(1), "one_byte_yields_one_page");
+  runner.expectEq<uint32_t>(1, estimatePagesForBytes(2048), "exact_one_page");
+  runner.expectEq<uint32_t>(2, estimatePagesForBytes(2049), "one_byte_over_yields_two");
+  runner.expectEq<uint32_t>(5, estimatePagesForBytes(10240), "exact_five_pages");
+  runner.expectEq<uint32_t>(5, estimatePagesForBytes(10000), "rounded_up_to_five");
 
   // Custom bytesPerPage
-  runner.expectEq<uint16_t>(10, estimatePagesForBytes(10000, 1000), "custom_bpp_1000");
-  runner.expectEq<uint16_t>(1, estimatePagesForBytes(500, 1000), "custom_bpp_under_one_page");
-  runner.expectEq<uint16_t>(2, estimatePagesForBytes(1001, 1000), "custom_bpp_just_over_one");
+  runner.expectEq<uint32_t>(10, estimatePagesForBytes(10000, 1000), "custom_bpp_1000");
+  runner.expectEq<uint32_t>(1, estimatePagesForBytes(500, 1000), "custom_bpp_under_one_page");
+  runner.expectEq<uint32_t>(2, estimatePagesForBytes(1001, 1000), "custom_bpp_just_over_one");
 
   // bytesPerPage=0 is guarded (treated as 1)
-  runner.expectEq<uint16_t>(100, estimatePagesForBytes(100, 0), "bpp_zero_guarded");
+  runner.expectEq<uint32_t>(100, estimatePagesForBytes(100, 0), "bpp_zero_guarded");
 
-  // Large values don't overflow uint16_t
-  runner.expectEq<uint16_t>(65535, estimatePagesForBytes(200000000, 1), "large_bytes_clamped_to_uint16_max");
+  // Large values remain exact beyond the legacy uint16_t ceiling
+  runner.expectEq<uint32_t>(200000000, estimatePagesForBytes(200000000, 1),
+                            "large_bytes_preserve_uint32_page_count");
 
   // ============================================
   // recomputeTotal
@@ -82,9 +83,9 @@ int main() {
         {0, false, 5000},   // Should become 5 pages at 1000 bpp
     };
     recalibrate(metrics);
-    runner.expectEq<uint16_t>(5, metrics[2].pages, "recalibrate_estimated_section");
-    runner.expectEq<uint16_t>(10, metrics[0].pages, "recalibrate_exact_unchanged_0");
-    runner.expectEq<uint16_t>(20, metrics[1].pages, "recalibrate_exact_unchanged_1");
+    runner.expectEq<uint32_t>(5, metrics[2].pages, "recalibrate_estimated_section");
+    runner.expectEq<uint32_t>(10, metrics[0].pages, "recalibrate_exact_unchanged_0");
+    runner.expectEq<uint32_t>(20, metrics[1].pages, "recalibrate_exact_unchanged_1");
   }
 
   // No exact sections: no recalibration
@@ -94,8 +95,8 @@ int main() {
         {4, false, 8000},
     };
     recalibrate(metrics);
-    runner.expectEq<uint16_t>(3, metrics[0].pages, "no_exact_no_change_0");
-    runner.expectEq<uint16_t>(4, metrics[1].pages, "no_exact_no_change_1");
+    runner.expectEq<uint32_t>(3, metrics[0].pages, "no_exact_no_change_0");
+    runner.expectEq<uint32_t>(4, metrics[1].pages, "no_exact_no_change_1");
   }
 
   // Exact section with byteSize=0 doesn't contribute to calibration
@@ -105,7 +106,7 @@ int main() {
         {0, false, 10000},  // Should stay unchanged (no calibration data)
     };
     recalibrate(metrics);
-    runner.expectEq<uint16_t>(0, metrics[1].pages, "exact_no_bytes_no_calibration");
+    runner.expectEq<uint32_t>(0, metrics[1].pages, "exact_no_bytes_no_calibration");
   }
 
   // Mixed: one exact section calibrates multiple estimated
@@ -117,9 +118,9 @@ int main() {
         {0, false, 4000},   // Should become 2 pages
     };
     recalibrate(metrics);
-    runner.expectEq<uint16_t>(5, metrics[1].pages, "mixed_calibrate_section_1");
-    runner.expectEq<uint16_t>(10, metrics[2].pages, "mixed_calibrate_section_2");
-    runner.expectEq<uint16_t>(2, metrics[3].pages, "mixed_calibrate_section_3");
+    runner.expectEq<uint32_t>(5, metrics[1].pages, "mixed_calibrate_section_1");
+    runner.expectEq<uint32_t>(10, metrics[2].pages, "mixed_calibrate_section_2");
+    runner.expectEq<uint32_t>(2, metrics[3].pages, "mixed_calibrate_section_3");
   }
 
   // Calibration floor: bytesPerPage is at least 256
@@ -129,7 +130,7 @@ int main() {
         {0, false, 512},    // At 256 bpp → 2 pages
     };
     recalibrate(metrics);
-    runner.expectEq<uint16_t>(2, metrics[1].pages, "bpp_floor_256");
+    runner.expectEq<uint32_t>(2, metrics[1].pages, "bpp_floor_256");
   }
 
   // ============================================
@@ -331,7 +332,7 @@ int main() {
     runner.expectTrue(update.changed, "zero_page_probe_changed");
     runner.expectTrue(update.becameExact, "zero_page_probe_became_exact");
     runner.expectTrue(m.exact, "zero_page_probe_exact");
-    runner.expectEq<uint16_t>(0, m.pages, "zero_page_probe_pages");
+    runner.expectEq<uint32_t>(0, m.pages, "zero_page_probe_pages");
   }
 
   // A complete cache replaces a prior overestimate with its lower exact count.
@@ -339,7 +340,7 @@ int main() {
     SectionPageMetric m{7, false, 10000};
     applyProbe(m, 5, false);
     runner.expectTrue(m.exact, "complete_probe_replaces_estimate_exact");
-    runner.expectEq<uint16_t>(5, m.pages, "complete_probe_lowers_estimate");
+    runner.expectEq<uint32_t>(5, m.pages, "complete_probe_lowers_estimate");
   }
 
   // Estimate fill must NOT overwrite exact 0 with a byte-size estimate of 1
@@ -350,9 +351,9 @@ int main() {
         {20, true, 40000},
     };
     fillEstimates(metrics, 2000);
-    runner.expectEq<uint16_t>(0, metrics[0].pages, "zero_page_exact_not_overwritten");
+    runner.expectEq<uint32_t>(0, metrics[0].pages, "zero_page_exact_not_overwritten");
     runner.expectTrue(metrics[0].exact, "zero_page_exact_flag_kept");
-    runner.expectEq<uint16_t>(5, metrics[1].pages, "uncached_still_estimated");
+    runner.expectEq<uint32_t>(5, metrics[1].pages, "uncached_still_estimated");
     runner.expectFalse(metrics[1].exact, "uncached_not_exact");
   }
 

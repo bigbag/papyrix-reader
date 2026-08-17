@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <functional>
 #include <string>
 
 /**
@@ -53,9 +54,7 @@ class Txt {
 
   // Cover image support (for sleep screen and home view)
   std::string getCoverBmpPath() const;
-  bool generateCoverBmp(bool use1BitDithering = false) const;
-  std::string getThumbBmpPath() const;
-  bool generateThumbBmp() const;
+  bool generateCoverBmp(bool use1BitDithering = false, const std::function<bool()>& shouldAbort = nullptr) const;
 
   /**
    * Read content from file at specified offset
@@ -71,7 +70,7 @@ class Txt {
    * Searches for: <filename>.jpg, <filename>.bmp, cover.jpg, cover.bmp
    * @return Path to cover image, or empty string if not found
    */
-  std::string findCoverImage() const;
+  std::string findCoverImage(const std::function<bool()>& shouldAbort = nullptr) const;
 
   // Check if file is loaded
   bool isLoaded() const { return loaded; }

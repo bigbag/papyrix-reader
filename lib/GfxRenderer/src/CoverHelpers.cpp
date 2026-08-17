@@ -1,34 +1,15 @@
 #include "CoverHelpers.h"
 
 #include <Bitmap.h>
-#include <BitmapHelpers.h>
 #include <GfxRenderer.h>
+#include <HomeThumbnail.h>
 #include <ImageConverter.h>
 #include <Logging.h>
 #include <SDCardManager.h>
 
 #define TAG "COVER"
 
-#include "../../src/config.h"
-
 namespace CoverHelpers {
-
-bool renderCoverWithFallback(GfxRenderer& renderer, const std::string& coverPath, const std::string& previewPath,
-                             int marginTop, int marginRight, int marginBottom, int marginLeft,
-                             int& pagesUntilFullRefresh, int pagesPerRefreshValue, bool turnOffScreen) {
-  // Prefer full cover if available
-  if (SdMan.exists(coverPath.c_str())) {
-    return renderCoverFromBmp(renderer, coverPath, marginTop, marginRight, marginBottom, marginLeft,
-                              pagesUntilFullRefresh, pagesPerRefreshValue, turnOffScreen);
-  }
-  // Fall back to preview
-  if (SdMan.exists(previewPath.c_str())) {
-    LOG_DBG(TAG, "Using preview cover (full cover not ready)");
-    return renderCoverFromBmp(renderer, previewPath, marginTop, marginRight, marginBottom, marginLeft,
-                              pagesUntilFullRefresh, pagesPerRefreshValue, turnOffScreen);
-  }
-  return false;
-}
 
 bool renderCoverFromBmp(GfxRenderer& renderer, const std::string& bmpPath, int marginTop, int marginRight,
                         int marginBottom, int marginLeft, int& pagesUntilFullRefresh, int pagesPerRefreshValue,
@@ -91,14 +72,16 @@ bool renderCoverFromBmp(GfxRenderer& renderer, const std::string& bmpPath, int m
   return true;
 }
 
-std::string findCoverImage(const std::string& dirPath, const std::string& baseName) {
+std::string findCoverImage(const std::string& dirPath, const std::string& baseName,
+                           const std::function<bool()>& shouldAbort) {
   // Extensions to search for, in priority order
   const char* extensions[] = {".jpg", ".jpeg", ".png", ".bmp"};
 
   // Priority 1: Image matching base filename (e.g., book.jpg for book.txt)
   for (const char* ext : extensions) {
+    if (isAbortRequested(shouldAbort)) return "";
     std::string imagePath = dirPath + "/" + baseName + ext;
-    if (SdMan.exists(imagePath.c_str())) {
+    if (SdMan.exists(imagePath.c_str()) && ImageConverterFactory::detectFormat(imagePath) != ImageFormat::Unknown) {
       LOG_DBG(TAG, "Found cover image: %s", imagePath.c_str());
       return imagePath;
     }
@@ -106,8 +89,9 @@ std::string findCoverImage(const std::string& dirPath, const std::string& baseNa
 
   // Priority 2: Generic cover image in same directory
   for (const char* ext : extensions) {
+    if (isAbortRequested(shouldAbort)) return "";
     std::string imagePath = dirPath + "/cover" + ext;
-    if (SdMan.exists(imagePath.c_str())) {
+    if (SdMan.exists(imagePath.c_str()) && ImageConverterFactory::detectFormat(imagePath) != ImageFormat::Unknown) {
       LOG_DBG(TAG, "Found cover image: %s", imagePath.c_str());
       return imagePath;
     }
@@ -117,29 +101,15 @@ std::string findCoverImage(const std::string& dirPath, const std::string& baseNa
 }
 
 bool convertImageToBmp(const std::string& inputPath, const std::string& outputPath, const char* logTag,
-                       bool use1BitDithering) {
+                       bool use1BitDithering, const std::function<bool()>& shouldAbort) {
   ImageConvertConfig config;
   config.oneBit = use1BitDithering;
   config.logTag = logTag;
-  return ImageConverterFactory::convertToBmp(inputPath, outputPath, config);
-}
-
-bool generateThumbFromCover(const std::string& coverBmpPath, const std::string& thumbBmpPath, const char* logTag) {
-  if (SdMan.exists(thumbBmpPath.c_str())) return true;
-  if (!SdMan.exists(coverBmpPath.c_str())) return false;
-
-  const auto thumbTempPath = thumbBmpPath + ".tmp";
-  if (bmpTo1BitBmpScaled(coverBmpPath.c_str(), thumbTempPath.c_str(), THUMB_WIDTH, THUMB_HEIGHT)) {
-    FsFile tempFile = SdMan.open(thumbTempPath.c_str(), O_RDWR);
-    if (tempFile) {
-      tempFile.rename(thumbBmpPath.c_str());
-      tempFile.close();
-      LOG_INF(logTag, "Generated thumbnail");
-      return true;
-    }
+  config.shouldAbort = shouldAbort;
+  if (use1BitDithering) {
+    config.validateOutput = [](const std::string& path) { return home_thumbnail::validateCover(path); };
   }
-  SdMan.remove(thumbTempPath.c_str());
-  return false;
+  return ImageConverterFactory::convertToBmp(inputPath, outputPath, config);
 }
 
 }  // namespace CoverHelpers

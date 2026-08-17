@@ -7,6 +7,7 @@
 #include <Fb2.h>
 #include <Fb2Parser.h>
 #include <GfxRenderer.h>
+#include <HomeThumbnail.h>
 #include <HtmlParser.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -28,6 +29,7 @@
 #include "../FontManager.h"
 #include "../config.h"
 #include "../content/BookmarkManager.h"
+#include "../content/FileFingerprint.h"
 #include "../content/ProgressManager.h"
 #include "../content/ReaderNavigation.h"
 #include "../content/ReadingStatsStore.h"
@@ -53,8 +55,14 @@ static constexpr int kCacheTaskStopTimeoutMs = 10000;  // 10s - generous for slo
 namespace {
 constexpr int horizontalPadding = 5;
 constexpr int statusBarMargin = 23;
-constexpr uint8_t kMetricsIndexVersion = 2;
+constexpr uint8_t kMetricsIndexVersion = 4;
 constexpr const char* kMetricsIndexFilename = "metrics.bin";
+constexpr uint32_t kAnchorMapMagic = 0x48434E41;  // "ANCH" in little-endian files
+constexpr uint8_t kAnchorMapVersion = 1;
+constexpr size_t kColdMinFreeHeap = 28 * 1024;
+constexpr size_t kColdMinLargestBlock = 10 * 1024;
+constexpr size_t kHotMinFreeHeap = 15 * 1024;
+constexpr size_t kHotMinLargestBlock = 6 * 1024;
 
 // Cache path helpers
 inline std::string epubSectionCachePath(const std::string& epubCachePath, int spineIndex) {
@@ -66,7 +74,7 @@ inline std::string contentCachePath(const char* cacheDir, int fontId) {
 }
 
 struct MetricsEntry {
-  uint16_t pages;
+  uint32_t pages;
   bool exact;
   uint32_t byteSize;
 };
@@ -92,7 +100,9 @@ bool readMetricsIndexFile(const std::string& sectionsDir, const RenderConfig& co
                           serialization::readPodChecked(file, fileConfig.hyphenation) &&
                           serialization::readPodChecked(file, fileConfig.showImages) &&
                           serialization::readPodChecked(file, fileConfig.viewportWidth) &&
-                          serialization::readPodChecked(file, fileConfig.viewportHeight);
+                          serialization::readPodChecked(file, fileConfig.viewportHeight) &&
+                          serialization::readPodChecked(file, fileConfig.sourceFingerprint) &&
+                          serialization::readPodChecked(file, fileConfig.fontFingerprint);
   if (!configRead || config != fileConfig) {
     file.close();
     return false;
@@ -106,7 +116,7 @@ bool readMetricsIndexFile(const std::string& sectionsDir, const RenderConfig& co
 
   std::vector<MetricsEntry> decoded(static_cast<size_t>(spineCount));
   for (int i = 0; i < spineCount; ++i) {
-    uint16_t pages;
+    uint32_t pages;
     uint8_t flags;
     uint32_t byteSize;
     if (!serialization::readPodChecked(file, pages) || !serialization::readPodChecked(file, flags) ||
@@ -146,6 +156,8 @@ bool ReaderState::saveMetricsIndex(const std::string& sectionsDir, const RenderC
                  serialization::writePodChecked(file, config.showImages) &&
                  serialization::writePodChecked(file, config.viewportWidth) &&
                  serialization::writePodChecked(file, config.viewportHeight) &&
+                 serialization::writePodChecked(file, config.sourceFingerprint) &&
+                 serialization::writePodChecked(file, config.fontFingerprint) &&
                  serialization::writePodChecked(file, entryCount);
 
   for (const auto& m : globalSectionPageMetrics_) {
@@ -210,13 +222,14 @@ void ReaderState::saveAnchorMap(const ContentParser& parser, const std::string& 
   FsFile file;
   if (!SdMan.openFileForWrite("RDR", anchorPath, file)) return;
 
-  bool writeOk = true;
+  bool writeOk =
+      serialization::writePodChecked(file, kAnchorMapMagic) && serialization::writePodChecked(file, kAnchorMapVersion);
   if (anchors.size() > UINT16_MAX) {
     const uint16_t zero = 0;
-    writeOk = serialization::writePodChecked(file, zero);
+    writeOk = writeOk && serialization::writePodChecked(file, zero);
   } else {
     const uint16_t count = static_cast<uint16_t>(anchors.size());
-    writeOk = serialization::writePodChecked(file, count);
+    writeOk = writeOk && serialization::writePodChecked(file, count);
     for (const auto& entry : anchors) {
       writeOk = writeOk && serialization::writeStringChecked(file, entry.first) &&
                 serialization::writePodChecked(file, entry.second);
@@ -232,22 +245,26 @@ int ReaderState::loadAnchorPage(const std::string& cachePath, const std::string&
   FsFile file;
   if (!SdMan.openFileForRead("RDR", anchorPath, file)) return -1;
 
+  uint32_t magic;
+  uint8_t version;
   uint16_t count;
-  if (!serialization::readPodChecked(file, count)) {
+  if (!serialization::readPodChecked(file, magic) || magic != kAnchorMapMagic ||
+      !serialization::readPodChecked(file, version) || version != kAnchorMapVersion ||
+      !serialization::readPodChecked(file, count)) {
     file.close();
     return -1;
   }
 
   for (uint16_t i = 0; i < count; i++) {
     std::string anchorId;
-    uint16_t page;
+    uint32_t page;
     if (!serialization::readString(file, anchorId) || !serialization::readPodChecked(file, page)) {
       file.close();
       return -1;
     }
     if (anchorId == anchor) {
       file.close();
-      return page;
+      return page <= static_cast<uint32_t>(INT_MAX) ? static_cast<int>(page) : -1;
     }
   }
 
@@ -255,17 +272,21 @@ int ReaderState::loadAnchorPage(const std::string& cachePath, const std::string&
   return -1;
 }
 
-std::vector<std::pair<std::string, uint16_t>> ReaderState::loadAnchorMap(const std::string& cachePath) {
-  std::vector<std::pair<std::string, uint16_t>> anchors;
+std::vector<std::pair<std::string, uint32_t>> ReaderState::loadAnchorMap(const std::string& cachePath) {
+  std::vector<std::pair<std::string, uint32_t>> anchors;
   std::string anchorPath = cachePath + ".anchors";
   FsFile file;
   if (!SdMan.openFileForRead("RDR", anchorPath, file)) return anchors;
 
+  uint32_t magic;
+  uint8_t version;
   uint16_t count;
-  if (serialization::readPodChecked(file, count)) {
+  if (serialization::readPodChecked(file, magic) && magic == kAnchorMapMagic &&
+      serialization::readPodChecked(file, version) && version == kAnchorMapVersion &&
+      serialization::readPodChecked(file, count)) {
     for (uint16_t i = 0; i < count; i++) {
       std::string anchorId;
-      uint16_t page;
+      uint32_t page;
       if (!serialization::readString(file, anchorId) || !serialization::readPodChecked(file, page)) break;
       anchors.emplace_back(std::move(anchorId), page);
     }
@@ -288,7 +309,7 @@ void ReaderState::initializeGlobalPageMetrics(Core& core) {
   const ContentType type = core.content.metadata().type;
   const Theme& theme = THEME_MANAGER.current();
   const auto vp = getReaderViewport(core.settings.statusBar != 0);
-  const auto config = core.settings.getRenderConfig(theme, vp.width, vp.height);
+  const auto config = makeRenderConfig(core, theme, vp);
 
   int spineCount = 0;
   std::string sectionsDir;
@@ -320,8 +341,7 @@ void ReaderState::initializeGlobalPageMetrics(Core& core) {
       return false;
     }
     auto& metric = globalSectionPageMetrics_[static_cast<size_t>(currentSpineIndex_)];
-    const auto cacheUpdate =
-        page_metrics::applyCache(metric, static_cast<uint16_t>(pageCache_->pageCount()), pageCache_->isPartial());
+    const auto cacheUpdate = page_metrics::applyCache(metric, pageCache_->pageCount(), pageCache_->isPartial());
     return cacheUpdate.changed;
   };
 
@@ -437,8 +457,7 @@ void ReaderState::updateGlobalPageMetrics(Core& core) {
   }
 
   auto& metric = globalSectionPageMetrics_[static_cast<size_t>(currentSpineIndex_)];
-  const auto cacheUpdate =
-      page_metrics::applyCache(metric, static_cast<uint16_t>(pageCache_->pageCount()), pageCache_->isPartial());
+  const auto cacheUpdate = page_metrics::applyCache(metric, pageCache_->pageCount(), pageCache_->isPartial());
 
   if (cacheUpdate.becameExact) {
     page_metrics::recalibrate(globalSectionPageMetrics_);
@@ -451,7 +470,7 @@ void ReaderState::updateGlobalPageMetrics(Core& core) {
     }
     const Theme& theme = THEME_MANAGER.current();
     const auto vp = getReaderViewport(core.settings.statusBar != 0);
-    saveMetricsIndex(sectionsDir, core.settings.getRenderConfig(theme, vp.width, vp.height));
+    saveMetricsIndex(sectionsDir, makeRenderConfig(core, theme, vp));
   }
 }
 
@@ -545,7 +564,8 @@ void ReaderState::createOrExtendCacheImpl(ContentParser& parser, const std::stri
 // Background caching implementation (handles stop request checks)
 // Called from background task - uses BackgroundTask's shouldStop()
 // Ownership: background task owns pageCache_/parser_ while running
-void ReaderState::backgroundCacheImpl(ContentParser& parser, const std::string& cachePath, const RenderConfig& config) {
+void ReaderState::backgroundCacheImpl(ContentParser& parser, const std::string& cachePath, const RenderConfig& config,
+                                      uint32_t currentPage) {
   // Check for early abort before doing anything
   if (cacheTask_.shouldStop()) {
     LOG_DBG(TAG, "Background cache aborted before start");
@@ -559,7 +579,11 @@ void ReaderState::backgroundCacheImpl(ContentParser& parser, const std::string& 
   if (loaded && !SdMan.exists((cachePath + ".anchors").c_str())) {
     loaded = false;
   }
-  bool needsExtend = loaded && pageCache_->needsExtension(currentSectionPage_);
+  const bool cachePartial = loaded && pageCache_->isPartial();
+  const bool parserCanResume = parser.canResume();
+  const uint32_t cachedPages = loaded ? pageCache_->pageCount() : 0;
+  const bool needsExtend =
+      page_cache::backgroundShouldExtend(loaded, cachePartial, parserCanResume, cachedPages, currentPage);
 
   // Check for abort after setup
   if (cacheTask_.shouldStop()) {
@@ -583,7 +607,7 @@ void ReaderState::backgroundCacheImpl(ContentParser& parser, const std::string& 
       // gate prevents false-positive aborts on a fragmented-but-workable heap.
       size_t freeHeap = heap_caps_get_free_size(MALLOC_CAP_8BIT);
       size_t largestBlock = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
-      if (freeHeap < 15 * 1024 || largestBlock < 6 * 1024) {
+      if (freeHeap < kHotMinFreeHeap || largestBlock < kHotMinLargestBlock) {
         LOG_WRN(TAG, "Skip hot extend: heap tight (free=%zu largest=%zu)", freeHeap, largestBlock);
         pageCache_.reset();
         return;
@@ -593,7 +617,7 @@ void ReaderState::backgroundCacheImpl(ContentParser& parser, const std::string& 
       // Cold rebuild needs more headroom for full parser + allocations.
       size_t freeHeap = heap_caps_get_free_size(MALLOC_CAP_8BIT);
       size_t largestBlock = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
-      if (freeHeap < 28 * 1024 || largestBlock < 10 * 1024) {
+      if (freeHeap < kColdMinFreeHeap || largestBlock < kColdMinLargestBlock) {
         LOG_WRN(TAG, "Skip cold create: heap critical (free=%zu largest=%zu)", freeHeap, largestBlock);
         pageCache_.reset();
         parser.reset();
@@ -686,6 +710,12 @@ void ReaderState::enter(Core& core) {
     return;
   }
 
+  sourceFingerprint_ = fileFingerprint(contentPath_);
+  if (sourceFingerprint_ == 0) {
+    sourceFingerprint_ = fingerprintOrSession(sourceFingerprint_);
+    LOG_WRN(TAG, "Content fingerprint unavailable; using session cache ID for %s", contentPath_);
+  }
+
   // Apply orientation setting to renderer
   switch (core.settings.orientation) {
     case Settings::Portrait:
@@ -733,6 +763,7 @@ void ReaderState::enter(Core& core) {
   textStartIndex_ = 0;
   hasCover_ = false;
   thumbnailDone_ = false;
+  coverDone_ = false;
   switch (core.content.metadata().type) {
     case ContentType::Epub: {
       auto* provider = core.content.asEpub();
@@ -777,6 +808,28 @@ void ReaderState::enter(Core& core) {
       break;
   }
 
+  const char* cacheDir = core.content.cacheDir();
+  const bool hasCacheDir = cacheDir && cacheDir[0] != '\0';
+  if (hasCacheDir) {
+    for (const char* name : {"/cover.bmp.part", "/.cover-source.tmp", "/thumb.bmp.tmp", "/thumb.bmp.tmp.part"}) {
+      SdMan.remove((std::string(cacheDir) + name).c_str());
+    }
+  }
+
+  const std::string thumbnailPath = core.content.getThumbnailPath();
+  const bool thumbnailValid = !thumbnailPath.empty() && home_thumbnail::validate(thumbnailPath);
+  const std::string thumbnailMarker = hasCacheDir ? std::string(cacheDir) + "/.thumb.failed" : "";
+  if (thumbnailValid && !thumbnailMarker.empty()) SdMan.remove(thumbnailMarker.c_str());
+  const bool thumbnailFailed = !thumbnailMarker.empty() && SdMan.exists(thumbnailMarker.c_str());
+  thumbnailDone_ = core.settings.showImages == 0 || thumbnailValid || thumbnailFailed;
+
+  const std::string coverPath = core.content.getCoverPath();
+  const bool coverValid = !coverPath.empty() && home_thumbnail::validateCover(coverPath);
+  const std::string coverMarker = hasCacheDir ? std::string(cacheDir) + "/.cover.failed" : "";
+  if (coverValid && !coverMarker.empty()) SdMan.remove(coverMarker.c_str());
+  const bool coverFailed = !coverMarker.empty() && SdMan.exists(coverMarker.c_str());
+  coverDone_ = core.settings.showImages == 0 || coverValid || coverFailed;
+
   // Load saved progress
   ContentType type = core.content.metadata().type;
   auto progress = ProgressManager::load(core, core.content.cacheDir(), type);
@@ -809,8 +862,8 @@ void ReaderState::enter(Core& core) {
     return;
   }
 
-  // Start background caching (includes thumbnail generation)
-  // This runs once per book open regardless of starting position
+  // Start background caching, cover generation, and thumbnail generation.
+  // This runs once per book open regardless of starting position.
   startBackgroundCaching(core);
 }
 
@@ -1108,7 +1161,6 @@ void ReaderState::navigateNext(Core& core) {
     currentSectionPage_ = 0;
     needsRender_ = true;
     recordReadingActivityIfMoved(oldSpine, oldSection, oldPage);
-    startBackgroundCaching(core);
     return;
   }
 
@@ -1161,6 +1213,9 @@ void ReaderState::navigatePrev(Core& core) {
       needsRender_ = true;
       recordReadingActivityIfMoved(oldSpine, oldSection, oldPage);
     }
+    if (!needsRender_) {
+      startBackgroundCaching(core);
+    }
     return;  // At start of book either way
   }
 
@@ -1195,7 +1250,9 @@ void ReaderState::applyNavResult(const ReaderNavigation::NavResult& result, Core
     pageCache_.reset();
   }
   recordReadingActivityIfMoved(oldSpine, oldSection, oldPage);
-  startBackgroundCaching(core);  // Resume caching
+  if (!needsRender_) {
+    startBackgroundCaching(core);
+  }
 }
 
 void ReaderState::navigateNextChapter(Core& core) {
@@ -1252,7 +1309,6 @@ void ReaderState::navigateNextChapter(Core& core) {
   pageCache_.reset();
   needsRender_ = true;
   recordReadingActivityIfMoved(oldSpine, oldSection, oldPage);
-  startBackgroundCaching(core);
 }
 
 void ReaderState::navigatePrevChapter(Core& core) {
@@ -1329,7 +1385,6 @@ void ReaderState::navigatePrevChapter(Core& core) {
 
   needsRender_ = true;
   recordReadingActivityIfMoved(oldSpine, oldSection, oldPage);
-  startBackgroundCaching(core);
 }
 
 void ReaderState::renderCurrentPage(Core& core) {
@@ -1350,6 +1405,7 @@ void ReaderState::renderCurrentPage(Core& core) {
         hasCover_ = true;
         readingSession_.updateProgress(0);
         core.display.markDirty();
+        startBackgroundCaching(core);
         return;
       }
       // No cover - skip spine 0 if textStartIndex is 0 (likely empty cover document)
@@ -1393,7 +1449,15 @@ void ReaderState::renderCurrentPage(Core& core) {
       break;
   }
 
-  if (!cacheTask_.isRunning() && (!pageCache_ || !thumbnailDone_)) {
+  const bool cacheLoaded = pageCache_ != nullptr;
+  const bool cachePartial = cacheLoaded && pageCache_->isPartial();
+  const bool parserCanResume = parser_ && parser_->canResume();
+  const uint32_t cachedPages = cacheLoaded ? pageCache_->pageCount() : 0;
+  const uint32_t currentCachePage = currentSectionPage_ > 0 ? static_cast<uint32_t>(currentSectionPage_) : 0;
+  const bool cacheRequired = type != ContentType::Xtc;
+  if (!cacheTask_.isRunning() &&
+      page_cache::backgroundWorkPending(cacheLoaded, cachePartial, thumbnailDone_, coverDone_, parserCanResume,
+                                        cachedPages, currentCachePage, cacheRequired)) {
     startBackgroundCaching(core);
   }
 
@@ -1518,7 +1582,7 @@ void ReaderState::renderCachedPage(Core& core) {
   }
 
   // Check if we need to extend cache
-  if (!ensurePageCached(core, currentSectionPage_)) {
+  if (currentSectionPage_ < 0 || !ensurePageCached(core, static_cast<uint32_t>(currentSectionPage_))) {
     renderer_.drawCenteredText(core.settings.getReaderFontId(theme), 300, tr(FAILED_TO_LOAD_PAGE),
                                theme.primaryTextBlack, BOLD);
     renderer_.displayBuffer();
@@ -1530,8 +1594,8 @@ void ReaderState::renderCachedPage(Core& core) {
   renderer_.clearScreen(theme.backgroundColor);
 
   // Load and render page (cache is now guaranteed to exist, we own it)
-  size_t pageCount = pageCache_ ? pageCache_->pageCount() : 0;
-  auto page = pageCache_ ? pageCache_->loadPage(currentSectionPage_) : nullptr;
+  uint32_t pageCount = pageCache_ ? pageCache_->pageCount() : 0;
+  auto page = pageCache_ ? pageCache_->loadPage(static_cast<uint32_t>(currentSectionPage_)) : nullptr;
 
   if (!page) {
     LOG_ERR(TAG, "Failed to load page, clearing cache");
@@ -1602,23 +1666,23 @@ void ReaderState::renderCachedPage(Core& core) {
     renderer_.cleanupGrayscaleWithFrameBuffer();
   }
 
-  LOG_DBG(TAG, "Rendered page %d/%d", currentSectionPage_ + 1, pageCount);
+  LOG_DBG(TAG, "Rendered page %d/%u", currentSectionPage_ + 1, pageCount);
 }
 
-bool ReaderState::ensurePageCached(Core& core, uint16_t pageNum) {
+bool ReaderState::ensurePageCached(Core& core, uint32_t pageNum) {
   // Caller must have stopped background task (we own pageCache_)
   if (!pageCache_) {
     return false;
   }
 
   // If page is already cached, we're good
-  size_t pageCount = pageCache_->pageCount();
+  uint32_t pageCount = pageCache_->pageCount();
   bool needsExtension = pageCache_->needsExtension(pageNum);
   bool isPartial = pageCache_->isPartial();
 
   if (pageNum < pageCount) {
     if (needsExtension) {
-      LOG_DBG(TAG, "Pre-extending cache at page %d", pageNum);
+      LOG_DBG(TAG, "Pre-extending cache at page %u", pageNum);
       createOrExtendCache(core);
     }
     return pageCache_ && pageNum < pageCache_->pageCount();
@@ -1626,11 +1690,11 @@ bool ReaderState::ensurePageCached(Core& core, uint16_t pageNum) {
 
   // Page not cached yet - need to extend
   if (!isPartial) {
-    LOG_DBG(TAG, "Page %d not available (cache complete at %d pages)", pageNum, pageCount);
+    LOG_DBG(TAG, "Page %u not available (cache complete at %u pages)", pageNum, pageCount);
     return false;
   }
 
-  LOG_DBG(TAG, "Extending cache for page %d", pageNum);
+  LOG_DBG(TAG, "Extending cache for page %u", pageNum);
 
   const Theme& theme = THEME_MANAGER.current();
   ui::centeredMessage(renderer_, theme, core.settings.getReaderFontId(theme), tr(LOADING));
@@ -1646,7 +1710,7 @@ void ReaderState::loadCacheFromDisk(Core& core) {
   ContentType type = core.content.metadata().type;
 
   const auto vp = getReaderViewport(core.settings.statusBar != 0);
-  const auto config = core.settings.getRenderConfig(theme, vp.width, vp.height);
+  const auto config = makeRenderConfig(core, theme, vp);
 
   std::string cachePath;
   if (type == ContentType::Epub) {
@@ -1684,7 +1748,7 @@ void ReaderState::createOrExtendCache(Core& core) {
   ContentType type = core.content.metadata().type;
 
   const auto vp = getReaderViewport(core.settings.statusBar != 0);
-  const auto config = core.settings.getRenderConfig(theme, vp.width, vp.height);
+  const auto config = makeRenderConfig(core, theme, vp);
 
   std::string cachePath;
   if (type == ContentType::Epub) {
@@ -1868,6 +1932,12 @@ ReaderState::Viewport ReaderState::getReaderViewport(bool showStatusBar) const {
   return vp;
 }
 
+RenderConfig ReaderState::makeRenderConfig(Core& core, const Theme& theme, const Viewport& viewport) const {
+  RenderConfig config = core.settings.getRenderConfig(theme, viewport.width, viewport.height);
+  config.sourceFingerprint = sourceFingerprint_;
+  return config;
+}
+
 bool ReaderState::renderCoverPage(Core& core) {
   LOG_DBG(TAG, "Generating cover for reader...");
   std::string coverPath = core.content.generateCover(true);  // Always 1-bit in reader (saves ~48KB grayscale buffer)
@@ -1890,18 +1960,9 @@ bool ReaderState::renderCoverPage(Core& core) {
 }
 
 void ReaderState::startBackgroundCaching(Core& core) {
-  // XTC content uses pre-rendered bitmaps — no page cache needed.
-  // Generate cover + thumbnail synchronously since XTC has no background task.
-  if (core.content.metadata().type == ContentType::Xtc) {
-    if (!thumbnailDone_) {
-      core.content.generateCover(true);
-      core.content.generateThumbnail();
-      thumbnailDone_ = true;
-    }
-    return;
-  }
+  if (core.content.metadata().type == ContentType::Xtc && thumbnailDone_ && coverDone_) return;
 
-  // BackgroundTask handles safe restart via CAS loop
+  // BackgroundTask rejects an unpublished prior generation without blocking.
   if (cacheTask_.isRunning()) {
     LOG_ERR(TAG, "Warning: Previous cache task still running, stopping first");
     if (!stopBackgroundCaching()) return;
@@ -1916,7 +1977,7 @@ void ReaderState::startBackgroundCaching(Core& core) {
   const bool coverExists = hasCover_;
   const int textStart = textStartIndex_;
 
-  cacheTask_.start(
+  const bool started = cacheTask_.start(
       "PageCache", kCacheTaskStackSize,
       [this, sectionPage, spineIndex, coverExists, textStart]() {
         const Theme& theme = THEME_MANAGER.current();
@@ -1934,12 +1995,14 @@ void ReaderState::startBackgroundCaching(Core& core) {
         }
 
         Core& coreRef = *corePtr;
+        drivers::Cpu::PerformanceLock performanceLock(coreRef.cpu);
         ContentType type = coreRef.content.metadata().type;
 
-        // Build cache if it doesn't exist
-        if (!pageCache_ && !cacheTask_.shouldStop()) {
+        // Build a missing cache or extend the loaded partial cache.
+        // XTC pages are pre-rendered and only need the cover stage below.
+        if (!cacheTask_.shouldStop() && type != ContentType::Xtc) {
           const auto vp = getReaderViewport(coreRef.settings.statusBar != 0);
-          const auto config = coreRef.settings.getRenderConfig(theme, vp.width, vp.height);
+          const auto config = makeRenderConfig(coreRef, theme, vp);
           std::string cachePath;
 
           if (type == ContentType::Epub) {
@@ -1993,14 +2056,21 @@ void ReaderState::startBackgroundCaching(Core& core) {
           }
 
           if (parser_ && !cachePath.empty() && !cacheTask_.shouldStop()) {
-            backgroundCacheImpl(*parser_, cachePath, config);
+            const uint32_t cachePage = sectionPage > 0 ? static_cast<uint32_t>(sectionPage) : 0;
+            backgroundCacheImpl(*parser_, cachePath, config, cachePage);
           }
         }
 
-        // Generate thumbnail from cover for HomeState (lower priority than page cache)
-        // Only attempt once per book open — skip if already tried (success or failure)
-        if (!thumbnailDone_ && !cacheTask_.shouldStop()) {
-          coreRef.content.generateThumbnail();
+        const auto shouldAbort = cacheTask_.getAbortCallback();
+        if (!coverDone_ && !shouldAbort()) {
+          coreRef.content.generateCover(true, shouldAbort);
+          if (shouldAbort()) return;
+          coverDone_ = true;
+        }
+
+        if (!thumbnailDone_ && !shouldAbort()) {
+          const auto result = coreRef.content.generateThumbnail(shouldAbort);
+          if (result == home_thumbnail::Result::Cancelled) return;
           thumbnailDone_ = true;
         }
 
@@ -2011,12 +2081,15 @@ void ReaderState::startBackgroundCaching(Core& core) {
         }
       },
       0);  // priority 0 (idle)
+  if (!started) {
+    LOG_ERR(TAG, "Failed to start background page cache task");
+    coreForCacheTask_ = nullptr;
+  }
 }
 
 bool ReaderState::stopBackgroundCaching(const bool waitForever) {
-  if (!cacheTask_.isRunning()) {
-    return true;
-  }
+  const auto state = cacheTask_.getState();
+  if (state == BackgroundTask::State::IDLE || state == BackgroundTask::State::ERROR) return true;
 
   // BackgroundTask::stop() uses event-based waiting (no polling)
   // and NEVER force-deletes the task.
@@ -2027,12 +2100,6 @@ bool ReaderState::stopBackgroundCaching(const bool waitForever) {
     return false;
   }
 
-  // Yield to allow FreeRTOS idle task to clean up the deleted task's TCB.
-  // The background task self-deletes via vTaskDelete(NULL), but the idle task
-  // must run to free its resources. Without this, parser_.reset() or
-  // pageCache_.reset() can trigger mutex ownership violations
-  // (assert failed: xQueueGenericSend queue.c:832).
-  vTaskDelay(10 / portTICK_PERIOD_MS);
   return true;
 }
 
@@ -2044,7 +2111,7 @@ bool ReaderState::isFullyIndexed(Core& core) {
   const ContentType type = core.content.metadata().type;
   const Theme& theme = THEME_MANAGER.current();
   const auto vp = getReaderViewport(core.settings.statusBar != 0);
-  const auto config = core.settings.getRenderConfig(theme, vp.width, vp.height);
+  const auto config = makeRenderConfig(core, theme, vp);
 
   if (type == ContentType::Epub) {
     auto* provider = core.content.asEpub();
@@ -2097,7 +2164,7 @@ void ReaderState::startFullBookIndexing(Core& core) {
   const ContentType type = core.content.metadata().type;
   const Theme& theme = THEME_MANAGER.current();
   const auto vp = getReaderViewport(core.settings.statusBar != 0);
-  const auto config = core.settings.getRenderConfig(theme, vp.width, vp.height);
+  const auto config = makeRenderConfig(core, theme, vp);
 
   indexingInProgress_ = true;
   indexingSpine_ = 0;
@@ -2164,7 +2231,7 @@ void ReaderState::processIndexingChunk(Core& core) {
   const ContentType type = core.content.metadata().type;
   const Theme& theme = THEME_MANAGER.current();
   const auto vp = getReaderViewport(core.settings.statusBar != 0);
-  const auto config = core.settings.getRenderConfig(theme, vp.width, vp.height);
+  const auto config = makeRenderConfig(core, theme, vp);
 
   auto shouldAbort = [this, &core]() -> bool {
     if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < 4 * 1024) return true;
@@ -2188,6 +2255,12 @@ void ReaderState::processIndexingChunk(Core& core) {
     renderer_.displayBuffer(EInkDisplay::HALF_REFRESH);
     LOG_WRN(TAG, "Full book indexing failed, falling back to page-by-page caching");
   };
+  auto skipCurrentSpine = [this]() {
+    indexingCache_.reset();
+    indexingParser_.reset();
+    renderer_.clearWidthCache();
+    indexingSpine_++;
+  };
 
   if (indexingSpine_ >= indexingTotalSpines_) {
     indexingInProgress_ = false;
@@ -2207,17 +2280,13 @@ void ReaderState::processIndexingChunk(Core& core) {
   if (indexingCache_) {
     size_t freeHeap = heap_caps_get_free_size(MALLOC_CAP_8BIT);
     size_t largestBlock = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
-    // Hot-extend reuses the open parser/cache and copies the LUT disk-to-disk via a
-    // small buffer, so it needs no more heap than the create path. Gate it at the same
-    // threshold; a higher bar here would needlessly skip spines on a fragmented heap and
-    // leave them partial (a partial spine keeps the whole-book count approximate).
-    if (freeHeap < 28 * 1024 || largestBlock < 10 * 1024) {
-      LOG_WRN(TAG, "Indexing: heap too low for spine %d (free=%zu largest=%zu), skipping", indexingSpine_, freeHeap,
-              largestBlock);
-      indexingCache_.reset();
-      indexingParser_.reset();
-      renderer_.clearWidthCache();
-      indexingSpine_++;
+    const bool hotExtend = indexingParser_->canResume();
+    const size_t minFreeHeap = hotExtend ? kHotMinFreeHeap : kColdMinFreeHeap;
+    const size_t minLargestBlock = hotExtend ? kHotMinLargestBlock : kColdMinLargestBlock;
+    if (freeHeap < minFreeHeap || largestBlock < minLargestBlock) {
+      LOG_WRN(TAG, "Indexing: heap too low for partial spine %d (free=%zu largest=%zu), skipping", indexingSpine_,
+              freeHeap, largestBlock);
+      skipCurrentSpine();
       needsRender_ = true;
       return;
     }
@@ -2229,11 +2298,8 @@ void ReaderState::processIndexingChunk(Core& core) {
         indexingParser_.reset();
         LOG_INF(TAG, "Indexing cancelled by user at spine %d", indexingSpine_);
       } else {
-        LOG_WRN(TAG, "Indexing: extend failed for spine %d, skipping", indexingSpine_);
-        indexingCache_.reset();
-        indexingParser_.reset();
-        renderer_.clearWidthCache();
-        indexingSpine_++;
+        LOG_WRN(TAG, "Indexing: extend failed for partial spine %d, skipping", indexingSpine_);
+        skipCurrentSpine();
       }
       needsRender_ = true;
       return;
@@ -2292,7 +2358,7 @@ void ReaderState::processIndexingChunk(Core& core) {
   // Heap gate before allocating parser + cache
   size_t freeHeap = heap_caps_get_free_size(MALLOC_CAP_8BIT);
   size_t largestBlock = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
-  if (freeHeap < 28 * 1024 || largestBlock < 10 * 1024) {
+  if (freeHeap < kColdMinFreeHeap || largestBlock < kColdMinLargestBlock) {
     LOG_ERR(TAG, "Indexing: heap too low for spine %d (free=%zu largest=%zu)", indexingSpine_, freeHeap, largestBlock);
     stopIndexing();
     needsRender_ = true;
@@ -2378,10 +2444,21 @@ void ReaderState::processIndexingChunk(Core& core) {
   }
   indexingCache_.reset(c);
 
-  if (indexingCache_->load(config) && !indexingCache_->isPartial()) {
+  const bool cacheLoaded = indexingCache_->load(config);
+  const auto cacheAction = page_cache::fullIndexCacheAction(cacheLoaded, cacheLoaded && indexingCache_->isPartial());
+  if (cacheAction == page_cache::FullIndexCacheAction::Skip) {
     indexingCache_.reset();
     indexingParser_.reset();
     indexingSpine_++;
+    needsRender_ = true;
+    return;
+  }
+  if (cacheAction == page_cache::FullIndexCacheAction::Extend) {
+    if (!page_cache::proactiveExtensionAllowed(indexingParser_->canResume(), indexingCache_->pageCount())) {
+      LOG_INF(TAG, "Indexing: deferring cold extend for partial spine %d at %u pages", indexingSpine_,
+              indexingCache_->pageCount());
+      skipCurrentSpine();
+    }
     needsRender_ = true;
     return;
   }
@@ -2471,8 +2548,8 @@ void ReaderState::enterTocMode(Core& core) {
     return;
   }
 
-  // Stop background task before TOC overlay — both SD card I/O (thumbnail)
-  // and e-ink display update share the same SPI bus
+  // Stop background task before TOC overlay — cache/cover SD I/O and e-ink
+  // display updates share the same SPI bus.
   if (!stopBackgroundCaching()) return;
 
   populateTocView(core);
@@ -2534,12 +2611,10 @@ void ReaderState::handleTocInput(Core& core, const Event& e) {
     case Button::Center:
       jumpToTocEntry(core, tocView_.selected);
       exitTocMode();
-      startBackgroundCaching(core);
       break;
 
     case Button::Back:
       exitTocMode();
-      startBackgroundCaching(core);
       break;
 
     case Button::Power:

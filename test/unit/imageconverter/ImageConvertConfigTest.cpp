@@ -9,15 +9,15 @@ struct TestImageConvertConfig {
   int maxWidth = 450;
   int maxHeight = 750;
   bool oneBit = false;
-  bool quickMode = false;
+  bool requireDithering = false;
   const char* logTag = "IMG";
   std::function<bool()> shouldAbort = nullptr;
+  std::function<bool(const std::string&)> validateOutput = nullptr;
 };
 
 // Routing decision logic extracted from JpegImageConverter::convert()
 // Returns which code path the JPEG converter would take
 enum class JpegRoute {
-  QuickMode,           // jpegFileToBmpStreamQuick
   FastPath,            // jpegFileToBmpStream (no scaling, no abort support)
   FastPath1Bit,        // jpegFileTo1BitBmpStream (no scaling, no abort support)
   WithSize,            // jpegFileToBmpStreamWithSize (supports abort)
@@ -25,27 +25,24 @@ enum class JpegRoute {
 };
 
 JpegRoute getJpegRoute(const TestImageConvertConfig& config) {
-  if (config.quickMode) {
-    return JpegRoute::QuickMode;
-  }
   if (config.maxWidth == 450 && config.maxHeight == 750 && !config.shouldAbort) {
     return config.oneBit ? JpegRoute::FastPath1Bit : JpegRoute::FastPath;
   }
   return config.oneBit ? JpegRoute::WithSize1Bit : JpegRoute::WithSize;
 }
 
+bool jpegRouteSupportsAbort(const JpegRoute route) {
+  return route == JpegRoute::WithSize || route == JpegRoute::WithSize1Bit;
+}
+
 // Routing decision logic extracted from PngImageConverter::convert()
 enum class PngRoute {
-  QuickMode,   // pngFileToBmpStreamQuick
-  WithSize,    // pngFileToBmpStreamWithSize (always supports abort)
+  WithSize,
 };
 
-PngRoute getPngRoute(const TestImageConvertConfig& config) {
-  if (config.quickMode) {
-    return PngRoute::QuickMode;
-  }
-  return PngRoute::WithSize;
-}
+PngRoute getPngRoute(const TestImageConvertConfig&) { return PngRoute::WithSize; }
+
+bool pngRouteSupportsAbort(const PngRoute route) { return route == PngRoute::WithSize; }
 
 int main() {
   TestUtils::TestRunner runner("ImageConvertConfig");
@@ -60,8 +57,9 @@ int main() {
     runner.expectEq(450, config.maxWidth, "default_maxWidth");
     runner.expectEq(750, config.maxHeight, "default_maxHeight");
     runner.expectFalse(config.oneBit, "default_oneBit");
-    runner.expectFalse(config.quickMode, "default_quickMode");
+    runner.expectFalse(config.requireDithering, "default_requireDithering");
     runner.expectTrue(config.shouldAbort == nullptr, "default_shouldAbort_null");
+    runner.expectTrue(config.validateOutput == nullptr, "default_validateOutput_null");
   }
 
   // Test 2: shouldAbort can be set to a callback
@@ -105,19 +103,6 @@ int main() {
     runner.expectTrue(getJpegRoute(config) == JpegRoute::FastPath1Bit, "jpeg_1bit_fastpath");
   }
 
-  // Test 6: quickMode always takes QuickMode path regardless of other settings
-  {
-    TestImageConvertConfig config;
-    config.quickMode = true;
-    runner.expectTrue(getJpegRoute(config) == JpegRoute::QuickMode, "jpeg_quickmode");
-
-    config.shouldAbort = []() { return false; };
-    runner.expectTrue(getJpegRoute(config) == JpegRoute::QuickMode, "jpeg_quickmode_with_abort");
-
-    config.maxWidth = 100;
-    runner.expectTrue(getJpegRoute(config) == JpegRoute::QuickMode, "jpeg_quickmode_with_size");
-  }
-
   // Test 7: Non-default size -> WithSize (supports abort callback)
   {
     TestImageConvertConfig config;
@@ -143,6 +128,7 @@ int main() {
     config.shouldAbort = []() { return false; };
     runner.expectTrue(getJpegRoute(config) == JpegRoute::WithSize1Bit,
                       "jpeg_450x750_1bit_with_abort_uses_withsize1bit");
+    runner.expectTrue(jpegRouteSupportsAbort(getJpegRoute(config)), "jpeg_1bit_withsize_propagates_abort");
   }
 
   // Test 10: Only width differs from 450 -> WithSize
@@ -169,13 +155,6 @@ int main() {
   {
     TestImageConvertConfig config;
     runner.expectTrue(getPngRoute(config) == PngRoute::WithSize, "png_default_withsize");
-  }
-
-  // Test 13: PNG quickMode
-  {
-    TestImageConvertConfig config;
-    config.quickMode = true;
-    runner.expectTrue(getPngRoute(config) == PngRoute::QuickMode, "png_quickmode");
   }
 
   // Test 14: PNG with shouldAbort still uses WithSize (which propagates it)

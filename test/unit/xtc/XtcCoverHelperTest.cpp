@@ -6,6 +6,7 @@
 #include <XtcCoverHelper.h>
 #include <Xtc/XtcParser.h>
 #include <Xtc/XtcTypes.h>
+#include <platform_stubs.h>
 
 #include <cstring>
 #include <string>
@@ -421,6 +422,26 @@ int main() {
                       static_cast<uint8_t>(static_cast<uint8_t>(bmpData[bottomRow]) & 0x80),
                       "unaligned XTH: final-row pixel is decoded");
     }
+  }
+
+  // ---- Test: cancellation does not publish a partial cover ----
+  {
+    SdMan.clearFiles();
+    SdMan.clearWrittenFiles();
+
+    constexpr uint16_t w = 16;
+    constexpr uint16_t h = 16;
+    std::vector<uint8_t> pixels((w + 7) / 8 * h, 0xFF);
+    SdMan.registerFile("/abort.xtc", buildXtcFile1Bit(w, h, pixels));
+
+    xtc::XtcParser parser;
+    runner.expectTrue(parser.open("/abort.xtc") == xtc::XtcError::OK, "abort: parser opens");
+    int checks = 0;
+    const bool result = xtc::generateCoverBmpFromParser(
+        parser, "/cache/aborted-cover.bmp", [&checks]() { return ++checks >= 3; });
+    runner.expectFalse(result, "abort: cover generation stops");
+    runner.expectFalse(SdMan.exists("/cache/aborted-cover.bmp"), "abort: partial cover is not published");
+    runner.expectFalse(SdMan.exists("/cache/aborted-cover.bmp.part"), "abort: partial cover is removed");
   }
 
   return runner.allPassed() ? 0 : 1;

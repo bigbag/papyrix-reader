@@ -12,132 +12,7 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 
-// BackgroundTask implementation (inlined for testing without complex dependencies)
-class BackgroundTask {
- public:
-  using TaskFunction = std::function<void()>;
-  using AbortCallback = std::function<bool()>;
-
-  enum class State : uint8_t {
-    IDLE,
-    STARTING,
-    RUNNING,
-    STOPPING,
-    COMPLETE,
-    ERROR
-  };
-
-  BackgroundTask() {
-    eventGroup_ = xEventGroupCreate();
-  }
-
-  ~BackgroundTask() {
-    stop(5000);
-    if (eventGroup_) {
-      vEventGroupDelete(eventGroup_);
-    }
-  }
-
-  BackgroundTask(const BackgroundTask&) = delete;
-  BackgroundTask& operator=(const BackgroundTask&) = delete;
-
-  bool start(const char* name, uint32_t stackSize, TaskFunction func, int priority) {
-    // Mirrors firmware BackgroundTask::start CAS loop: allow IDLE/COMPLETE/ERROR,
-    // and retry on compare_exchange_weak spurious failure.
-    State expected = state_.load(std::memory_order_acquire);
-    while (true) {
-      if (expected != State::IDLE && expected != State::COMPLETE && expected != State::ERROR) {
-        return false;
-      }
-      if (state_.compare_exchange_weak(expected, State::STARTING, std::memory_order_acq_rel,
-                                       std::memory_order_acquire)) {
-        break;
-      }
-    }
-
-    stopRequested_.store(false, std::memory_order_release);
-    xEventGroupClearBits(eventGroup_, EVENT_EXITED);
-
-    func_ = std::move(func);
-    name_ = name ? name : "";
-
-    BaseType_t result = xTaskCreatePinnedToCore(trampoline, name_.c_str(), stackSize, this, priority, &handle_, 0);
-
-    if (result != pdPASS) {
-      state_.store(State::ERROR, std::memory_order_release);
-      return false;
-    }
-
-    return true;
-  }
-
-  bool stop(uint32_t maxWaitMs = 10000) {
-    State currentState = state_.load(std::memory_order_acquire);
-    if (currentState == State::IDLE || currentState == State::COMPLETE || currentState == State::ERROR) {
-      return true;
-    }
-
-    stopRequested_.store(true, std::memory_order_release);
-    state_.store(State::STOPPING, std::memory_order_release);
-
-    TickType_t waitTicks = (maxWaitMs == 0) ? portMAX_DELAY : maxWaitMs;
-    EventBits_t bits = xEventGroupWaitBits(eventGroup_, EVENT_EXITED, pdFALSE, pdFALSE, waitTicks);
-
-    if (bits & EVENT_EXITED) {
-      // Task exited - join the thread
-      auto& registry = getTaskRegistry();
-      for (auto* task : registry) {
-        if (task->thread.joinable() && static_cast<void*>(task) == handle_) {
-          task->thread.join();
-          break;
-        }
-      }
-      state_.store(State::COMPLETE, std::memory_order_release);
-      return true;
-    }
-
-    return false;  // Timeout
-  }
-
-  bool shouldStop() const { return stopRequested_.load(std::memory_order_acquire); }
-
-  AbortCallback getAbortCallback() const {
-    return [this]() { return shouldStop(); };
-  }
-
-  bool isRunning() const {
-    State s = state_.load(std::memory_order_acquire);
-    return s == State::RUNNING || s == State::STOPPING;
-  }
-
-  State getState() const { return state_.load(std::memory_order_acquire); }
-
-  TaskHandle_t getHandle() const { return handle_; }
-
- private:
-  static void trampoline(void* param) {
-    BackgroundTask* self = static_cast<BackgroundTask*>(param);
-    self->run();
-  }
-
-  void run() {
-    state_.store(State::RUNNING, std::memory_order_release);
-    if (func_) {
-      func_();
-    }
-    xEventGroupSetBits(eventGroup_, EVENT_EXITED);
-    vTaskDelete(nullptr);  // Self-delete (correct usage)
-  }
-
-  static constexpr EventBits_t EVENT_EXITED = (1 << 0);
-
-  TaskHandle_t handle_ = nullptr;
-  EventGroupHandle_t eventGroup_ = nullptr;
-  std::atomic<bool> stopRequested_{false};
-  std::atomic<State> state_{State::IDLE};
-  TaskFunction func_;
-  std::string name_;
-};
+#include <BackgroundTask.h>
 
 int main() {
   TestUtils::TestRunner runner("BackgroundTask");
@@ -212,6 +87,8 @@ int main() {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     task.stop(1000);
     runner.expectTrue(task.getState() == BackgroundTask::State::COMPLETE, "State is COMPLETE after first stop");
+    // Restart uses the finalized generation even if another waiter consumed the event bit.
+    xEventGroupClearBits(static_cast<EventGroupHandle_t>(getEventGroupRegistry().back()), 1);
 
     bool second = task.start(
         "test2", 4096,
@@ -443,6 +320,139 @@ int main() {
     }
 
     runner.expectTrue(true, "Multiple start/stop cycles completed without crash");
+  }
+
+  // Test 13: Restart is rejected without blocking until the previous task has
+  // published generation completion.
+  {
+    cleanupMockTasks();
+    enableEventSetGate();
+    BackgroundTask task;
+
+    runner.expectTrue(task.start("first", 4096, []() {}, 1), "Immediate task starts");
+    waitForEventSetBlocked();
+    runner.expectFalse(task.start("second", 4096, []() {}, 1),
+                       "Restart is rejected until the previous generation publishes completion");
+
+    releaseEventSetGate();
+    while (task.getState() != BackgroundTask::State::COMPLETE) std::this_thread::yield();
+    runner.expectTrue(task.start("second", 4096, []() {}, 1),
+                      "Restart succeeds after completion publication");
+    runner.expectTrue(task.stop(1000), "Replacement task stops");
+  }
+
+  // Test 13b: A stop waiter must not lose the only event signal when the
+  // worker is preempted between event and generation publication.
+  {
+    cleanupMockTasks();
+    enableEventSetReturnGate();
+    BackgroundTask task;
+
+    runner.expectTrue(task.start("event-first", 4096, []() {}, 1), "Event-first task starts");
+    waitForEventSetReturnBlocked();
+
+    std::atomic<bool> stopDone{false};
+    bool stopped = false;
+    std::thread stopThread([&]() {
+      stopped = task.stop(0);
+      stopDone.store(true);
+    });
+    while (task.getState() != BackgroundTask::State::STOPPING) std::this_thread::yield();
+    runner.expectFalse(stopDone.load(), "Stop waits for generation publication");
+
+    releaseEventSetReturnGate();
+    stopThread.join();
+    runner.expectTrue(stopped, "Stop completes after generation publication");
+  }
+
+  // Test 14: A task that finishes before xTaskCreate() returns must remain
+  // COMPLETE; start() must not overwrite the terminal state with RUNNING.
+  {
+    cleanupMockTasks();
+    getCompleteTaskBeforeCreateReturns() = true;
+    BackgroundTask task;
+
+    runner.expectTrue(task.start("fast", 4096, []() {}, 1), "Fast task starts");
+    getCompleteTaskBeforeCreateReturns() = false;
+    runner.expectEq(static_cast<int>(BackgroundTask::State::COMPLETE), static_cast<int>(task.getState()),
+                    "Completion before create return remains visible");
+    runner.expectTrue(task.stop(100), "Stop observes already-completed fast task");
+  }
+
+  // Test 15: stop reserves a completed generation until its exit signal is
+  // published, so start cannot replace the generation underneath the waiter.
+  {
+    cleanupMockTasks();
+    enableEventSetGate();
+    BackgroundTask task;
+
+    runner.expectTrue(task.start("first", 4096, []() {}, 1), "Reserved-stop task starts");
+    waitForEventSetBlocked();
+
+    bool stopped = false;
+    std::thread stopThread([&]() { stopped = task.stop(1000); });
+    while (task.getState() != BackgroundTask::State::STOPPING) std::this_thread::yield();
+    runner.expectFalse(task.start("replacement", 4096, []() {}, 1),
+                       "Restart is rejected while stop owns the completed generation");
+
+    releaseEventSetGate();
+    stopThread.join();
+    runner.expectTrue(stopped, "Reserved completed generation stops cleanly");
+    runner.expectTrue(task.start("replacement", 4096, []() {}, 1),
+                      "Restart succeeds after the stop waiter returns");
+    task.stop(1000);
+  }
+
+  // Test 16: A failed xTaskCreate publishes terminal generation state so a
+  // concurrent unbounded stop does not wait for a worker that does not exist.
+  {
+    cleanupMockTasks();
+    enableTaskCreateFailureGate();
+    BackgroundTask task;
+
+    bool started = true;
+    std::thread startThread([&]() { started = task.start("fail", 4096, []() {}, 1); });
+    waitForTaskCreateBlocked();
+
+    bool stopped = false;
+    std::thread stopThread([&]() { stopped = task.stop(0); });
+    while (task.getState() != BackgroundTask::State::STOPPING) std::this_thread::yield();
+
+    releaseTaskCreateFailureGate();
+    startThread.join();
+    stopThread.join();
+
+    runner.expectFalse(started, "Injected task creation failure is reported");
+    runner.expectTrue(stopped, "Concurrent unbounded stop is released after creation failure");
+    runner.expectEq(static_cast<int>(BackgroundTask::State::COMPLETE), static_cast<int>(task.getState()),
+                    "Stopped failed generation is terminal");
+    runner.expectEq(0, getSelfDeleteCount().load(), "Failed creation has no worker to self-delete");
+    runner.expectTrue(getTaskRegistry().empty(), "Failed creation does not register a mock task");
+  }
+
+  // Test 17: A bounded stop times out without force-deleting a worker that
+  // has not cooperated yet, then succeeds after the worker exits.
+  {
+    cleanupMockTasks();
+    BackgroundTask task;
+    std::atomic<bool> workerStarted{false};
+    std::atomic<bool> releaseWorker{false};
+
+    runner.expectTrue(task.start("timeout", 4096, [&]() {
+      workerStarted.store(true);
+      while (!releaseWorker.load()) std::this_thread::yield();
+    }, 1), "Timeout fixture starts");
+    while (!workerStarted.load()) std::this_thread::yield();
+
+    const int forceDeletesBefore = getForceDeleteCount().load();
+    runner.expectFalse(task.stop(5), "Bounded stop reports an uncooperative worker timeout");
+    runner.expectEq(forceDeletesBefore, getForceDeleteCount().load(),
+                    "Timed-out stop does not force-delete the worker");
+    runner.expectTrue(task.getState() == BackgroundTask::State::STOPPING,
+                      "Timed-out worker remains in STOPPING state");
+
+    releaseWorker.store(true);
+    runner.expectTrue(task.stop(1000), "Stop succeeds after the timed-out worker exits");
   }
 
   cleanupMockTasks();

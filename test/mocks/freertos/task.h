@@ -3,13 +3,20 @@
 #include "FreeRTOS.h"
 
 #include <atomic>
+#include <condition_variable>
 #include <cstring>
 #include <functional>
+#include <mutex>
+#include <string>
 #include <thread>
 #include <vector>
 
 // Task function type
 typedef void (*TaskFunction_t)(void*);
+using StackType_t = uint32_t;
+
+inline UBaseType_t uxTaskGetStackHighWaterMark(TaskHandle_t) { return 4096; }
+inline const char* pcTaskGetName(TaskHandle_t) { return "test"; }
 
 // Mock task structure
 struct MockTask {
@@ -37,6 +44,49 @@ inline std::atomic<int>& getSelfDeleteCount() {
   return count;
 }
 
+inline std::atomic<bool>& getCompleteTaskBeforeCreateReturns() {
+  static std::atomic<bool> enabled{false};
+  return enabled;
+}
+
+struct MockTaskCreateFailureGate {
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool enabled = false;
+  bool blocked = false;
+  bool released = false;
+};
+
+inline MockTaskCreateFailureGate& getTaskCreateFailureGate() {
+  static MockTaskCreateFailureGate gate;
+  return gate;
+}
+
+inline void enableTaskCreateFailureGate() {
+  auto& gate = getTaskCreateFailureGate();
+  std::lock_guard<std::mutex> lock(gate.mutex);
+  gate.enabled = true;
+  gate.blocked = false;
+  gate.released = false;
+}
+
+inline void waitForTaskCreateBlocked() {
+  auto& gate = getTaskCreateFailureGate();
+  std::unique_lock<std::mutex> lock(gate.mutex);
+  gate.cv.wait(lock, [&gate]() { return gate.blocked; });
+}
+
+inline void releaseTaskCreateFailureGate() {
+  auto& gate = getTaskCreateFailureGate();
+  {
+    std::lock_guard<std::mutex> lock(gate.mutex);
+    gate.released = true;
+  }
+  gate.cv.notify_all();
+}
+
+inline thread_local MockTask* currentMockTask = nullptr;
+
 // xTaskCreatePinnedToCore mock
 inline BaseType_t xTaskCreatePinnedToCore(TaskFunction_t pvTaskCode, const char* const pcName, const uint32_t usStackDepth,
                                           void* const pvParameters, UBaseType_t uxPriority, TaskHandle_t* const pxCreatedTask,
@@ -45,20 +95,43 @@ inline BaseType_t xTaskCreatePinnedToCore(TaskFunction_t pvTaskCode, const char*
   (void)uxPriority;
   (void)xCoreID;
 
+  auto& createGate = getTaskCreateFailureGate();
+  {
+    std::unique_lock<std::mutex> lock(createGate.mutex);
+    if (createGate.enabled) {
+      createGate.blocked = true;
+      createGate.cv.notify_all();
+      createGate.cv.wait(lock, [&createGate]() { return createGate.released; });
+      createGate.enabled = false;
+      *pxCreatedTask = nullptr;
+      return pdFAIL;
+    }
+  }
+
   MockTask* task = new MockTask();
   task->func = pvTaskCode;
   task->param = pvParameters;
   task->name = pcName ? pcName : "";
 
   getTaskRegistry().push_back(task);
+  *pxCreatedTask = static_cast<TaskHandle_t>(task);
 
   task->thread = std::thread([task]() {
+    currentMockTask = task;
     task->func(task->param);
-    // Task should have called vTaskDelete(NULL) before exiting
+    currentMockTask = nullptr;
   });
 
-  *pxCreatedTask = static_cast<TaskHandle_t>(task);
+  if (getCompleteTaskBeforeCreateReturns().load()) {
+    while (!task->deleted.load()) std::this_thread::yield();
+  }
   return pdPASS;
+}
+
+inline BaseType_t xTaskCreate(TaskFunction_t pvTaskCode, const char* const pcName, const uint32_t usStackDepth,
+                              void* const pvParameters, UBaseType_t uxPriority,
+                              TaskHandle_t* const pxCreatedTask) {
+  return xTaskCreatePinnedToCore(pvTaskCode, pcName, usStackDepth, pvParameters, uxPriority, pxCreatedTask, 0);
 }
 
 // vTaskDelete mock - tracks self-delete vs force-delete
@@ -66,15 +139,9 @@ inline void vTaskDelete(TaskHandle_t xTaskToDelete) {
   if (xTaskToDelete == nullptr) {
     // Self-delete (correct usage)
     getSelfDeleteCount()++;
-    // Find this task and mark as self-deleted
-    auto& registry = getTaskRegistry();
-    std::thread::id thisId = std::this_thread::get_id();
-    for (auto* t : registry) {
-      if (t->thread.get_id() == thisId) {
-        t->selfDeleted = true;
-        t->deleted.store(true);
-        break;
-      }
+    if (currentMockTask) {
+      currentMockTask->selfDeleted = true;
+      currentMockTask->deleted.store(true);
     }
   } else {
     // Force-delete (incorrect - should never happen)
@@ -105,4 +172,11 @@ inline void cleanupMockTasks() {
   registry.clear();
   getForceDeleteCount() = 0;
   getSelfDeleteCount() = 0;
+  getCompleteTaskBeforeCreateReturns() = false;
+
+  auto& createGate = getTaskCreateFailureGate();
+  std::lock_guard<std::mutex> lock(createGate.mutex);
+  createGate.enabled = false;
+  createGate.blocked = false;
+  createGate.released = false;
 }

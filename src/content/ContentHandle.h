@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 #include "../core/Result.h"
 #include "ContentTypes.h"
 #include "EpubProvider.h"
@@ -56,10 +58,10 @@ struct ContentHandle {
   Result<TocEntry> getTocEntry(uint16_t index) const;
 
   // Cover generation helpers - return empty string on failure
-  std::string getThumbnailPath() const;              // Get path without generating (for existence check)
-  std::string getCoverPath() const;                  // Get cover.bmp path without generating
-  std::string generateThumbnail();                   // For home screen (THUMB_WIDTH x THUMB_HEIGHT 1-bit)
-  std::string generateCover(bool use1BitDithering);  // For reader cover page
+  std::string getCoverPath() const;
+  std::string generateCover(bool use1BitDithering, const std::function<bool()>& shouldAbort = nullptr);
+  std::string getThumbnailPath() const;
+  home_thumbnail::Result generateThumbnail(const std::function<bool()>& shouldAbort = nullptr);
 
   // Direct provider access (for format-specific operations)
   EpubProvider* asEpub();

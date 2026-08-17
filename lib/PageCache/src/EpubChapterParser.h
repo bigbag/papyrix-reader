@@ -39,18 +39,18 @@ class EpubChapterParser : public ContentParser {
   // The liveParser_'s completePageFn captures `this` and delegates to these members,
   // so the callback can be rewired between parsePages() calls without recreating the parser.
   std::function<void(std::unique_ptr<Page>)> onPageComplete_;
-  uint16_t maxPages_ = 0;
-  uint16_t pagesCreated_ = 0;
+  uint32_t maxPages_ = 0;
+  uint32_t pagesCreated_ = 0;
   bool hitMaxPages_ = false;
 
   // Captured anchor map from parser (persisted after liveParser_ is destroyed)
-  std::vector<std::pair<std::string, uint16_t>> anchorMap_;
+  std::vector<std::pair<std::string, uint32_t>> anchorMap_;
 
   // Sub-section chaining for on-demand spine splitting
   int currentSubSection_ = 0;
   int totalSubSections_ = 0;
   int subSectionPageOffset_ = 0;
-  uint16_t currentSubSectionPages_ = 0;
+  uint32_t currentSubSectionPages_ = 0;
 
   void cleanupTempFiles();
 
@@ -59,12 +59,12 @@ class EpubChapterParser : public ContentParser {
                     const std::string& imageCachePath = "");
   ~EpubChapterParser() override;
 
-  bool parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint16_t maxPages = 0,
+  bool parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint32_t maxPages = 0,
                   const AbortCallback& shouldAbort = nullptr) override;
   bool hasMoreContent() const override { return hasMore_; }
   bool canResume() const override { return initialized_ && liveParser_ != nullptr; }
   void reset() override;
-  const std::vector<std::pair<std::string, uint16_t>>& getAnchorMap() const override;
+  const std::vector<std::pair<std::string, uint32_t>>& getAnchorMap() const override;
   void clearAnchorMap() override {
     anchorMap_.clear();
     anchorMap_.shrink_to_fit();

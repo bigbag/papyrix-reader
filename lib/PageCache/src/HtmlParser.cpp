@@ -34,7 +34,7 @@ void HtmlParser::reset() {
   anchorMap_.clear();
 }
 
-const std::vector<std::pair<std::string, uint16_t>>& HtmlParser::getAnchorMap() const {
+const std::vector<std::pair<std::string, uint32_t>>& HtmlParser::getAnchorMap() const {
   if (liveParser_) {
     return liveParser_->getAnchorMap();
   }
@@ -45,7 +45,7 @@ uint32_t HtmlParser::bytesConsumed() const { return liveParser_ ? liveParser_->b
 
 uint32_t HtmlParser::totalBytes() const { return liveParser_ ? liveParser_->totalSize() : 0; }
 
-bool HtmlParser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint16_t maxPages,
+bool HtmlParser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint32_t maxPages,
                             const AbortCallback& shouldAbort) {
   // RESUME PATH
   if (initialized_ && liveParser_ && liveParser_->isSuspended()) {

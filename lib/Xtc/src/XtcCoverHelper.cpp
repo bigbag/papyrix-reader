@@ -1,15 +1,19 @@
 #include "XtcCoverHelper.h"
 
-#include <FsHelpers.h>
 #include <Logging.h>
 #include <SDCardManager.h>
 #include <esp_heap_caps.h>
+
+#include <cstring>
 
 #define TAG "XTC_COVER"
 
 namespace xtc {
 
-bool generateCoverBmpFromParser(XtcParser& parser, const std::string& coverBmpPath) {
+bool generateCoverBmpFromParser(XtcParser& parser, const std::string& coverBmpPath,
+                                const std::function<bool()>& shouldAbort) {
+  if (shouldAbort && shouldAbort()) return false;
+
   if (parser.getPageCount() == 0) {
     LOG_ERR(TAG, "No pages in XTC file");
     return false;
@@ -51,6 +55,11 @@ bool generateCoverBmpFromParser(XtcParser& parser, const std::string& coverBmpPa
     return false;
   }
 
+  if (shouldAbort && shouldAbort()) {
+    free(pageBuffer);
+    return false;
+  }
+
   size_t bytesRead = parser.loadPage(0, pageBuffer, bitmapSize);
   if (bytesRead != bitmapSize) {
     LOG_ERR(TAG, "Failed to load cover page");
@@ -58,9 +67,11 @@ bool generateCoverBmpFromParser(XtcParser& parser, const std::string& coverBmpPa
     return false;
   }
 
+  const std::string tempPath = coverBmpPath + ".part";
+  SdMan.remove(tempPath.c_str());
   FsFile coverBmp;
-  if (!SdMan.openFileForWrite("XTC", coverBmpPath, coverBmp)) {
-    LOG_ERR(TAG, "Failed to create cover BMP file");
+  if (!SdMan.openFileForWrite("XTC", tempPath, coverBmp)) {
+    LOG_ERR(TAG, "Failed to create temporary cover BMP file");
     free(pageBuffer);
     return false;
   }
@@ -110,6 +121,7 @@ bool generateCoverBmpFromParser(XtcParser& parser, const std::string& coverBmpPa
 
   // Bitmap data
   const size_t dstRowSize = (pageInfo.width + 7) / 8;
+  bool aborted = false;
 
   if (bitDepth == 2) {
     // XTH 2-bit: two bit planes, column-major, right-to-left
@@ -121,10 +133,15 @@ bool generateCoverBmpFromParser(XtcParser& parser, const std::string& coverBmpPa
     if (!rowBuffer) {
       free(pageBuffer);
       coverBmp.close();
+      SdMan.remove(tempPath.c_str());
       return false;
     }
 
     for (uint16_t y = 0; y < pageInfo.height; y++) {
+      if (shouldAbort && shouldAbort()) {
+        aborted = true;
+        break;
+      }
       memset(rowBuffer, 0xFF, dstRowSize);
 
       for (uint16_t x = 0; x < pageInfo.width; x++) {
@@ -152,6 +169,10 @@ bool generateCoverBmpFromParser(XtcParser& parser, const std::string& coverBmpPa
     const size_t srcRowSize = (pageInfo.width + 7) / 8;
 
     for (uint16_t y = 0; y < pageInfo.height; y++) {
+      if (shouldAbort && shouldAbort()) {
+        aborted = true;
+        break;
+      }
       coverBmp.write(pageBuffer + y * srcRowSize, srcRowSize);
 
       uint8_t padding[4] = {0, 0, 0, 0};
@@ -164,6 +185,11 @@ bool generateCoverBmpFromParser(XtcParser& parser, const std::string& coverBmpPa
 
   coverBmp.close();
   free(pageBuffer);
+
+  if (aborted || !SdMan.commitFile(tempPath.c_str(), coverBmpPath.c_str())) {
+    SdMan.remove(tempPath.c_str());
+    return false;
+  }
 
   LOG_INF(TAG, "Generated cover BMP: %s", coverBmpPath.c_str());
   return true;

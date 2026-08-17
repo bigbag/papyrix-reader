@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -32,7 +33,7 @@ class ContentParser {
    * @param shouldAbort Optional callback to check for cancellation (called periodically)
    * @return true if parsing completed successfully (may be partial if maxPages hit or aborted)
    */
-  virtual bool parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint16_t maxPages = 0,
+  virtual bool parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint32_t maxPages = 0,
                           const AbortCallback& shouldAbort = nullptr) = 0;
 
   /**
@@ -58,8 +59,8 @@ class ContentParser {
    * Get anchor-to-page mapping (element id → page index).
    * Only meaningful for EPUB parsers; returns empty for other formats.
    */
-  virtual const std::vector<std::pair<std::string, uint16_t>>& getAnchorMap() const {
-    static const std::vector<std::pair<std::string, uint16_t>> empty;
+  virtual const std::vector<std::pair<std::string, uint32_t>>& getAnchorMap() const {
+    static const std::vector<std::pair<std::string, uint32_t>> empty;
     return empty;
   }
 

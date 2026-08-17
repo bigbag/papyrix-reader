@@ -15,7 +15,7 @@ namespace {
 // lib/PageCache/src/PageCache.h. Keep in sync with the production code.
 constexpr uint16_t kMinPagesForEstimate = 3;
 
-uint32_t estimatedTotalPages(uint16_t pageCount, uint32_t bytesConsumed, uint32_t totalBytes) {
+uint32_t estimatedTotalPages(uint32_t pageCount, uint32_t bytesConsumed, uint32_t totalBytes) {
   if (pageCount < kMinPagesForEstimate) return 0;
   if (bytesConsumed == 0 || totalBytes == 0) return 0;
   if (bytesConsumed >= totalBytes) return pageCount;
@@ -61,6 +61,9 @@ int main() {
   // 4_000_000_000 * 10000 / 4_000_000_000 = 10000
   runner.expectEq<uint32_t>(10000, estimatedTotalPages(10000, 4000000000U, 4000000000U),
                             "no_overflow_at_max_inputs");
+
+  runner.expectEq<uint32_t>(70000, estimatedTotalPages(70000, 1000, 1000),
+                            "wide_cached_count_is_preserved");
 
   return runner.allPassed() ? 0 : 1;
 }

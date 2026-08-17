@@ -19,6 +19,8 @@ struct JpegReadContext {
   uint8_t buffer[512];
   size_t bufferPos;
   size_t bufferFilled;
+  const std::function<bool()>* shouldAbort;
+  bool aborted;
 };
 
 // ============================================================================
@@ -91,45 +93,6 @@ void writeBmpHeader8bit(Print& bmpOut, const int width, const int height) {
   }
 }
 
-// Helper function: Write BMP header with 1-bit color depth (black and white)
-static void writeBmpHeader1bit(Print& bmpOut, const int width, const int height) {
-  // Calculate row padding (each row must be multiple of 4 bytes)
-  const int bytesPerRow = (width + 31) / 32 * 4;  // 1 bit per pixel, round up to 4-byte boundary
-  const int imageSize = bytesPerRow * height;
-  const uint32_t fileSize = 62 + imageSize;  // 14 (file header) + 40 (DIB header) + 8 (palette) + image
-
-  // BMP File Header (14 bytes)
-  bmpOut.write('B');
-  bmpOut.write('M');
-  write32(bmpOut, fileSize);  // File size
-  write32(bmpOut, 0);         // Reserved
-  write32(bmpOut, 62);        // Offset to pixel data (14 + 40 + 8)
-
-  // DIB Header (BITMAPINFOHEADER - 40 bytes)
-  write32(bmpOut, 40);
-  write32Signed(bmpOut, width);
-  write32Signed(bmpOut, -height);  // Negative height = top-down bitmap
-  write16(bmpOut, 1);              // Color planes
-  write16(bmpOut, 1);              // Bits per pixel (1 bit)
-  write32(bmpOut, 0);              // BI_RGB (no compression)
-  write32(bmpOut, imageSize);
-  write32(bmpOut, 2835);  // xPixelsPerMeter (72 DPI)
-  write32(bmpOut, 2835);  // yPixelsPerMeter (72 DPI)
-  write32(bmpOut, 2);     // colorsUsed
-  write32(bmpOut, 2);     // colorsImportant
-
-  // Color Palette (2 colors x 4 bytes = 8 bytes)
-  // Format: Blue, Green, Red, Reserved (BGRA)
-  // Note: In 1-bit BMP, palette index 0 = black, 1 = white
-  uint8_t palette[8] = {
-      0x00, 0x00, 0x00, 0x00,  // Color 0: Black
-      0xFF, 0xFF, 0xFF, 0x00   // Color 1: White
-  };
-  for (const uint8_t i : palette) {
-    bmpOut.write(i);
-  }
-}
-
 // Helper function: Write BMP header with 2-bit color depth
 static void writeBmpHeader2bit(Print& bmpOut, const int width, const int height) {
   // Calculate row padding (each row must be multiple of 4 bytes)
@@ -176,15 +139,20 @@ static void writeBmpHeader2bit(Print& bmpOut, const int width, const int height)
 // SOF2 (0xC2) = Progressive DCT (NOT supported)
 // SOF9 (0xC9) = Extended sequential DCT, arithmetic (NOT supported)
 // SOF10 (0xCA) = Progressive DCT, arithmetic (NOT supported)
-static bool isUnsupportedJpeg(FsFile& file) {
+static bool isUnsupportedJpeg(FsFile& file, const std::function<bool()>& shouldAbort, bool& aborted) {
   const uint64_t originalPos = file.position();
   file.seek(0);
 
   uint8_t buf[2];
   bool isProgressive = false;
+  aborted = false;
 
   // Scan for SOF marker
   while (file.read(buf, 1) == 1) {
+    if (shouldAbort && shouldAbort()) {
+      aborted = true;
+      break;
+    }
     if (buf[0] != 0xFF) continue;
 
     if (file.read(buf, 1) != 1) break;
@@ -229,16 +197,20 @@ unsigned char JpegToBmpConverter::jpegReadCallback(unsigned char* pBuf, const un
   if (!context || !context->file) {
     return PJPG_STREAM_READ_ERROR;
   }
+  if (context->shouldAbort && *context->shouldAbort && (*context->shouldAbort)()) {
+    context->aborted = true;
+    return PJPG_STREAM_READ_ERROR;
+  }
 
   // Check if we need to refill our context buffer
   if (context->bufferPos >= context->bufferFilled) {
-    context->bufferFilled = context->file.read(context->buffer, sizeof(context->buffer));
+    const int bytesRead = context->file.read(context->buffer, sizeof(context->buffer));
+    context->bufferFilled = bytesRead > 0 ? static_cast<size_t>(bytesRead) : 0;
     context->bufferPos = 0;
 
     if (context->bufferFilled == 0) {
-      // EOF or error
       *pBytes_actually_read = 0;
-      return 0;  // Success (EOF is normal)
+      return bytesRead < 0 ? PJPG_STREAM_READ_ERROR : 0;
     }
   }
 
@@ -255,24 +227,31 @@ unsigned char JpegToBmpConverter::jpegReadCallback(unsigned char* pBuf, const un
 
 // Internal implementation with configurable target size and bit depth
 bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bmpOut, int targetWidth, int targetHeight,
-                                                     bool oneBit, bool quickMode,
+                                                     bool oneBit, bool requireDithering,
                                                      const std::function<bool()>& shouldAbort) {
-  LOG_INF(TAG, "Converting JPEG to %s BMP (target: %dx%d)%s", oneBit ? "1-bit" : "2-bit", targetWidth, targetHeight,
-          quickMode ? " [QUICK]" : "");
+  LOG_INF(TAG, "Converting JPEG to %s BMP (target: %dx%d)", oneBit ? "1-bit" : "2-bit", targetWidth, targetHeight);
 
   // Check for unsupported JPEG encoding (progressive or arithmetic) before attempting decode
-  if (isUnsupportedJpeg(jpegFile)) {
+  bool scanAborted = false;
+  if (isUnsupportedJpeg(jpegFile, shouldAbort, scanAborted)) {
     LOG_ERR(TAG, "Unsupported JPEG encoding (progressive or arithmetic), skipping");
     return false;
   }
+  if (scanAborted) return false;
 
   // Setup context for picojpeg callback
-  JpegReadContext context = {.file = jpegFile, .bufferPos = 0, .bufferFilled = 0};
+  JpegReadContext context = {
+      .file = jpegFile,
+      .bufferPos = 0,
+      .bufferFilled = 0,
+      .shouldAbort = &shouldAbort,
+      .aborted = false,
+  };
 
   // Initialize picojpeg decoder
   pjpeg_image_info_t imageInfo;
   const unsigned char status = pjpeg_decode_init(&imageInfo, jpegReadCallback, &context, PJPG_GRAYSCALE_ONLY);
-  if (status != 0) {
+  if (status != 0 || context.aborted) {
     LOG_ERR(TAG, "JPEG decode init failed with error code: %d", status);
     return false;
   }
@@ -324,7 +303,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
     writeBmpHeader8bit(bmpOut, outWidth, outHeight);
     bytesPerRow = (outWidth + 3) / 4 * 4;
   } else if (oneBit) {
-    writeBmpHeader1bit(bmpOut, outWidth, outHeight);
+    if (!write1BitBmpHeader(bmpOut, outWidth, outHeight)) return false;
     bytesPerRow = (outWidth + 31) / 32 * 4;  // 1 bit per pixel
   } else {
     writeBmpHeader2bit(bmpOut, outWidth, outHeight);
@@ -367,33 +346,33 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
     return false;
   }
 
-  // Create ditherer if enabled (skip in quickMode for faster preview)
-  // Use OUTPUT dimensions for dithering (after prescaling)
   AtkinsonDitherer* atkinsonDitherer = nullptr;
   FloydSteinbergDitherer* fsDitherer = nullptr;
   Atkinson1BitDitherer* atkinson1BitDitherer = nullptr;
 
-  if (!quickMode) {
-    if (oneBit) {
-      // Fall back to simple threshold if object or row buffers fail to allocate.
-      atkinson1BitDitherer = new (std::nothrow) Atkinson1BitDitherer(outWidth);
-      if (atkinson1BitDitherer && !atkinson1BitDitherer->valid()) {
-        delete atkinson1BitDitherer;
-        atkinson1BitDitherer = nullptr;
+  if (oneBit) {
+    atkinson1BitDitherer = new (std::nothrow) Atkinson1BitDitherer(outWidth);
+    if (atkinson1BitDitherer && !atkinson1BitDitherer->valid()) {
+      delete atkinson1BitDitherer;
+      atkinson1BitDitherer = nullptr;
+    }
+    if (requireDithering && !atkinson1BitDitherer) {
+      free(mcuRowBuffer);
+      free(rowBuffer);
+      return false;
+    }
+  } else if (!USE_8BIT_OUTPUT) {
+    if (USE_ATKINSON) {
+      atkinsonDitherer = new (std::nothrow) AtkinsonDitherer(outWidth);
+      if (atkinsonDitherer && !atkinsonDitherer->valid()) {
+        delete atkinsonDitherer;
+        atkinsonDitherer = nullptr;
       }
-    } else if (!USE_8BIT_OUTPUT) {
-      if (USE_ATKINSON) {
-        atkinsonDitherer = new (std::nothrow) AtkinsonDitherer(outWidth);
-        if (atkinsonDitherer && !atkinsonDitherer->valid()) {
-          delete atkinsonDitherer;
-          atkinsonDitherer = nullptr;
-        }
-      } else if (USE_FLOYD_STEINBERG) {
-        fsDitherer = new (std::nothrow) FloydSteinbergDitherer(outWidth);
-        if (fsDitherer && !fsDitherer->valid()) {
-          delete fsDitherer;
-          fsDitherer = nullptr;
-        }
+    } else if (USE_FLOYD_STEINBERG) {
+      fsDitherer = new (std::nothrow) FloydSteinbergDitherer(outWidth);
+      if (fsDitherer && !fsDitherer->valid()) {
+        delete fsDitherer;
+        fsDitherer = nullptr;
       }
     }
   }
@@ -407,8 +386,18 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   uint32_t nextOutY_srcStart = 0;  // Source Y where next output row starts (16.16 fixed point)
 
   if (needsScaling) {
-    rowAccum = new uint32_t[outWidth]();
-    rowCount = new uint16_t[outWidth]();
+    rowAccum = new (std::nothrow) uint32_t[outWidth]();
+    rowCount = new (std::nothrow) uint16_t[outWidth]();
+    if (!rowAccum || !rowCount) {
+      delete[] rowAccum;
+      delete[] rowCount;
+      delete atkinsonDitherer;
+      delete fsDitherer;
+      delete atkinson1BitDitherer;
+      free(mcuRowBuffer);
+      free(rowBuffer);
+      return false;
+    }
     nextOutY_srcStart = scaleY_fp;  // First boundary is at scaleY_fp (source Y for outY=1)
   }
 
@@ -518,10 +507,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
           for (int x = 0; x < outWidth; x++) {
             const uint8_t gray = adjustPixel(mcuRowBuffer[bufferY * imageInfo.m_width + x]);
             uint8_t twoBit;
-            if (quickMode) {
-              // Quick mode: simple threshold (faster, no dithering)
-              twoBit = quantizeSimple(gray);
-            } else if (atkinsonDitherer) {
+            if (atkinsonDitherer) {
               twoBit = atkinsonDitherer->processPixel(gray, x);
             } else if (fsDitherer) {
               twoBit = fsDitherer->processPixel(gray, x);
@@ -596,10 +582,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
             for (int x = 0; x < outWidth; x++) {
               const uint8_t gray = adjustPixel((rowCount[x] > 0) ? (rowAccum[x] / rowCount[x]) : 0);
               uint8_t twoBit;
-              if (quickMode) {
-                // Quick mode: simple threshold (faster, no dithering)
-                twoBit = quantizeSimple(gray);
-              } else if (atkinsonDitherer) {
+              if (atkinsonDitherer) {
                 twoBit = atkinsonDitherer->processPixel(gray, x);
               } else if (fsDitherer) {
                 twoBit = fsDitherer->processPixel(gray, x);
@@ -652,13 +635,14 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   free(mcuRowBuffer);
   free(rowBuffer);
 
+  if (context.aborted || (shouldAbort && shouldAbort())) return false;
   LOG_INF(TAG, "Successfully converted JPEG to BMP");
   return true;
 }
 
 // Core function: Convert JPEG file to 2-bit BMP (uses default target size)
 bool JpegToBmpConverter::jpegFileToBmpStream(FsFile& jpegFile, Print& bmpOut) {
-  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, TARGET_MAX_WIDTH, TARGET_MAX_HEIGHT, false);
+  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, TARGET_MAX_WIDTH, TARGET_MAX_HEIGHT, false, false, nullptr);
 }
 
 // Convert with custom target size (for thumbnails, 2-bit)
@@ -669,17 +653,13 @@ bool JpegToBmpConverter::jpegFileToBmpStreamWithSize(FsFile& jpegFile, Print& bm
 
 // Convert to 1-bit BMP (black and white only, no grays) using default target size
 bool JpegToBmpConverter::jpegFileTo1BitBmpStream(FsFile& jpegFile, Print& bmpOut) {
-  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, TARGET_MAX_WIDTH, TARGET_MAX_HEIGHT, true);
+  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, TARGET_MAX_WIDTH, TARGET_MAX_HEIGHT, true, false, nullptr);
 }
 
 // Convert to 1-bit BMP with custom target size (for thumbnails)
 bool JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(FsFile& jpegFile, Print& bmpOut, int targetMaxWidth,
-                                                         int targetMaxHeight) {
-  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetMaxWidth, targetMaxHeight, true);
-}
-
-// Quick preview mode: simple threshold instead of dithering (faster but lower quality)
-bool JpegToBmpConverter::jpegFileToBmpStreamQuick(FsFile& jpegFile, Print& bmpOut, int targetMaxWidth,
-                                                  int targetMaxHeight) {
-  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetMaxWidth, targetMaxHeight, false, true);
+                                                         int targetMaxHeight, const std::function<bool()>& shouldAbort,
+                                                         const bool requireDithering) {
+  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetMaxWidth, targetMaxHeight, true, requireDithering,
+                                     shouldAbort);
 }

@@ -85,9 +85,8 @@ class Xtc {
    * @param chunkSize Chunk size
    * @return Error code
    */
-  xtc::XtcError loadPageStreaming(uint32_t pageIndex,
-                                  std::function<void(const uint8_t* data, size_t size, size_t offset)> callback,
-                                  size_t chunkSize = 1024) const;
+  xtc::XtcError loadPageStreaming(uint32_t pageIndex, xtc::XtcParser::PageChunkCallback callback,
+                                  size_t chunkSize = 1024, const std::function<bool()>& shouldAbort = nullptr) const;
 
   // Progress calculation
   uint8_t calculateProgress(uint32_t currentPage) const;

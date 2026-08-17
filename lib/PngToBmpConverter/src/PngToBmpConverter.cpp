@@ -4,6 +4,7 @@
 
 #define TAG "PNG"
 #include <SdFat.h>
+#include <esp_heap_caps.h>
 #include <pngle.h>
 
 #include <cstring>
@@ -80,7 +81,8 @@ struct PngContext {
   uint32_t scaleY_fp;
   bool needsScaling;
   bool headerWritten;
-  bool quickMode;   // Fast preview: simple threshold instead of dithering
+  bool oneBit;
+  bool requireDithering;
   bool initFailed;  // Set when allocation fails in pngInitCallback
   bool aborted;
   int currentSrcY;
@@ -94,9 +96,31 @@ struct PngContext {
   uint32_t* rowAccum;     // Accumulator for scaling
   uint16_t* rowCount;     // Count for scaling
   AtkinsonDitherer* ditherer;
+  Atkinson1BitDitherer* oneBitDitherer;
 
   int bytesPerRow;
 };
+
+void writeOutputPixel(PngContext& ctx, const uint8_t gray, const int x, const int y) {
+  if (ctx.oneBit) {
+    const uint8_t bit =
+        ctx.oneBitDitherer ? ctx.oneBitDitherer->processPixel(gray, x) : quantize1bit(adjustPixel(gray), x, y);
+    ctx.outRowBuffer[x >> 3] |= static_cast<uint8_t>(bit << (7 - (x & 7)));
+    return;
+  }
+
+  const uint8_t adjusted = static_cast<uint8_t>(adjustPixel(gray));
+  const uint8_t level = ctx.ditherer ? ctx.ditherer->processPixel(adjusted, x) : quantize(adjusted, x, y);
+  ctx.outRowBuffer[(x * 2) / 8] |= static_cast<uint8_t>(level << (6 - ((x * 2) % 8)));
+}
+
+void finishOutputRow(PngContext& ctx) {
+  if (ctx.oneBitDitherer) {
+    ctx.oneBitDitherer->nextRow();
+  } else if (ctx.ditherer) {
+    ctx.ditherer->nextRow();
+  }
+}
 
 void pngDrawCallback(pngle_t* pngle, uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint8_t rgba[4]) {
   auto* ctx = static_cast<PngContext*>(pngle_get_user_data(pngle));
@@ -127,20 +151,14 @@ void pngDrawCallback(pngle_t* pngle, uint32_t x, uint32_t y, uint32_t w, uint32_
       // Direct output
       memset(ctx->outRowBuffer, 0, ctx->bytesPerRow);
       for (int outX = 0; outX < ctx->outWidth; outX++) {
-        const uint8_t gray = adjustPixel(ctx->srcRowBuffer[outX]);
-        uint8_t twoBit;
-        if (ctx->quickMode) {
-          // Simple threshold quantization (faster)
-          twoBit = quantizeSimple(gray);
-        } else {
-          twoBit = ctx->ditherer ? ctx->ditherer->processPixel(gray, outX) : quantize(gray, outX, y);
-        }
-        const int byteIndex = (outX * 2) / 8;
-        const int bitOffset = 6 - ((outX * 2) % 8);
-        ctx->outRowBuffer[byteIndex] |= (twoBit << bitOffset);
+        writeOutputPixel(*ctx, ctx->srcRowBuffer[outX], outX, static_cast<int>(y));
       }
-      if (ctx->ditherer && !ctx->quickMode) ctx->ditherer->nextRow();
-      ctx->bmpOut->write(ctx->outRowBuffer, ctx->bytesPerRow);
+      finishOutputRow(*ctx);
+      if (ctx->bmpOut->write(ctx->outRowBuffer, ctx->bytesPerRow) != static_cast<size_t>(ctx->bytesPerRow)) {
+        ctx->initFailed = true;
+        return;
+      }
+      ++ctx->currentOutY;
     } else {
       // Scaling: accumulate source pixels
       for (int outX = 0; outX < ctx->outWidth; outX++) {
@@ -169,20 +187,15 @@ void pngDrawCallback(pngle_t* pngle, uint32_t x, uint32_t y, uint32_t w, uint32_
       while (srcY_fp >= ctx->nextOutY_srcStart && ctx->currentOutY < ctx->outHeight) {
         memset(ctx->outRowBuffer, 0, ctx->bytesPerRow);
         for (int outX = 0; outX < ctx->outWidth; outX++) {
-          const uint8_t gray = adjustPixel((ctx->rowCount[outX] > 0) ? (ctx->rowAccum[outX] / ctx->rowCount[outX]) : 0);
-          uint8_t twoBit;
-          if (ctx->quickMode) {
-            // Simple threshold quantization (faster)
-            twoBit = quantizeSimple(gray);
-          } else {
-            twoBit = ctx->ditherer ? ctx->ditherer->processPixel(gray, outX) : quantize(gray, outX, ctx->currentOutY);
-          }
-          const int byteIndex = (outX * 2) / 8;
-          const int bitOffset = 6 - ((outX * 2) % 8);
-          ctx->outRowBuffer[byteIndex] |= (twoBit << bitOffset);
+          const uint8_t gray =
+              static_cast<uint8_t>((ctx->rowCount[outX] > 0) ? (ctx->rowAccum[outX] / ctx->rowCount[outX]) : 0);
+          writeOutputPixel(*ctx, gray, outX, ctx->currentOutY);
         }
-        if (ctx->ditherer && !ctx->quickMode) ctx->ditherer->nextRow();
-        ctx->bmpOut->write(ctx->outRowBuffer, ctx->bytesPerRow);
+        finishOutputRow(*ctx);
+        if (ctx->bmpOut->write(ctx->outRowBuffer, ctx->bytesPerRow) != static_cast<size_t>(ctx->bytesPerRow)) {
+          ctx->initFailed = true;
+          return;
+        }
         ctx->currentOutY++;
 
         ctx->nextOutY_srcStart = static_cast<uint32_t>(ctx->currentOutY + 1) * ctx->scaleY_fp;
@@ -239,8 +252,19 @@ void pngInitCallback(pngle_t* pngle, uint32_t w, uint32_t h) {
   }
 
   // Allocate buffers
+  ctx->bytesPerRow = ctx->oneBit ? (ctx->outWidth + 31) / 32 * 4 : (ctx->outWidth * 2 + 31) / 32 * 4;
+  const size_t scalingBytes = ctx->needsScaling ? static_cast<size_t>(ctx->outWidth) * 6 : 0;
+  const size_t ditherBytes = static_cast<size_t>(ctx->outWidth + 4) * sizeof(int16_t) * 3;
+  const size_t requiredBytes =
+      static_cast<size_t>(w) + static_cast<size_t>(ctx->bytesPerRow) + scalingBytes + ditherBytes;
+  const size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+  if (requiredBytes > 1024 && requiredBytes > largest * 80 / 100) {
+    LOG_ERR(TAG, "Insufficient heap for PNG conversion");
+    ctx->initFailed = true;
+    return;
+  }
+
   ctx->srcRowBuffer = static_cast<uint8_t*>(malloc(w));
-  ctx->bytesPerRow = (ctx->outWidth * 2 + 31) / 32 * 4;
   ctx->outRowBuffer = static_cast<uint8_t*>(malloc(ctx->bytesPerRow));
 
   if (!ctx->srcRowBuffer || !ctx->outRowBuffer) {
@@ -272,10 +296,17 @@ void pngInitCallback(pngle_t* pngle, uint32_t w, uint32_t h) {
     ctx->nextOutY_srcStart = ctx->scaleY_fp;
   }
 
-  // Skip ditherer allocation in quickMode for faster preview.
-  // On OOM (object or row buffers), leave ditherer null and fall back to
-  // non-dithered quantize — same degrade path as JPEG/Bitmap.
-  if (!ctx->quickMode) {
+  if (ctx->oneBit) {
+    ctx->oneBitDitherer = new (std::nothrow) Atkinson1BitDitherer(ctx->outWidth);
+    if (ctx->oneBitDitherer && !ctx->oneBitDitherer->valid()) {
+      delete ctx->oneBitDitherer;
+      ctx->oneBitDitherer = nullptr;
+    }
+    if (ctx->requireDithering && !ctx->oneBitDitherer) {
+      ctx->initFailed = true;
+      return;
+    }
+  } else {
     ctx->ditherer = new (std::nothrow) AtkinsonDitherer(ctx->outWidth);
     if (ctx->ditherer && !ctx->ditherer->valid()) {
       delete ctx->ditherer;
@@ -285,14 +316,14 @@ void pngInitCallback(pngle_t* pngle, uint32_t w, uint32_t h) {
   ctx->currentSrcY = 0;
   ctx->currentOutY = 0;
 
-  // Write BMP header
-  writeBmpHeader2bit(*ctx->bmpOut, ctx->outWidth, ctx->outHeight);
-  ctx->headerWritten = true;
+  ctx->headerWritten = ctx->oneBit ? write1BitBmpHeader(*ctx->bmpOut, ctx->outWidth, ctx->outHeight)
+                                   : (writeBmpHeader2bit(*ctx->bmpOut, ctx->outWidth, ctx->outHeight), true);
+  if (!ctx->headerWritten) ctx->initFailed = true;
 }
 
-bool pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOut, int targetMaxWidth, int targetMaxHeight, bool quickMode,
-                                const std::function<bool()>& shouldAbort = nullptr) {
-  LOG_INF(TAG, "Converting PNG to BMP (target: %dx%d)%s", targetMaxWidth, targetMaxHeight, quickMode ? " [QUICK]" : "");
+bool pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOut, int targetMaxWidth, int targetMaxHeight, bool oneBit,
+                                bool requireDithering, const std::function<bool()>& shouldAbort = nullptr) {
+  LOG_INF(TAG, "Converting PNG to BMP (target: %dx%d)", targetMaxWidth, targetMaxHeight);
 
   pngle_t* pngle = pngle_new();
   if (!pngle) {
@@ -306,7 +337,8 @@ bool pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOut, int targetMaxWid
   ctx.targetMaxWidth = targetMaxWidth;
   ctx.targetMaxHeight = targetMaxHeight;
   ctx.headerWritten = false;
-  ctx.quickMode = quickMode;
+  ctx.oneBit = oneBit;
+  ctx.requireDithering = requireDithering;
   ctx.aborted = false;
   ctx.shouldAbort = &shouldAbort;
 
@@ -320,7 +352,9 @@ bool pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOut, int targetMaxWid
   bool success = true;
 
   while ((bytesRead = pngFile.read(buffer, sizeof(buffer))) > 0) {
-    if (ctx.aborted || ctx.initFailed) {
+    const bool abortRequested = shouldAbort && shouldAbort();
+    if (ctx.aborted || ctx.initFailed || abortRequested) {
+      ctx.aborted = ctx.aborted || abortRequested;
       LOG_INF(TAG, "Abort requested during PNG conversion");
       success = false;
       break;
@@ -339,25 +373,23 @@ bool pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOut, int targetMaxWid
   if (ctx.rowAccum) delete[] ctx.rowAccum;
   if (ctx.rowCount) delete[] ctx.rowCount;
   if (ctx.ditherer) delete ctx.ditherer;
+  if (ctx.oneBitDitherer) delete ctx.oneBitDitherer;
 
   pngle_destroy(pngle);
 
-  if (success && ctx.headerWritten) {
-    LOG_INF(TAG, "Successfully converted PNG to BMP (%dx%d)", ctx.outWidth, ctx.outHeight);
-    return true;
-  }
+  const bool complete = success && ctx.headerWritten && !ctx.initFailed && !ctx.aborted &&
+                        ctx.currentOutY == ctx.outHeight && !(shouldAbort && shouldAbort());
+  if (!complete) return false;
 
-  return false;
+  LOG_INF(TAG, "Successfully converted PNG to BMP (%dx%d)", ctx.outWidth, ctx.outHeight);
+  return true;
 }
 
 }  // namespace
 
 bool PngToBmpConverter::pngFileToBmpStreamWithSize(FsFile& pngFile, Print& bmpOut, int targetMaxWidth,
-                                                   int targetMaxHeight, const std::function<bool()>& shouldAbort) {
-  return pngFileToBmpStreamInternal(pngFile, bmpOut, targetMaxWidth, targetMaxHeight, false, shouldAbort);
-}
-
-bool PngToBmpConverter::pngFileToBmpStreamQuick(FsFile& pngFile, Print& bmpOut, int targetMaxWidth,
-                                                int targetMaxHeight) {
-  return pngFileToBmpStreamInternal(pngFile, bmpOut, targetMaxWidth, targetMaxHeight, true);
+                                                   int targetMaxHeight, const bool oneBit, const bool requireDithering,
+                                                   const std::function<bool()>& shouldAbort) {
+  return pngFileToBmpStreamInternal(pngFile, bmpOut, targetMaxWidth, targetMaxHeight, oneBit, requireDithering,
+                                    shouldAbort);
 }

@@ -25,6 +25,7 @@ class SDCardManager {
     directories_[path] = entries;
     files_.erase(path);
     writtenFiles_.erase(path);
+    modifyDateTimes_.erase(path);
   }
 
   // Alias for registerFile - more intuitive name for test setup
@@ -33,6 +34,10 @@ class SDCardManager {
   }
 
   void setFileData(const std::string& path, const std::string& data) { registerFile(path, data); }
+
+  void setFileModifyDateTime(const std::string& path, uint16_t date, uint16_t time) {
+    modifyDateTimes_[path] = {date, time};
+  }
 
   // Control whether exists() returns true for a path
   void setFileExists(const std::string& path, bool exists) {
@@ -43,6 +48,7 @@ class SDCardManager {
       }
     } else {
       files_.erase(path);
+      modifyDateTimes_.erase(path);
     }
   }
 
@@ -50,6 +56,7 @@ class SDCardManager {
     files_.clear();
     writtenFiles_.clear();
     directories_.clear();
+    modifyDateTimes_.clear();
   }
 
   // Reset all mock state
@@ -57,6 +64,7 @@ class SDCardManager {
     files_.clear();
     writtenFiles_.clear();
     directories_.clear();
+    modifyDateTimes_.clear();
     openFailCount_ = 0;
     openFileForReadFailCount_ = 0;
     mallocFailCount_ = 0;
@@ -65,6 +73,7 @@ class SDCardManager {
     writeLimit_ = 0;
     writeLimitActive_ = false;
     syncResult_ = true;
+    seekEndResult_ = true;
     renameResult_ = true;
   }
 
@@ -108,6 +117,7 @@ class SDCardManager {
   }
 
   void setSyncResult(bool result) { syncResult_ = result; }
+  void setSeekEndResult(bool result) { seekEndResult_ = result; }
   void setRenameResult(bool result) { renameResult_ = result; }
 
   FsFile open(const char* path, int mode = O_RDONLY) {
@@ -131,8 +141,13 @@ class SDCardManager {
       }
       if ((mode & O_TRUNC) != 0) buffer->clear();
       file.setSharedBuffer(buffer);
+      auto timestamp = modifyDateTimes_.find(path);
+      if (timestamp != modifyDateTimes_.end()) {
+        file.setModifyDateTime(timestamp->second.first, timestamp->second.second);
+      }
       if (writeLimitActive_) file.setWriteLimit(writeLimit_);
       file.setSyncResult(syncResult_);
+      file.setSeekEndResult(seekEndResult_);
       return file;
     }
 
@@ -149,7 +164,13 @@ class SDCardManager {
       auto written = writtenFiles_.find(path);
       if (written != writtenFiles_.end()) file.setBuffer(*written->second);
     }
-    if (file && readLimitActive_) file.setReadLimit(readLimit_);
+    if (file) {
+      auto timestamp = modifyDateTimes_.find(path);
+      if (timestamp != modifyDateTimes_.end()) {
+        file.setModifyDateTime(timestamp->second.first, timestamp->second.second);
+      }
+      if (readLimitActive_) file.setReadLimit(readLimit_);
+    }
     return file;
   }
 
@@ -172,8 +193,13 @@ class SDCardManager {
     auto buf = std::make_shared<std::string>();
     writtenFiles_[path] = buf;
     file.setSharedBuffer(buf);
+    auto timestamp = modifyDateTimes_.find(path);
+    if (timestamp != modifyDateTimes_.end()) {
+      file.setModifyDateTime(timestamp->second.first, timestamp->second.second);
+    }
     if (writeLimitActive_) file.setWriteLimit(writeLimit_);
     file.setSyncResult(syncResult_);
+    file.setSeekEndResult(seekEndResult_);
     return true;
   }
 
@@ -190,6 +216,7 @@ class SDCardManager {
     files_.erase(path);
     writtenFiles_.erase(path);
     directories_.erase(path);
+    modifyDateTimes_.erase(path);
     return true;
   }
 
@@ -211,6 +238,11 @@ class SDCardManager {
       directories_[newPath] = std::move(directory->second);
       directories_.erase(directory);
     }
+    auto timestamp = modifyDateTimes_.find(oldPath);
+    if (timestamp != modifyDateTimes_.end()) {
+      modifyDateTimes_[newPath] = timestamp->second;
+      modifyDateTimes_.erase(timestamp);
+    }
     return true;
   }
 
@@ -226,6 +258,7 @@ class SDCardManager {
   bool ensureDirectoryExists(const char* path) { return exists(path) || mkdir(path); }
   bool removeDir(const char* path) {
     directories_.erase(path);
+    modifyDateTimes_.erase(path);
     return true;
   }
 
@@ -247,6 +280,7 @@ class SDCardManager {
   std::map<std::string, std::string> files_;
   std::map<std::string, std::shared_ptr<std::string>> writtenFiles_;
   std::map<std::string, std::vector<MockDirectoryEntry>> directories_;
+  std::map<std::string, std::pair<uint16_t, uint16_t>> modifyDateTimes_;
   int openFailCount_ = 0;
   int openFileForReadFailCount_ = 0;
   int mallocFailCount_ = 0;
@@ -255,6 +289,7 @@ class SDCardManager {
   size_t writeLimit_ = 0;
   bool writeLimitActive_ = false;
   bool syncResult_ = true;
+  bool seekEndResult_ = true;
   bool renameResult_ = true;
 };
 

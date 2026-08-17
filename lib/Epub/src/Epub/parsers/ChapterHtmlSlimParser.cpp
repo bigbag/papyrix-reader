@@ -15,6 +15,8 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include "LayoutCancellation.h"
+
 #define TAG "HTML_PARSER"
 
 #include "../htmlEntities.h"
@@ -720,7 +722,6 @@ void ChapterHtmlSlimParser::cleanupParser() {
 
 bool ChapterHtmlSlimParser::initParser() {
   parseStartTime_ = millis();
-  loopCounter_ = 0;
   pendingEmergencySplit_ = false;
   pendingNewTextBlock_ = false;
   pendingSpacing_ = 0;
@@ -797,15 +798,12 @@ bool ChapterHtmlSlimParser::parseLoop() {
   const size_t bodyLimit = byteRangeMode_ ? rangeLength_ : 0;
 
   do {
-    // Periodic safety check and yield
-    if (++loopCounter_ % YIELD_CHECK_INTERVAL == 0) {
-      if (shouldAbort()) {
-        LOG_DBG(TAG, "Aborting parse, pages created: %u", pagesCreated_);
-        aborted_ = true;
-        break;
-      }
-      taskYIELD();
+    if (shouldAbort()) {
+      LOG_DBG(TAG, "Aborting parse, pages created: %u", pagesCreated_);
+      aborted_ = true;
+      break;
     }
+    taskYIELD();
 
     constexpr size_t kReadChunkSize = 4096;
     constexpr size_t kDataUriPrefixSize = 10;
@@ -882,12 +880,20 @@ bool ChapterHtmlSlimParser::parseLoop() {
             (inset < config.viewportWidth) ? static_cast<uint16_t>(config.viewportWidth - inset) : config.viewportWidth;
         currentLeftInset_ = currentBlockStyle_.leftInset();
         const uint32_t layoutStarted = perfMsNow();
-        currentTextBlock->layoutAndExtractLines(
+        const bool layoutCompleted = currentTextBlock->layoutAndExtractLines(
             renderer, config.fontId, splitWidth,
             [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); }, true,
             [this]() -> bool { return stopRequested_ || shouldAbort(); }, buildScratch_);
         readerPerfLog("epub-layout", layoutStarted);
+        if (chapter_html::layoutWasAborted(layoutCompleted, stopRequested_)) {
+          aborted_ = true;
+        }
       }
+    }
+
+    if (aborted_) {
+      cleanupParser();
+      return true;
     }
   } while (!done);
 
@@ -896,10 +902,14 @@ bool ChapterHtmlSlimParser::parseLoop() {
     XML_Parse(xmlParser_, epilogueXml_.c_str(), static_cast<int>(epilogueXml_.size()), 1);
   }
 
-  // Reached end of file or aborted — finalize
-  // Process last page if there is still text
-  if (currentTextBlock && !stopRequested_) {
+  // Reached end of file — finalize unless cancellation already stopped parsing.
+  // Process last page if there is still text.
+  if (currentTextBlock && !stopRequested_ && !aborted_) {
     makePages();
+    if (aborted_) {
+      cleanupParser();
+      return true;
+    }
     if (stopRequested_) {
       // Batch limit hit while flushing final content — stay suspended
       suspended_ = true;
@@ -943,6 +953,10 @@ bool ChapterHtmlSlimParser::resumeParsing() {
 
     if (currentTextBlock && !currentTextBlock->isEmpty()) {
       makePages();
+      if (aborted_) {
+        cleanupParser();
+        return true;
+      }
       if (stopRequested_) {
         // Still more content than fits in one batch — stay suspended
         suspended_ = true;
@@ -967,7 +981,6 @@ bool ChapterHtmlSlimParser::resumeParsing() {
 
   // Reset per-extend state
   parseStartTime_ = millis();
-  loopCounter_ = 0;
   stopRequested_ = false;
   suspended_ = false;
 
@@ -981,6 +994,10 @@ bool ChapterHtmlSlimParser::resumeParsing() {
   // point in a paragraph are silently lost.
   if (currentTextBlock && !currentTextBlock->isEmpty()) {
     makePages();
+    if (aborted_) {
+      cleanupParser();
+      return true;
+    }
     if (stopRequested_) {
       // Remaining words filled another batch — stay suspended
       suspended_ = true;
@@ -1025,6 +1042,10 @@ bool ChapterHtmlSlimParser::resumeParsing() {
   if (file_.available() == 0) {
     if (currentTextBlock && !stopRequested_) {
       makePages();
+      if (aborted_) {
+        cleanupParser();
+        return true;
+      }
       if (stopRequested_) {
         suspended_ = true;
         xmlDone_ = true;
@@ -1118,11 +1139,15 @@ void ChapterHtmlSlimParser::makePages() {
   currentLeftInset_ = currentBlockStyle_.leftInset();
 
   const uint32_t layoutStarted = perfMsNow();
-  currentTextBlock->layoutAndExtractLines(
+  const bool layoutCompleted = currentTextBlock->layoutAndExtractLines(
       renderer, config.fontId, effectiveWidth,
       [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); }, true,
-      [this]() -> bool { return stopRequested_; }, buildScratch_);
+      [this]() -> bool { return stopRequested_ || shouldAbort(); }, buildScratch_);
   readerPerfLog("epub-layout", layoutStarted);
+  if (chapter_html::layoutWasAborted(layoutCompleted, stopRequested_)) {
+    aborted_ = true;
+    return;
+  }
 
   // Apply bottom spacing from CSS block style
   if (!stopRequested_ && currentBlockStyle_.bottomInset() > 0) {
@@ -1232,9 +1257,15 @@ std::string ChapterHtmlSlimParser::cacheImage(const std::string& src) {
   }
 
   if (!readItemFn(resolvedPath, tempFile, 1024, buildScratch_)) {
-    LOG_ERR(TAG, "Failed to extract image: %s", resolvedPath.c_str());
     tempFile.close();
     SdMan.remove(tempPath.c_str());
+    const bool externallyAborted = externalAbortCallback_ && externalAbortCallback_();
+    if (!chapter_html::imageFailureShouldPersist(externallyAborted)) {
+      LOG_DBG(TAG, "Image extraction cancelled: %s", resolvedPath.c_str());
+      return "";
+    }
+
+    LOG_ERR(TAG, "Failed to extract image: %s", resolvedPath.c_str());
     FsFile marker;
     if (SdMan.openFileForWrite("EHP", failedMarker, marker)) {
       marker.close();
@@ -1256,8 +1287,15 @@ std::string ChapterHtmlSlimParser::cacheImage(const std::string& src) {
   SdMan.remove(tempPath.c_str());
 
   if (!success) {
-    LOG_ERR(TAG, "Failed to convert image to BMP: %s", resolvedPath.c_str());
     SdMan.remove(cachedBmpPath.c_str());
+    SdMan.remove((cachedBmpPath + ".part").c_str());
+    const bool externallyAborted = externalAbortCallback_ && externalAbortCallback_();
+    if (!chapter_html::imageFailureShouldPersist(externallyAborted)) {
+      LOG_DBG(TAG, "Image conversion cancelled: %s", resolvedPath.c_str());
+      return "";
+    }
+
+    LOG_ERR(TAG, "Failed to convert image to BMP: %s", resolvedPath.c_str());
     FsFile marker;
     if (SdMan.openFileForWrite("EHP", failedMarker, marker)) {
       marker.close();

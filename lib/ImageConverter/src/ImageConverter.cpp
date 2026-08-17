@@ -10,21 +10,20 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include <cstring>
+
 namespace {
 
 class JpegImageConverter : public ImageConverter {
  public:
   bool convert(FsFile& input, Print& output, const ImageConvertConfig& config) override {
-    // Quick mode: simple threshold instead of dithering
-    if (config.quickMode) {
-      return JpegToBmpConverter::jpegFileToBmpStreamQuick(input, output, config.maxWidth, config.maxHeight);
-    }
     if (config.maxWidth == 450 && config.maxHeight == 750 && !config.shouldAbort) {
       return config.oneBit ? JpegToBmpConverter::jpegFileTo1BitBmpStream(input, output)
                            : JpegToBmpConverter::jpegFileToBmpStream(input, output);
     }
     return config.oneBit
-               ? JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(input, output, config.maxWidth, config.maxHeight)
+               ? JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(input, output, config.maxWidth, config.maxHeight,
+                                                                     config.shouldAbort, config.requireDithering)
                : JpegToBmpConverter::jpegFileToBmpStreamWithSize(input, output, config.maxWidth, config.maxHeight,
                                                                  config.shouldAbort);
   }
@@ -35,15 +34,8 @@ class JpegImageConverter : public ImageConverter {
 class PngImageConverter : public ImageConverter {
  public:
   bool convert(FsFile& input, Print& output, const ImageConvertConfig& config) override {
-    // Quick mode: simple threshold instead of dithering
-    if (config.quickMode) {
-      return PngToBmpConverter::pngFileToBmpStreamQuick(input, output, config.maxWidth, config.maxHeight);
-    }
-    // Note: PNG converter always produces 2-bit output. Unlike JPEG, PNG does not support
-    // 1-bit dithering (oneBit flag is ignored). PNG thumbnails will be slightly larger but
-    // render at the same speed since the display hardware handles both formats equally.
     return PngToBmpConverter::pngFileToBmpStreamWithSize(input, output, config.maxWidth, config.maxHeight,
-                                                         config.shouldAbort);
+                                                         config.oneBit, config.requireDithering, config.shouldAbort);
   }
 
   const char* formatName() const override { return "PNG"; }
@@ -52,11 +44,11 @@ class PngImageConverter : public ImageConverter {
 class BmpImageConverter : public ImageConverter {
  public:
   bool convert(FsFile& input, Print& output, const ImageConvertConfig& config) override {
-    (void)config;
     uint8_t buffer[512];
     while (input.available()) {
-      size_t bytesRead = input.read(buffer, sizeof(buffer));
-      if (output.write(buffer, bytesRead) != bytesRead) {
+      if (config.shouldAbort && config.shouldAbort()) return false;
+      const int bytesRead = input.read(buffer, sizeof(buffer));
+      if (bytesRead <= 0 || output.write(buffer, static_cast<size_t>(bytesRead)) != static_cast<size_t>(bytesRead)) {
         return false;
       }
     }
@@ -70,35 +62,57 @@ JpegImageConverter jpegConverter;
 PngImageConverter pngConverter;
 BmpImageConverter bmpConverter;
 
-}  // namespace
+ImageFormat detectFormat(FsFile& file) {
+  const auto originalPosition = file.position();
+  if (!file.seek(0)) return ImageFormat::Unknown;
 
-ImageConverter* ImageConverterFactory::getConverter(const std::string& filePath) {
-  if (FsHelpers::isJpegFile(filePath)) {
-    return &jpegConverter;
+  uint8_t signature[8] = {};
+  const int count = file.read(signature, sizeof(signature));
+  const bool restored = file.seek(originalPosition);
+  if (count < 0 || !restored) return ImageFormat::Unknown;
+
+  if (count >= 2 && signature[0] == 0xFF && signature[1] == 0xD8) return ImageFormat::Jpeg;
+
+  static const uint8_t pngSignature[8] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+  if (count >= static_cast<int>(sizeof(pngSignature)) && memcmp(signature, pngSignature, sizeof(pngSignature)) == 0) {
+    return ImageFormat::Png;
   }
-  if (FsHelpers::isPngFile(filePath)) {
-    return &pngConverter;
-  }
-  if (FsHelpers::isBmpFile(filePath)) {
-    return &bmpConverter;
+
+  if (count >= 2 && signature[0] == 'B' && signature[1] == 'M') return ImageFormat::Bmp;
+  return ImageFormat::Unknown;
+}
+
+ImageConverter* converterForFormat(const ImageFormat format) {
+  switch (format) {
+    case ImageFormat::Jpeg:
+      return &jpegConverter;
+    case ImageFormat::Png:
+      return &pngConverter;
+    case ImageFormat::Bmp:
+      return &bmpConverter;
+    case ImageFormat::Unknown:
+      return nullptr;
   }
   return nullptr;
 }
 
+}  // namespace
+
+ImageFormat ImageConverterFactory::detectFormat(const std::string& filePath) {
+  FsFile file;
+  if (!SdMan.openFileForRead(TAG, filePath, file)) return ImageFormat::Unknown;
+  const ImageFormat format = ::detectFormat(file);
+  file.close();
+  return format;
+}
+
 bool ImageConverterFactory::convertToBmp(const std::string& inputPath, const std::string& outputPath,
                                          const ImageConvertConfig& config) {
-  ImageConverter* converter = getConverter(inputPath);
-  if (!converter) {
-    LOG_ERR(config.logTag, "Unsupported image format: %s", inputPath.c_str());
-    return false;
-  }
-
   // Stack safety gate: PNG/JPEG decode (pngle + zlib/tinflate) is the deepest call chain in
   // the reader and can overflow a constrained task stack, panicking the whole device. If the
   // current task's free stack is below the safety floor, skip this image gracefully instead —
-  // the caller writes a .failed marker and session-blacklists the hash, so the page renders
-  // without the image rather than rebooting. The 12 KB loopTask (see ARDUINO_LOOP_STACK_SIZE)
-  // keeps this gate from triggering in normal use; it only fires when the stack is genuinely
+  // callers can skip or retry the asset rather than rebooting. The 12 KB foreground and Reader
+  // background task stacks keep this gate from triggering in normal use; it only fires when the stack is genuinely
   // tight (deeper-than-expected nesting, huge image), which is exactly when a skip beats a crash.
   constexpr size_t kMinImageStackBytes = 4096;
   if (uxTaskGetStackHighWaterMark(nullptr) * sizeof(StackType_t) < kMinImageStackBytes) {
@@ -109,6 +123,13 @@ bool ImageConverterFactory::convertToBmp(const std::string& inputPath, const std
   FsFile inputFile;
   if (!SdMan.openFileForRead(config.logTag, inputPath, inputFile)) {
     LOG_ERR(config.logTag, "Failed to open input file: %s", inputPath.c_str());
+    return false;
+  }
+
+  ImageConverter* converter = converterForFormat(::detectFormat(inputFile));
+  if (!converter) {
+    inputFile.close();
+    LOG_ERR(config.logTag, "Unsupported image format: %s", inputPath.c_str());
     return false;
   }
 
@@ -134,6 +155,12 @@ bool ImageConverterFactory::convertToBmp(const std::string& inputPath, const std
     return false;
   }
 
+  if (config.validateOutput && !config.validateOutput(partPath)) {
+    LOG_ERR(config.logTag, "Converted BMP failed validation: %s", partPath.c_str());
+    SdMan.remove(partPath.c_str());
+    return false;
+  }
+
   // Publish the completed BMP (commitFile removes a stale output first because
   // SdFat can't rename over an existing file).
   if (!SdMan.commitFile(partPath.c_str(), outputPath.c_str())) {
@@ -144,8 +171,8 @@ bool ImageConverterFactory::convertToBmp(const std::string& inputPath, const std
 
   LOG_INF(config.logTag, "Converted %s to BMP: %s", converter->formatName(), outputPath.c_str());
 
-  // Stack headroom probe: image conversion (PNG/JPEG decode) is the deepest call chain
-  // run on loopTask. Report remaining stack so a future regression shows up as a shrinking
+  // Stack headroom probe: image conversion (PNG/JPEG decode) is the deepest call chain.
+  // Report remaining stack so a future regression shows up as a shrinking
   // high-water mark instead of a mystery "Stack protection fault" crash. Everything is a
   // LOG_DBG argument, so it compiles to nothing at LOG_LEVEL<2 (release).
   LOG_DBG(config.logTag, "Stack headroom: %u bytes (%s)",

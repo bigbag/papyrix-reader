@@ -24,11 +24,11 @@
 
 namespace {
 
-constexpr uint8_t kMetricsIndexVersion = 2;
+constexpr uint8_t kMetricsIndexVersion = 4;
 constexpr const char* kMetricsIndexFilename = "metrics.bin";
 
 struct MetricsEntry {
-  uint16_t pages;
+  uint32_t pages;
   bool exact;
   uint32_t byteSize;
 };
@@ -53,6 +53,8 @@ bool saveMetricsIndex(const std::string& sectionsDir, const RenderConfig& config
                  serialization::writePodChecked(file, config.showImages) &&
                  serialization::writePodChecked(file, config.viewportWidth) &&
                  serialization::writePodChecked(file, config.viewportHeight) &&
+                 serialization::writePodChecked(file, config.sourceFingerprint) &&
+                 serialization::writePodChecked(file, config.fontFingerprint) &&
                  serialization::writePodChecked(file, entryCount);
 
   for (const auto& m : metrics) {
@@ -88,7 +90,9 @@ bool readMetricsIndexFile(const std::string& sectionsDir, const RenderConfig& co
                           serialization::readPodChecked(file, fileConfig.hyphenation) &&
                           serialization::readPodChecked(file, fileConfig.showImages) &&
                           serialization::readPodChecked(file, fileConfig.viewportWidth) &&
-                          serialization::readPodChecked(file, fileConfig.viewportHeight);
+                          serialization::readPodChecked(file, fileConfig.viewportHeight) &&
+                          serialization::readPodChecked(file, fileConfig.sourceFingerprint) &&
+                          serialization::readPodChecked(file, fileConfig.fontFingerprint);
   if (!configRead || config != fileConfig) {
     file.close();
     return false;
@@ -102,7 +106,7 @@ bool readMetricsIndexFile(const std::string& sectionsDir, const RenderConfig& co
 
   std::vector<MetricsEntry> decoded(static_cast<size_t>(spineCount));
   for (int i = 0; i < spineCount; ++i) {
-    uint16_t pages;
+    uint32_t pages;
     uint8_t flags;
     uint32_t byteSize;
     if (!serialization::readPodChecked(file, pages) || !serialization::readPodChecked(file, flags) ||
@@ -121,7 +125,8 @@ bool readMetricsIndexFile(const std::string& sectionsDir, const RenderConfig& co
 RenderConfig makeConfig() {
   return RenderConfig(/*fontId=*/1234, /*lineCompression=*/1.0f, /*indentLevel=*/1, /*spacingLevel=*/2,
                       /*paragraphAlignment=*/0, /*hyphenation=*/true, /*showImages=*/true,
-                      /*viewportWidth=*/464, /*viewportHeight=*/765);
+                      /*viewportWidth=*/464, /*viewportHeight=*/765, /*sourceFingerprint=*/0x12345678u,
+                      /*fontFingerprint=*/0x89ABCDEFu);
 }
 
 void registerOnDisk(const std::string& dir) {
@@ -140,7 +145,7 @@ int main() {
     const std::string dir = "/cache/book1";
     const RenderConfig config = makeConfig();
     std::vector<MetricsEntry> in = {
-        {10, true, 20480},
+        {70000, true, 20480},
         {25, true, 51200},
         {5, true, 10240},
     };
@@ -150,9 +155,9 @@ int main() {
     std::vector<MetricsEntry> out;
     runner.expectTrue(readMetricsIndexFile(dir, config, 3, out), "all_exact_load_ok");
     runner.expectEq<size_t>(3, out.size(), "all_exact_count");
-    runner.expectEq<uint16_t>(10, out[0].pages, "all_exact_pages_0");
-    runner.expectEq<uint16_t>(25, out[1].pages, "all_exact_pages_1");
-    runner.expectEq<uint16_t>(5, out[2].pages, "all_exact_pages_2");
+    runner.expectEq<uint32_t>(70000, out[0].pages, "all_exact_pages_0");
+    runner.expectEq<uint32_t>(25, out[1].pages, "all_exact_pages_1");
+    runner.expectEq<uint32_t>(5, out[2].pages, "all_exact_pages_2");
     runner.expectTrue(out[0].exact && out[1].exact && out[2].exact, "all_exact_flags");
     runner.expectEq<uint32_t>(20480, out[0].byteSize, "all_exact_bytesize_0");
     runner.expectEq<uint32_t>(51200, out[1].byteSize, "all_exact_bytesize_1");
@@ -185,14 +190,14 @@ int main() {
     runner.expectEq<uint32_t>(6144, out[3].byteSize, "mixed_estimated_bytesize_3");
   }
 
-  // Test 3: Version mismatch is rejected (simulate old v1 file)
+  // Test 3: Version mismatch is rejected (simulate the legacy v2 file)
   {
     SdMan.clearWrittenFiles();
     const std::string dir = "/cache/book3";
     const std::string path = dir + "/" + kMetricsIndexFilename;
     FsFile writer;
     writer.setBuffer("");
-    uint8_t oldVersion = 1;
+    uint8_t oldVersion = 2;
     serialization::writePod(writer, oldVersion);
     // Pad enough bytes so a truncation check isn't what trips us
     const RenderConfig config = makeConfig();
@@ -217,6 +222,14 @@ int main() {
 
     std::vector<MetricsEntry> out;
     runner.expectFalse(readMetricsIndexFile(dir, configB, 1, out), "config_mismatch_rejected");
+
+    RenderConfig sourceMismatch = configA;
+    sourceMismatch.sourceFingerprint ^= 1u;
+    runner.expectFalse(readMetricsIndexFile(dir, sourceMismatch, 1, out), "source_fingerprint_mismatch_rejected");
+
+    RenderConfig fontMismatch = configA;
+    fontMismatch.fontFingerprint ^= 1u;
+    runner.expectFalse(readMetricsIndexFile(dir, fontMismatch, 1, out), "font_fingerprint_mismatch_rejected");
   }
 
   // Test 5: Entry-count mismatch (book gained/lost spine items) is rejected
@@ -251,10 +264,12 @@ int main() {
     serialization::writePod(writer, config.showImages);
     serialization::writePod(writer, config.viewportWidth);
     serialization::writePod(writer, config.viewportHeight);
+    serialization::writePod(writer, config.sourceFingerprint);
+    serialization::writePod(writer, config.fontFingerprint);
     uint16_t entryCount = 3;
     serialization::writePod(writer, entryCount);
     // Only one entry written despite claiming three
-    uint16_t pages = 10;
+    uint32_t pages = 10;
     uint8_t flags = 1;
     uint32_t byteSize = 1024;
     serialization::writePod(writer, pages);
@@ -283,6 +298,8 @@ int main() {
     serialization::writePod(writer, config.showImages);
     serialization::writePod(writer, config.viewportWidth);
     serialization::writePod(writer, config.viewportHeight);
+    serialization::writePod(writer, config.sourceFingerprint);
+    serialization::writePod(writer, config.fontFingerprint);
     const std::string configBytes = writer.getBuffer();
 
     bool allRejected = true;
@@ -314,10 +331,12 @@ int main() {
     serialization::writePod(writer, config.showImages);
     serialization::writePod(writer, config.viewportWidth);
     serialization::writePod(writer, config.viewportHeight);
+    serialization::writePod(writer, config.sourceFingerprint);
+    serialization::writePod(writer, config.fontFingerprint);
     SdMan.registerFile(path, writer.getBuffer());
     std::vector<MetricsEntry> out = {{777, true, 888}};
     runner.expectFalse(readMetricsIndexFile(dir, config, 1, out), "missing_entry_count_rejected");
-    runner.expectEq<uint16_t>(777, out[0].pages, "missing_entry_count_preserves_output");
+    runner.expectEq<uint32_t>(777, out[0].pages, "missing_entry_count_preserves_output");
   }
 
   // Test 9: Checked writer rejects short writes and sync failures

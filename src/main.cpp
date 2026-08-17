@@ -399,8 +399,12 @@ bool earlyInit() {
   LOG_INF(TAG, "Starting Papyrix version " PAPYRIX_VERSION);
   papyrix::crashdebug::logBootInfo(wakeup.resetReason);
 
-  // Initialize battery ADC pin with proper attenuation for 0-3.3V range
-  analogSetPinAttenuation(BAT_GPIO0, ADC_11db);
+  if (papyrix::drivers::Device::instance().isX4()) {
+    // Arduino 3.x requires the first read to attach the pin to the ADC bus
+    // before per-pin attenuation can be configured.
+    (void)analogRead(BAT_GPIO0);
+    analogSetPinAttenuation(BAT_GPIO0, ADC_11db);
+  }
 
   // Initialize internal flash filesystem for font storage
   if (!LittleFS.begin(false)) {

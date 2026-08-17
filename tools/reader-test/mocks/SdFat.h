@@ -143,9 +143,7 @@ class FsFile : public Print {
     return static_cast<int>(fileSize_ - pos);
   }
 
-  void sync() {
-    if (fp_) fflush(fp_);
-  }
+  bool sync() { return fp_ && fflush(fp_) == 0; }
 
   bool isOpen() const { return isOpen_; }
   operator bool() const { return isOpen_; }

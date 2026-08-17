@@ -148,9 +148,10 @@ bool Settings::hasExternalReaderFont(const Theme& theme) const {
 }
 
 RenderConfig Settings::getRenderConfig(const Theme& theme, uint16_t viewportWidth, uint16_t viewportHeight) const {
-  return RenderConfig(getReaderFontId(theme), getLineCompression(), getIndentLevel(), getSpacingLevel(),
-                      paragraphAlignment, static_cast<bool>(hyphenation), static_cast<bool>(showImages), viewportWidth,
-                      viewportHeight);
+  const int fontId = getReaderFontId(theme);
+  return RenderConfig(fontId, getLineCompression(), getIndentLevel(), getSpacingLevel(), paragraphAlignment,
+                      static_cast<bool>(hyphenation), static_cast<bool>(showImages), viewportWidth, viewportHeight, 0,
+                      FONT_MANAGER.activeReaderFontFingerprint());
 }
 
 // Legacy methods that use SdMan directly (for early init before Core)

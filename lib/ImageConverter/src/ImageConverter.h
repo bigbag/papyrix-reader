@@ -1,18 +1,27 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <string>
 
 class FsFile;
 class Print;
 
+enum class ImageFormat : uint8_t {
+  Unknown,
+  Jpeg,
+  Png,
+  Bmp,
+};
+
 struct ImageConvertConfig {
   int maxWidth = 450;
   int maxHeight = 750;
   bool oneBit = false;
-  bool quickMode = false;  // Fast preview: simple threshold instead of dithering
+  bool requireDithering = false;
   const char* logTag = "IMG";
   std::function<bool()> shouldAbort = nullptr;
+  std::function<bool(const std::string&)> validateOutput = nullptr;
 };
 
 class ImageConverter {
@@ -24,8 +33,8 @@ class ImageConverter {
 
 class ImageConverterFactory {
  public:
-  // Returns appropriate converter based on file extension (or nullptr if unsupported)
-  static ImageConverter* getConverter(const std::string& filePath);
+  // Detect the actual source type from its file signature.
+  static ImageFormat detectFormat(const std::string& filePath);
 
   // Convenience: convert file to BMP in one call (handles file I/O)
   static bool convertToBmp(const std::string& inputPath, const std::string& outputPath,

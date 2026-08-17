@@ -20,14 +20,14 @@
 
 namespace {
 
-constexpr uint8_t CACHE_FILE_VERSION = 20;
-constexpr uint32_t kHeaderSize = 33;
+constexpr uint8_t CACHE_FILE_VERSION = 22;
+constexpr uint32_t kHeaderSize = 43;
 
 RenderConfig defaultConfig() {
-  return RenderConfig(1818981670, 1.0f, 1, 1, 0, true, true, 464, 769);
+  return RenderConfig(1818981670, 1.0f, 1, 1, 0, true, true, 464, 769, 0x12345678u, 0x89ABCDEFu);
 }
 
-void writeCacheHeader(FsFile& file, const RenderConfig& config, uint16_t pageCount, bool isPartial,
+void writeCacheHeader(FsFile& file, const RenderConfig& config, uint32_t pageCount, bool isPartial,
                       uint8_t version = CACHE_FILE_VERSION) {
   serialization::writePod(file, version);
   serialization::writePod(file, config.fontId);
@@ -48,15 +48,17 @@ void writeCacheHeader(FsFile& file, const RenderConfig& config, uint16_t pageCou
   serialization::writePod(file, bytesConsumed);
   uint32_t totalBytes = 0;
   serialization::writePod(file, totalBytes);
+  serialization::writePod(file, config.sourceFingerprint);
+  serialization::writePod(file, config.fontFingerprint);
   const uint32_t pagePosition = kHeaderSize;
-  for (uint16_t i = 0; i < pageCount; i++) serialization::writePod(file, pagePosition);
+  for (uint32_t i = 0; i < pageCount; i++) serialization::writePod(file, pagePosition);
 }
 
 // Mirror of PageCache::probe() — reads header and validates config match
 struct ProbeResult {
   bool valid = false;
   bool partial = false;
-  uint16_t pageCount = 0;
+  uint32_t pageCount = 0;
 };
 
 ProbeResult probe(const std::string& cachePath, const RenderConfig& config) {
@@ -93,7 +95,9 @@ ProbeResult probe(const std::string& cachePath, const RenderConfig& config) {
                            serialization::readPodChecked(file, partial) &&
                            serialization::readPodChecked(file, lutOffset) &&
                            serialization::readPodChecked(file, bytesConsumed) &&
-                           serialization::readPodChecked(file, totalBytes);
+                           serialization::readPodChecked(file, totalBytes) &&
+                           serialization::readPodChecked(file, fileConfig.sourceFingerprint) &&
+                           serialization::readPodChecked(file, fileConfig.fontFingerprint);
   const size_t lutSize = static_cast<size_t>(result.pageCount) * sizeof(uint32_t);
   if (!headerValid || version != CACHE_FILE_VERSION || config != fileConfig || partial > 1 ||
       lutOffset < kHeaderSize || lutOffset > fileSize || lutSize > fileSize - lutOffset) {
@@ -123,7 +127,7 @@ int main() {
 
     auto result = probe("/cache/complete.bin", cfg);
     runner.expectTrue(result.valid, "complete_cache_valid");
-    runner.expectEq(static_cast<uint16_t>(42), result.pageCount, "complete_cache_page_count");
+    runner.expectEq(static_cast<uint32_t>(42), result.pageCount, "complete_cache_page_count");
     runner.expectFalse(result.partial, "complete_cache_not_partial");
   }
 
@@ -136,7 +140,7 @@ int main() {
 
     auto result = probe("/cache/partial.bin", cfg);
     runner.expectTrue(result.valid, "partial_cache_valid");
-    runner.expectEq(static_cast<uint16_t>(10), result.pageCount, "partial_cache_page_count");
+    runner.expectEq(static_cast<uint32_t>(10), result.pageCount, "partial_cache_page_count");
     runner.expectTrue(result.partial, "partial_cache_is_partial");
   }
 
@@ -192,7 +196,7 @@ int main() {
 
     auto result = probe("/cache/exact_match.bin", cfg);
     runner.expectTrue(result.valid, "exact_config_match_valid");
-    runner.expectEq(static_cast<uint16_t>(100), result.pageCount, "exact_config_match_pages");
+    runner.expectEq(static_cast<uint32_t>(100), result.pageCount, "exact_config_match_pages");
   }
 
   // Version mismatch
@@ -241,29 +245,29 @@ int main() {
 
     auto result = probe("/cache/zero_pages.bin", cfg);
     runner.expectTrue(result.valid, "zero_pages_valid");
-    runner.expectEq(static_cast<uint16_t>(0), result.pageCount, "zero_pages_count");
+    runner.expectEq(static_cast<uint32_t>(0), result.pageCount, "zero_pages_count");
   }
 
-  // Max uint16_t page count
+  // Page count exceeds the legacy uint16_t limit
   {
     FsFile writer;
     writer.setBuffer("");
-    writeCacheHeader(writer, cfg, 65535, true);
+    writeCacheHeader(writer, cfg, 70000, true);
     SdMan.registerFile("/cache/max_pages.bin", writer.getBuffer());
 
     auto result = probe("/cache/max_pages.bin", cfg);
-    runner.expectTrue(result.valid, "max_pages_valid");
-    runner.expectEq(static_cast<uint16_t>(65535), result.pageCount, "max_pages_count");
-    runner.expectTrue(result.partial, "max_pages_partial");
+    runner.expectTrue(result.valid, "wide_page_count_valid");
+    runner.expectEq(static_cast<uint32_t>(70000), result.pageCount, "wide_page_count");
+    runner.expectTrue(result.partial, "wide_page_count_partial");
   }
 
-  // Header size is exactly kHeaderSize (33 bytes)
+  // Header size includes both fingerprints
   {
     FsFile writer;
     writer.setBuffer("");
     writeCacheHeader(writer, cfg, 0, false);
     runner.expectEq(static_cast<uint32_t>(kHeaderSize), static_cast<uint32_t>(writer.getBuffer().size()),
-                    "header_size_33_bytes");
+                    "header_size_43_bytes");
   }
 
   SdMan.clearFiles();

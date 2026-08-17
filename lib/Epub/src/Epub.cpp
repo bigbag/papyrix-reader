@@ -642,97 +642,7 @@ const std::string& Epub::getLanguage() const {
 
 std::string Epub::getCoverBmpPath() const { return cachePath + "/cover.bmp"; }
 
-std::string Epub::getCoverPreviewBmpPath() const { return cachePath + "/cover_preview.bmp"; }
-
-bool Epub::generateCoverPreviewBmp() const {
-  const auto previewPath = getCoverPreviewBmpPath();
-
-  // Already generated, return true
-  if (SdMan.exists(previewPath.c_str())) {
-    return true;
-  }
-
-  // Full cover already exists, no need for preview
-  if (SdMan.exists(getCoverBmpPath().c_str())) {
-    return false;
-  }
-
-  setupCacheDir();
-
-  // Priority 1: External cover file (bookname.jpg, etc.)
-  std::string externalCover = findCoverImage();
-  if (!externalCover.empty()) {
-    LOG_DBG(TAG, "Found external cover for preview: %s", externalCover.c_str());
-    ImageConvertConfig config;
-    config.quickMode = true;
-    config.logTag = "EBP";
-    if (ImageConverterFactory::convertToBmp(externalCover, previewPath, config)) {
-      LOG_INF(TAG, "Generated cover preview from external image");
-      return true;
-    }
-    // Conversion failed - clean up any partial output
-    SdMan.remove(previewPath.c_str());
-  }
-
-  // Priority 2: Try common internal cover paths (batch scan - single ZIP pass)
-  static const char* const commonCoverPaths[] = {
-      "cover.jpg",
-      "cover.jpeg",
-      "cover.png",
-      "images/cover.jpg",
-      "images/cover.jpeg",
-      "images/cover.png",
-      "Images/cover.jpg",
-      "Images/cover.jpeg",
-      "Images/cover.png",
-      "OEBPS/cover.jpg",
-      "OEBPS/cover.jpeg",
-      "OEBPS/cover.png",
-      "OEBPS/images/cover.jpg",
-      "OEBPS/images/cover.jpeg",
-      "OEBPS/images/cover.png",
-      "OEBPS/Images/cover.jpg",
-      "OEBPS/Images/cover.jpeg",
-      "OEBPS/Images/cover.png",
-  };
-  constexpr int commonCoverPathsCount = sizeof(commonCoverPaths) / sizeof(commonCoverPaths[0]);
-
-  ZipFile zip(filepath);
-  const int foundIndex = zip.findFirstExisting(commonCoverPaths, commonCoverPathsCount);
-  if (foundIndex >= 0) {
-    const char* path = commonCoverPaths[foundIndex];
-    LOG_DBG(TAG, "Found cover for preview via heuristic: %s", path);
-
-    const std::string ext = FsHelpers::isJpegFile(path) ? ".jpg" : ".png";
-    const auto coverTempPath = getCachePath() + "/.cover_preview" + ext;
-
-    FsFile coverFile;
-    if (SdMan.openFileForWrite("EBP", coverTempPath, coverFile)) {
-      if (readItemContentsToStream(path, coverFile, 1024)) {
-        coverFile.close();
-        ImageConvertConfig config;
-        config.quickMode = true;
-        config.logTag = "EBP";
-        if (ImageConverterFactory::convertToBmp(coverTempPath, previewPath, config)) {
-          SdMan.remove(coverTempPath.c_str());
-          return true;
-        }
-        // Conversion failed - clean up partial output
-        SdMan.remove(previewPath.c_str());
-      } else {
-        coverFile.close();
-      }
-    }
-    SdMan.remove(coverTempPath.c_str());
-  }
-
-  LOG_DBG(TAG, "No cover found for preview");
-  return false;
-}
-
-std::string Epub::getThumbBmpPath() const { return cachePath + "/thumb.bmp"; }
-
-std::string Epub::findCoverImage() const {
+std::string Epub::findCoverImage(const std::function<bool()>& shouldAbort) const {
   size_t lastSlash = filepath.find_last_of('/');
   std::string dirPath = (lastSlash == std::string::npos) ? "/" : filepath.substr(0, lastSlash);
   if (dirPath.empty()) dirPath = "/";
@@ -743,303 +653,152 @@ std::string Epub::findCoverImage() const {
     baseName = baseName.substr(0, lastDot);
   }
 
-  return CoverHelpers::findCoverImage(dirPath, baseName);
+  return CoverHelpers::findCoverImage(dirPath, baseName, shouldAbort);
 }
 
-bool Epub::generateThumbBmp() const {
-  const auto thumbPath = getThumbBmpPath();
-  const auto failedMarkerPath = cachePath + "/.thumb.failed";
-
-  // Already generated, return true
-  if (SdMan.exists(thumbPath.c_str())) {
-    return true;
-  }
-
-  // Previously failed, don't retry
-  if (SdMan.exists(failedMarkerPath.c_str())) {
-    return false;
-  }
-
+home_thumbnail::Result Epub::extractCoverSource(const std::string& itemHref,
+                                                const std::function<bool()>& shouldAbort) const {
   setupCacheDir();
+  const std::string sourcePath = cachePath + "/.cover-source.tmp";
+  SdMan.remove(sourcePath.c_str());
 
-  // Priority 1: External cover file (bookname.jpg, etc.)
-  std::string externalCover = findCoverImage();
-  if (!externalCover.empty()) {
-    LOG_DBG(TAG, "Found external cover: %s", externalCover.c_str());
-    // Generate full-size cover BMP first (needed for thumbnail scaling)
-    const auto coverPath = getCoverBmpPath();
-    if (!SdMan.exists(coverPath.c_str())) {
-      if (CoverHelpers::convertImageToBmp(externalCover, coverPath, "EBP", true)) {
-        LOG_INF(TAG, "Generated cover BMP from external image");
-      }
-    }
-    // Now generate thumbnail from cover
-    if (CoverHelpers::generateThumbFromCover(coverPath, thumbPath, "EBP")) {
-      return true;
-    }
+  FsFile output;
+  if (!SdMan.openFileForWrite("EBP", sourcePath, output)) return home_thumbnail::Result::Unavailable;
+  const bool extracted = readItemContentsToStream(itemHref, output, 1024, nullptr, nullptr, shouldAbort);
+  output.close();
+
+  if (CoverHelpers::isAbortRequested(shouldAbort)) {
+    SdMan.remove(sourcePath.c_str());
+    return home_thumbnail::Result::Cancelled;
   }
-
-  // Priority 2: Try to generate from existing cover.bmp (much faster than re-extracting from EPUB)
-  const auto coverPath = getCoverBmpPath();
-  if (CoverHelpers::generateThumbFromCover(coverPath, thumbPath, "EBP")) {
-    return true;
+  if (!extracted || ImageConverterFactory::detectFormat(sourcePath) == ImageFormat::Unknown) {
+    SdMan.remove(sourcePath.c_str());
+    return home_thumbnail::Result::Unavailable;
   }
-
-  // If cover generation already failed, the same source image won't work for thumbnail either.
-  // Skip the expensive re-extraction from ZIP.
-  const auto coverFailedMarkerPath = cachePath + "/.cover.failed";
-  if (SdMan.exists(coverFailedMarkerPath.c_str())) {
-    LOG_DBG(TAG, "Cover generation failed previously, skipping thumbnail extraction");
-    FsFile marker;
-    if (SdMan.openFileForWrite("EBP", failedMarkerPath, marker)) {
-      marker.close();
-    }
-    return false;
-  }
-
-  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-    LOG_ERR(TAG, "Cannot generate thumb BMP, cache not loaded");
-    return false;
-  }
-
-  const auto coverImageHref = bookMetadataCache->coreMetadata.coverItemHref;
-  if (coverImageHref.empty()) {
-    LOG_DBG(TAG, "No known cover image for thumbnail");
-    // Create failure marker so we don't retry
-    FsFile marker;
-    if (SdMan.openFileForWrite("EBP", failedMarkerPath, marker)) {
-      marker.close();
-    }
-    return false;
-  }
-
-  // Check if format is supported
-  if (!ImageConverterFactory::isSupported(coverImageHref)) {
-    LOG_ERR(TAG, "Unsupported cover image format for thumbnail");
-    // Create failure marker so we don't retry
-    FsFile marker;
-    if (SdMan.openFileForWrite("EBP", failedMarkerPath, marker)) {
-      marker.close();
-    }
-    return false;
-  }
-
-  // Extract cover image to temp file, then convert to thumbnail
-  LOG_DBG(TAG, "Generating thumb BMP from cover image");
-  const std::string ext = FsHelpers::isJpegFile(coverImageHref) ? ".jpg" : ".png";
-  const auto coverTempPath = getCachePath() + "/.cover" + ext;
-  const auto thumbTempPath = thumbPath + ".tmp";
-
-  FsFile coverFile;
-  if (!SdMan.openFileForWrite("EBP", coverTempPath, coverFile)) {
-    return false;
-  }
-  if (!readItemContentsToStream(coverImageHref, coverFile, 1024)) {
-    coverFile.close();
-    return false;
-  }
-  coverFile.close();
-
-  // Use 1-bit dithering for JPEG thumbnails (smaller files). PNG thumbnails are
-  // always 2-bit since PngToBmpConverter doesn't support 1-bit output.
-  ImageConvertConfig config;
-  config.maxWidth = THUMB_WIDTH;
-  config.maxHeight = THUMB_HEIGHT;
-  config.oneBit = FsHelpers::isJpegFile(coverImageHref);
-  config.logTag = "EBP";
-
-  const bool success = ImageConverterFactory::convertToBmp(coverTempPath, thumbTempPath, config);
-  SdMan.remove(coverTempPath.c_str());
-
-  if (success) {
-    // Atomic rename: readers see either no file or complete file
-    FsFile tempFile = SdMan.open(thumbTempPath.c_str(), O_RDWR);
-    if (tempFile) {
-      tempFile.rename(thumbPath.c_str());
-      tempFile.close();
-    }
-  } else {
-    LOG_ERR(TAG, "Failed to generate thumb BMP from cover image");
-    SdMan.remove(thumbTempPath.c_str());
-    // Create failure marker so we don't retry
-    FsFile marker;
-    if (SdMan.openFileForWrite("EBP", failedMarkerPath, marker)) {
-      marker.close();
-    }
-  }
-  LOG_INF(TAG, "Generated thumb BMP from cover image, success: %s", success ? "yes" : "no");
-  return success;
+  return home_thumbnail::Result::Ready;
 }
 
-bool Epub::generateCoverBmp(bool use1BitDithering) const {
-  const auto coverPath = getCoverBmpPath();
-  const auto failedMarkerPath = cachePath + "/.cover.failed";
-
-  // Already generated, return true
-  if (SdMan.exists(coverPath.c_str())) {
-    return true;
-  }
-
-  // Previously failed, don't retry
-  if (SdMan.exists(failedMarkerPath.c_str())) {
-    return false;
-  }
+home_thumbnail::Result Epub::prepareCoverSource(std::string& sourcePath, bool& temporary,
+                                                const std::function<bool()>& shouldAbort) const {
+  temporary = false;
+  sourcePath = findCoverImage(shouldAbort);
+  if (CoverHelpers::isAbortRequested(shouldAbort)) return home_thumbnail::Result::Cancelled;
+  if (!sourcePath.empty()) return home_thumbnail::Result::Ready;
 
   setupCacheDir();
+  const std::string temporarySource = cachePath + "/.cover-source.tmp";
+  SdMan.remove(temporarySource.c_str());
 
-  // Priority 1: External cover file (bookname.jpg, etc.)
-  std::string externalCover = findCoverImage();
-  if (!externalCover.empty()) {
-    LOG_DBG(TAG, "Found external cover: %s", externalCover.c_str());
-    if (CoverHelpers::convertImageToBmp(externalCover, coverPath, "EBP", use1BitDithering)) {
-      LOG_INF(TAG, "Generated cover BMP from external image");
-      return true;
-    }
-  }
-
-  // Priority 1.5: Try common internal cover paths (batch scan - single ZIP pass)
   static const char* const commonCoverPaths[] = {
-      // Root level
       "cover.jpg",
       "cover.jpeg",
       "cover.png",
-      // images/ directory (lowercase - most common)
+      "cover.bmp",
       "images/cover.jpg",
       "images/cover.jpeg",
       "images/cover.png",
-      // Images/ directory (capitalized - common in Calibre)
+      "images/cover.bmp",
       "Images/cover.jpg",
       "Images/cover.jpeg",
       "Images/cover.png",
-      // OEBPS/ root
+      "Images/cover.bmp",
       "OEBPS/cover.jpg",
       "OEBPS/cover.jpeg",
       "OEBPS/cover.png",
-      // OEBPS/images/
+      "OEBPS/cover.bmp",
       "OEBPS/images/cover.jpg",
       "OEBPS/images/cover.jpeg",
       "OEBPS/images/cover.png",
-      // OEBPS/Images/
+      "OEBPS/images/cover.bmp",
       "OEBPS/Images/cover.jpg",
       "OEBPS/Images/cover.jpeg",
       "OEBPS/Images/cover.png",
-      // OPS/ variants (older EPUB 2)
+      "OEBPS/Images/cover.bmp",
       "OPS/cover.jpg",
       "OPS/cover.jpeg",
       "OPS/cover.png",
+      "OPS/cover.bmp",
       "OPS/images/cover.jpg",
       "OPS/images/cover.jpeg",
       "OPS/images/cover.png",
+      "OPS/images/cover.bmp",
       "OPS/Images/cover.jpg",
       "OPS/Images/cover.jpeg",
       "OPS/Images/cover.png",
-      // EPUB/ variants (EPUB 3)
+      "OPS/Images/cover.bmp",
       "EPUB/cover.jpg",
       "EPUB/cover.jpeg",
       "EPUB/cover.png",
+      "EPUB/cover.bmp",
       "EPUB/images/cover.jpg",
       "EPUB/images/cover.jpeg",
       "EPUB/images/cover.png",
-      // EPUB/Images/ (capitalized, for consistency with OEBPS/Images/)
+      "EPUB/images/cover.bmp",
       "EPUB/Images/cover.jpg",
       "EPUB/Images/cover.jpeg",
       "EPUB/Images/cover.png",
+      "EPUB/Images/cover.bmp",
   };
-  constexpr int commonCoverPathsCount = sizeof(commonCoverPaths) / sizeof(commonCoverPaths[0]);
 
-  // Use single ZipFile instance with batch lookup for efficiency
-  ZipFile zip(filepath);
-  const int foundIndex = zip.findFirstExisting(commonCoverPaths, commonCoverPathsCount);
+  const int foundIndex = ZipFile(filepath).findFirstExisting(
+      commonCoverPaths, sizeof(commonCoverPaths) / sizeof(commonCoverPaths[0]), shouldAbort);
+  if (CoverHelpers::isAbortRequested(shouldAbort)) return home_thumbnail::Result::Cancelled;
   if (foundIndex >= 0) {
-    const char* path = commonCoverPaths[foundIndex];
-    // Note: No file size check needed - converters have built-in limits:
-    // - JPEG: MAX_MCU_ROW_BYTES=64KB limits width to ~4K-8K pixels
-    // - PNG: MAX_IMAGE_WIDTH=2048, MAX_IMAGE_HEIGHT=3072
-    LOG_DBG(TAG, "Found cover via heuristic: %s", path);
-
-    const std::string ext = FsHelpers::isJpegFile(path) ? ".jpg" : ".png";
-    const auto coverTempPath = getCachePath() + "/.cover" + ext;
-
-    FsFile coverFile;
-    if (SdMan.openFileForWrite("EBP", coverTempPath, coverFile)) {
-      if (readItemContentsToStream(path, coverFile, 1024)) {
-        coverFile.close();
-        ImageConvertConfig config;
-        config.oneBit = use1BitDithering;
-        config.logTag = "EBP";
-        if (ImageConverterFactory::convertToBmp(coverTempPath, coverPath, config)) {
-          SdMan.remove(coverTempPath.c_str());
-          return true;
-        }
-        // Conversion failed - clean up partial output
-        SdMan.remove(coverPath.c_str());
-      } else {
-        coverFile.close();
-      }
+    const auto result = extractCoverSource(commonCoverPaths[foundIndex], shouldAbort);
+    if (result == home_thumbnail::Result::Ready) {
+      sourcePath = temporarySource;
+      temporary = true;
+      return result;
     }
-    SdMan.remove(coverTempPath.c_str());
+    if (result == home_thumbnail::Result::Cancelled) return result;
   }
 
-  // Priority 2: Internal EPUB cover via OPF metadata
-  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-    LOG_ERR(TAG, "Cannot generate cover BMP, cache not loaded");
-    return false;
-  }
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) return home_thumbnail::Result::Unavailable;
+  const std::string coverHref = bookMetadataCache->coreMetadata.coverItemHref;
+  if (coverHref.empty()) return home_thumbnail::Result::Unavailable;
 
-  const auto coverImageHref = bookMetadataCache->coreMetadata.coverItemHref;
-  if (coverImageHref.empty()) {
-    LOG_DBG(TAG, "No known cover image");
-    // Create failure marker
-    FsFile marker;
-    if (SdMan.openFileForWrite("EBP", failedMarkerPath, marker)) {
-      marker.close();
+  const auto result = extractCoverSource(coverHref, shouldAbort);
+  if (result == home_thumbnail::Result::Ready) {
+    sourcePath = temporarySource;
+    temporary = true;
+  }
+  return result;
+}
+
+bool Epub::generateCoverBmp(const bool use1BitDithering, const std::function<bool()>& shouldAbort) const {
+  const std::string coverPath = getCoverBmpPath();
+  const std::string failedMarkerPath = cachePath + "/.cover.failed";
+  if (home_thumbnail::validateCover(coverPath)) {
+    SdMan.remove(failedMarkerPath.c_str());
+    return true;
+  }
+  if (SdMan.exists(coverPath.c_str())) SdMan.remove(coverPath.c_str());
+  if (SdMan.exists(failedMarkerPath.c_str())) return false;
+
+  std::string sourcePath;
+  bool temporary = false;
+  const auto sourceResult = prepareCoverSource(sourcePath, temporary, shouldAbort);
+  if (sourceResult != home_thumbnail::Result::Ready) {
+    if (sourceResult == home_thumbnail::Result::Unavailable) {
+      FsFile marker;
+      if (SdMan.openFileForWrite("EBP", failedMarkerPath, marker)) marker.close();
     }
     return false;
   }
 
-  // Check if format is supported
-  if (!ImageConverterFactory::isSupported(coverImageHref)) {
-    LOG_ERR(TAG, "Unsupported cover image format");
-    // Create failure marker
-    FsFile marker;
-    if (SdMan.openFileForWrite("EBP", failedMarkerPath, marker)) {
-      marker.close();
-    }
-    return false;
-  }
+  const bool converted = CoverHelpers::convertImageToBmp(sourcePath, coverPath, "EBP", use1BitDithering, shouldAbort);
+  if (temporary) SdMan.remove(sourcePath.c_str());
 
-  // Extract cover image to temp file, then convert
-  LOG_DBG(TAG, "Generating BMP from cover image");
-  const std::string ext = FsHelpers::isJpegFile(coverImageHref) ? ".jpg" : ".png";
-  const auto coverTempPath = getCachePath() + "/.cover" + ext;
-
-  FsFile coverFile;
-  if (!SdMan.openFileForWrite("EBP", coverTempPath, coverFile)) {
-    return false;
-  }
-  if (!readItemContentsToStream(coverImageHref, coverFile, 1024)) {
-    coverFile.close();
-    return false;
-  }
-  coverFile.close();
-
-  ImageConvertConfig config;
-  config.oneBit = use1BitDithering;
-  config.logTag = "EBP";
-
-  const bool success = ImageConverterFactory::convertToBmp(coverTempPath, coverPath, config);
-  SdMan.remove(coverTempPath.c_str());
-
-  if (!success) {
-    LOG_ERR(TAG, "Failed to generate BMP from cover image");
+  const bool cancelled = CoverHelpers::isAbortRequested(shouldAbort);
+  const bool success = converted && !cancelled && home_thumbnail::validateCover(coverPath);
+  if (cancelled) {
     SdMan.remove(coverPath.c_str());
-    // Create failure marker
+  } else if (!success) {
     FsFile marker;
-    if (SdMan.openFileForWrite("EBP", failedMarkerPath, marker)) {
-      marker.close();
-    }
+    if (SdMan.openFileForWrite("EBP", failedMarkerPath, marker)) marker.close();
+  } else {
+    SdMan.remove(failedMarkerPath.c_str());
   }
-  LOG_INF(TAG, "Generated BMP from cover image, success: %s", success ? "yes" : "no");
   return success;
 }
 
@@ -1061,14 +820,15 @@ uint8_t* Epub::readItemContentsToBytes(const std::string& itemHref, size_t* size
 }
 
 bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, const size_t chunkSize,
-                                    uint8_t* dictBuffer, BuildArena* scratch) const {
+                                    uint8_t* dictBuffer, BuildArena* scratch,
+                                    const std::function<bool()>& shouldAbort) const {
   if (itemHref.empty()) {
     LOG_ERR(TAG, "Failed to read item, empty href");
     return false;
   }
 
   const std::string path = FsHelpers::normalisePath(itemHref);
-  return ZipFile(filepath).readFileToStream(path.c_str(), out, chunkSize, dictBuffer, nullptr, scratch);
+  return ZipFile(filepath).readFileToStream(path.c_str(), out, chunkSize, dictBuffer, shouldAbort, scratch);
 }
 
 bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {

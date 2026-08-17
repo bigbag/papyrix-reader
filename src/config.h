@@ -66,10 +66,6 @@
 #define PAPYRIX_FIRMWARE_FILE "/firmware.bin"
 #define PAPYRIX_EMERGENCY_FW_FILE "/force_update.bin"
 
-// Thumbnail dimensions for home screen
-#define THUMB_WIDTH 320
-#define THUMB_HEIGHT 440
-
 // User configuration directory
 #define CONFIG_DIR "/config"
 #define CONFIG_CALIBRE_FILE CONFIG_DIR "/calibre.ini"

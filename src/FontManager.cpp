@@ -9,8 +9,27 @@
 #include <cstring>
 
 #include "config.h"
+#include "content/FileFingerprint.h"
 
 #define TAG "FONT"
+
+namespace {
+constexpr uint32_t kFontFingerprintBasis = 2166136261u;
+constexpr uint32_t kFontFingerprintPrime = 16777619u;
+
+uint32_t updateFontFingerprint(uint32_t hash, const void* data, size_t size) {
+  const auto* bytes = static_cast<const uint8_t*>(data);
+  for (size_t i = 0; i < size; ++i) {
+    hash ^= bytes[i];
+    hash *= kFontFingerprintPrime;
+  }
+  return hash;
+}
+
+uint32_t builtinFontFingerprint(int fontId) {
+  return updateFontFingerprint(kFontFingerprintBasis, &fontId, sizeof(fontId));
+}
+}  // namespace
 
 FontManager& FontManager::instance() {
   static FontManager instance;
@@ -63,18 +82,35 @@ bool FontManager::loadFontFamily(const char* familyName, int fontId) {
 
   LoadedFamily family;
   family.fontId = fontId;
+  family.fingerprint = builtinFontFingerprint(fontId);
 
+  char stylePaths[3][80] = {};
   for (const auto& s : styles) {
-    char fontPath[80];
-    snprintf(fontPath, sizeof(fontPath), "%s/%s", basePath, s.filename);
+    char* fontPath = stylePaths[s.style];
+    snprintf(fontPath, sizeof(stylePaths[s.style]), "%s/%s", basePath, s.filename);
 
     if (!SdMan.exists(fontPath)) {
       if (s.style == EpdFontFamily::REGULAR) {
         LOG_ERR(TAG, "Custom font '%s': missing required file regular.epdfont in %s", familyName, basePath);
         return false;  // Regular is required
       }
+      fontPath[0] = '\0';
       continue;
     }
+
+    const uint32_t styleFingerprint = papyrix::fileFingerprint(fontPath);
+    if (styleFingerprint == 0) {
+      LOG_ERR(TAG, "Failed to fingerprint font file: %s", fontPath);
+      return false;
+    }
+    const uint8_t style = static_cast<uint8_t>(s.style);
+    family.fingerprint = updateFontFingerprint(family.fingerprint, &style, sizeof(style));
+    family.fingerprint = updateFontFingerprint(family.fingerprint, &styleFingerprint, sizeof(styleFingerprint));
+  }
+
+  for (const auto& s : styles) {
+    const char* fontPath = stylePaths[s.style];
+    if (!*fontPath) continue;
 
     // Defer bold/italic loading to save ~42KB per variant
     if (s.style != EpdFontFamily::REGULAR) {
@@ -321,47 +357,74 @@ bool FontManager::isBinFont(const char* familyName) {
 }
 
 int FontManager::getReaderFontId(const char* familyName, int builtinFontId) {
+  const uint32_t builtinFingerprint = builtinFontFingerprint(builtinFontId);
   if (!familyName || !*familyName) {
     // Using built-in font - unload any custom reader font and external font
     if (_activeReaderFontId != 0 && _activeReaderFontId != builtinFontId) {
       unloadFontFamily(_activeReaderFontId);
-      _activeReaderFontId = 0;
     }
+    _activeReaderFontId = 0;
+    _activeReaderFontFingerprint = builtinFingerprint;
+    _activeBinFontName[0] = '\0';
+    _activeBinBuiltinFontId = 0;
     unloadExternalFont();
     return builtinFontId;
   }
 
   // Handle .bin fonts as external fonts (CJK fallback)
   if (isBinFont(familyName)) {
-    // Unload any previous custom .epdfont reader font
-    if (_activeReaderFontId != 0 && _activeReaderFontId != builtinFontId) {
-      unloadFontFamily(_activeReaderFontId);
-      _activeReaderFontId = 0;
+    if (_activeBinBuiltinFontId == builtinFontId && strcmp(_activeBinFontName, familyName) == 0) {
+      return builtinFontId;
     }
 
+    if (_activeReaderFontId != 0 && _activeReaderFontId != builtinFontId) {
+      unloadFontFamily(_activeReaderFontId);
+    }
+    _activeReaderFontId = 0;
+    unloadExternalFont();
+
+    char path[80];
+    snprintf(path, sizeof(path), "%s/%s", CONFIG_FONTS_DIR, familyName);
+    const uint32_t fileSignature = papyrix::fileFingerprint(path);
+    const uint32_t cacheSignature = papyrix::fingerprintOrSession(fileSignature);
+    if (fileSignature == 0) {
+      LOG_WRN(TAG, "External font fingerprint unavailable; using session cache ID for %s", path);
+    }
+    _activeReaderFontFingerprint = updateFontFingerprint(builtinFingerprint, familyName, strlen(familyName));
+    _activeReaderFontFingerprint =
+        updateFontFingerprint(_activeReaderFontFingerprint, &cacheSignature, sizeof(cacheSignature));
+    strncpy(_activeBinFontName, familyName, sizeof(_activeBinFontName) - 1);
+    _activeBinFontName[sizeof(_activeBinFontName) - 1] = '\0';
+    _activeBinBuiltinFontId = builtinFontId;
+
     // Defer external font loading until a CJK character is actually encountered.
-    // Saves ~13KB for non-CJK books.
     deferExternalFont(familyName);
-    // Return builtin font ID - ASCII uses built-in, CJK falls back to external
     return builtinFontId;
   }
 
-  int targetId = generateFontId(familyName);
+  if (_activeBinFontName[0] != '\0') {
+    _activeBinFontName[0] = '\0';
+    _activeBinBuiltinFontId = 0;
+    unloadExternalFont();
+  }
 
-  // If switching to a different custom font, unload previous
+  const int targetId = generateFontId(familyName);
   if (_activeReaderFontId != 0 && _activeReaderFontId != targetId) {
     unloadFontFamily(_activeReaderFontId);
   }
 
-  // Load new font if needed
-  if (loadedFamilies.find(targetId) == loadedFamilies.end()) {
+  auto loaded = loadedFamilies.find(targetId);
+  if (loaded == loadedFamilies.end()) {
     if (!loadFontFamily(familyName, targetId)) {
       _activeReaderFontId = 0;
+      _activeReaderFontFingerprint = builtinFingerprint;
       return builtinFontId;
     }
+    loaded = loadedFamilies.find(targetId);
   }
 
   _activeReaderFontId = targetId;
+  _activeReaderFontFingerprint = loaded->second.fingerprint;
   return targetId;
 }
 
@@ -435,6 +498,9 @@ void FontManager::unloadReaderFonts() {
     unloadFontFamily(_activeReaderFontId);
     _activeReaderFontId = 0;
   }
+
+  _activeBinFontName[0] = '\0';
+  _activeBinBuiltinFontId = 0;
 
   // Unload external CJK font
   unloadExternalFont();

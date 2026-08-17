@@ -63,9 +63,9 @@ class XtcParser {
    * @param chunkSize Chunk size (default: 1024 bytes)
    * @return Error code
    */
-  XtcError loadPageStreaming(uint32_t pageIndex,
-                             std::function<void(const uint8_t* data, size_t size, size_t offset)> callback,
-                             size_t chunkSize = 1024);
+  using PageChunkCallback = std::function<bool(const uint8_t* data, size_t size, size_t offset)>;
+  XtcError loadPageStreaming(uint32_t pageIndex, PageChunkCallback callback, size_t chunkSize = 1024,
+                             const std::function<bool()>& shouldAbort = nullptr);
 
   // Get title/author from metadata
   std::string getTitle() const { return m_title; }

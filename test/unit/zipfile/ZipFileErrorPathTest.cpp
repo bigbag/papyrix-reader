@@ -512,6 +512,21 @@ int main() {
     runner.expectEq<uint32_t>(correctSizeB, sizeB, "FillSizes_EarlyExit_CorruptTrailingEntry_NotReached_SizeB");
   }
 
+  // findFirstExisting observes cancellation while scanning the central directory.
+  {
+    SdMan.reset();
+    const std::vector<std::pair<std::string, uint32_t>> entries = {
+        {"chapter1.xhtml", 100}, {"chapter2.xhtml", 200}, {"cover.jpg", 300}};
+    SdMan.setFileData("/covers.zip", createZipWithNamedEntries(entries));
+    std::string path = "/covers.zip";
+    ZipFile zip(path);
+    const char* candidates[] = {"missing.jpg", "cover.jpg"};
+    int checks = 0;
+    const int found = zip.findFirstExisting(candidates, 2, [&checks]() { return ++checks >= 3; });
+    runner.expectEq<int>(-1, found, "FindFirstExisting_Abort_ReturnsNotFound");
+    runner.expectTrue(checks >= 3, "FindFirstExisting_Abort_CheckedDuringScan");
+  }
+
   SdMan.reset();
   runner.printSummary();
   return runner.allPassed() ? 0 : 1;

@@ -76,5 +76,41 @@ int main() {
     runner.expectEq(uint32_t(10), g_mockCpuFreqMhz, "cycle: second throttle sets 10 again");
   }
 
+  // === performance lock restores and holds normal speed ===
+  {
+    papyrix::drivers::Cpu cpu;
+    g_mockCpuFreqMhz = 160;
+    cpu.throttle();
+    {
+      papyrix::drivers::Cpu::PerformanceLock outer(cpu);
+      runner.expectEq(uint32_t(160), g_mockCpuFreqMhz, "performance lock restores 160 MHz");
+      cpu.throttle();
+      runner.expectFalse(cpu.isThrottled(), "throttle is suppressed while locked");
+      {
+        papyrix::drivers::Cpu::PerformanceLock inner(cpu);
+        cpu.throttle();
+        runner.expectEq(uint32_t(160), g_mockCpuFreqMhz, "nested lock keeps 160 MHz");
+      }
+      cpu.throttle();
+      runner.expectFalse(cpu.isThrottled(), "outer lock remains authoritative");
+    }
+    runner.expectFalse(cpu.isThrottled(), "unlock does not force an immediate downclock");
+    cpu.throttle();
+    runner.expectEq(uint32_t(10), g_mockCpuFreqMhz, "idle policy can downclock after unlock");
+  }
+
+  // === ordinary early return releases lock ===
+  {
+    papyrix::drivers::Cpu cpu;
+    g_mockCpuFreqMhz = 160;
+    auto earlyReturn = [&cpu]() {
+      papyrix::drivers::Cpu::PerformanceLock lock(cpu);
+      return;
+    };
+    earlyReturn();
+    cpu.throttle();
+    runner.expectEq(uint32_t(10), g_mockCpuFreqMhz, "early return releases performance lock");
+  }
+
   return runner.allPassed() ? 0 : 1;
 }

@@ -1,7 +1,7 @@
 #include "XtcProvider.h"
 
-#include <CoverHelpers.h>
 #include <HardwareSerial.h>
+#include <HomeThumbnail.h>
 #include <SDCardManager.h>
 #include <Utf8.h>
 #include <XtcCoverHelper.h>
@@ -88,42 +88,28 @@ Result<TocEntry> XtcProvider::getTocEntry(uint16_t index) const {
 
 std::string XtcProvider::getCoverBmpPath() const { return std::string(meta.cachePath) + "/cover.bmp"; }
 
-std::string XtcProvider::getThumbBmpPath() const { return std::string(meta.cachePath) + "/thumb.bmp"; }
-
-bool XtcProvider::generateCoverBmp() {
-  const auto coverPath = getCoverBmpPath();
-  if (SdMan.exists(coverPath.c_str())) {
+bool XtcProvider::generateCoverBmp(const std::function<bool()>& shouldAbort) {
+  const std::string coverPath = getCoverBmpPath();
+  const std::string failedMarkerPath = std::string(meta.cachePath) + "/.cover.failed";
+  if (home_thumbnail::validateCover(coverPath)) {
+    SdMan.remove(failedMarkerPath.c_str());
     return true;
   }
-  return xtc::generateCoverBmpFromParser(parser, coverPath);
-}
+  if (SdMan.exists(coverPath.c_str())) SdMan.remove(coverPath.c_str());
+  if (SdMan.exists(failedMarkerPath.c_str())) return false;
 
-bool XtcProvider::generateThumbBmp() {
-  const auto thumbPath = getThumbBmpPath();
-  const auto failedMarkerPath = std::string(meta.cachePath) + "/.thumb.failed";
-
-  if (SdMan.exists(thumbPath.c_str())) return true;
-
-  if (SdMan.exists(failedMarkerPath.c_str())) {
-    return false;
-  }
-
-  if (!SdMan.exists(getCoverBmpPath().c_str()) && !generateCoverBmp()) {
+  const bool generated = xtc::generateCoverBmpFromParser(parser, coverPath, shouldAbort);
+  const bool cancelled = shouldAbort && shouldAbort();
+  const bool valid = generated && !cancelled && home_thumbnail::validateCover(coverPath);
+  if (cancelled) {
+    SdMan.remove(coverPath.c_str());
+  } else if (!valid) {
     FsFile marker;
-    if (SdMan.openFileForWrite("XTC", failedMarkerPath, marker)) {
-      marker.close();
-    }
-    return false;
+    if (SdMan.openFileForWrite("XTC", failedMarkerPath, marker)) marker.close();
+  } else {
+    SdMan.remove(failedMarkerPath.c_str());
   }
-
-  const bool success = CoverHelpers::generateThumbFromCover(getCoverBmpPath(), thumbPath, "XTC");
-  if (!success) {
-    FsFile marker;
-    if (SdMan.openFileForWrite("XTC", failedMarkerPath, marker)) {
-      marker.close();
-    }
-  }
-  return success;
+  return valid;
 }
 
 }  // namespace papyrix

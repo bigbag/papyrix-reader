@@ -124,7 +124,7 @@ void Fb2Parser::reset() {
   anchorMap_.clear();
 }
 
-bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint16_t maxPages,
+bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint32_t maxPages,
                            const AbortCallback& shouldAbort) {
   const uint32_t scratchStarted = millis();
   BuildArena scratch(renderer_.getFrameBuffer(), renderer_.getBufferSize());
@@ -287,7 +287,7 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
   currentPage_.reset();
   hasMore_ = false;
 
-  LOG_INF(TAG, "Parsed %d pages from %s", pagesCreated_, filepath_.c_str());
+  LOG_INF(TAG, "Parsed %u pages from %s", pagesCreated_, filepath_.c_str());
   return true;
 }
 

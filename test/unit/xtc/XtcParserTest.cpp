@@ -484,13 +484,21 @@ int main() {
     auto err = parser.loadPageStreaming(1, [&](const uint8_t* data, size_t size, size_t offset) {
       (void)offset;
       collected.insert(collected.end(), data, data + size);
+      return true;
     });
     runner.expectTrue(err == xtc::XtcError::OK, "streaming_lazy: page 1 streams OK");
     runner.expectTrue(collected.size() > 0, "streaming_lazy: received data");
 
     // Out of range
-    err = parser.loadPageStreaming(2, [](const uint8_t*, size_t, size_t) {});
+    err = parser.loadPageStreaming(2, [](const uint8_t*, size_t, size_t) { return true; });
     runner.expectTrue(err == xtc::XtcError::PAGE_OUT_OF_RANGE, "streaming_lazy: out of range error");
+
+    err = parser.loadPageStreaming(0, [](const uint8_t*, size_t, size_t) { return false; });
+    runner.expectTrue(err == xtc::XtcError::READ_ERROR, "streaming: callback failure propagates");
+
+    err = parser.loadPageStreaming(0, [](const uint8_t*, size_t, size_t) { return true; }, 1,
+                                   []() { return true; });
+    runner.expectTrue(err == xtc::XtcError::CANCELLED, "streaming: cancellation propagates");
 
     parser.close();
   }
@@ -561,7 +569,7 @@ int main() {
     SdMan.registerFile("/zero_chunk.xtc", buildMultiPageXtc(8, 8, 1));
     xtc::XtcParser parser;
     parser.open("/zero_chunk.xtc");
-    const auto err = parser.loadPageStreaming(0, [](const uint8_t*, size_t, size_t) {}, 0);
+    const auto err = parser.loadPageStreaming(0, [](const uint8_t*, size_t, size_t) { return true; }, 0);
     runner.expectTrue(err == xtc::XtcError::CORRUPTED_HEADER, "streaming: rejects zero chunk size");
   }
 

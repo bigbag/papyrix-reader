@@ -140,7 +140,7 @@ bool MarkdownParser::addLineToPage(ParseContext& ctx, std::shared_ptr<TextBlock>
   if (ctx.pageNextY + lineHeight > config_.viewportHeight) {
     if (ctx.onPageComplete) {
       const size_t freeHeap = heap_caps_get_free_size(MALLOC_CAP_8BIT);
-      LOG_DBG(TAG, "Page %d complete, heap: %zu free", ctx.pagesCreated, freeHeap);
+      LOG_DBG(TAG, "Page %u complete, heap: %zu free", ctx.pagesCreated, freeHeap);
       ctx.onPageComplete(std::move(ctx.currentPage));
       ctx.pagesCreated++;
 
@@ -371,7 +371,7 @@ bool MarkdownParser::tokenCallback(const md_token_t* token, void* userData) {
   return true;
 }
 
-bool MarkdownParser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint16_t maxPages,
+bool MarkdownParser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint32_t maxPages,
                                 const AbortCallback& shouldAbort) {
   FsFile file;
   if (!SdMan.openFileForRead("MD", filepath_, file)) {
@@ -559,6 +559,6 @@ bool MarkdownParser::parsePages(const std::function<void(std::unique_ptr<Page>)>
   currentOffset_ += bytesProcessed;
   hasMore_ = ctx.hitMaxPages || (currentOffset_ < fileSize_);
 
-  LOG_INF(TAG, "Parsed %d pages, offset %zu/%zu, hasMore=%d", ctx.pagesCreated, currentOffset_, fileSize_, hasMore_);
+  LOG_INF(TAG, "Parsed %u pages, offset %zu/%zu, hasMore=%d", ctx.pagesCreated, currentOffset_, fileSize_, hasMore_);
   return true;
 }

@@ -1,8 +1,10 @@
 #pragma once
 
+#include <HomeThumbnail.h>
 #include <Print.h>
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -54,6 +56,10 @@ class Epub {
   bool extractSections(const std::string& htmlPath, const SpineSplit& split, uint8_t* ioBuf);
   bool rebuildBookBinWithSplits(const std::vector<SpineSplit>& splits);
   std::string sectionFilePath(int originalSpineIndex, int sectionIndex) const;
+  home_thumbnail::Result extractCoverSource(const std::string& itemHref,
+                                            const std::function<bool()>& shouldAbort) const;
+  home_thumbnail::Result prepareCoverSource(std::string& sourcePath, bool& temporary,
+                                            const std::function<bool()>& shouldAbort) const;
 
  public:
   explicit Epub(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)) {
@@ -76,16 +82,13 @@ class Epub {
   const std::string& getAuthor() const;
   const std::string& getLanguage() const;
   std::string getCoverBmpPath() const;
-  std::string getCoverPreviewBmpPath() const;
-  bool generateCoverBmp(bool use1BitDithering = false) const;
-  bool generateCoverPreviewBmp() const;
-  std::string getThumbBmpPath() const;
-  bool generateThumbBmp() const;
-  std::string findCoverImage() const;
+  bool generateCoverBmp(bool use1BitDithering = false, const std::function<bool()>& shouldAbort = nullptr) const;
+  std::string findCoverImage(const std::function<bool()>& shouldAbort = nullptr) const;
   uint8_t* readItemContentsToBytes(const std::string& itemHref, size_t* size = nullptr,
                                    bool trailingNullByte = false) const;
   bool readItemContentsToStream(const std::string& itemHref, Print& out, size_t chunkSize,
-                                uint8_t* dictBuffer = nullptr, BuildArena* scratch = nullptr) const;
+                                uint8_t* dictBuffer = nullptr, BuildArena* scratch = nullptr,
+                                const std::function<bool()>& shouldAbort = nullptr) const;
   bool getItemSize(const std::string& itemHref, size_t* size) const;
   bool getSpineItemSizes(std::vector<size_t>& sizes) const;
   BookMetadataCache::SpineEntry getSpineItem(int spineIndex) const;

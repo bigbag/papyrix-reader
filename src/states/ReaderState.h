@@ -22,6 +22,7 @@ class GfxRenderer;
 class PageCache;
 class Page;
 struct RenderConfig;
+struct Theme;
 
 namespace papyrix {
 
@@ -56,6 +57,7 @@ class ReaderState : public State {
   GfxRenderer& renderer_;
   XtcPageRenderer xtcRenderer_;
   char contentPath_[BufferSize::FilePath];
+  uint32_t sourceFingerprint_ = 0;
   uint32_t currentPage_;
   bool needsRender_;
   bool suppressRender_ = false;
@@ -93,6 +95,7 @@ class ReaderState : public State {
   BackgroundTask cacheTask_;
   Core* coreForCacheTask_ = nullptr;
   bool thumbnailDone_ = false;
+  bool coverDone_ = false;
   void startBackgroundCaching(Core& core);
   bool stopBackgroundCaching(bool waitForever = false);
 
@@ -145,12 +148,13 @@ class ReaderState : public State {
   void flushReadingSession();
 
   // Cache management
-  bool ensurePageCached(Core& core, uint16_t pageNum);
+  bool ensurePageCached(Core& core, uint32_t pageNum);
   void loadCacheFromDisk(Core& core);
   void createOrExtendCache(Core& core);
 
   void createOrExtendCacheImpl(ContentParser& parser, const std::string& cachePath, const RenderConfig& config);
-  void backgroundCacheImpl(ContentParser& parser, const std::string& cachePath, const RenderConfig& config);
+  void backgroundCacheImpl(ContentParser& parser, const std::string& cachePath, const RenderConfig& config,
+                           uint32_t currentPage);
 
   // Display helpers
   void displayWithRefresh(Core& core);
@@ -166,6 +170,7 @@ class ReaderState : public State {
     int height;
   };
   Viewport getReaderViewport(bool showStatusBar) const;
+  RenderConfig makeRenderConfig(Core& core, const Theme& theme, const Viewport& viewport) const;
 
   // Get first content spine index (skips cover document when appropriate)
   static int calcFirstContentSpine(bool hasCover, int textStartIndex, size_t spineCount);
@@ -173,7 +178,7 @@ class ReaderState : public State {
   // Anchor-to-page persistence for intra-spine TOC navigation
   static void saveAnchorMap(const ContentParser& parser, const std::string& cachePath);
   static int loadAnchorPage(const std::string& cachePath, const std::string& anchor);
-  static std::vector<std::pair<std::string, uint16_t>> loadAnchorMap(const std::string& cachePath);
+  static std::vector<std::pair<std::string, uint32_t>> loadAnchorMap(const std::string& cachePath);
 
   // Source state (where reader was opened from)
   StateId sourceState_ = StateId::Home;

@@ -2,6 +2,7 @@
 
 #include <SdFat.h>
 
+#include <cstddef>
 #include <cstdint>
 
 #include "BitmapHelpers.h"
@@ -36,7 +37,11 @@ class Bitmap {
   ~Bitmap();
   BmpReaderError parseHeaders();
   BmpReaderError readRow(uint8_t* data, uint8_t* rowBuffer, int rowY) const;
+  BmpReaderError readRawRow(uint8_t* rowBuffer, size_t rowBufferSize, int logicalRowY) const;
+  BmpReaderError readGrayscaleRow(uint8_t* gray, size_t graySize, uint8_t* rowBuffer, size_t rowBufferSize,
+                                  int logicalRowY) const;
   BmpReaderError rewindToData() const;
+  bool hasCompletePixelData() const;
   bool preloadAllRows() const;
   bool isPreloaded() const { return preloadedRows_ != nullptr; }
   const uint8_t* preloadedRow(int rowIndex) const;
@@ -46,6 +51,7 @@ class Bitmap {
   bool hasGreyscale() const { return bpp > 1; }
   uint16_t getBpp() const { return bpp; }
   int getRowBytes() const { return rowBytes; }
+  uint8_t getPaletteLuminance(uint8_t index) const { return paletteLum[index]; }
   bool isIdentityPalette() const { return isIdentityPalette_; }
 
  private:
@@ -60,6 +66,8 @@ class Bitmap {
   uint8_t paletteLum[256] = {};
   bool isIdentityPalette_ = false;
   mutable uint8_t* preloadedRows_ = nullptr;
+
+  BmpReaderError loadRawRow(uint8_t* rowBuffer, int storageRowY) const;
 
   // Dithering state (mutable for const methods)
   mutable int prevRowY = -1;

@@ -8,6 +8,7 @@
 
 #include <CoverHelpers.h>
 #include <FsHelpers.h>
+#include <HomeThumbnail.h>
 #include <Logging.h>
 #include <SDCardManager.h>
 
@@ -88,37 +89,35 @@ void Txt::setupCacheDir() const {
 
 std::string Txt::getCoverBmpPath() const { return cachePath + "/cover.bmp"; }
 
-std::string Txt::findCoverImage() const {
+std::string Txt::findCoverImage(const std::function<bool()>& shouldAbort) const {
   // Extract directory path
   size_t lastSlash = filepath.find_last_of('/');
   std::string dirPath = (lastSlash == std::string::npos) ? "/" : filepath.substr(0, lastSlash);
   if (dirPath.empty()) dirPath = "/";
 
-  return CoverHelpers::findCoverImage(dirPath, title);
+  return CoverHelpers::findCoverImage(dirPath, title, shouldAbort);
 }
 
-bool Txt::generateCoverBmp(bool use1BitDithering) const {
+bool Txt::generateCoverBmp(bool use1BitDithering, const std::function<bool()>& shouldAbort) const {
   const auto coverPath = getCoverBmpPath();
   const auto failedMarkerPath = cachePath + "/.cover.failed";
 
-  // Already generated
-  if (SdMan.exists(coverPath.c_str())) {
+  if (home_thumbnail::validateCover(coverPath)) {
+    SdMan.remove(failedMarkerPath.c_str());
     return true;
   }
-
-  // Previously failed, don't retry
-  if (SdMan.exists(failedMarkerPath.c_str())) {
-    return false;
-  }
+  if (SdMan.exists(coverPath.c_str())) SdMan.remove(coverPath.c_str());
+  if (SdMan.exists(failedMarkerPath.c_str())) return false;
 
   // Find a cover image
-  std::string coverImagePath = findCoverImage();
+  std::string coverImagePath = findCoverImage(shouldAbort);
   if (coverImagePath.empty()) {
     LOG_DBG(TAG, "No cover image found");
-    // Create failure marker
-    FsFile marker;
-    if (SdMan.openFileForWrite("TXT", failedMarkerPath, marker)) {
-      marker.close();
+    if (!CoverHelpers::isAbortRequested(shouldAbort)) {
+      FsFile marker;
+      if (SdMan.openFileForWrite("TXT", failedMarkerPath, marker)) {
+        marker.close();
+      }
     }
     return false;
   }
@@ -127,50 +126,18 @@ bool Txt::generateCoverBmp(bool use1BitDithering) const {
   setupCacheDir();
 
   // Convert to BMP using shared helper
-  const bool success = CoverHelpers::convertImageToBmp(coverImagePath, coverPath, "TXT", use1BitDithering);
-  if (!success) {
-    // Create failure marker
+  const bool success = CoverHelpers::convertImageToBmp(coverImagePath, coverPath, "TXT", use1BitDithering, shouldAbort);
+  const bool cancelled = CoverHelpers::isAbortRequested(shouldAbort);
+  const bool valid = success && !cancelled && home_thumbnail::validateCover(coverPath);
+  if (cancelled) {
+    SdMan.remove(coverPath.c_str());
+  } else if (!valid) {
     FsFile marker;
-    if (SdMan.openFileForWrite("TXT", failedMarkerPath, marker)) {
-      marker.close();
-    }
+    if (SdMan.openFileForWrite("TXT", failedMarkerPath, marker)) marker.close();
+  } else {
+    SdMan.remove(failedMarkerPath.c_str());
   }
-  return success;
-}
-
-std::string Txt::getThumbBmpPath() const { return cachePath + "/thumb.bmp"; }
-
-bool Txt::generateThumbBmp() const {
-  const auto thumbPath = getThumbBmpPath();
-  const auto failedMarkerPath = cachePath + "/.thumb.failed";
-
-  if (SdMan.exists(thumbPath.c_str())) return true;
-
-  // Previously failed, don't retry
-  if (SdMan.exists(failedMarkerPath.c_str())) {
-    return false;
-  }
-
-  if (!SdMan.exists(getCoverBmpPath().c_str()) && !generateCoverBmp(true)) {
-    // Create failure marker
-    FsFile marker;
-    if (SdMan.openFileForWrite("TXT", failedMarkerPath, marker)) {
-      marker.close();
-    }
-    return false;
-  }
-
-  setupCacheDir();
-
-  const bool success = CoverHelpers::generateThumbFromCover(getCoverBmpPath(), thumbPath, "TXT");
-  if (!success) {
-    // Create failure marker
-    FsFile marker;
-    if (SdMan.openFileForWrite("TXT", failedMarkerPath, marker)) {
-      marker.close();
-    }
-  }
-  return success;
+  return valid;
 }
 
 size_t Txt::readContent(uint8_t* buffer, size_t offset, size_t length) const {

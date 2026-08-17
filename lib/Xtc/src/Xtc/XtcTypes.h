@@ -150,6 +150,7 @@ enum class XtcError {
   WRITE_ERROR,
   MEMORY_ERROR,
   DECOMPRESSION_ERROR,
+  CANCELLED,
 };
 
 // Convert error code to string
@@ -175,6 +176,8 @@ inline const char* errorToString(XtcError err) {
       return "Memory allocation error";
     case XtcError::DECOMPRESSION_ERROR:
       return "Decompression error";
+    case XtcError::CANCELLED:
+      return "Cancelled";
     default:
       return "Unknown error";
   }

@@ -223,7 +223,20 @@ int main() {
     runner.expectTrue(bmpBU.readRowCalls == expected, "bottomup_sequential_readRow");
   }
 
-  // Test 4: Bottom-up bitmap - verify each row's pixel value lands at correct screen Y
+  // Test 4: Exact max bounds keep a 1:1 row mapping
+  {
+    Bitmap bmp(4, 4, true);
+    EInkDisplay display(0, 0, 0, 0, 0, 0);
+    GfxRenderer gfx(display);
+    gfx.begin();
+    gfx.setOrientation(GfxRenderer::LandscapeCounterClockwise);
+    gfx.drawBitmap(bmp, 0, 0, 4, 4);
+
+    const std::vector<int> expected = {0, 1, 2, 3};
+    runner.expectTrue(bmp.readRowCalls == expected, "exact_bounds_draws_one_to_one");
+  }
+
+  // Test 5: Bottom-up bitmap - verify each row's pixel value lands at correct screen Y
   {
     EInkDisplay display(0, 0, 0, 0, 0, 0);
     GfxRenderer gfx(display);
@@ -321,6 +334,19 @@ int main() {
     runner.expectTrue(isPixelSet(gfx.getFrameBuffer(), 0, screenH - 1), "bottom_edge_visible");
     // destY=3 (srcY=3, val=3 white) → screenY=screenH-2
     runner.expectFalse(isPixelSet(gfx.getFrameBuffer(), 0, screenH - 2), "bottom_edge_white_row");
+  }
+
+  // Test 9: Home cover dimensions use the full bounding box rather than rounded fitted dimensions.
+  {
+    EInkDisplay display(0, 0, 0, 0, 0, 0);
+    GfxRenderer gfx(display);
+    gfx.begin();
+    gfx.setOrientation(GfxRenderer::LandscapeCounterClockwise);
+
+    Bitmap bmp(450, 691, true);
+    gfx.drawBitmap(bmp, 0, 0, 320, 440);
+
+    runner.expectTrue(isPixelSet(gfx.getFrameBuffer(), 0, 439), "home_cover_reaches_fitted_bottom_row");
   }
 
   return runner.allPassed() ? 0 : 1;

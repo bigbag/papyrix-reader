@@ -2,11 +2,14 @@
 
 #include <FsHelpers.h>
 
+#include <functional>
 #include <string>
 
 class GfxRenderer;
 
 namespace CoverHelpers {
+
+inline bool isAbortRequested(const std::function<bool()>& shouldAbort) { return shouldAbort && shouldAbort(); }
 
 struct CenteredRect {
   int x;
@@ -52,18 +55,11 @@ bool renderCoverFromBmp(GfxRenderer& renderer, const std::string& bmpPath, int m
                         int marginBottom, int marginLeft, int& pagesUntilFullRefresh, int pagesPerRefreshValue,
                         bool turnOffScreen = false);
 
-// Render cover with automatic fallback to preview if full cover not available
-// previewPath: fast-generated preview (simple threshold, no dithering)
-// coverPath: high-quality cover (with dithering)
-// Prefers coverPath when available, falls back to previewPath
-bool renderCoverWithFallback(GfxRenderer& renderer, const std::string& coverPath, const std::string& previewPath,
-                             int marginTop, int marginRight, int marginBottom, int marginLeft,
-                             int& pagesUntilFullRefresh, int pagesPerRefreshValue, bool turnOffScreen = false);
-
 // Find a cover image file in the given directory
 // Looks for: baseName.jpg, baseName.jpeg, baseName.png, baseName.bmp, cover.jpg, etc.
 // Returns empty string if no cover found
-std::string findCoverImage(const std::string& dirPath, const std::string& baseName);
+std::string findCoverImage(const std::string& dirPath, const std::string& baseName,
+                           const std::function<bool()>& shouldAbort = nullptr);
 
 // Convert an image file (JPG, PNG, or BMP) to BMP format
 // For BMP input, just copies the file
@@ -72,11 +68,6 @@ std::string findCoverImage(const std::string& dirPath, const std::string& baseNa
 // logTag is used for Serial logging (e.g., "TXT", "MD ")
 // Returns true on success
 bool convertImageToBmp(const std::string& inputPath, const std::string& outputPath, const char* logTag,
-                       bool use1BitDithering);
-
-// Generate thumbnail BMP from full-size cover BMP
-// Uses atomic write (temp file + rename) for safety
-// Returns true on success
-bool generateThumbFromCover(const std::string& coverBmpPath, const std::string& thumbBmpPath, const char* logTag);
+                       bool use1BitDithering, const std::function<bool()>& shouldAbort = nullptr);
 
 }  // namespace CoverHelpers

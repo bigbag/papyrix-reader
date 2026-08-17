@@ -7,10 +7,12 @@
 
 #pragma once
 
+#include <HomeThumbnail.h>
 #include <expat.h>
 
 #include <climits>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -91,6 +93,8 @@ class Fb2 {
   bool saveMetaCache() const;
   std::string metaCachePath() const;
   std::string sectionFilePath(int sectionIndex) const;
+  home_thumbnail::Result prepareCoverSource(std::string& sourcePath, bool& temporary,
+                                            const std::function<bool()>& shouldAbort) const;
 
  public:
   explicit Fb2(std::string filepath, const std::string& cacheDir);
@@ -132,9 +136,7 @@ class Fb2 {
 
   // Cover image support
   std::string getCoverBmpPath() const;
-  bool generateCoverBmp(bool use1BitDithering = false) const;
-  std::string getThumbBmpPath() const;
-  bool generateThumbBmp() const;
+  bool generateCoverBmp(bool use1BitDithering = false, const std::function<bool()>& shouldAbort = nullptr) const;
 
   /**
    * Read content from file at specified offset
@@ -150,13 +152,13 @@ class Fb2 {
    * @param outputPath Path to write the decoded image
    * @return true on success
    */
-  bool extractEmbeddedCover(const std::string& outputPath) const;
+  bool extractEmbeddedCover(const std::string& outputPath, const std::function<bool()>& shouldAbort = nullptr) const;
 
   /**
    * Find a cover image in the same directory as the FB2 file
    * @return Path to cover image, or empty string if not found
    */
-  std::string findCoverImage() const;
+  std::string findCoverImage(const std::function<bool()>& shouldAbort = nullptr) const;
 
   // Check if file is loaded
   bool isLoaded() const { return loaded; }

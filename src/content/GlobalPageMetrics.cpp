@@ -6,14 +6,14 @@
 
 namespace papyrix::page_metrics {
 
-uint16_t estimatePagesForBytes(size_t bytes, size_t bytesPerPage) {
+uint32_t estimatePagesForBytes(size_t bytes, size_t bytesPerPage) {
   const size_t safeBytesPerPage = std::max<size_t>(1, bytesPerPage);
   const size_t quotient = bytes / safeBytesPerPage;
   const size_t pageCount = std::max<size_t>(1, quotient + (bytes % safeBytesPerPage != 0));
-  return static_cast<uint16_t>(std::min<size_t>(pageCount, UINT16_MAX));
+  return static_cast<uint32_t>(std::min<size_t>(pageCount, UINT32_MAX));
 }
 
-Update applyCache(Section& metric, uint16_t pageCount, bool partial) {
+Update applyCache(Section& metric, uint32_t pageCount, bool partial) {
   Update result;
   if (!partial) {
     if (!metric.exact || metric.pages != pageCount) {
@@ -32,14 +32,14 @@ Update applyCache(Section& metric, uint16_t pageCount, bool partial) {
 void fillEstimates(std::vector<Section>& metrics, size_t bytesPerPage) {
   for (auto& metric : metrics) {
     if (metric.exact) continue;
-    const uint16_t estimated = estimatePagesForBytes(metric.byteSize, bytesPerPage);
+    const uint32_t estimated = estimatePagesForBytes(metric.byteSize, bytesPerPage);
     if (metric.pages == 0 || estimated > metric.pages) metric.pages = estimated;
   }
 }
 
 void recalibrate(std::vector<Section>& metrics) {
   uint64_t calibrationBytes = 0;
-  uint32_t calibrationPages = 0;
+  uint64_t calibrationPages = 0;
   for (const auto& metric : metrics) {
     if (metric.exact && metric.byteSize > 0 && metric.pages > 0) {
       calibrationBytes += metric.byteSize;

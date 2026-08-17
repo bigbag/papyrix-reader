@@ -36,7 +36,7 @@ bool allSectionsComplete(const std::vector<ProbeResult>& probes) {
 // Mirrors the metrics.bin fast path in isFullyIndexed: fully indexed iff every recorded
 // section is exact. A skipped/partial section is recorded with exact=false.
 struct MetricsEntry {
-  uint16_t pages = 0;
+  uint32_t pages = 0;
   bool exact = false;
 };
 

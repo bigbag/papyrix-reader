@@ -23,12 +23,12 @@ class Fb2Parser : public ContentParser {
   Fb2Parser(std::string filepath, GfxRenderer& renderer, const RenderConfig& config, const std::string& language = "");
   ~Fb2Parser() override;
 
-  bool parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint16_t maxPages = 0,
+  bool parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint32_t maxPages = 0,
                   const AbortCallback& shouldAbort = nullptr) override;
   bool hasMoreContent() const override { return hasMore_; }
   bool canResume() const override { return xmlParser_ != nullptr; }
   void reset() override;
-  const std::vector<std::pair<std::string, uint16_t>>& getAnchorMap() const override { return anchorMap_; }
+  const std::vector<std::pair<std::string, uint32_t>>& getAnchorMap() const override { return anchorMap_; }
   uint32_t bytesConsumed() const override { return bytesConsumed_; }
   uint32_t totalBytes() const override { return static_cast<uint32_t>(fileSize_); }
 
@@ -69,12 +69,12 @@ class Fb2Parser : public ContentParser {
   int16_t currentPageNextY_ = 0;
 
   // Anchor map for TOC navigation (section_N → page index)
-  std::vector<std::pair<std::string, uint16_t>> anchorMap_;
+  std::vector<std::pair<std::string, uint32_t>> anchorMap_;
 
   // Callback state
   std::function<void(std::unique_ptr<Page>)> onPageComplete_;
-  uint16_t maxPages_ = 0;
-  uint16_t pagesCreated_ = 0;
+  uint32_t maxPages_ = 0;
+  uint32_t pagesCreated_ = 0;
   bool hitMaxPages_ = false;
   int16_t pendingSpacing_ = 0;
   AbortCallback shouldAbort_;

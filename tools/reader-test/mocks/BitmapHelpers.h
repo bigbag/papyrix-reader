@@ -9,8 +9,6 @@ inline int adjustPixel(int gray) { return gray; }
 inline uint8_t rgbToGray(uint8_t r, uint8_t g, uint8_t b) {
   return static_cast<uint8_t>((r * 77 + g * 150 + b * 29) >> 8);
 }
-inline bool bmpTo1BitBmpScaled(const char*, const char*, int, int) { return false; }
-
 class AtkinsonDitherer {
  public:
   explicit AtkinsonDitherer(int) {}

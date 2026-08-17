@@ -95,17 +95,15 @@ class ChapterHtmlSlimParser {
 
   // Parser safety - timeout and memory checks
   uint32_t parseStartTime_ = 0;
-  uint16_t loopCounter_ = 0;
-  uint16_t pagesCreated_ = 0;
+  uint32_t pagesCreated_ = 0;
   static constexpr uint32_t MAX_PARSE_TIME_MS = 20000;  // 20 second timeout
-  static constexpr uint16_t YIELD_CHECK_INTERVAL = 500;
-  static constexpr size_t MIN_FREE_HEAP = 8192;  // 8KB minimum free heap
+  static constexpr size_t MIN_FREE_HEAP = 8192;         // 8KB minimum free heap
 
   // Pre-parse data URI stripper to prevent expat OOM on large embedded images
   DataUriStripper dataUriStripper_;
 
   // Anchor-to-page mapping: element id → page index (0-based)
-  std::vector<std::pair<std::string, uint16_t>> anchorMap_;
+  std::vector<std::pair<std::string, uint32_t>> anchorMap_;
 
   // Check if parsing should abort due to timeout or memory pressure
   bool shouldAbort() const;
@@ -170,12 +168,13 @@ class ChapterHtmlSlimParser {
   }
 
   void setBuildScratch(BuildArena* scratch) { buildScratch_ = scratch; }
+  void setExternalAbortCallback(const std::function<bool()>& callback) { externalAbortCallback_ = callback; }
   bool parseAndBuildPages();
   bool resumeParsing();
   bool isSuspended() const { return suspended_; }
   void addLineToPage(std::shared_ptr<TextBlock> line);
   bool wasAborted() const { return aborted_; }
-  const std::vector<std::pair<std::string, uint16_t>>& getAnchorMap() const { return anchorMap_; }
+  const std::vector<std::pair<std::string, uint32_t>>& getAnchorMap() const { return anchorMap_; }
   uint32_t bytesRead() const { return static_cast<uint32_t>(bytesRead_); }
   uint32_t totalSize() const { return static_cast<uint32_t>(totalSize_); }
 

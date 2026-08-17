@@ -63,7 +63,13 @@ foreach(TEST_SRC ${TEST_SOURCES})
   get_filename_component(TEST_NAME ${TEST_SRC} NAME_WE)
 
   # Special handling for tests that need additional source files
-  if(TEST_NAME STREQUAL "ThaiShaperTest")
+  if(TEST_NAME STREQUAL "BackgroundTaskTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/AsyncTask/src/BackgroundTask.cpp
+      ${TEST_HELPERS}
+    )
+  elseif(TEST_NAME STREQUAL "ThaiShaperTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
       ${PROJECT_ROOT}/lib/ThaiShaper/src/ThaiCharacter.cpp
@@ -336,6 +342,70 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/InflateReader/src
       ${PROJECT_ROOT}/lib/uzlib/src
     )
+  elseif(TEST_NAME STREQUAL "PngOneBitTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/PngToBmpConverter/src/PngToBmpConverter.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/BitmapHelpers.cpp
+      ${PROJECT_ROOT}/lib/ImageConverter/src/ImageConverter.cpp
+      ${PROJECT_ROOT}/lib/FsHelpers/src/FsHelpers.cpp
+      ${TEST_HELPERS}
+    )
+    target_include_directories(${TEST_NAME} BEFORE PRIVATE
+      ${PROJECT_ROOT}/lib/PngToBmpConverter/src
+      ${CMAKE_CURRENT_SOURCE_DIR}/unit/imageconverter/mocks
+      ${PROJECT_ROOT}/lib/ImageConverter/src
+    )
+  elseif(TEST_NAME STREQUAL "JpegThumbnailCancellationTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/JpegToBmpConverter/src/JpegToBmpConverter.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/BitmapHelpers.cpp
+      ${PROJECT_ROOT}/lib/ImageConverter/src/ImageConverter.cpp
+      ${PROJECT_ROOT}/lib/FsHelpers/src/FsHelpers.cpp
+      ${TEST_HELPERS}
+    )
+    target_include_directories(${TEST_NAME} BEFORE PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/unit/jpegconverter/mocks
+      ${PROJECT_ROOT}/lib/JpegToBmpConverter/src
+      ${CMAKE_CURRENT_SOURCE_DIR}/unit/imageconverter/mocks
+      ${PROJECT_ROOT}/lib/ImageConverter/src
+    )
+  elseif(TEST_NAME STREQUAL "ImageConverterSignatureTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/ImageConverter/src/ImageConverter.cpp
+      ${PROJECT_ROOT}/lib/FsHelpers/src/FsHelpers.cpp
+      ${TEST_HELPERS}
+    )
+    target_include_directories(${TEST_NAME} BEFORE PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/unit/imageconverter/mocks
+      ${PROJECT_ROOT}/lib/ImageConverter/src
+    )
+  elseif(TEST_NAME STREQUAL "PackedCoverReducerTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/PackedCoverReducer.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/Bitmap.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/BitmapHelpers.cpp
+      ${TEST_HELPERS}
+    )
+  elseif(TEST_NAME STREQUAL "HomeThumbnailTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/HomeThumbnail.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/PackedCoverReducer.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/Bitmap.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/BitmapHelpers.cpp
+      ${TEST_HELPERS}
+    )
+  elseif(TEST_NAME STREQUAL "BitmapRowAccessTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/Bitmap.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/BitmapHelpers.cpp
+      ${TEST_HELPERS}
+    )
   elseif(TEST_NAME STREQUAL "ParsedTextAbortTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
@@ -519,6 +589,15 @@ foreach(TEST_SRC ${TEST_SOURCES})
     add_executable(${TEST_NAME}
       ${TEST_SRC}
       ${PROJECT_ROOT}/src/core/SettingsSerialization.cpp
+      ${TEST_HELPERS}
+    )
+  elseif(TEST_NAME STREQUAL "PageCacheIntegrationTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/PageCache/src/PageCache.cpp
+      ${PROJECT_ROOT}/lib/RenderTypes/src/Page.cpp
+      ${PROJECT_ROOT}/lib/RenderTypes/src/blocks/TextBlock.cpp
+      ${PROJECT_ROOT}/lib/Utf8/src/Utf8.cpp
       ${TEST_HELPERS}
     )
   elseif(TEST_NAME STREQUAL "PageSerializationTest")

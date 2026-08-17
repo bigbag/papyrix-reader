@@ -23,6 +23,75 @@ inline std::vector<MockEventGroup*>& getEventGroupRegistry() {
   return registry;
 }
 
+struct MockEventSetGate {
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool enabled = false;
+  bool blocked = false;
+  bool released = false;
+};
+
+inline MockEventSetGate& getEventSetGate() {
+  static MockEventSetGate gate;
+  return gate;
+}
+
+inline MockEventSetGate& getEventSetReturnGate() {
+  static MockEventSetGate gate;
+  return gate;
+}
+
+inline std::atomic<uint32_t>& getEventWaitCallCount() {
+  static std::atomic<uint32_t> count{0};
+  return count;
+}
+
+inline void enableEventSetGate() {
+  auto& gate = getEventSetGate();
+  std::lock_guard<std::mutex> lock(gate.mutex);
+  gate.enabled = true;
+  gate.blocked = false;
+  gate.released = false;
+}
+
+inline void waitForEventSetBlocked() {
+  auto& gate = getEventSetGate();
+  std::unique_lock<std::mutex> lock(gate.mutex);
+  gate.cv.wait(lock, [&gate]() { return gate.blocked; });
+}
+
+inline void releaseEventSetGate() {
+  auto& gate = getEventSetGate();
+  {
+    std::lock_guard<std::mutex> lock(gate.mutex);
+    gate.released = true;
+  }
+  gate.cv.notify_all();
+}
+
+inline void enableEventSetReturnGate() {
+  auto& gate = getEventSetReturnGate();
+  std::lock_guard<std::mutex> lock(gate.mutex);
+  gate.enabled = true;
+  gate.blocked = false;
+  gate.released = false;
+}
+
+inline void waitForEventSetReturnBlocked() {
+  auto& gate = getEventSetReturnGate();
+  std::unique_lock<std::mutex> lock(gate.mutex);
+  gate.cv.wait(lock, [&gate]() { return gate.blocked; });
+}
+
+inline void releaseEventSetReturnGate() {
+  auto& gate = getEventSetReturnGate();
+  {
+    std::lock_guard<std::mutex> lock(gate.mutex);
+    gate.released = true;
+  }
+  gate.cv.notify_all();
+}
+
 inline EventGroupHandle_t xEventGroupCreate() {
   MockEventGroup* eg = new MockEventGroup();
   getEventGroupRegistry().push_back(eg);
@@ -40,12 +109,37 @@ inline EventBits_t xEventGroupSetBits(EventGroupHandle_t xEventGroup, const Even
   MockEventGroup* eg = static_cast<MockEventGroup*>(xEventGroup);
   if (!eg) return 0;
 
+  auto& gate = getEventSetGate();
+  {
+    std::unique_lock<std::mutex> lock(gate.mutex);
+    if (gate.enabled) {
+      gate.blocked = true;
+      gate.cv.notify_all();
+      gate.cv.wait(lock, [&gate]() { return gate.released; });
+      gate.enabled = false;
+    }
+  }
+
+  EventBits_t result;
   {
     std::lock_guard<std::mutex> lock(eg->mtx);
     eg->bits |= uxBitsToSet;
+    result = eg->bits.load();
   }
   eg->cv.notify_all();
-  return eg->bits.load();
+
+  auto& returnGate = getEventSetReturnGate();
+  {
+    std::unique_lock<std::mutex> lock(returnGate.mutex);
+    if (returnGate.enabled) {
+      returnGate.blocked = true;
+      returnGate.cv.notify_all();
+      returnGate.cv.wait(lock, [&returnGate]() { return returnGate.released; });
+      returnGate.enabled = false;
+    }
+  }
+
+  return result;
 }
 
 inline EventBits_t xEventGroupClearBits(EventGroupHandle_t xEventGroup, const EventBits_t uxBitsToClear) {
@@ -63,6 +157,7 @@ inline EventBits_t xEventGroupWaitBits(EventGroupHandle_t xEventGroup, const Eve
   MockEventGroup* eg = static_cast<MockEventGroup*>(xEventGroup);
   if (!eg) return 0;
 
+  getEventWaitCallCount()++;
   (void)xWaitForAllBits;  // Simplified: always OR behavior
 
   auto checkBits = [&]() -> bool { return (eg->bits.load() & uxBitsToWaitFor) != 0; };
@@ -96,4 +191,17 @@ inline void cleanupMockEventGroups() {
     delete eg;
   }
   registry.clear();
+  getEventWaitCallCount() = 0;
+  auto& gate = getEventSetGate();
+  {
+    std::lock_guard<std::mutex> lock(gate.mutex);
+    gate.enabled = false;
+    gate.blocked = false;
+    gate.released = false;
+  }
+  auto& returnGate = getEventSetReturnGate();
+  std::lock_guard<std::mutex> lock(returnGate.mutex);
+  returnGate.enabled = false;
+  returnGate.blocked = false;
+  returnGate.released = false;
 }
