@@ -199,3 +199,124 @@ uint8_t quantize(int gray, int x, int y) {
 
 // Simple 1-bit quantization (black or white)
 uint8_t quantize1bit(int gray, int x, int y) { return gray < 128 ? 0 : 1; }
+
+bool write2BitBmpHeader(Print& output, const int width, const int height) {
+  if (width <= 0 || height <= 0) return false;
+
+  const uint64_t rowSize = (static_cast<uint64_t>(width) * 2 + 31U) / 32U * 4U;
+  const uint64_t imageSize = rowSize * static_cast<uint64_t>(height);
+  const uint64_t fileSize = 70U + imageSize;
+  if (imageSize > UINT32_MAX || fileSize > UINT32_MAX) return false;
+
+  uint8_t header[70] = {};
+  header[0] = 'B';
+  header[1] = 'M';
+  put32(header + 2, static_cast<uint32_t>(fileSize));
+  put32(header + 10, 70);
+  put32(header + 14, 40);
+  put32(header + 18, static_cast<uint32_t>(width));
+  put32(header + 22, static_cast<uint32_t>(-height));
+  put16(header + 26, 1);
+  put16(header + 28, 2);
+  put32(header + 34, static_cast<uint32_t>(imageSize));
+  put32(header + 38, 2835);
+  put32(header + 42, 2835);
+  put32(header + 46, 4);
+  put32(header + 50, 4);
+
+  uint8_t palette[16] = {
+      0x00, 0x00, 0x00, 0x00,  // Black
+      0x55, 0x55, 0x55, 0x00,  // Dark gray
+      0xAA, 0xAA, 0xAA, 0x00,  // Light gray
+      0xFF, 0xFF, 0xFF, 0x00   // White
+  };
+  memcpy(header + 54, palette, sizeof(palette));
+  return output.write(header, sizeof(header)) == sizeof(header);
+}
+
+GrayscaleRowScaler::GrayscaleRowScaler(const int srcWidth, const int srcHeight, const int maxW, const int maxH)
+    : srcW_(srcWidth), srcH_(srcHeight), outW_(srcWidth), outH_(srcHeight) {
+  if (srcW_ <= 0 || srcH_ <= 0) {
+    valid_ = false;
+    return;
+  }
+
+  if (maxW > 0 && maxH > 0 && (srcW_ > maxW || srcH_ > maxH)) {
+    const float scaleToFitWidth = static_cast<float>(maxW) / srcW_;
+    const float scaleToFitHeight = static_cast<float>(maxH) / srcH_;
+    const float scale = (scaleToFitWidth < scaleToFitHeight) ? scaleToFitWidth : scaleToFitHeight;
+
+    outW_ = static_cast<int>(srcW_ * scale);
+    outH_ = static_cast<int>(srcH_ * scale);
+    if (outW_ < 1) outW_ = 1;
+    if (outH_ < 1) outH_ = 1;
+
+    scaleX_fp_ = (static_cast<uint32_t>(srcW_) << 16) / outW_;
+    scaleY_fp_ = (static_cast<uint32_t>(srcH_) << 16) / outH_;
+    nextOutY_srcStart_ = scaleY_fp_;
+    needsScaling_ = true;
+
+    rowAccum_.reset(new (std::nothrow) uint32_t[outW_]());
+    rowCount_.reset(new (std::nothrow) uint16_t[outW_]());
+    meanRow_.reset(new (std::nothrow) uint8_t[outW_]());
+    if (!rowAccum_ || !rowCount_ || !meanRow_) {
+      rowAccum_.reset();
+      rowCount_.reset();
+      meanRow_.reset();
+      valid_ = false;
+    }
+  }
+}
+
+bool GrayscaleRowScaler::accumulate(const uint8_t* grayRow, const std::function<bool(const uint8_t* meanRow)>& emit) {
+  if (!valid_ || currentOutY_ >= static_cast<uint32_t>(outH_)) return false;
+
+  if (!needsScaling_) {
+    if (!emit(grayRow)) return false;
+    currentOutY_++;
+    return true;
+  }
+
+  for (int outX = 0; outX < outW_; outX++) {
+    const int srcXStart = (static_cast<uint32_t>(outX) * scaleX_fp_) >> 16;
+    const int srcXEnd = (static_cast<uint32_t>(outX + 1) * scaleX_fp_) >> 16;
+
+    uint32_t sum = 0;
+    uint16_t count = 0;
+    for (int srcX = srcXStart; srcX < srcXEnd && srcX < srcW_; srcX++) {
+      sum += grayRow[srcX];
+      count++;
+    }
+    if (count == 0 && srcXStart < srcW_) {
+      sum = grayRow[srcXStart];
+      count = 1;
+    }
+    rowAccum_[outX] += sum;
+    rowCount_[outX] += count;
+  }
+
+  currentSrcY_++;
+  const uint32_t srcY_fp = currentSrcY_ << 16;
+
+  // Emit all rows whose boundaries we've crossed (handles both up- and
+  // downscaling). For upscaling, one source row may produce multiple output
+  // rows; accumulators are only reset once the next boundary is beyond this
+  // source row.
+  while (srcY_fp >= nextOutY_srcStart_ && currentOutY_ < static_cast<uint32_t>(outH_)) {
+    for (int outX = 0; outX < outW_; outX++) {
+      meanRow_[outX] = static_cast<uint8_t>((rowCount_[outX] > 0) ? (rowAccum_[outX] / rowCount_[outX]) : 0);
+    }
+    if (!emit(meanRow_.get())) return false;
+    currentOutY_++;
+
+    nextOutY_srcStart_ = (currentOutY_ + 1) * scaleY_fp_;
+
+    if (srcY_fp >= nextOutY_srcStart_) {
+      continue;  // upscaling: next output row reuses this source row's data
+    }
+    memset(rowAccum_.get(), 0, static_cast<size_t>(outW_) * sizeof(uint32_t));
+    memset(rowCount_.get(), 0, static_cast<size_t>(outW_) * sizeof(uint16_t));
+  }
+
+  return true;
+}

@@ -1,5 +1,7 @@
 #include "ImageConverter.h"
 
+#include <Bitmap.h>
+#include <BitmapHelpers.h>
 #include <FsHelpers.h>
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
@@ -7,10 +9,12 @@
 #define TAG "IMG_CONV"
 #include <PngToBmpConverter.h>
 #include <SDCardManager.h>
+#include <esp_heap_caps.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
 #include <cstring>
+#include <memory>
 
 namespace {
 
@@ -44,11 +48,83 @@ class PngImageConverter : public ImageConverter {
 class BmpImageConverter : public ImageConverter {
  public:
   bool convert(FsFile& input, Print& output, const ImageConvertConfig& config) override {
-    uint8_t buffer[512];
-    while (input.available()) {
+    Bitmap bitmap(input);
+    if (bitmap.parseHeaders() != BmpReaderError::Ok || bitmap.getWidth() <= 0 || bitmap.getHeight() <= 0) {
+      LOG_ERR(config.logTag, "Invalid BMP input");
+      return false;
+    }
+
+    GrayscaleRowScaler scaler(bitmap.getWidth(), bitmap.getHeight(), config.maxWidth, config.maxHeight);
+    if (!scaler.valid()) {
+      LOG_ERR(config.logTag, "Failed to prepare BMP scaler");
+      return false;
+    }
+    const int outW = scaler.outWidth();
+    const int outH = scaler.outHeight();
+    const int outRowBytes = config.oneBit ? (outW + 31) / 32 * 4 : (outW * 2 + 31) / 32 * 4;
+    const size_t rawRowBytes = static_cast<size_t>(bitmap.getRowBytes());
+    const size_t grayBytes = static_cast<size_t>(bitmap.getWidth());
+    const size_t required = grayBytes + rawRowBytes + static_cast<size_t>(outRowBytes) +
+                            (scaler.needsScaling() ? static_cast<size_t>(outW) * 7 : 0);
+    const size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+    if (required > 1024 && required > largest * 80 / 100) {
+      LOG_ERR(config.logTag, "Insufficient heap for BMP conversion");
+      return false;
+    }
+
+    std::unique_ptr<uint8_t[]> grayRow(new (std::nothrow) uint8_t[grayBytes]());
+    std::unique_ptr<uint8_t[]> rawRow(new (std::nothrow) uint8_t[rawRowBytes]());
+    std::unique_ptr<uint8_t[]> outRow(new (std::nothrow) uint8_t[outRowBytes]());
+    if (!grayRow || !rawRow || !outRow) {
+      LOG_ERR(config.logTag, "Failed to allocate BMP row buffers");
+      return false;
+    }
+
+    std::unique_ptr<Atkinson1BitDitherer> oneBitDitherer;
+    std::unique_ptr<AtkinsonDitherer> ditherer;
+    if (config.oneBit) {
+      oneBitDitherer.reset(new (std::nothrow) Atkinson1BitDitherer(outW));
+      if (oneBitDitherer && !oneBitDitherer->valid()) oneBitDitherer.reset();
+      if (config.requireDithering && !oneBitDitherer) {
+        LOG_ERR(config.logTag, "Failed to allocate 1-bit ditherer");
+        return false;
+      }
+    } else {
+      ditherer.reset(new (std::nothrow) AtkinsonDitherer(outW));
+      if (ditherer && !ditherer->valid()) ditherer.reset();
+    }
+
+    if (!(config.oneBit ? write1BitBmpHeader(output, outW, outH) : write2BitBmpHeader(output, outW, outH))) {
+      LOG_ERR(config.logTag, "Failed to write output BMP header");
+      return false;
+    }
+
+    const int srcH = bitmap.getHeight();
+    for (int y = 0; y < srcH; y++) {
       if (config.shouldAbort && config.shouldAbort()) return false;
-      const int bytesRead = input.read(buffer, sizeof(buffer));
-      if (bytesRead <= 0 || output.write(buffer, static_cast<size_t>(bytesRead)) != static_cast<size_t>(bytesRead)) {
+      if (bitmap.readGrayscaleRow(grayRow.get(), grayBytes, rawRow.get(), rawRowBytes, y) != BmpReaderError::Ok) {
+        LOG_ERR(config.logTag, "Failed to read BMP row %d", y);
+        return false;
+      }
+      const bool ok = scaler.accumulate(grayRow.get(), [&](const uint8_t* meanRow) {
+        memset(outRow.get(), 0, static_cast<size_t>(outRowBytes));
+        for (int x = 0; x < outW; x++) {
+          if (config.oneBit) {
+            const uint8_t bit = oneBitDitherer ? oneBitDitherer->processPixel(meanRow[x], x)
+                                               : quantize1bit(adjustPixel(meanRow[x]), x, y);
+            outRow[x >> 3] |= static_cast<uint8_t>(bit << (7 - (x & 7)));
+          } else {
+            const uint8_t adjusted = static_cast<uint8_t>(adjustPixel(meanRow[x]));
+            const uint8_t level = ditherer ? ditherer->processPixel(adjusted, x) : quantize(adjusted, x, y);
+            outRow[(x * 2) / 8] |= static_cast<uint8_t>(level << (6 - ((x * 2) % 8)));
+          }
+        }
+        if (oneBitDitherer) oneBitDitherer->nextRow();
+        if (ditherer) ditherer->nextRow();
+        return output.write(outRow.get(), static_cast<size_t>(outRowBytes)) == static_cast<size_t>(outRowBytes);
+      });
+      if (!ok) {
+        LOG_ERR(config.logTag, "Failed to emit BMP output row");
         return false;
       }
     }

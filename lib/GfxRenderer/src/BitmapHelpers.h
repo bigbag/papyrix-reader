@@ -3,6 +3,8 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <functional>
+#include <memory>
 #include <new>
 
 class Print;
@@ -13,6 +15,44 @@ uint8_t quantizeSimple(int gray);
 uint8_t quantize1bit(int gray, int x, int y);
 int adjustPixel(int gray);
 bool write1BitBmpHeader(Print& output, int width, int height);
+bool write2BitBmpHeader(Print& output, int width, int height);
+
+// Streaming area-average row scaler shared by image converters. Accumulates
+// grayscale source rows and emits one mean output row whenever an output row
+// boundary is crossed (handles both up- and downscaling, same fixed-point
+// semantics as the original PNG converter). When the source already fits the
+// maximum dimensions, accumulate() passes rows through unchanged.
+class GrayscaleRowScaler {
+ public:
+  GrayscaleRowScaler(int srcWidth, int srcHeight, int maxW, int maxH);
+
+  int outWidth() const { return outW_; }
+  int outHeight() const { return outH_; }
+  bool needsScaling() const { return needsScaling_; }
+  // False when scaling accumulators failed to allocate.
+  bool valid() const { return valid_; }
+
+  // Feed one source row (srcWidth bytes). Invokes emit once per completed
+  // output row with a meanRow of outWidth() bytes. Returns false when emit
+  // fails or the scaler is invalid.
+  bool accumulate(const uint8_t* grayRow, const std::function<bool(const uint8_t* meanRow)>& emit);
+
+ private:
+  int srcW_ = 0;
+  int srcH_ = 0;
+  int outW_ = 0;
+  int outH_ = 0;
+  bool needsScaling_ = false;
+  bool valid_ = true;
+  uint32_t scaleX_fp_ = 65536;
+  uint32_t scaleY_fp_ = 65536;
+  uint32_t nextOutY_srcStart_ = 65536;
+  uint32_t currentSrcY_ = 0;
+  uint32_t currentOutY_ = 0;
+  std::unique_ptr<uint32_t[]> rowAccum_;
+  std::unique_ptr<uint16_t[]> rowCount_;
+  std::unique_ptr<uint8_t[]> meanRow_;
+};
 
 // RGB to grayscale conversion using BT.601 coefficients via lookup tables.
 // Avoids 3 multiplications per pixel on ESP32-C3 (no FPU).

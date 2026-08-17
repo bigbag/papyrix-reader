@@ -48,9 +48,10 @@ int main() {
                     "neutral extension converts by PNG signature");
   runner.expectTrue(SdMan.getWrittenData("/png.bmp") == "PNG", "PNG converter selected");
 
-  runner.expectTrue(ImageConverterFactory::convertToBmp("/source.bmp.bin", "/copy.bmp", config),
-                    "neutral extension converts by BMP signature");
-  runner.expectTrue(SdMan.getWrittenData("/copy.bmp") == "BMpayload", "BMP source copied");
+  // Invalid BMP payload must be rejected by the real converter (not raw-copied)
+  runner.expectFalse(ImageConverterFactory::convertToBmp("/source.bmp.bin", "/copy.bmp", config),
+                     "invalid BMP payload is rejected");
+  runner.expectFalse(SdMan.exists("/copy.bmp"), "rejected BMP publishes nothing");
 
   config.validateOutput = [](const std::string&) { return false; };
   runner.expectFalse(ImageConverterFactory::convertToBmp("/neutral.img", "/rejected.bmp", config),

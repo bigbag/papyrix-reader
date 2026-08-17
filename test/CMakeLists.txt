@@ -368,6 +368,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
     add_executable(${TEST_NAME}
       ${TEST_SRC}
       ${PROJECT_ROOT}/lib/PngToBmpConverter/src/PngToBmpConverter.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/Bitmap.cpp
       ${PROJECT_ROOT}/lib/GfxRenderer/src/BitmapHelpers.cpp
       ${PROJECT_ROOT}/lib/ImageConverter/src/ImageConverter.cpp
       ${PROJECT_ROOT}/lib/FsHelpers/src/FsHelpers.cpp
@@ -382,6 +383,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
     add_executable(${TEST_NAME}
       ${TEST_SRC}
       ${PROJECT_ROOT}/lib/JpegToBmpConverter/src/JpegToBmpConverter.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/Bitmap.cpp
       ${PROJECT_ROOT}/lib/GfxRenderer/src/BitmapHelpers.cpp
       ${PROJECT_ROOT}/lib/ImageConverter/src/ImageConverter.cpp
       ${PROJECT_ROOT}/lib/FsHelpers/src/FsHelpers.cpp
@@ -393,10 +395,27 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${CMAKE_CURRENT_SOURCE_DIR}/unit/imageconverter/mocks
       ${PROJECT_ROOT}/lib/ImageConverter/src
     )
+  elseif(TEST_NAME STREQUAL "BmpConversionTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/ImageConverter/src/ImageConverter.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/Bitmap.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/BitmapHelpers.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/PackedCoverReducer.cpp
+      ${PROJECT_ROOT}/lib/FsHelpers/src/FsHelpers.cpp
+      ${TEST_HELPERS}
+    )
+    target_include_directories(${TEST_NAME} BEFORE PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/unit/imageconverter/mocks
+      ${PROJECT_ROOT}/lib/ImageConverter/src
+    )
   elseif(TEST_NAME STREQUAL "ImageConverterSignatureTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
       ${PROJECT_ROOT}/lib/ImageConverter/src/ImageConverter.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/Bitmap.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/BitmapHelpers.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/PackedCoverReducer.cpp
       ${PROJECT_ROOT}/lib/FsHelpers/src/FsHelpers.cpp
       ${TEST_HELPERS}
     )
