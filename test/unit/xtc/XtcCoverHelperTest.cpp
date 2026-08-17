@@ -317,7 +317,7 @@ int main() {
     SdMan.clearWrittenFiles();
 
     const uint16_t w = 8, h = 8;
-    // Both planes all zeros → pixelValue = 0 → white (threshold: >= 1 is black)
+    // Both planes all zeros → pixelValue = 0 → white
     std::vector<uint8_t> pixels(16, 0x00);
 
     std::string xtcData = buildXtcFile2Bit(w, h, pixels);
@@ -480,7 +480,7 @@ int main() {
       for (uint16_t x = 0; x < w; x++) {
         const uint8_t v =
             xtc::xthPixelValue(pixels.data(), pixels.data() + xtc::xthPlaneSize(w, h), w, h, x, 0);
-        if (v >= 1) expectRow[x >> 3] &= static_cast<uint8_t>(~(1u << (7 - (x & 7))));
+        if (v >= 2) expectRow[x >> 3] &= static_cast<uint8_t>(~(1u << (7 - (x & 7))));
       }
       bool rowMatches = true;
       for (size_t b = 0; b < rowBytes; b++) {
@@ -524,7 +524,7 @@ int main() {
       for (uint16_t x = 0; x < w; x++) {
         const uint8_t v =
             xtc::xthPixelValue(pixels.data(), pixels.data() + xtc::xthPlaneSize(w, h), w, h, x, y);
-        if (v >= 1) expectRow[x >> 3] &= static_cast<uint8_t>(~(1u << (7 - (x & 7))));
+        if (v >= 2) expectRow[x >> 3] &= static_cast<uint8_t>(~(1u << (7 - (x & 7))));
       }
       for (size_t b = 0; b < rowBytes; b++) {
         if (static_cast<uint8_t>(bmp[62 + y * bmpRow + b]) != expectRow[b]) allMatch = false;
@@ -598,6 +598,34 @@ int main() {
     runner.expectTrue(
         xtc::generateCoverBmpFromParser(parser, "/cache/bad.bmp") == xtc::CoverResult::InvalidFile,
         "corrupt page: InvalidFile");
+    parser.close();
+  }
+
+  // ---- Test: gray-level threshold (50% luminance midpoint) ----
+  {
+    SdMan.clearFiles();
+    SdMan.clearWrittenFiles();
+
+    // 4x1 image: x0=white(0), x1=light gray(1), x2=dark gray(2), x3=black(3).
+    // Light gray stays white; dark gray and black render black.
+    constexpr uint16_t w = 4, h = 1;
+    std::vector<uint8_t> pixels(xtc::xthBitmapSize(w, h), 0);
+    setXthPixel(pixels, w, h, 1, 0, 1);
+    setXthPixel(pixels, w, h, 2, 0, 2);
+    setXthPixel(pixels, w, h, 3, 0, 3);
+    SdMan.registerFile("/gray.xtch", buildXtcFile2Bit(w, h, pixels));
+
+    xtc::XtcParser parser;
+    parser.open("/gray.xtch");
+    runner.expectTrue(
+        xtc::generateCoverBmpFromParser(parser, "/cache/gray.bmp") == xtc::CoverResult::Generated,
+        "gray: cover generated");
+    const std::string bmp = SdMan.getWrittenData("/cache/gray.bmp");
+    runner.expectTrue(bmp.size() >= 63, "gray: BMP large enough");
+    // bit 7=x0 white(1), bit 6=x1 light gray -> white(1), bit 5=x2 dark -> black(0), bit 4=x3 black(0)
+    // bit7..4 = x0..x3 (white, white, black, black); bits beyond width are white pad
+    runner.expectEq(static_cast<uint8_t>(0xCF), static_cast<uint8_t>(bmp[62]),
+                    "gray: white+light stay white, dark+black render black");
     parser.close();
   }
 

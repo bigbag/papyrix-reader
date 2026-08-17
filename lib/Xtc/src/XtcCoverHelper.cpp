@@ -167,7 +167,10 @@ CoverResult streamTwoBit(XtcParser& parser, const uint16_t width, const uint16_t
               uint8_t* const rows = bands + b * 8 * bmpRowSize;
               for (size_t k = 0; k < 8; k++) {
                 const uint8_t value = static_cast<uint8_t>((((v1 >> (7 - k)) & 1) << 1) | ((v2 >> (7 - k)) & 1));
-                if (value >= 1) rows[k * bmpRowSize + byte] &= static_cast<uint8_t>(~mask);
+                // XTH luminance: 0=white, 1=light (170), 2=dark (85), 3=black.
+                // 50% midpoint (128) keeps scanned off-white backgrounds
+                // (level 1) white instead of rendering them solid black.
+                if (value >= 2) rows[k * bmpRowSize + byte] &= static_cast<uint8_t>(~mask);
               }
             }
           }
