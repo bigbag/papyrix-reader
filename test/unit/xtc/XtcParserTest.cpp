@@ -503,7 +503,103 @@ int main() {
     parser.close();
   }
 
-  // Test 10: page table and embedded dimensions must agree
+  // Test 10: paired XTCH planes stream with matching offsets and bounded scratch
+  {
+    constexpr uint16_t width = 8;
+    constexpr uint16_t height = 8;
+    constexpr size_t planeSize = xtc::xthPlaneSize(width, height);
+    constexpr size_t pageTableOffset = sizeof(xtc::XtcHeader) + 128 + 64;
+
+    SdMan.clearFiles();
+    std::string data = buildMultiPageXtc(width, height, 1, xtc::XTCH_MAGIC);
+    auto* entry = reinterpret_cast<xtc::PageTableEntry*>(&data[pageTableOffset]);
+    uint8_t* bitmap = reinterpret_cast<uint8_t*>(&data[entry->dataOffset + sizeof(xtc::XtgPageHeader)]);
+    std::vector<uint8_t> expectedPlane1(planeSize);
+    std::vector<uint8_t> expectedPlane2(planeSize);
+    for (size_t i = 0; i < planeSize; ++i) {
+      expectedPlane1[i] = static_cast<uint8_t>(0x11 + i);
+      expectedPlane2[i] = static_cast<uint8_t>(0x91 + i);
+      bitmap[i] = expectedPlane1[i];
+      bitmap[planeSize + i] = expectedPlane2[i];
+    }
+    SdMan.registerFile("/pairs.xtch", data);
+
+    xtc::XtcParser parser;
+    runner.expectTrue(parser.open("/pairs.xtch") == xtc::XtcError::OK, "plane_pairs: parser opens");
+    std::vector<uint8_t> actualPlane1;
+    std::vector<uint8_t> actualPlane2;
+    std::vector<size_t> offsets;
+    const auto pairedResult = parser.loadPagePlanePairs(
+        0,
+        [&](const uint8_t* plane1, const uint8_t* plane2, const size_t size, const size_t offset) {
+          offsets.push_back(offset);
+          actualPlane1.insert(actualPlane1.end(), plane1, plane1 + size);
+          actualPlane2.insert(actualPlane2.end(), plane2, plane2 + size);
+          return true;
+        },
+        3);
+    runner.expectTrue(pairedResult == xtc::XtcError::OK, "plane_pairs: streams matching chunks");
+    runner.expectTrue(actualPlane1 == expectedPlane1 && actualPlane2 == expectedPlane2,
+                      "plane_pairs: returns corresponding plane bytes");
+    runner.expectTrue(offsets == std::vector<size_t>({0, 3, 6}), "plane_pairs: reports offsets and final chunk");
+
+    runner.expectTrue(parser.loadPagePlanePairs(0, [](const uint8_t*, const uint8_t*, size_t, size_t) { return true; },
+                                                1, []() { return true; }) == xtc::XtcError::CANCELLED,
+                      "plane_pairs: cancellation propagates");
+    runner.expectTrue(parser.loadPagePlanePairs(
+                          0, [](const uint8_t*, const uint8_t*, size_t, size_t) { return false; }) ==
+                          xtc::XtcError::READ_ERROR,
+                      "plane_pairs: callback rejection propagates");
+
+    SdMan.registerFile("/one-bit-pairs.xtc", buildMultiPageXtc(width, height, 1));
+    xtc::XtcParser oneBitParser;
+    oneBitParser.open("/one-bit-pairs.xtc");
+    runner.expectTrue(oneBitParser.loadPagePlanePairs(
+                          0, [](const uint8_t*, const uint8_t*, size_t, size_t) { return true; }) ==
+                          xtc::XtcError::CORRUPTED_HEADER,
+                      "plane_pairs: rejects one-bit pages");
+  }
+
+  {
+    constexpr size_t pageTableOffset = sizeof(xtc::XtcHeader) + 128 + 64;
+    SdMan.clearFiles();
+    std::string malformed = buildMultiPageXtc(8, 8, 1, xtc::XTCH_MAGIC);
+    auto* entry = reinterpret_cast<xtc::PageTableEntry*>(&malformed[pageTableOffset]);
+    auto* pageHeader = reinterpret_cast<xtc::XtgPageHeader*>(&malformed[entry->dataOffset]);
+    pageHeader->dataSize++;
+    SdMan.registerFile("/malformed-pairs.xtch", malformed);
+    xtc::XtcParser malformedParser;
+    malformedParser.open("/malformed-pairs.xtch");
+    runner.expectTrue(malformedParser.loadPagePlanePairs(
+                          0, [](const uint8_t*, const uint8_t*, size_t, size_t) { return true; }) ==
+                          xtc::XtcError::CORRUPTED_HEADER,
+                      "plane_pairs: rejects inconsistent bitmap size");
+
+    std::string truncated = buildMultiPageXtc(8, 8, 1, xtc::XTCH_MAGIC);
+    truncated.pop_back();
+    SdMan.registerFile("/truncated-pairs.xtch", truncated);
+    xtc::XtcParser truncatedParser;
+    truncatedParser.open("/truncated-pairs.xtch");
+    runner.expectTrue(truncatedParser.loadPagePlanePairs(
+                          0, [](const uint8_t*, const uint8_t*, size_t, size_t) { return true; }) ==
+                          xtc::XtcError::CORRUPTED_HEADER,
+                      "plane_pairs: rejects truncated second plane");
+  }
+
+  {
+    SdMan.clearFiles();
+    SdMan.registerFile("/full-pairs.xtch", buildMultiPageXtc(480, 800, 1, xtc::XTCH_MAGIC));
+    xtc::XtcParser parser;
+    parser.open("/full-pairs.xtch");
+    testSetLargestFreeBlock(10239);
+    const auto result = parser.loadPagePlanePairs(
+        0, [](const uint8_t*, const uint8_t*, size_t, size_t) { return true; }, 4096);
+    testResetLargestFreeBlock();
+    runner.expectTrue(result == xtc::XtcError::MEMORY_ERROR,
+                      "plane_pairs: combined scratch obeys allocation gate");
+  }
+
+  // Test 11: page table and embedded dimensions must agree
   {
     SdMan.clearFiles();
     std::string data = buildMultiPageXtc(16, 8, 1);

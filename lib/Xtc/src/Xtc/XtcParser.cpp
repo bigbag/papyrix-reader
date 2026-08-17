@@ -419,7 +419,7 @@ XtcError XtcParser::loadPageStreaming(uint32_t pageIndex, PageChunkCallback call
     return m_lastError;
   }
 
-  chunkSize = std::min<size_t>(chunkSize, 4096);
+  chunkSize = std::min({chunkSize, size_t{4096}, bitmapSize});
   if (chunkSize > 1024 && chunkSize > heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) * 80 / 100) {
     return XtcError::MEMORY_ERROR;
   }
@@ -448,6 +448,52 @@ XtcError XtcParser::loadPageStreaming(uint32_t pageIndex, PageChunkCallback call
 
   m_lastError = XtcError::OK;
   return m_lastError;
+}
+
+XtcError XtcParser::loadPagePlanePairs(const uint32_t pageIndex, PagePlaneChunkCallback callback, size_t chunkSize,
+                                       const std::function<bool()>& shouldAbort) {
+  auto finish = [this](const XtcError error) {
+    m_lastError = error;
+    return error;
+  };
+
+  if (!m_isOpen) return finish(XtcError::FILE_NOT_FOUND);
+  if (pageIndex >= m_header.pageCount) return finish(XtcError::PAGE_OUT_OF_RANGE);
+  if (!callback || chunkSize == 0 || m_bitDepth != 2) return finish(XtcError::CORRUPTED_HEADER);
+
+  PageInfo page;
+  XtgPageHeader pageHeader;
+  size_t bitmapSize = 0;
+  if (!readValidatedPage(pageIndex, page, pageHeader, bitmapSize)) return m_lastError;
+
+  const size_t planeSize = xthPlaneSize(page.width, page.height);
+  if (planeSize == 0 || bitmapSize != planeSize * 2) return finish(XtcError::CORRUPTED_HEADER);
+
+  chunkSize = std::min({chunkSize, size_t{4096}, planeSize});
+  if (chunkSize > SIZE_MAX / 2) return finish(XtcError::MEMORY_ERROR);
+  const size_t scratchSize = chunkSize * 2;
+  if (scratchSize > 1024 && scratchSize > heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) * 80 / 100) {
+    return finish(XtcError::MEMORY_ERROR);
+  }
+
+  std::unique_ptr<uint8_t[]> scratch(new (std::nothrow) uint8_t[scratchSize]);
+  if (!scratch) return finish(XtcError::MEMORY_ERROR);
+
+  uint8_t* const plane1 = scratch.get();
+  uint8_t* const plane2 = scratch.get() + chunkSize;
+  const uint64_t bitmapOffset = page.offset + sizeof(XtgPageHeader);
+
+  for (size_t offset = 0; offset < planeSize; offset += chunkSize) {
+    if (shouldAbort && shouldAbort()) return finish(XtcError::CANCELLED);
+    const size_t size = std::min(chunkSize, planeSize - offset);
+    if (!m_file.seek(bitmapOffset + offset) || !readExact(m_file, plane1, size) ||
+        !m_file.seek(bitmapOffset + planeSize + offset) || !readExact(m_file, plane2, size)) {
+      return finish(XtcError::READ_ERROR);
+    }
+    if (!callback(plane1, plane2, size, offset)) return finish(XtcError::READ_ERROR);
+  }
+
+  return finish(XtcError::OK);
 }
 
 bool XtcParser::isValidXtcFile(const char* filepath) {

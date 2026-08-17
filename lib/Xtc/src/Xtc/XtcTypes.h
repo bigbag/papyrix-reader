@@ -51,6 +51,13 @@ constexpr size_t xthPlaneSize(uint16_t width, uint16_t height) {
   return static_cast<size_t>(width) * xthColumnBytes(height);
 }
 constexpr size_t xthBitmapSize(uint16_t width, uint16_t height) { return xthPlaneSize(width, height) * 2; }
+constexpr uint8_t xthBaseByte(const uint8_t plane1, const uint8_t plane2) {
+  return static_cast<uint8_t>(~(plane1 | plane2));
+}
+constexpr uint8_t xthLsbByte(const uint8_t plane1, const uint8_t plane2) {
+  return static_cast<uint8_t>(~plane1 & plane2);
+}
+constexpr uint8_t xthMsbByte(const uint8_t plane1, const uint8_t plane2) { return plane1 ^ plane2; }
 constexpr size_t xtgBitmapSize(uint16_t width, uint16_t height) {
   return ((static_cast<size_t>(width) + 7) / 8) * height;
 }

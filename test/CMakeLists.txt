@@ -215,6 +215,9 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/Xtc/src/Xtc/XtcParser.cpp
       ${TEST_HELPERS}
     )
+    target_include_directories(${TEST_NAME} BEFORE PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/unit/xtc/mocks
+    )
     target_include_directories(${TEST_NAME} PRIVATE
       ${PROJECT_ROOT}/src/rendering
       ${PROJECT_ROOT}/lib/Xtc/src

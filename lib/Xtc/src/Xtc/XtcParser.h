@@ -67,6 +67,11 @@ class XtcParser {
   XtcError loadPageStreaming(uint32_t pageIndex, PageChunkCallback callback, size_t chunkSize = 1024,
                              const std::function<bool()>& shouldAbort = nullptr);
 
+  using PagePlaneChunkCallback =
+      std::function<bool(const uint8_t* plane1, const uint8_t* plane2, size_t size, size_t planeOffset)>;
+  XtcError loadPagePlanePairs(uint32_t pageIndex, PagePlaneChunkCallback callback, size_t chunkSize = 4096,
+                              const std::function<bool()>& shouldAbort = nullptr);
+
   // Get title/author from metadata
   std::string getTitle() const { return m_title; }
   std::string getAuthor() const { return m_author; }
