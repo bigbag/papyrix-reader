@@ -3,6 +3,7 @@
 #include <G5ImageCache.h>
 #include <SDCardManager.h>
 
+#include <climits>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -39,6 +40,14 @@ int main() {
     const G5ImageHeader header{G5_MAGIC, UINT16_MAX, UINT16_MAX, 1};
     SdMan.registerFile("/huge.g5", makeG5File(header, 1));
     runner.expectFalse(G5ImageCache::readHeader("/huge.g5", parsed), "header: rejects decoded bitmap above limit");
+  }
+
+  {
+    SdMan.reset();
+    const G5ImageHeader header{G5_MAGIC, static_cast<uint16_t>(INT16_MAX + 1), 1, 1};
+    SdMan.registerFile("/wide.g5", makeG5File(header, 1));
+    runner.expectFalse(G5ImageCache::readHeader("/wide.g5", parsed),
+                       "header: rejects width outside decoder flip range");
   }
 
   {
@@ -96,6 +105,15 @@ int main() {
   }
 
   {
+    uint8_t payload[] = {0};
+    uint8_t row[] = {0};
+    G5DECODER decoder;
+    runner.expectEq(static_cast<int>(G5_SUCCESS), decoder.init(8, 1, payload, sizeof(payload)),
+                    "decoder: accepts an exact short buffer");
+    runner.expectTrue(decoder.decodeLine(row) != G5_SUCCESS, "decoder: exact short buffer fails safely");
+  }
+
+  {
     SdMan.reset();
     const G5ImageHeader header{G5_MAGIC, 8, 1, 1};
     SdMan.registerFile("/short-vlc.g5", makeG5File(header, 1));
@@ -124,6 +142,40 @@ int main() {
                        }),
                        "decoder: zero-progress stream stops at input boundary");
     runner.expectEq(0, callbacks, "decoder: zero-progress stream invokes no callbacks");
+  }
+
+  {
+    SdMan.reset();
+    std::vector<uint8_t> payload(5, 0);
+    for (const size_t bit : {size_t{2}, size_t{13}, size_t{14}}) {
+      payload[bit / 8] |= static_cast<uint8_t>(0x80 >> (bit % 8));
+    }
+    const G5ImageHeader header{G5_MAGIC, INT16_MAX, 1, static_cast<uint32_t>(payload.size())};
+    SdMan.registerFile("/run-boundary.g5", makeG5File(header, payload));
+    int callbacks = 0;
+    runner.expectFalse(G5ImageCache::decompressFromFile("/run-boundary.g5", [&](const uint8_t*, int, int) {
+                         callbacks++;
+                       }),
+                       "decoder: rejects a run that crosses the VLC window");
+    runner.expectEq(0, callbacks, "decoder: VLC boundary stream invokes no callbacks");
+  }
+
+  {
+    SdMan.reset();
+    constexpr size_t codes = MAX_IMAGE_FLIPS / 2 + 1;
+    std::vector<uint8_t> payload((codes * 11 + 7) / 8, 0);
+    for (size_t code = 0; code < codes; ++code) {
+      const size_t oneBit = code * 11 + 2;
+      payload[oneBit / 8] |= static_cast<uint8_t>(0x80 >> (oneBit % 8));
+    }
+    const G5ImageHeader header{G5_MAGIC, 8, 1, static_cast<uint32_t>(payload.size())};
+    SdMan.registerFile("/flip-overflow.g5", makeG5File(header, payload));
+    int callbacks = 0;
+    runner.expectFalse(G5ImageCache::decompressFromFile("/flip-overflow.g5", [&](const uint8_t*, int, int) {
+                         callbacks++;
+                       }),
+                       "decoder: rejects flip-buffer exhaustion");
+    runner.expectEq(0, callbacks, "decoder: overflow stream invokes no callbacks");
   }
 
   return runner.allPassed() ? 0 : 1;

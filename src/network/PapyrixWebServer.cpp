@@ -37,6 +37,13 @@ bool appendWebPathComponent(String& path, const String& name) {
   return true;
 }
 
+bool prepareWebPath(String& path) {
+  if (path.isEmpty()) return false;
+  if (!path.startsWith("/")) path = "/" + path;
+  if (path.length() > 1 && path.endsWith("/")) path = path.substring(0, path.length() - 1);
+  return web::isSafeWebPath(path.c_str(), path.length());
+}
+
 }  // namespace
 
 static void sendGzipHtml(WebServer* server, const char* data, size_t len) {
@@ -167,11 +174,9 @@ void PapyrixWebServer::handleFileListData() {
   String currentPath = "/";
   if (server_->hasArg("path")) {
     currentPath = server_->arg("path");
-    if (!currentPath.startsWith("/")) {
-      currentPath = "/" + currentPath;
-    }
-    if (currentPath.length() > 1 && currentPath.endsWith("/")) {
-      currentPath = currentPath.substring(0, currentPath.length() - 1);
+    if (!prepareWebPath(currentPath)) {
+      server_->send(400, "application/json", "[]");
+      return;
     }
   }
 
@@ -249,11 +254,9 @@ void PapyrixWebServer::handleUpload() {
 
     if (server_->hasArg("path")) {
       upload_.path = server_->arg("path");
-      if (!upload_.path.startsWith("/")) {
-        upload_.path = "/" + upload_.path;
-      }
-      if (upload_.path.length() > 1 && upload_.path.endsWith("/")) {
-        upload_.path = upload_.path.substring(0, upload_.path.length() - 1);
+      if (!prepareWebPath(upload_.path)) {
+        upload_.error = "Invalid path";
+        return;
       }
     } else {
       upload_.path = "/";
@@ -374,11 +377,9 @@ void PapyrixWebServer::handleCreateFolder() {
   String parentPath = "/";
   if (server_->hasArg("path")) {
     parentPath = server_->arg("path");
-    if (!parentPath.startsWith("/")) {
-      parentPath = "/" + parentPath;
-    }
-    if (parentPath.length() > 1 && parentPath.endsWith("/")) {
-      parentPath = parentPath.substring(0, parentPath.length() - 1);
+    if (!prepareWebPath(parentPath)) {
+      server_->send(400, "text/plain", "Invalid path");
+      return;
     }
   }
 
@@ -415,8 +416,9 @@ void PapyrixWebServer::handleDelete() {
     return;
   }
 
-  if (!itemPath.startsWith("/")) {
-    itemPath = "/" + itemPath;
+  if (!prepareWebPath(itemPath)) {
+    server_->send(400, "text/plain", "Invalid path");
+    return;
   }
 
   // Security: prevent deletion of hidden/system files
@@ -465,7 +467,7 @@ void PapyrixWebServer::handleDownload() {
   }
 
   String filePath = server_->arg("path");
-  if (filePath.isEmpty() || !filePath.startsWith("/") || filePath.indexOf("..") >= 0) {
+  if (filePath.isEmpty() || !filePath.startsWith("/") || !web::isSafeWebPath(filePath.c_str(), filePath.length())) {
     server_->send(400, "text/plain", "Invalid path");
     return;
   }
@@ -509,13 +511,9 @@ void PapyrixWebServer::handleRename() {
   String itemPath = server_->arg("path");
   String newName = server_->arg("newName");
 
-  if (itemPath.isEmpty() || itemPath == "/" || itemPath.indexOf("..") >= 0) {
+  if (itemPath.isEmpty() || itemPath == "/" || !prepareWebPath(itemPath)) {
     server_->send(400, "text/plain", "Invalid parameters");
     return;
-  }
-
-  if (!itemPath.startsWith("/")) {
-    itemPath = "/" + itemPath;
   }
 
   const web::FileNameError nameError = prepareWebFileName(newName);

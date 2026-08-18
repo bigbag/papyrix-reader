@@ -18,6 +18,10 @@ void expectName(TestUtils::TestRunner& runner, const std::string& name, FileName
   runner.expectEq(code(expected), code(papyrix::web::validateFileName(name.data(), name.size())), testName);
 }
 
+void expectPath(TestUtils::TestRunner& runner, const std::string& path, bool expected, const char* testName) {
+  runner.expectEq(expected, papyrix::web::isSafeWebPath(path.data(), path.size()), testName);
+}
+
 }  // namespace
 
 int main() {
@@ -81,6 +85,18 @@ int main() {
   decomposed.resize(normalizedLength);
   runner.expectEqual(u8"Sách", decomposed, "Vietnamese normalized to NFC");
   expectName(runner, decomposed, FileNameError::None, "normalized Vietnamese accepted");
+
+  expectPath(runner, "/Books/Novel.epub", true, "normal absolute path accepted");
+  expectPath(runner, u8"/Книги/Sách.epub", true, "Unicode path accepted");
+  expectPath(runner, "/", true, "root path accepted");
+  expectPath(runner, "Books/Novel.epub", false, "relative path rejected");
+  expectPath(runner, "/.papyrix/wifi.bin", false, "internal path rejected");
+  expectPath(runner, "/Books/.hidden/book.epub", false, "hidden component rejected");
+  expectPath(runner, "/Books/../wifi.bin", false, "parent traversal rejected");
+  expectPath(runner, "/Books/./Novel.epub", false, "current-directory component rejected");
+  expectPath(runner, "/Books\\Novel.epub", false, "backslash rejected");
+  expectPath(runner, std::string("/Books/") + char(1) + "Novel.epub", false, "control byte rejected");
+  expectPath(runner, "/" + std::string(1023, 'a'), false, "path over byte limit rejected");
 
   runner.expectTrue(papyrix::web::canAppendPathComponent(1018, false, 4),
                     "path exactly 1023 bytes accepted");

@@ -51,7 +51,7 @@ constexpr uint32_t kMinSettingsBytes =
     sizeof(kSizeProbe.pendingTransition) + sizeof(kSizeProbe.transitionReturnTo) +
     sizeof(kSizeProbe.sunlightFadingFix) + sizeof(kSizeProbe.fileListDir) + sizeof(kSizeProbe.fileListSelectedName) +
     sizeof(kSizeProbe.fileListSelectedIndex) + sizeof(kSizeProbe.frontButtonLayout) +
-    sizeof(kSizeProbe.fullBookProcess) + sizeof(kSizeProbe.showRecents);
+    sizeof(kSizeProbe.fullBookProcess) + sizeof(kSizeProbe.showRecents) + sizeof(kSizeProbe.recycleBinEnabled);
 }  // namespace
 
 Result<void> Settings::save(drivers::Storage& storage) const {

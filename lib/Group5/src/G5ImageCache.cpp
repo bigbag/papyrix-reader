@@ -3,6 +3,7 @@
 #include <SDCardManager.h>
 #include <esp_heap_caps.h>
 
+#include <climits>
 #include <cstring>
 
 bool G5ImageCache::compressToFile(const uint8_t* bitmap, int width, int height, const char* path) {
@@ -10,7 +11,7 @@ bool G5ImageCache::compressToFile(const uint8_t* bitmap, int width, int height, 
     return false;
   }
 
-  if (width > UINT16_MAX || height > UINT16_MAX) {
+  if (width > INT16_MAX || height > UINT16_MAX) {
     return false;
   }
 
@@ -187,7 +188,8 @@ bool G5ImageCache::readHeader(const char* path, G5ImageHeader& header) {
 }
 
 bool G5ImageCache::validateHeader(const G5ImageHeader& header, size_t fileSize, size_t& rowBytes) {
-  if (header.magic != G5_MAGIC || header.width == 0 || header.height == 0 || header.compressedSize == 0) {
+  if (header.magic != G5_MAGIC || header.width == 0 || header.width > INT16_MAX || header.height == 0 ||
+      header.compressedSize == 0) {
     return false;
   }
 

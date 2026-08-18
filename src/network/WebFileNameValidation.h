@@ -20,6 +20,7 @@ enum class FileNameError : uint8_t {
 
 bool isValidUtf8(const char* name, size_t length);
 FileNameError validateFileName(const char* name, size_t length);
+bool isSafeWebPath(const char* path, size_t length);
 bool canAppendPathComponent(size_t parentLength, bool parentEndsWithSlash, size_t nameLength);
 const char* fileNameErrorMessage(FileNameError error);
 

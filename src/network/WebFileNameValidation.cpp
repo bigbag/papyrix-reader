@@ -97,6 +97,23 @@ FileNameError validateFileName(const char* name, size_t length) {
   return FileNameError::None;
 }
 
+bool isSafeWebPath(const char* path, size_t length) {
+  if (!path || length == 0 || length > MAX_FILE_PATH_BYTES || path[0] != '/') return false;
+
+  size_t offset = 1;
+  while (offset < length) {
+    const size_t componentStart = offset;
+    while (offset < length && path[offset] != '/') {
+      const uint8_t byte = static_cast<uint8_t>(path[offset]);
+      if (byte < 0x20 || path[offset] == '\\') return false;
+      offset++;
+    }
+    if (offset > componentStart && path[componentStart] == '.') return false;
+    if (offset < length) offset++;
+  }
+  return true;
+}
+
 bool canAppendPathComponent(size_t parentLength, bool parentEndsWithSlash, size_t nameLength) {
   if (parentLength > MAX_FILE_PATH_BYTES) return false;
   const size_t separatorLength = parentEndsWithSlash ? 0 : 1;
