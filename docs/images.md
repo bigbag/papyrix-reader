@@ -8,36 +8,36 @@ This document describes how Papyrix handles images in EPUB content.
 EPUB HTML → ChapterHtmlSlimParser → ImageConverter → BMP Cache → GfxRenderer
 ```
 
-1. **HTML Parsing**: Detects `<img>` tags, extracts `src` and `alt` attributes
-2. **Data URI Stripping**: Removes embedded base64 images before XML parsing (prevents OOM)
-3. **Image Extraction**: Extracts image from EPUB ZIP to temp file
-4. **Conversion**: Converts JPEG/PNG to BMP format
-5. **Caching**: Stores converted BMP on SD card
-6. **Rendering**: Displays image centered on page
+1. **HTML Parsing**: Finds `<img>` tags. Gets `src` and `alt` attributes.
+2. **Data URI Stripping**: Removes embedded base64 images before XML parse (prevents OOM).
+3. **Image Extraction**: Gets the image from the EPUB ZIP to a temporary file.
+4. **Conversion**: Converts JPEG/PNG to BMP format.
+5. **Caching**: Stores the converted BMP on the SD card.
+6. **Rendering**: Shows the image in the center of the page.
 
 ---
 
 ## Supported Formats
 
 - **JPEG** (`.jpg`, `.jpeg`) — Baseline only (see below)
-- **PNG** (`.png`) — Transparency rendered as opaque
-- **BMP** (`.bmp`) — Direct display, no conversion needed
+- **PNG** (`.png`) — Transparency shown as opaque
+- **BMP** (`.bmp`) — Direct display. No conversion is necessary.
 
 Format detection is case-insensitive.
 
 ### JPEG Encoding Support
 
 The picojpeg decoder supports:
-- **Baseline DCT** (SOF0) — Standard single-pass JPEG
+- **Baseline DCT** (SOF0) — Standard one-pass JPEG
 - **Extended sequential DCT** (SOF1) — Extended baseline
 
-**Not supported** (displays as placeholder):
+**Not supported** (shown as a placeholder):
 - **Progressive DCT** (SOF2) — Multi-pass progressive JPEG
-- **Arithmetic coding** (SOF9, SOF10) — Rarely used
+- **Arithmetic coding** (SOF9, SOF10) — Not used frequently
 
-Progressive JPEGs are detected by scanning for SOF markers before decoding. If detected, the image is skipped and shows a placeholder instead.
+The firmware finds progressive JPEGs. It scans for SOF markers before decode. If it finds one, it skips the image and shows a placeholder.
 
-To convert progressive JPEGs to baseline, use tools like ImageMagick:
+To convert progressive JPEGs to baseline, use tools such as ImageMagick:
 ```bash
 convert progressive.jpg -interlace none baseline.jpg
 ```
@@ -46,27 +46,27 @@ convert progressive.jpg -interlace none baseline.jpg
 
 ## Size Constraints
 
-- **Max parse width**: 2048px — Memory limit during decoding
-- **Max parse height**: 3072px — Memory limit during decoding
-- **Max render height**: viewport — Images taller than half viewport get a dedicated page
-- **Min dimension**: 20px — Images <20px in width or height are skipped as decorative
-- **Min free heap**: 8KB — Parsing aborts if memory drops below
+- **Max parse width**: 2048px — Memory limit during decode
+- **Max parse height**: 3072px — Memory limit during decode
+- **Max render height**: viewport — Images taller than half the viewport get one page
+- **Min dimension**: 20px — Images with width or height less than 20px are skipped. They are decorative.
+- **Min free heap**: 8KB — Parse stops if memory goes below this
 
-Images exceeding viewport width are scaled down proportionally while maintaining aspect ratio.
+Images that are wider than the viewport are scaled down. Aspect ratio stays the same.
 
 ---
 
 ## When Images Are Rendered
 
-Images are rendered when all conditions are met:
-- `showImages` setting is enabled
-- Source path is valid and non-empty
-- Source is not a data URI
-- Format is supported (JPEG/PNG/BMP)
-- File exists in EPUB archive
-- Conversion succeeds
-- Sufficient memory available (≥8KB free)
-- Fewer than 3 consecutive failures in current chapter
+Images are shown when all these conditions are true:
+- The `showImages` setting is on
+- The source path is valid and not empty
+- The source is not a data URI
+- The format is supported (JPEG/PNG/BMP)
+- The file is in the EPUB archive
+- Conversion completes
+- Sufficient memory is available (8KB free or more)
+- Fewer than 3 failures one after the other in the current chapter
 
 ---
 
@@ -74,8 +74,8 @@ Images are rendered when all conditions are met:
 
 ### Silently skipped (no placeholder)
 
-- **Unsupported format** — Not JPEG/PNG/BMP (e.g. GIF, SVG, WebP, TIFF). Detected by file extension before any processing.
-- **Tiny decorative images** — Width or height <20px (e.g. 1px-tall JPEG line separators, small spacer PNGs, decorative borders). These are invisible on e-paper and would only waste vertical space.
+- **Unsupported format** — Not JPEG/PNG/BMP (for example GIF, SVG, WebP, TIFF). Found by file extension before processing.
+- **Tiny decorative images** — Width or height less than 20px (for example, 1px-tall JPEG line separators, small spacer PNGs, decorative borders). These are not visible on e-paper. They only use vertical space.
 
 ### Skipped with placeholder text `[Image: alt-text]`
 
@@ -83,10 +83,10 @@ Images are rendered when all conditions are met:
 - **Empty/malformed source** — Invalid HTML
 - **Data URI source** — Memory protection (see below)
 - **Progressive/arithmetic JPEG** — picojpeg limitation
-- **File not found** — Missing from EPUB archive
-- **Conversion failure** — Corrupt file or I/O error
-- **Insufficient memory** — <8KB free heap
-- **Failure rate limit** — ≥3 consecutive failures
+- **File not found** — Missing from the EPUB archive
+- **Conversion failure** — Damaged file or I/O error
+- **Insufficient memory** — Less than 8KB free heap
+- **Failure rate limit** — 3 or more failures one after the other
 
 ---
 
@@ -94,23 +94,23 @@ Images are rendered when all conditions are met:
 
 ### The Problem
 
-Some EPUBs embed images as base64 data URIs:
+Some EPUBs put images in as base64 data URIs:
 
 ```html
 <img src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD..." />
 ```
 
-These can be 1MB+ of text and cause out-of-memory crashes during XML parsing. The expat XML parser must allocate memory to store the entire attribute value.
+These can be 1MB or more of text. They can cause out-of-memory crashes during XML parse. The expat XML parser must allocate memory to store the full attribute value.
 
 ### The Solution
 
-The `DataUriStripper` pre-processes HTML buffers before the XML parser sees them:
+The `DataUriStripper` processes HTML buffers before the XML parser sees them:
 
-1. Scans for `src="data:` patterns (case-insensitive, handles single/double quotes)
-2. Replaces the data URI with `src="#"` in-place
-3. Handles patterns that span buffer boundaries (streaming-safe)
+1. Scans for `src="data:` patterns (case-insensitive, handles single quotes and double quotes).
+2. Replaces the data URI with `src="#"` in the same buffer.
+3. Handles patterns that go across buffer boundaries (safe for streaming).
 
-This prevents memory allocation for embedded image data while preserving the document structure.
+This prevents memory allocation for embedded image data. The document structure stays.
 
 ### Key Files
 
@@ -123,7 +123,7 @@ This prevents memory allocation for embedded image data while preserving the doc
 
 ### Cache Location
 
-Images are cached to SD card under `/.papyrix/epub_<hash>/images/`:
+Images are cached to the SD card in `/.papyrix/epub_<hash>/images/`:
 
 ```
 .papyrix/
@@ -136,33 +136,33 @@ Images are cached to SD card under `/.papyrix/epub_<hash>/images/`:
 
 ### Filename Generation
 
-Cache filenames use FNV-1a hash of the resolved image path:
-- Input: Full path within EPUB (e.g., `OEBPS/images/cover.jpg`)
-- Output: 8-character hex hash (e.g., `a1b2c3d4.bmp`)
+Cache filenames use an FNV-1a hash of the resolved image path:
+- Input: Full path in the EPUB (for example, `OEBPS/images/cover.jpg`)
+- Output: 8-character hex hash (for example, `a1b2c3d4.bmp`)
 
-This ensures:
-- Same image referenced multiple times is cached once
-- No path character escaping needed
-- Fixed-length filenames
+This makes sure:
+- The same image that is referred to more than one time is cached one time
+- No path character escaping is necessary
+- Filenames have a fixed length
 
 ### Failed Conversion Markers
 
 When image conversion fails, a `.failed` marker file is created:
-- Prevents re-attempting conversion on subsequent loads
+- Prevents a new conversion try on later loads
 - Contains no data (empty file)
-- Cleared when book cache is cleared
+- Cleared when the book cache is cleared
 
 ---
 
 ## Failure Rate Limiting
 
-To prevent a corrupt EPUB from causing excessive delays, image processing implements failure rate limiting:
+To prevent a damaged EPUB from causing long delays, image processing uses a failure rate limit:
 
-- **Threshold**: 3 consecutive failures
-- **Scope**: Per chapter (resets when moving to new spine item)
-- **Behavior**: After threshold reached, remaining images in chapter display as placeholders
+- **Threshold**: 3 failures one after the other
+- **Scope**: For each chapter (resets when you go to a new spine item)
+- **Behavior**: After the threshold, remaining images in the chapter show as placeholders
 
-This ensures that a few corrupt images don't prevent reading the rest of the chapter.
+This makes sure that some damaged images do not prevent you from reading the remainder of the chapter.
 
 ---
 
@@ -170,20 +170,20 @@ This ensures that a few corrupt images don't prevent reading the rest of the cha
 
 ### Heap Monitoring
 
-Before processing each image:
-1. Check `heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)`
-2. If < 8KB, skip image and show placeholder
-3. Log warning for diagnostics
+Before the firmware processes each image:
+1. Check `heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)`.
+2. If less than 8KB, skip the image and show a placeholder.
+3. Write a warning to the log for diagnostics.
 
 ### Temporary Files
 
-Image extraction uses a temporary file on SD card:
-1. Extract from ZIP to temp file
-2. Convert temp file to BMP
-3. Delete temp file
-4. Cache BMP result
+Image extraction uses a temporary file on the SD card:
+1. Extract from ZIP to a temporary file.
+2. Convert the temporary file to BMP.
+3. Delete the temporary file.
+4. Cache the BMP result.
 
-This avoids holding the entire source image in RAM.
+This prevents the full source image from staying in RAM.
 
 ---
 
@@ -193,13 +193,13 @@ This avoids holding the entire source image in RAM.
 
 **Settings > Display > Show Images**
 
-- **On** (default): Images are rendered inline
-- **Off**: All images display as `[Image: alt-text]` placeholders
+- **On** (default): Images are shown in the text
+- **Off**: All images show as `[Image: alt-text]` placeholders
 
-Disabling images:
-- Reduces memory usage
-- Speeds up page rendering
-- Useful for text-heavy reading
+If you set images to off:
+- Memory use decreases
+- Page rendering is faster
+- This is useful for reading that is mostly text
 
 ---
 
@@ -207,19 +207,19 @@ Disabling images:
 
 ### Images Not Displaying
 
-1. Check **Settings > Display > Show Images** is enabled
-2. Verify image format is JPEG/PNG/BMP
-3. Check SD card has free space for cache
-4. Try clearing book cache (**Settings > Cleanup > Clear Book Cache**)
+1. Make sure **Settings > Display > Show Images** is on.
+2. Make sure the image format is JPEG/PNG/BMP.
+3. Make sure the SD card has free space for the cache.
+4. Try to clear the book cache (**Settings > Cleanup > Clear Book Cache**).
 
 ### Slow Page Loading with Images
 
-1. First load converts images (slower)
-2. Subsequent loads use cache (faster)
-3. Consider disabling images for faster reading
+1. The first load converts images (slower).
+2. Later loads use the cache (faster).
+3. You can set images to off for faster reading.
 
 ### Out of Memory Errors
 
-1. Large images may exceed available RAM
-2. Try a different EPUB with smaller images
-3. Use [xteink-epub-optimizer](https://github.com/bigbag/xteink-epub-optimizer) to resize images
+1. Large images can go above available RAM.
+2. Try a different EPUB with smaller images.
+3. Use [xteink-epub-optimizer](https://github.com/bigbag/xteink-epub-optimizer) to change the image size.

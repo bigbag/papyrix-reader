@@ -1,6 +1,6 @@
 # Device Specifications
 
-Shared hardware documentation for both the **Xteink X4** and **Xteink X3** e-readers running Papyrix firmware. For device-specific specs (display, battery, pins), see:
+Shared hardware documentation for the **Xteink X4** and the **Xteink X3** e-readers that run Papyrix firmware. For device-specific specifications (display, battery, pins), see:
 
 - [Xteink X4 Specifications](x4-specifications.md) — 4.26" 800×480 panel, ADC battery, 40 MHz SPI
 - [Xteink X3 Specifications](x3-specifications.md) — 3.68" 792×528 panel, BQ27220 fuel gauge, 10 MHz SPI
@@ -11,23 +11,23 @@ Shared hardware documentation for both the **Xteink X4** and **Xteink X3** e-rea
 
 **Shared:**
 - **Processor** — ESP32-C3 (RISC-V)
-- **RAM** — ~380 KB usable
+- **RAM** — approximately 380 KB usable
 - **Flash** — 16 MB
 - **Storage** — SD Card (FAT32/exFAT)
 
 **Xteink X4:**
-- **Display** — 4.26" 800×480 (~217 PPI)
+- **Display** — 4.26" 800×480 (approximately 217 PPI)
 - **Battery** — LiPo (ADC)
 - **SPI Clock** — 40 MHz
 - **Detection** — Default (fallback)
 
 **Xteink X3:**
-- **Display** — 3.68" 792×528 (~259 PPI)
+- **Display** — 3.68" 792×528 (approximately 259 PPI)
 - **Battery** — LiPo (BQ27220 fuel gauge)
 - **SPI Clock** — 10 MHz
-- **Detection** — I²C probe at boot
+- **Detection** — I²C probe at start
 
-A single firmware binary supports both devices. The device variant is auto-detected at boot (see [Device Auto-Detection](#device-auto-detection)).
+One firmware binary supports the two devices. The firmware finds the device type at start (see [Device Auto-Detection](#device-auto-detection)).
 
 ---
 
@@ -46,40 +46,40 @@ A single firmware binary supports both devices. The device variant is auto-detec
 
 ### Memory Layout
 
-- **DROM** — `0x3C140020` — ~5 MB — Data ROM (strings, constants)
-- **DRAM** — `0x3FC91C00` — ~14 KB — Initialized data
-- **IROM** — `0x42000020` — ~1.2 MB — Main executable code
-- **IRAM** — `0x40380000` — ~72 KB — Hot path code
+- **DROM** — `0x3C140020` — approximately 5 MB — Data ROM (strings, constants)
+- **DRAM** — `0x3FC91C00` — approximately 14 KB — Initialized data
+- **IROM** — `0x42000020` — approximately 1.2 MB — Primary executable code
+- **IRAM** — `0x40380000` — approximately 72 KB — Hot path code
 - **RTC** — `0x50000000` — 56 bytes — RTC retention memory
 
 ### Power Consumption
 
-- **Active (reading)** — ~50 mA
-- **WiFi active** — ~150 mA
-- **Deep sleep** — ~10 µA
+- **Active (reading)** — approximately 50 mA
+- **WiFi active** — approximately 150 mA
+- **Deep sleep** — approximately 10 µA
 
 ---
 
 ## Device Auto-Detection
 
-The firmware detects the device variant at boot using a two-pass I²C probe for X3-specific chips. This runs in `Device::probe()` before display initialization or battery/USB detection.
+The firmware finds the device type at start. It uses a two-pass I²C probe for X3-specific chips. This runs in `Device::probe()` before display initialization or battery/USB detection.
 
 ### Probe Sequence
 
-1. Initialize I²C bus (SDA=GPIO 20, SCL=GPIO 0, 400 kHz)
-2. Run two probe passes (2ms apart) scanning three chips:
+1. Initialize the I²C bus (SDA=GPIO 20, SCL=GPIO 0, 400 kHz).
+2. Run two probe passes (2ms apart) that scan three chips:
 
 - **BQ27220** (fuel gauge, 0x55) — SOC register (0x2C) ∈ [0, 100] AND voltage (0x08) ∈ [2500, 5000] mV
 - **DS3231** (RTC, 0x68) — Seconds register (0x00) is valid BCD: tens ≤ 5, ones ≤ 9
-- **QMI8658** (IMU, 0x6B / alt 0x6A) — WHO_AM_I register (0x00) = 0x05
+- **QMI8658** (IMU, 0x6B / alternative 0x6A) — WHO_AM_I register (0x00) = 0x05
 
-3. Each chip that ACKs with sane register values scores 1 point per pass
-4. **X3** if both passes score ≥ 2; **X4** if both passes score 0; defaults to X4 if inconclusive
+3. Each chip that ACKs with correct register values adds 1 point for each pass.
+4. **X3** if the two passes score 2 or more. **X4** if the two passes score 0. Defaults to X4 if the result is not clear.
 
 ### Caching and Override
 
-- Result cached in NVS (`papyrix_hw` namespace, key `dev_det`) to skip probing on subsequent boots
-- Manual override available via NVS key `dev_ovr` (for development)
+- Result cached in NVS (`papyrix_hw` namespace, key `dev_det`) so later starts can skip the probe
+- Manual override available through NVS key `dev_ovr` (for development)
 - Probe order: override → cache → full probe → default to X4
 
 Source: `src/drivers/Device.h`, `src/drivers/Device.cpp`
@@ -90,14 +90,14 @@ Source: `src/drivers/Device.h`, `src/drivers/Device.cpp`
 
 ### Button Configuration
 
-The device uses a resistor ladder connected to two ADC pins plus a dedicated power button GPIO. Identical on both X4 and X3.
+The device uses a resistor ladder connected to two ADC pins plus one power button GPIO. The same on X4 and X3.
 
-- **BACK** — Index 0 — ADC1 — ~3512 mV
-- **CONFIRM** — Index 1 — ADC1 — ~2694 mV
-- **LEFT** — Index 2 — ADC1 — ~1493 mV
-- **RIGHT** — Index 3 — ADC1 — ~5 mV
-- **UP** — Index 4 — ADC2 — ~2242 mV
-- **DOWN** — Index 5 — ADC2 — ~5 mV
+- **BACK** — Index 0 — ADC1 — approximately 3512 mV
+- **CONFIRM** — Index 1 — ADC1 — approximately 2694 mV
+- **LEFT** — Index 2 — ADC1 — approximately 1493 mV
+- **RIGHT** — Index 3 — ADC1 — approximately 5 mV
+- **UP** — Index 4 — ADC2 — approximately 2242 mV
+- **DOWN** — Index 5 — ADC2 — approximately 5 mV
 - **POWER** — Index 6 — GPIO3 — Digital (active LOW)
 
 ### ADC Pin Configuration
@@ -147,7 +147,7 @@ The device uses a resistor ladder connected to two ADC pins plus a dedicated pow
 
 ### Cache Directory Structure
 
-Page caches are stored in device-specific subdirectories to prevent layout mismatches when an SD card is moved between devices:
+Page caches are in folders for each device. This prevents layout mismatches when you move an SD card between devices:
 
 ```
 /.papyrix/
@@ -171,8 +171,8 @@ Source: `src/drivers/Device.cpp` — `Device::cacheDir()`
 ## Deep Sleep Wakeup
 
 - Wake on power button press (GPIO 3)
-- Configurable hold duration for power on
-- Software reset detection via `ESP_RST_SW`
+- Hold duration for power on that you can set
+- Software reset detection through `ESP_RST_SW`
 
 ---
 
@@ -194,9 +194,9 @@ monitor_speed = 115200
 
 ### Build Flags
 
-- `-DARDUINO_USB_MODE=1` — USB mode enabled
-- `-DARDUINO_USB_CDC_ON_BOOT=1` — USB CDC on boot
-- `-DEINK_DISPLAY_SINGLE_BUFFER_MODE=1` — Single framebuffer
+- `-DARDUINO_USB_MODE=1` — USB mode on
+- `-DARDUINO_USB_CDC_ON_BOOT=1` — USB CDC on start
+- `-DEINK_DISPLAY_SINGLE_BUFFER_MODE=1` — One framebuffer
 - `-DUSE_UTF8_LONG_NAMES=1` — UTF-8 filename support
 
 ### C++ Standard
@@ -219,21 +219,21 @@ C++20 (`-std=gnu++2a`)
 
 ### Images
 
-- **JPEG** — `.jpg`, `.jpeg` — Baseline only, max 2048×3072
-- **PNG** — `.png` — Max 2048×3072
-- **BMP** — `.bmp` — Max 2048×3072
+- **JPEG** — `.jpg`, `.jpeg` — Baseline only, maximum 2048×3072
+- **PNG** — `.png` — Maximum 2048×3072
+- **BMP** — `.bmp` — Maximum 2048×3072
 
 ### Fonts
 
-- **EpdFont** — `.epdfont` — Custom e-ink optimized format
+- **EpdFont** — `.epdfont` — Custom format prepared for e-ink
 
 ---
 
 ## Hardware Libraries
 
-Located in `lib/`:
+In `lib/`:
 
-- **EInkDisplay** — `lib/EInkDisplay/` — SSD1677 driver (supports both X4 and X3 panels)
+- **EInkDisplay** — `lib/EInkDisplay/` — SSD1677 driver (supports X4 panels and X3 panels)
 - **InputManager** — `lib/InputManager/` — Button handling
 - **BatteryMonitor** — `lib/BatteryMonitor/` — Battery ADC (X4) / BQ27220 fuel gauge (X3)
 - **SDCardManager** — `lib/SDCardManager/` — SD card interface

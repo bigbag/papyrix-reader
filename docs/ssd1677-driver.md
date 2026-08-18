@@ -1,8 +1,8 @@
 # SSD1677 E-Ink Display Driver Guide
 
-Complete reference for programming the SSD1677 e-paper display controller, including initialization, image updates, custom LUT creation, and low-level protocol details. Covers the GDEQ0426T82 (4.26" 800×480) on **Xteink X4** and the 3.68" 792×528 panel on **Xteink X3**.
+This is a full reference to program the SSD1677 e-paper display controller. It includes initialization, image updates, custom LUT creation, and low-level protocol data. It covers the GDEQ0426T82 (4.26" 800×480) on **Xteink X4** and the 3.68" 792×528 panel on **Xteink X3**.
 
-Based on the GxEPD2_426_GDEQ0426T82 driver implementation. For X3-specific LUT waveforms and timing, see [X3 LUT Waveforms](x3-lut-waveforms.md).
+This document is from the GxEPD2_426_GDEQ0426T82 driver implementation. For X3-specific LUT waveforms and timing, see [X3 LUT Waveforms](x3-lut-waveforms.md).
 
 ---
 
@@ -25,7 +25,7 @@ Based on the GxEPD2_426_GDEQ0426T82 driver implementation. For X3-specific LUT w
 
 - **Controller** — SSD1677
 - **X4 panel** — 800×480 (100×480 = 48,000 bytes), SPI 40 MHz (spec: 20 MHz)
-- **X3 panel** — 792×528 (99×528 = 52,272 bytes), SPI 10 MHz (controller does not tolerate faster)
+- **X3 panel** — 792×528 (99×528 = 52,272 bytes), SPI 10 MHz (the controller does not tolerate a higher speed)
 - **SPI Pins** — SCLK=8, MOSI=10, CS=21, DC=4, RST=5, BUSY=6
 - **SPI Settings** — MSB First, SPI Mode 0
 
@@ -124,9 +124,9 @@ After reset:
 
 **Data Entry Mode (0x11)** — Controls RAM addressing: `0x03 = X increment, Y increment`.
 
-**Set RAM Window (0x44 & 0x45)** — Defines the region written during RAM writes. For full 960x680 screen, X=0..0x3B, Y=0..0x2A7.
+**Set RAM Window (0x44 & 0x45)** — Sets the region written during RAM writes. For a full 960x680 screen, X=0..0x3B, Y=0..0x2A7.
 
-**Border Waveform (0x3C)** — Controls VBD (border pixel behavior). `0xC0 = Hi-Z`, common default.
+**Border Waveform (0x3C)** — Controls VBD (border pixel behavior). `0xC0 = Hi-Z`, usual default.
 
 **Temperature Sensor (0x18)** — `0x80 = use internal sensor`.
 
@@ -136,9 +136,9 @@ After reset:
 
 ### RAM Area Configuration
 
-Sets the window for subsequent RAM writes. Y-coordinates are reversed due to hardware gates orientation.
+Sets the window for later RAM writes. Y-coordinates are reversed because of hardware gates orientation.
 
-**Important:** X addresses are specified in **pixels**, not bytes. The controller handles the byte conversion internally.
+**Important:** X addresses are specified in **pixels**, not bytes. The controller does the byte conversion.
 
 **For coordinates (x, y, w, h):**
 
@@ -189,10 +189,10 @@ void ssd1677_write_bw(uint8_t *buffer, uint32_t size) {
 ```
 
 **Process:**
-1. Configure RAM area with `_setPartialRamArea(x, y, w, h)`
+1. Set RAM area with `_setPartialRamArea(x, y, w, h)`
 2. Send command `0x24`
 3. Start bulk transfer (CS=LOW)
-4. Transfer image data bytes (one bit per pixel, MSB first)
+4. Transfer image data bytes (one bit for each pixel, MSB first)
    - Total bytes = `(w * h) / 8`
    - `0xFF` = white, `0x00` = black
 5. End transfer (CS=HIGH)
@@ -203,13 +203,13 @@ void ssd1677_write_bw(uint8_t *buffer, uint32_t size) {
 
 ### Write to Previous Buffer (Command 0x26)
 
-Same as above but use command `0x26` instead of `0x24`. Used for differential updates.
+Same as above, but use command `0x26`, not `0x24`. Used for differential updates.
 
 ### Full Screen Clear
 
 1. Write to previous buffer: `_setPartialRamArea(0, 0, 800, 480)` -> Command `0x26` -> 48000 bytes of `0xFF`
 2. Write to current buffer: `_setPartialRamArea(0, 0, 800, 480)` -> Command `0x24` -> 48000 bytes of `0xFF`
-3. Perform full refresh
+3. Do a full refresh
 
 ### Full Frame Example
 
@@ -232,8 +232,8 @@ void ssd1677_display_frame(uint8_t *bw, uint8_t *red) {
 ### Power On
 
 - **0x22** `0xE0` — Display update control sequence
-- **0x20** — Master activation (trigger update)
-- Wait ~100ms while BUSY pin is HIGH
+- **0x20** — Master activation (start update)
+- Wait approximately 100ms while BUSY pin is HIGH
 
 ### Full Refresh
 
@@ -251,43 +251,43 @@ void ssd1677_update() {
 
 1. **0x21** `0x40, 0x00` — Display update control (bypass RED as 0, single chip)
 2. For fast mode: **0x1A** `0x5A` (temperature register), then **0x22** `0xD7`
-3. For normal mode: **0x22** `0xF7` (extended temp)
+3. For usual mode: **0x22** `0xF7` (extended temp)
 4. **0x20** — Master activation
-5. Wait ~1600ms while BUSY pin is HIGH
+5. Wait approximately 1600ms while BUSY pin is HIGH
 
 **Explanation:**
 - **0x22 / 0xC7** tells SSD1677 which tasks to run (enable analog, load LUT, drive display)
-- **0x20** starts the entire update cycle
-- **epd_wait_busy()** waits until the driver finishes waveform driving
+- **0x20** starts the full update cycle
+- **epd_wait_busy()** waits until the driver completes waveform driving
 
-**Fast vs Normal Mode**: `useFastFullUpdate=true` uses faster refresh but limited temperature range.
+**Fast compared to Usual Mode**: `useFastFullUpdate=true` uses a faster refresh but a limited temperature range.
 
 ### Display Update Control 2 (0x22) Bit Documentation
 
-Based on driver implementation analysis:
+From driver implementation analysis:
 
 - **Bit 7 (0x80)** CLOCK_ON — Start internal oscillator
-- **Bit 6 (0x40)** ANALOG_ON — Enable analog power rails (VGH/VGL drivers)
+- **Bit 6 (0x40)** ANALOG_ON — Set analog power rails to on (VGH/VGL drivers)
 - **Bit 5 (0x20)** TEMP_LOAD — Load temperature (internal or external)
 - **Bit 4 (0x10)** LUT_LOAD — Load waveform LUT
 - **Bit 3 (0x08)** MODE_SELECT — Mode 1/2 selection
 - **Bit 2 (0x04)** DISPLAY_START — Run display update
 - **Bit 1 (0x02)** ANALOG_OFF — Analog shutdown phase
-- **Bit 0 (0x01)** CLOCK_OFF — Disable internal oscillator
+- **Bit 0 (0x01)** CLOCK_OFF — Set internal oscillator to off
 
-**Common Patterns:**
+**Usual Patterns:**
 - Full refresh (first power on): `0xC0 | 0x34 = 0xF4` (CLOCK+ANALOG+TEMP+LUT+DISPLAY)
 - Full refresh (already on): `0x34` (TEMP+LUT+DISPLAY)
 - Half refresh with high temp: `0xD4` (CLOCK+ANALOG+LUT+DISPLAY)
 - Fast refresh with custom LUT: `0x0C` (MODE+DISPLAY)
-- Fast refresh without custom LUT: `0x1C` (LUT+MODE+DISPLAY)
+- Fast refresh with no custom LUT: `0x1C` (LUT+MODE+DISPLAY)
 
 ### Partial Refresh
 
-- **0x21** `0x00, 0x00` — Display update control (RED normal, single chip)
+- **0x21** `0x00, 0x00` — Display update control (RED usual, single chip)
 - **0x22** `0xFC` — Partial update sequence
 - **0x20** — Master activation
-- Wait ~600ms while BUSY pin is HIGH
+- Wait approximately 600ms while BUSY pin is HIGH
 
 ---
 
@@ -295,14 +295,14 @@ Based on driver implementation analysis:
 
 ### What is a LUT?
 
-The SSD1677 uses a **Look-Up Table (LUT)** to control **pixel waveform driving** during updates. Each pixel (BW/RED) needs a sequence of voltage phases to switch states correctly.
+The SSD1677 uses a **Look-Up Table (LUT)** to control **pixel waveform driving** during updates. Each pixel (BW/RED) needs a sequence of voltage phases to change states correctly.
 
 A LUT controls:
-- Voltage level per phase (VSH1, VSH2, VSL, Hi-Z)
+- Voltage level for each phase (VSH1, VSH2, VSL, Hi-Z)
 - VCOM toggling pattern
 - Duration of each phase (TP0-TP7)
 - Phase repetitions
-- Additional red-pixel handling
+- More red-pixel handling
 
 ### LUT Structure
 
@@ -311,14 +311,14 @@ A LUT controls:
 - **Bytes 0-49** (50 bytes) — VS waveforms (5 groups × 10 bytes)
 - **Bytes 50-99** (50 bytes) — TP/RP timing groups (10 groups × 5 bytes)
 - **Bytes 100-104** (5 bytes) — Frame rate control
-- **Byte 105** — VGH (Gate voltage) - sent via 0x03
-- **Byte 106** — VSH1 (Source voltage 1) - sent via 0x04
-- **Byte 107** — VSH2 (Source voltage 2) - sent via 0x04
-- **Byte 108** — VSL (Source voltage low) - sent via 0x04
-- **Byte 109** — VCOM voltage - sent via 0x2C
+- **Byte 105** — VGH (Gate voltage) - sent through 0x03
+- **Byte 106** — VSH1 (Source voltage 1) - sent through 0x04
+- **Byte 107** — VSH2 (Source voltage 2) - sent through 0x04
+- **Byte 108** — VSL (Source voltage low) - sent through 0x04
+- **Byte 109** — VCOM voltage - sent through 0x2C
 - **Byte 110** — Reserved
 
-**Note:** Bytes 105-109 are sent using separate voltage control commands after loading the main LUT.
+**Note:** Bytes 105-109 are sent with separate voltage control commands after the primary LUT is loaded.
 
 #### X3: Five separate 42-byte LUT registers
 
@@ -330,30 +330,30 @@ The X3 uses a different LUT architecture with five registers of 42 bytes each (7
 - **WB** (0x23) — White → Black transition
 - **BB** (0x24) — Black → Black transition
 
-Five LUT families are defined: full, turbo, image, grayscale, and fast. See [X3 LUT Waveforms](x3-lut-waveforms.md) for register-level details, voltage encoding, and frame timing.
+Five LUT families are defined: full, turbo, image, grayscale, and fast. See [X3 LUT Waveforms](x3-lut-waveforms.md) for register-level data, voltage encoding, and frame timing.
 
 ### How to Build a Custom LUT
 
 **Step 1 — Define Source Voltage Waveform (WS0-WS7)**
 
-You choose for each phase:
+You select for each phase:
 - VSH1 (medium positive)
 - VSH2 (strong positive - drives white)
 - VSL (strong negative - drives black)
 - Hi-Z (float)
 
-These define **pixel movement direction** and strength.
+These set **pixel movement direction** and strength.
 
 **Step 2 — Define VCOM Waveform (WS8-WS14)**
 
-VCOM biases the entire display. These bytes define:
-- On/off toggling per phase
-- Matching with source driver phases
-- Ghost reduction
+VCOM biases the full display. These bytes set:
+- On/off toggling for each phase
+- Match with source driver phases
+- Ghost decrease
 
 **Step 3 — Phase Timing TP0-TP7 (WS15-WS23)**
 
-Each TPx sets duration of a phase. Longer = cleaner image, slower refresh. Shorter = faster, but potential ghosting.
+Each TPx sets duration of a phase. Longer = cleaner image, slower refresh. Shorter = faster, but possible ghosting.
 
 **Step 4 — Repeat Counts & Finalization (WS24-WS33)**
 
@@ -364,7 +364,7 @@ These adjust:
 
 ### How to Load a Custom LUT
 
-A custom LUT is written using **Command 0x32**:
+A custom LUT is written with **Command 0x32**:
 
 ```
 CMD 0x32
@@ -374,7 +374,7 @@ DATA WS1
 DATA WS33
 ```
 
-The first **105 bytes** are written to the LUT register (0x32), followed by separate voltage control commands.
+The first **105 bytes** are written to the LUT register (0x32). Then separate voltage control commands follow.
 
 ```c
 // Load LUT (111-byte format with voltage controls)
@@ -400,11 +400,11 @@ void ssd1677_load_lut_extended(const uint8_t* lut) {
 
 ### How to Apply (Use) the Custom LUT
 
-After loading the LUT, tell the display to **use it**.
+After you load the LUT, tell the display to **use it**.
 
 **1. Configure Display Update Mode (0x22)**
 
-Typical value enabling LUT usage:
+Usual value that sets LUT use to on:
 ```
 CMD 0x22
 DATA 0xF7
@@ -417,7 +417,7 @@ CMD 0x20
 WAIT BUSY = LOW
 ```
 
-While BUSY is high, the LUT waveform is driving the display.
+While BUSY is high, the LUT waveform drives the display.
 
 ```c
 // Apply LUT
@@ -431,34 +431,34 @@ void ssd1677_apply_lut() {
 
 ### LUT Summary
 
-**Build a custom LUT** — Create 111 bytes: 105 for LUT register + 5 voltage values + 1 reserved
+**Build a custom LUT** — Make 111 bytes: 105 for LUT register + 5 voltage values + 1 reserved
 
 **Use a custom LUT:**
 1. Write with **0x32**
-2. Enable with **0x22**
-3. Trigger with **0x20**
+2. Set to on with **0x22**
+3. Start with **0x20**
 
 **Optional** — Burn to OTP with **0x36**
 
 ### Grayscale Rendering with Custom LUTs
 
-The driver implements 4-level grayscale using a multi-pass technique with custom LUTs.
+The driver uses 4-level grayscale with a multi-pass technique and custom LUTs.
 
 **Grayscale Principle:**
 
-1. **First pass (Black/White):** Write BW framebuffer to both RAM buffers, perform standard refresh
-2. **Second pass (Grayscale):** Write LSB and MSB grayscale buffers, apply custom grayscale LUT, perform fast refresh
-3. The custom LUT creates intermediate gray levels by controlling pixel voltage phases
+1. **First pass (Black/White):** Write BW framebuffer to the two RAM buffers, do a standard refresh
+2. **Second pass (Grayscale):** Write LSB and MSB grayscale buffers, apply custom grayscale LUT, do a fast refresh
+3. The custom LUT makes intermediate gray levels. It controls pixel voltage phases
 
 **Grayscale LUT Structure:**
 
 The driver includes two grayscale LUTs (111 bytes each):
 - `lut_grayscale`: Forward grayscale rendering
-- `lut_grayscale_revert`: Cleans up grayscale artifacts back to pure BW
+- `lut_grayscale_revert`: Removes grayscale artifacts back to pure BW
 
 Key characteristics:
 - Uses different voltage sequences for 4 gray levels (00, 01, 10, 11)
-- Frame timing optimized for fast refresh (~500ms)
+- Frame timing made for fast refresh (approximately 500ms)
 - VS waveforms: 50 bytes (5 groups x 10 bytes)
 - TP/RP timing: 50 bytes (10 groups x 5 bytes)
 - Voltages: VGH=0x17, VSH1=0x41, VSH2=0xA8, VSL=0x32, VCOM=0x30
@@ -489,7 +489,7 @@ Key characteristics:
 7. Write to previous: Command 0x26 + same image bytes
 ```
 
-**Why write twice?** Partial updates compare current vs previous buffer. Writing to both buffers after refresh prevents ghosting on next update.
+**Why write two times?** Partial updates compare the current buffer with the previous buffer. If you write to the two buffers after refresh, you prevent ghosting on the next update.
 
 ### Minimal Usage Example
 
@@ -501,7 +501,7 @@ ssd1677_display_frame(bw_image, red_image);
 
 ### Complete Example: Fast Refresh with Double Buffering
 
-The driver implements double buffering to enable fast partial updates:
+The driver uses double buffering for fast partial updates:
 
 ```cpp
 // Initialize display
@@ -522,14 +522,14 @@ display.displayBuffer(FAST_REFRESH);
 ```
 
 **How it works:**
-1. Two internal buffers (`frameBuffer0` and `frameBuffer1`) alternate as current/previous
+1. Two internal buffers (`frameBuffer0` and `frameBuffer1`) change as current/previous
 2. On `displayBuffer()`, current buffer written to BW RAM (0x24), previous to RED RAM (0x26)
-3. Controller compares buffers and only updates changed pixels
-4. Buffers swap roles after each display
+3. Controller compares buffers and updates only pixels that changed
+4. Buffers change roles after each display
 
 ### Auto-Write Commands for Fast Clear
 
-Commands `0x46` and `0x47` allow rapid buffer clearing:
+Commands `0x46` and `0x47` let you clear buffers quickly:
 
 ```c
 // Clear BW RAM to white pattern
@@ -543,7 +543,7 @@ sendData(0xF7);     // Fill pattern
 waitWhileBusy();
 ```
 
-This is much faster than writing 48,000 bytes manually during initialization.
+This is much faster than a write of 48,000 bytes during initialization.
 
 ---
 
@@ -552,23 +552,23 @@ This is much faster than writing 48,000 bytes manually during initialization.
 - **0x01** Driver Output Control — Set gate scanning (HEIGHT)
 - **0x03** Gate Voltage — Set VGH voltage level
 - **0x04** Source Voltage — Set VSH1, VSH2, VSL voltages
-- **0x0C** Booster Soft Start — Configure boost converter
+- **0x0C** Booster Soft Start — Set boost converter
 - **0x10** Deep Sleep Mode — Enter low power mode
 - **0x11** Data Entry Mode — Set X/Y increment direction
 - **0x12** Software Reset — Reset controller
 - **0x18** Temperature Sensor — Control temp sensor
 - **0x1A** Temperature Register — Set temp value (fast mode)
-- **0x20** Master Activation — Trigger display update
-- **0x21** Display Update Control — Configure update mode
+- **0x20** Master Activation — Start display update
+- **0x21** Display Update Control — Set update mode
 - **0x22** Display Update Sequence — Set update waveform
 - **0x24** Write RAM (BW) — Write to current buffer
 - **0x26** Write RAM (RED/OLD) — Write to previous buffer
 - **0x2C** Write VCOM — Set VCOM voltage
 - **0x32** Write LUT Register — Load custom 105-byte LUT (part of 111-byte structure)
 - **0x36** Write OTP — Burn LUT to one-time-programmable memory
-- **0x3C** Border Waveform — Configure border behavior
-- **0x44** Set RAM X Address — Define X window (in pixels)
-- **0x45** Set RAM Y Address — Define Y window (in pixels)
+- **0x3C** Border Waveform — Set border behavior
+- **0x44** Set RAM X Address — Set X window (in pixels)
+- **0x45** Set RAM Y Address — Set Y window (in pixels)
 - **0x46** Auto Write BW RAM — Fast fill BW RAM with pattern
 - **0x47** Auto Write RED RAM — Fast fill RED RAM with pattern
 - **0x4E** Set RAM X Counter — Set initial X position (in pixels)
@@ -581,10 +581,10 @@ This is much faster than writing 48,000 bytes manually during initialization.
 ### Timing Specifications
 
 - **Reset pulse** — 10ms low duration
-- **Power on** — ~100ms BUSY signal duration
-- **Power off** — ~200ms BUSY signal duration
-- **Full refresh** — ~1600ms normal mode, wait for BUSY
-- **Partial refresh** — ~600ms, wait for BUSY
+- **Power on** — approximately 100ms BUSY signal duration
+- **Power off** — approximately 200ms BUSY signal duration
+- **Full refresh** — approximately 1600ms usual mode, wait for BUSY
+- **Partial refresh** — approximately 600ms, wait for BUSY
 - **Software reset delay** — 10ms after command 0x12
 
 ### BUSY Signal Monitoring
@@ -599,15 +599,15 @@ This is much faster than writing 48,000 bytes manually during initialization.
 
 - **0x22** `0x83` — Power off sequence
 - **0x20** — Master activation
-- Wait ~200ms while BUSY pin is HIGH
+- Wait approximately 200ms while BUSY pin is HIGH
 
 ### Hibernate (Deep Sleep)
 
-1. Execute Power Off sequence
+1. Do the Power Off sequence
 2. Send command `0x10` (Deep Sleep Mode)
 3. Send data `0x01` (Enter deep sleep)
 
-**Wake from Hibernate**: Requires hardware reset via RST pin.
+**Wake from Hibernate**: Needs a hardware reset through the RST pin.
 
 ---
 
@@ -615,13 +615,13 @@ This is much faster than writing 48,000 bytes manually during initialization.
 
 ### Problem
 
-The XTEINK X4's SSD1677 display driver IC is packaged as "Gold Bump Die" without resin protection. This makes the IC susceptible to UV radiation. In bright sunlight, this causes the screen to fade to white.
+The XTEINK X4 SSD1677 display driver IC is packaged as "Gold Bump Die" with no resin protection. UV radiation can damage the IC. In bright sunlight, this causes the screen to fade to white.
 
-White X4 devices are more affected than black ones due to lower UV absorption by the case.
+White X4 devices are more affected than black ones. The case absorbs less UV.
 
 ### Solution
 
-Power down the display's VBUS after rendering each page. This is done by setting the analog shutdown bits in the Display Update Control 2 command (0x22):
+Power down the display VBUS after you show each page. Set the analog shutdown bits in the Display Update Control 2 command (0x22):
 
 ```c
 // After refresh, power down display to prevent UV fading
@@ -631,28 +631,28 @@ sendCommand(0x20);
 waitWhileBusy();
 ```
 
-The firmware implements this as the "Sunlight Fading Fix" setting in Device Settings. When enabled:
+The firmware uses this as the "Sunlight Fading Fix" setting in Device Settings. When this is on:
 - Sets bits 0 and 1 in the 0x22 command after each refresh
-- Adds ~100-200ms overhead per page turn (power-on cycle)
-- Screen will power back on automatically for the next refresh
+- Adds approximately 100-200ms overhead for each page turn (power-on cycle)
+- Screen powers on again for the next refresh
 
-This fix was developed by the crosspoint-reader community.
+The crosspoint-reader community made this repair.
 
 ### Physical Alternative
 
-For permanent protection, apply UV-blocking tape over the driver IC area on the display PCB.
+For permanent protection, apply UV-blocking tape on the driver IC area on the display PCB.
 
 ---
 
 ## Important Notes
 
-- BUSY pin *must* be polled after reset and update
-- All RAM writes auto-increment based on data entry mode
-- SSD1677 can display BW-only or RED-only if desired
+- You must poll the BUSY pin after reset and update
+- All RAM writes increase automatically from the data entry mode
+- SSD1677 can show BW-only or RED-only if you want
 - All X coordinates and widths must be multiples of 8 (byte boundaries)
 - Y coordinates are reversed in hardware (gates bottom-to-top)
-- RAM auto-increments after each byte transfer
+- RAM increases automatically after each byte transfer
 - Total RAM size: 48,000 bytes on X4 (800×480/8), 52,272 bytes on X3 (792×528/8)
-- Dual-buffer system enables differential partial updates
-- First write after init should be full refresh to clear ghost images
-- In sunlight: enable "Sunlight Fading Fix" setting to prevent UV-induced screen fading
+- Dual-buffer system lets you do differential partial updates
+- The first write after init must be a full refresh to clear ghost images
+- In sunlight: set "Sunlight Fading Fix" to on to prevent UV-caused screen fade

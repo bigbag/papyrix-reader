@@ -4,7 +4,7 @@ This document describes the internal architecture and subsystems of Papyrix.
 
 ## Overview
 
-Papyrix is organized around a **state machine** architecture with **singleton managers** and **content providers** for multi-format ebook support. The system is optimized for the ESP32-C3's ~380KB RAM constraint.
+Papyrix uses a **state machine** architecture with **singleton managers** and **content providers** for ebook support in more than one format. The system is made for the ESP32-C3 limit of approximately 380KB RAM.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -27,16 +27,16 @@ Papyrix is organized around a **state machine** architecture with **singleton ma
 
 ## State Machine
 
-Papyrix uses a finite state machine (FSM) with pre-allocated state instances. This avoids heap allocation during state transitions, preventing memory fragmentation.
+Papyrix uses a finite state machine (FSM) with state instances that are allocated before use. This prevents heap allocation during state transitions. This prevents memory fragmentation.
 
 ### States
 
-- **Startup** — Initial boot, system initialization
-- **Home** — Main hub with book card and navigation
+- **Startup** — Initial start, system initialization
+- **Home** — Primary hub with book card and navigation
 - **FileList** — File browser for book selection
-- **Reader** — Unified reader for all formats
+- **Reader** — One reader for all formats
 - **Settings** — User preferences and device settings
-- **Network** — WiFi connection and file transfer (auto-connect to saved networks, manual network selection, hotspot mode)
+- **Network** — WiFi connection and file transfer (automatic connection to saved networks, manual network selection, hotspot mode)
 - **CalibreSync** — Calibre wireless device sync
 - **AppLauncher** — Mini-apps, WiFi transfer, and Calibre sync
 - **Error** — Error display and recovery
@@ -54,18 +54,18 @@ class State {
 };
 ```
 
-States use `StateTransition` to navigate between screens:
-- `StateTransition::to(StateId)` - Navigate to another state
-- `StateTransition::stay(StateId)` - Remain in current state
+States use `StateTransition` to go between screens:
+- `StateTransition::to(StateId)` - Go to a different state
+- `StateTransition::stay(StateId)` - Stay in the current state
 
 ### Dual-Boot System
 
-To maximize available RAM in reader mode, Papyrix implements a dual-boot system:
+To get maximum available RAM in reader mode, Papyrix uses a dual-boot system:
 
-- **UI Mode**: Full feature set with all 10 states, theme switching, multiple font sizes
-- **Reader Mode**: Minimal reader with only Reader/Sleep/Error states, single font size
+- **UI Mode**: Full feature set with all 10 states, theme change, more than one font size
+- **Reader Mode**: Minimum reader with only Reader/Sleep/Error states, one font size
 
-The boot mode is stored in RTC memory and persists across ESP restarts. When launching a book from UI mode, the device restarts into Reader mode for maximum memory efficiency.
+The boot mode is stored in RTC memory. It stays across ESP restarts. When you open a book from UI mode, the device restarts into Reader mode to get maximum memory.
 
 ---
 
@@ -73,7 +73,7 @@ The boot mode is stored in RTC memory and persists across ESP restarts. When lau
 
 ### ContentHandle
 
-`ContentHandle` is a tagged union that manages one content provider at a time, supporting:
+`ContentHandle` is a tagged union that manages one content provider at a time. It supports:
 
 - **EPUB** — `EpubProvider` — `.epub`
 - **FB2** — `Fb2Provider` — `.fb2`
@@ -81,30 +81,30 @@ The boot mode is stored in RTC memory and persists across ESP restarts. When lau
 - **TXT** — `TxtProvider` — `.txt`, `.text`
 - **Markdown** — `MarkdownProvider` — `.md`, `.markdown`
 
-The unified interface provides:
-- `open(path, cacheDir)` - Auto-detect format and open
-- `pageCount()`, `spineCount()` - Navigation info
+The shared interface gives:
+- `open(path, cacheDir)` - Find the format and open
+- `pageCount()`, `spineCount()` - Navigation data
 - `getTocEntry()` - Table of contents access
 - `generateThumbnail()` - Cover image generation
 
 ### PageCache
 
-Unified page caching system for all content types:
+One page cache system for all content types:
 
-- **Partial caching**: 5 pages laid out at a time (`PageCache::DEFAULT_CACHE_CHUNK`) so peak RAM stays bounded.
-- **Extend-on-demand**: When the reader approaches the cached tail, `PageCache::extend()` appends another chunk; the header is rewritten only after new data is durable, so power loss mid-extend leaves the previous cache intact.
-- **Format-specific parsers**: each `ContentType` has a `ContentParser` (Epub / Fb2 / Html / Markdown / PlainText); the cache logic itself is shared.
-- **Cache key**: `fontId` + render config; changing font invalidates automatically.
-- **Background caching**: FreeRTOS task pre-renders ahead while the user reads, with an ownership model that needs no mutexes on `pageCache_` / `parser_`.
-- **Serialization**: Pages written to SD card; in-memory LUT mapped from disk for O(1) page seek.
+- **Partial caching**: 5 pages laid out at a time (`PageCache::DEFAULT_CACHE_CHUNK`) so peak RAM stays in a limit.
+- **Extend-on-demand**: When the reader is near the cached tail, `PageCache::extend()` adds one more chunk. The header is written again only after new data is durable. If power is lost during extend, the previous cache stays.
+- **Format-specific parsers**: each `ContentType` has a `ContentParser` (Epub / Fb2 / Html / Markdown / PlainText). The cache logic is shared.
+- **Cache key**: `fontId` + render config. A font change makes the cache not valid.
+- **Background caching**: A FreeRTOS task prepares pages ahead while the user reads. An ownership model needs no mutexes on `pageCache_` / `parser_`.
+- **Serialization**: Pages written to the SD card. In-memory LUT mapped from disk for O(1) page seek.
 
-See [Rendering Pipeline § Page Caching](rendering-pipeline.md#page-caching) for the full flow and [File Formats](file-formats.md) for the on-disk page record layout.
+See [Rendering Pipeline § Page Caching](rendering-pipeline.md#page-caching) for the full flow. See [File Formats](file-formats.md) for the on-disk page record layout.
 
 ### Progress Manager
 
-Saves and restores reading position per book:
+Saves and restores reading position for each book:
 - Spine index (EPUB chapter)
-- Section page (page within chapter)
+- Section page (page in the chapter)
 - Flat page (XTC absolute page)
 
 Cache location: `/.papyrix/<format>_<hash>/progress.bin`
@@ -113,26 +113,26 @@ Cache location: `/.papyrix/<format>_<hash>/progress.bin`
 
 ## Memory Management
 
-The ESP32-C3 has ~380KB usable RAM with ~100-150KB available after system overhead. Papyrix employs several strategies:
+The ESP32-C3 has approximately 380KB usable RAM. Approximately 100-150KB is available after system overhead. Papyrix uses these strategies:
 
 ### Allocation Strategies
 
-- **Pre-allocated states**: All 10 states allocated at startup, not during transitions
-- **Fixed-size buffers**: Path (256), Text (512), Decompress (8192) in global Core struct
+- **Pre-allocated states**: All 10 states allocated at start, not during transitions
+- **Fixed-size buffers**: Path (256), Text (512), Decompress (8192) in the global Core struct
 - **Tagged unions**: ContentHandle uses one provider at a time
-- **Chunked buffers**: GfxRenderer splits display buffer into 8KB chunks for non-contiguous allocation
+- **Chunked buffers**: GfxRenderer splits the display buffer into 8KB chunks for allocation that is not contiguous
 
 ### WiFi Memory
 
-The ESP32 WiFi stack allocates ~100KB and fragments heap memory. After using WiFi features, the device automatically restarts to reclaim memory before entering Reader mode.
+The ESP32 WiFi stack allocates approximately 100KB and fragments heap memory. After you use WiFi features, the device restarts to get memory back before Reader mode.
 
 ### Caching
 
-- **Compressed thumbnails**: 2-4KB vs 48KB uncompressed
-- **Glyph lookup cache**: 64-entry direct-mapped cache per font (codepoint → glyph)
-- **Glyph bitmap cache**: 128-entry LRU cache per streaming font (glyph → bitmap)
+- **Compressed thumbnails**: 2-4KB compared to 48KB uncompressed
+- **Glyph lookup cache**: 64-entry direct-mapped cache for each font (codepoint → glyph)
+- **Glyph bitmap cache**: 128-entry LRU cache for each streaming font (glyph → bitmap)
 - **Word width cache**: 512-entry FNV-1a hash cache in GfxRenderer
-- **SD card caching**: All parsed content cached to SD card
+- **SD card caching**: All parsed content cached to the SD card
 
 ---
 
@@ -145,42 +145,42 @@ Storage → EpdFontLoader → FontManager → GfxRenderer → Display
 ```
 
 1. **Storage**: Fonts loaded from flash (builtin) or SD card (custom)
-2. **EpdFontLoader**: Parses `.epdfont` binary format, provides glyph lookup
-3. **FontManager**: Manages font lifecycle, handles loading/unloading
-4. **GfxRenderer**: Renders text using font glyphs
+2. **EpdFontLoader**: Parses `.epdfont` binary format, gives glyph lookup
+3. **FontManager**: Manages font lifecycle, handles load/unload
+4. **GfxRenderer**: Shows text with font glyphs
 5. **Display**: Final output to e-paper
 
 ### Memory
 
-- **Builtin fonts**: Flash (DROM), ~20 bytes RAM per wrapper
-- **Custom fonts (streaming)**: ~25KB RAM per font (metadata + LRU cache)
+- **Builtin fonts**: Flash (DROM), approximately 20 bytes RAM for each wrapper
+- **Custom fonts (streaming)**: approximately 25KB RAM for each font (metadata + LRU cache)
 
 ### Streaming Font System
 
-Custom fonts use `StreamingEpdFont` for memory efficiency:
+Custom fonts use `StreamingEpdFont` to use less memory:
 
-- **Metadata in RAM**: Glyph table (~10-15KB) and unicode intervals (~2KB)
-- **Bitmaps on SD**: Streamed on-demand, not stored in RAM
-- **LRU cache**: 128-entry cache for recently-used glyph bitmaps
+- **Metadata in RAM**: Glyph table (approximately 10-15KB) and unicode intervals (approximately 2KB)
+- **Bitmaps on SD**: Streamed when necessary, not stored in RAM
+- **LRU cache**: 128-entry cache for glyph bitmaps that were used recently
 - **Hash table**: O(1) cache lookup with linear probing
 
-Memory comparison for a typical 50KB font:
-- **EpdFont (full load)**: ~70KB (intervals + glyphs + bitmap)
-- **StreamingEpdFont**: ~25KB (intervals + glyphs + cache)
+Memory comparison for a usual 50KB font:
+- **EpdFont (full load)**: approximately 70KB (intervals + glyphs + bitmap)
+- **StreamingEpdFont**: approximately 25KB (intervals + glyphs + cache)
 
 ### Fallback Behavior
 
-The font system guarantees users can always read:
+The font system makes sure that users can always read:
 
 1. **Font load failure** → Returns builtin font ID (FontManager.cpp)
-2. **Streaming bitmap failure** → Skips character gracefully (GfxRenderer.cpp)
-3. **Glyph not found** → Falls back to '?' character
+2. **Streaming bitmap failure** → Skips the character (GfxRenderer.cpp)
+3. **Glyph not found** → Uses the '?' character
 
 Defensive checks in StreamingEpdFont:
-- Bounds check on glyph index (corrupted font protection)
+- Bounds check on glyph index (protection from a damaged font)
 - Validates file handle before SD reads
-- Rejects glyphs >4KB (corrupted data protection)
-- Returns nullptr on partial SD read (SD card errors)
+- Rejects glyphs larger than 4KB (protection from damaged data)
+- Returns nullptr on a partial SD read (SD card errors)
 
 ### `.epdfont` Format
 
@@ -193,20 +193,20 @@ Header → Metrics → Unicode Intervals → Glyphs → Bitmap
 - **Header**: Magic, version, font metadata
 - **Metrics**: Line height, ascender, descender
 - **Unicode Intervals**: Ranges of supported codepoints
-- **Glyphs**: Per-character metrics and bitmap offsets
+- **Glyphs**: Metrics and bitmap offsets for each character
 - **Bitmap**: 1-bit or 2-bit packed glyph data
 
 ### Key Files
 
-- `lib/EpdFont/EpdFontLoader.cpp` — Format parsing, full and streaming load modes
-- `lib/EpdFont/StreamingEpdFont.cpp` — Memory-efficient streaming font with LRU cache
+- `lib/EpdFont/EpdFontLoader.cpp` — Format parse, full and streaming load modes
+- `lib/EpdFont/StreamingEpdFont.cpp` — Streaming font that uses less memory, with LRU cache
 - `src/FontManager.h/cpp` — Font lifecycle management, fallback handling
 - `lib/GfxRenderer/` — Text rendering with streaming font integration
 - `scripts/convert-fonts.mjs` — TTF/OTF to `.epdfont` conversion
 
 ### CJK Support
 
-CJK fonts use binary search for glyph lookup: O(log n) complexity. Text can break at any character boundary (no word-based line breaking).
+CJK fonts use binary search for glyph lookup: O(log n) complexity. Text can break at each character boundary (no word-based line break).
 
 ## CSS Parser
 
@@ -216,8 +216,8 @@ CJK fonts use binary search for glyph lookup: O(log n) complexity. Text can brea
 EPUB Load → ContentOpfParser → CssParser → ChapterHtmlSlimParser → Page
 ```
 
-1. **ContentOpfParser**: Discovers CSS files in EPUB manifest (media-type contains "css")
-2. **CssParser**: Parses CSS files, builds style map keyed by selector
+1. **ContentOpfParser**: Finds CSS files in the EPUB manifest (media-type contains "css")
+2. **CssParser**: Parses CSS files, builds a style map keyed by selector
 3. **ChapterHtmlSlimParser**: Queries CSS for each element, applies styles during page layout
 
 ### Supported Properties
@@ -240,16 +240,16 @@ EPUB Load → ContentOpfParser → CssParser → ChapterHtmlSlimParser → Page
 ### Key Files
 
 - `lib/Epub/Epub/css/CssStyle.h` — Style enums and struct
-- `lib/Epub/Epub/css/CssParser.h/cpp` — CSS file parsing
-- `lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp` — Style application during HTML parsing
+- `lib/Epub/Epub/css/CssParser.h/cpp` — CSS file parse
+- `lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp` — Style application during HTML parse
 
 ## Text Layout
 
 ### Line Breaking Algorithm
 
-Papyrix uses the **Knuth-Plass algorithm** for optimal line breaking, the same algorithm used by TeX. This produces higher-quality justified text than greedy algorithms.
+Papyrix uses the **Knuth-Plass algorithm** for the best line breaks. This is the same algorithm that TeX uses. This makes justified text of higher quality than greedy algorithms.
 
-**Hyphenation**: The Liang algorithm (also from TeX) finds valid hyphenation points within words. Language is auto-detected from EPUB metadata (`<dc:language>`) and falls back to English. Supported languages: German, English, Spanish, French, Italian, Russian, Ukrainian. Binary trie patterns are sourced from [typst/hypher](https://github.com/typst/hypher).
+**Hyphenation**: The Liang algorithm (also from TeX) finds valid hyphenation points in words. Language is found from EPUB metadata (`<dc:language>`). If there is no language, English is used. Supported languages: German, English, Spanish, French, Italian, Russian, Ukrainian. Binary trie patterns come from [typst/hypher](https://github.com/typst/hypher).
 
 ```
 Words → calculateWordWidths() → computeLineBreaks() → extractLine() → TextBlock
@@ -257,11 +257,11 @@ Words → calculateWordWidths() → computeLineBreaks() → extractLine() → Te
 
 ### How It Works
 
-1. **Forward Dynamic Programming**: Evaluates all possible line break points
-2. **Badness**: Measures line looseness using cubic ratio: `((target - actual) / target)³ × 100`
-3. **Demerits**: Cost function `(1 + badness)²` penalizes loose lines
-4. **Line Penalty**: Constant `+50` per line favors fewer total lines
-5. **Last Line**: Zero demerits (allowed to be loose, as in book typography)
+1. **Forward Dynamic Programming**: Examines all possible line break points
+2. **Badness**: Measures line looseness with cubic ratio: `((target - actual) / target)³ × 100`
+3. **Demerits**: Cost function `(1 + badness)²` gives a penalty to loose lines
+4. **Line Penalty**: Constant `+50` for each line. This favors fewer total lines
+5. **Last Line**: Zero demerits (can be loose, as in book typography)
 
 ### Cost Function
 
@@ -270,11 +270,11 @@ badness = ((pageWidth - lineWidth) / pageWidth)³ × 100
 demerits = (1 + badness)² + LINE_PENALTY
 ```
 
-Lines exceeding page width get infinite penalty. Oversized words that can't fit are forced onto their own line with a fixed penalty.
+Lines that are wider than the page width get an infinite penalty. Oversized words that cannot fit go on their own line with a fixed penalty.
 
 ### Key Files
 
-- `lib/Epub/Epub/ParsedText.cpp` — Line breaking implementation
+- `lib/Epub/Epub/ParsedText.cpp` — Line break implementation
 - `lib/Epub/Epub/ParsedText.h` — ParsedText class definition
 
 ### Reference
@@ -285,46 +285,46 @@ Lines exceeding page width get infinite penalty. Oversized words that can't fit 
 
 ## Multi-Script Support
 
-Papyrix supports multiple writing systems through script detection and specialized rendering.
+Papyrix supports more than one writing system through script detection and special rendering.
 
 ### ScriptDetector
 
 Classifies text by Unicode codepoint ranges:
 
-- **LATIN** — Latin, Cyrillic, Greek — Word-based line breaking
-- **CJK** — Chinese, Japanese, Korean (U+4E00–U+9FFF, etc.) — Character-based line breaking
+- **LATIN** — Latin, Cyrillic, Greek — Word-based line break
+- **CJK** — Chinese, Japanese, Korean (U+4E00–U+9FFF, and more) — Character-based line break
 - **THAI** — Thai script (U+0E00–U+0E7F) — Word segmentation
-- **ARABIC** — Arabic script (U+0600–U+06FF, etc.) — Shaping and RTL layout
-- **OTHER** — Symbols, digits, punctuation — Contextual line breaking
+- **ARABIC** — Arabic script (U+0600–U+06FF, and more) — Shaping and RTL layout
+- **OTHER** — Symbols, digits, punctuation — Contextual line break
 
 ### Thai Text Rendering
 
-Thai script requires special handling due to:
+Thai script needs special handling because of:
 - **Vowel marks** above/below consonants
 - **Tone marks** stacking above vowels
 - **No spaces** between words
 
-The ThaiShaper library provides:
+The ThaiShaper library gives:
 - **ThaiCluster**: Groups consonants with marks into grapheme clusters
-- **ThaiWordBreak**: Dictionary-based word segmentation for line breaking
-- **Mark positioning**: Proper vertical ordering of diacritics
+- **ThaiWordBreak**: Dictionary-based word segmentation for line break
+- **Mark positioning**: Correct vertical order of diacritics
 
 ### Arabic Text Rendering
 
-Arabic script is supported natively in the built-in fonts and requires special handling in reader mode for book text:
-- **Contextual shaping**: Letters change form based on position (initial, medial, final, isolated)
+Arabic script is supported in the built-in fonts. It needs special handling in reader mode for book text:
+- **Contextual shaping**: Letters change form from position (initial, medial, final, isolated)
 - **Lam-Alef ligatures**: Automatic ligature formation for Lam + Alef combinations
-- **RTL layout**: Words are rendered right-to-left with right-aligned lines
-- **CSS direction**: `direction: rtl` in EPUB stylesheets triggers RTL paragraph layout
+- **RTL layout**: Words are shown right-to-left with right-aligned lines
+- **CSS direction**: `direction: rtl` in EPUB stylesheets starts RTL paragraph layout
 
 The ArabicShaper library converts logical-order UTF-8 text to visual-order shaped codepoints for left-to-right rendering by the font system.
 
 ### CJK Rendering
 
-CJK text uses ExternalFont for large character set support:
-- **LRU cache**: 256-entry cache (~52KB) for glyph bitmaps
+CJK text uses ExternalFont for support of a large character set:
+- **LRU cache**: 256-entry cache (approximately 52KB) for glyph bitmaps
 - **Binary search**: O(log n) glyph lookup in large fonts
-- **Character-level breaking**: No word boundaries needed
+- **Character-level breaking**: No word boundaries are necessary
 
 ---
 
@@ -338,15 +338,15 @@ Content → ContentParser → Page → GfxRenderer → EInkDisplay
 
 1. **ContentParser**: Converts format-specific content to `Page` objects
 2. **Page**: Contains `PageLine` (text) and `PageImage` elements
-3. **GfxRenderer**: Renders pages using fonts and themes
+3. **GfxRenderer**: Shows pages with fonts and themes
 4. **EInkDisplay**: Final output with refresh mode control
 
 ### GfxRenderer Features
 
 - **Render modes**: BW (1-bit), Grayscale LSB, Grayscale MSB
 - **Orientation**: Portrait, Landscape CW/CCW, Inverted
-- **Word caching**: 512-entry hash cache for repeated word widths
-- **Row buffers**: Pre-allocated to avoid per-line allocation
+- **Word caching**: 512-entry hash cache for word widths that occur again
+- **Row buffers**: Allocated before use to prevent allocation for each line
 
 ### Refresh Modes
 
@@ -354,19 +354,19 @@ Content → ContentParser → Page → GfxRenderer → EInkDisplay
 - **Partial** — Fast page turns (some ghosting)
 - **Fast** — Animation, menus (more ghosting)
 
-The "Pages Per Refresh" setting controls how often full refresh occurs (1/5/10/15/30 pages).
+The "Pages Per Refresh" setting controls how frequently a full refresh occurs (1/5/10/15/30 pages).
 
 ---
 
 ## Image Rendering
 
-EPUB images (JPEG/PNG/BMP) are converted to BMP and cached to SD card. Data URIs are stripped before parsing to prevent OOM. See [images.md](images.md) for details.
+EPUB images (JPEG/PNG/BMP) are converted to BMP and cached to the SD card. Data URIs are removed before parse to prevent OOM. See [images.md](images.md) for more data.
 
 ---
 
 ## UI System
 
-Papyrix uses a view-based UI architecture with reusable elements and state-driven rendering.
+Papyrix uses a view-based UI architecture with elements that you can use again and rendering that is driven by state.
 
 ### Directory Structure
 
@@ -387,25 +387,25 @@ src/ui/
 
 ### UI Elements
 
-The `ui::` namespace provides reusable rendering components:
+The `ui::` namespace gives rendering components that you can use again:
 
-- **`ButtonBar`** — 4-button hint bar at screen bottom
+- **`ButtonBar`** — 4-button hint bar at the screen bottom
 - **`title()`** — Centered bold heading
-- **`menuItem()`** — Selectable menu entry
+- **`menuItem()`** — Menu entry that you can select
 - **`toggle()`** — On/Off setting row
 - **`enumValue()`** — Setting with value display
 - **`keyboard()`** — On-screen keyboard (10x10 grid)
 - **`battery()`** — Battery icon with percentage
 - **`bookCard()`** — Cover + title + author
 - **`fileEntry()`** — File name with directory indicator
-- **`chapterItem()`** — TOC entry with depth indentation
+- **`chapterItem()`** — TOC entry with depth indent
 - **`wifiEntry()`** — Network + signal + lock icon
 - **`dialog()`** — Yes/No confirmation
-- **`readerStatusBar()`** — Battery, title, page numbers (chapter page count available only after caching)
+- **`readerStatusBar()`** — Battery, title, page numbers (chapter page count is available only after cache)
 
 ### ButtonBar Pattern
 
-Views use `ButtonBar` to define which buttons are active and their labels:
+Views use `ButtonBar` to set which buttons are active and their labels:
 
 ```cpp
 ui::ButtonBar buttons("Back", "Select", "", "");  // 2 active buttons
@@ -414,7 +414,7 @@ ui::buttonBar(renderer, theme, buttons);
 
 ### View Pattern
 
-Views are stateless rendering functions. States own the data and call views:
+Views are rendering functions with no state. States own the data and call views:
 
 ```cpp
 // State owns data
@@ -432,16 +432,16 @@ class HomeState : public State {
 
 ## Desktop Testing (reader-test)
 
-`tools/reader-test/` is a desktop tool that runs the full content parsing pipeline (EPUB/FB2/HTML/TXT/Markdown) without hardware. It uses the same built-in fonts and viewport dimensions as the device to produce identical page boundaries.
+`tools/reader-test/` is a desktop tool that runs the full content parse pipeline (EPUB/FB2/HTML/TXT/Markdown) with no hardware. It uses the same built-in fonts and viewport dimensions as the device. Page boundaries are the same.
 
 ### Device Emulation
 
-- **Real font metrics**: Uses `reader_2b`, `reader_bold_2b`, `reader_italic_2b` built-in fonts with per-glyph `advanceX` lookup (not fixed-width approximation)
-- **Device viewport** (X4 default): 464×765 pixels (480 − 2×(3+5) × 800 − 9 − (3+23)) with status bar, 464×788 without
-- **X3 viewport**: 512×757 with status bar, 512×780 without. Build with `-DPAPYRIX_TEST_X3` to use X3 panel dimensions in the mock EInkDisplay.
-- **Batched caching**: `--batch 5` emulates the device's batched page cache generation with suspend/resume cycles
-- **Status bar toggle**: `--no-statusbar` removes the 23px bottom margin, matching the device viewport when status bar is hidden
-- **Font ID**: `READER_FONT_ID = 1818981670`, same as device
+- **Real font metrics**: Uses `reader_2b`, `reader_bold_2b`, `reader_italic_2b` built-in fonts with `advanceX` lookup for each glyph (not a fixed-width approximation)
+- **Device viewport** (X4 default): 464×765 pixels (480 − 2×(3+5) × 800 − 9 − (3+23)) with status bar, 464×788 with no status bar
+- **X3 viewport**: 512×757 with status bar, 512×780 with no status bar. Build with `-DPAPYRIX_TEST_X3` to use X3 panel dimensions in the mock EInkDisplay.
+- **Batched caching**: `--batch 5` copies the device batched page cache generation with suspend/resume cycles
+- **Status bar toggle**: `--no-statusbar` removes the 23px bottom margin, matching the device viewport when the status bar is hidden
+- **Font ID**: `READER_FONT_ID = 1818981670`, same as the device
 
 ### Architecture
 
@@ -456,7 +456,7 @@ tools/reader-test/
     └── platform_stubs.cpp # Arduino/FreeRTOS stubs
 ```
 
-The mock `GfxRenderer` provides real text measurement (`getTextWidth`, `getSpaceWidth`, `getLineHeight`, `getFontAscenderSize`, `breakWordWithHyphenation`) using the font map, while all drawing methods are no-ops.
+The mock `GfxRenderer` gives real text measurement (`getTextWidth`, `getSpaceWidth`, `getLineHeight`, `getFontAscenderSize`, `breakWordWithHyphenation`) with the font map. All drawing methods do nothing.
 
 ### Usage
 
@@ -477,13 +477,13 @@ diff <(reader-test --dump --batch 5 book.epub /tmp/cache 2>/dev/null) \
 
 ### Verifying Parser Fixes
 
-To verify fixes to the parsing/caching pipeline:
+To verify repairs to the parse/cache pipeline:
 
-1. Build reader-test **without** the fix, run with `--batch 5`, save output
-2. Apply the fix, rebuild, run again
-3. Diff the outputs — recovered text confirms the fix works
+1. Build reader-test **with no** repair, run with `--batch 5`, save output
+2. Apply the repair, build again, run again
+3. Diff the outputs — recovered text confirms that the repair operates
 
-The `--batch 5` flag is critical for reproducing suspend/resume bugs that only trigger at batch boundaries during page cache generation.
+The `--batch 5` flag is necessary to reproduce suspend/resume defects that only start at batch boundaries during page cache generation.
 
 ---
 
@@ -500,8 +500,8 @@ The `--batch 5` flag is critical for reproducing suspend/resume bugs that only t
 ### States (`/src/states/`)
 
 - **`State.h`** — Base state interface
-- **`ReaderState.h`** — Unified reader (largest state)
-- **`HomeState.h`** — Main hub with async cover loading
+- **`ReaderState.h`** — One reader (largest state)
+- **`HomeState.h`** — Primary hub with async cover load
 - **`SettingsState.h`** — Preferences UI
 
 ### Content (`/src/content/`)
@@ -513,26 +513,26 @@ The `--batch 5` flag is critical for reproducing suspend/resume bugs that only t
 - **`TxtProvider.h`** — Plain text support
 - **`MarkdownProvider.h`** — Markdown format support
 - **`ProgressManager.h`** — Reading position persistence
-- **`ReaderNavigation.h`** — Page/chapter traversal
+- **`ReaderNavigation.h`** — Page/chapter movement
 
 ### UI (`/src/ui/`)
 
-- **`Elements.h`** — Reusable UI components (ButtonBar, keyboard, etc.)
-- **`Views.h`** — Unified header for all view types
+- **`Elements.h`** — UI components that you can use again (ButtonBar, keyboard, and more)
+- **`Views.h`** — One header for all view types
 - **`views/HomeView.h`** — Home screen rendering
 - **`views/ReaderViews.h`** — Reader UI (TOC, status bar)
 - **`views/SettingsViews.h`** — Settings screen rendering
 
 ### Libraries (`/lib/`)
 
-- **`Epub/`** — EPUB parsing, CSS, TOC
-- **`Fb2/`** — FB2 (FictionBook 2.0) parsing, metadata extraction, TOC
+- **`Epub/`** — EPUB parse, CSS, TOC
+- **`Fb2/`** — FB2 (FictionBook 2.0) parse, metadata extraction, TOC
 - **`Xtc/`** — XTC/XTCH native format
 - **`Txt/`** — Plain text file handling
 - **`Markdown/`** — Markdown format support
-- **`PageCache/`** — Unified page caching
+- **`PageCache/`** — One page cache
 - **`GfxRenderer/`** — Graphics rendering
-- **`EpdFont/`** — Font loading (full and streaming modes) and glyph cache
+- **`EpdFont/`** — Font load (full and streaming modes) and glyph cache
 - **`ExternalFont/`** — CJK font support
 - **`ScriptDetector/`** — Script classification
 - **`ArabicShaper/`** — Arabic text shaping (contextual forms, ligatures)

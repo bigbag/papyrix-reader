@@ -1,6 +1,6 @@
 # Xteink X4 Specifications
 
-Hardware specifications specific to the Xteink X4 e-reader. For shared hardware (ESP32-C3, buttons, SD card, build config), see [Device Specifications](device-specifications.md).
+These hardware specifications are for the Xteink X4 e-reader. For shared hardware (ESP32-C3, buttons, SD card, build config), see [Device Specifications](device-specifications.md).
 
 ---
 
@@ -11,7 +11,7 @@ Hardware specifications specific to the Xteink X4 e-reader. For shared hardware 
 - **Model** — GDEQ0426T82
 - **Size** — 4.26 inches diagonal
 - **Resolution** — 800 × 480 pixels
-- **Pixel Density** — ~217 PPI
+- **Pixel Density** — approximately 217 PPI
 - **Colors** — Black/White (4-level grayscale)
 - **Viewing Angle** — 180 degrees
 
@@ -29,14 +29,14 @@ See [SSD1677 Driver Guide](ssd1677-driver.md) for the full command reference and
 - **Single buffer** — 48 KB — One framebuffer (current default)
 - **Dual buffer** — 96 KB — BW + RED RAM for differential updates
 
-**Calculation:** 800 pixels / 8 bits = 100 bytes per row × 480 rows = 48,000 bytes
+**Calculation:** 800 pixels / 8 bits = 100 bytes for each row × 480 rows = 48,000 bytes
 
 ### Refresh Modes
 
-- **Full refresh** — ~1600 ms — Page turns, complete redraw
-- **Fast refresh** — ~600 ms — Quick updates with custom LUT
-- **Half refresh** — ~1720 ms — Reduced ghosting, no flash
-- **Partial (window)** — ~50-100 ms — Status bar, UI elements
+- **Full refresh** — approximately 1600 ms — Page turns, complete redraw
+- **Fast refresh** — approximately 600 ms — Quick updates with custom LUT
+- **Half refresh** — approximately 1720 ms — Decreased ghosting, no flash
+- **Partial (window)** — approximately 50-100 ms — Status bar, UI elements
 
 #### Refresh Mode Details
 
@@ -44,11 +44,11 @@ See [SSD1677 Driver Guide](ssd1677-driver.md) for the full command reference and
 - **Half** — Write BOTH BW and RED RAM separately → Refresh — 48KB × 2 writes + 1.5s waveform
 - **Fast** — Write BW RAM only → Short waveform — 48KB write + 0.5s short waveform
 
-**Why Half refresh takes longer than Full:**
-- Full refresh writes 48KB to BW RAM, then uses fast internal copy to RED RAM
-- Half refresh writes 48KB twice (to each RAM separately) = 96KB total transfer
-- The extra ~120ms is the second 48KB SPI transfer
-- "Half" refers to reduced voltage swing in the waveform, not time
+**Why Half refresh takes more time than Full:**
+- Full refresh writes 48KB to BW RAM, then uses a fast internal copy to RED RAM.
+- Half refresh writes 48KB two times (to each RAM) = 96KB total transfer.
+- The extra approximately 120ms is the second 48KB SPI transfer.
+- "Half" refers to decreased voltage swing in the waveform, not time.
 
 ### Display Pin Mapping
 
@@ -61,7 +61,7 @@ See [SSD1677 Driver Guide](ssd1677-driver.md) for the full command reference and
 
 ### LUT Table Structure (111 bytes)
 
-The X4 uses a single 111-byte LUT loaded via command 0x32:
+The X4 uses one 111-byte LUT loaded with command 0x32:
 
 - **0-49** — 50 bytes — VS waveforms (5 groups × 10 bytes)
 - **50-99** — 50 bytes — TP/RP timing (10 groups × 5 bytes)
@@ -75,8 +75,8 @@ The X4 uses a single 111-byte LUT loaded via command 0x32:
 
 ### Voltage Settings
 
-- **VGH** — `0x17` — Gate high (~17-22V)
-- **VSH1** — `0x41` — Source high 1 (~15V)
+- **VGH** — `0x17` — Gate high (approximately 17-22V)
+- **VSH1** — `0x41` — Source high 1 (approximately 15V)
 - **VSH2** — `0xA8` — Source high 2
 - **VSL** — `0x32` — Source low (negative)
 - **VCOM** — `0x30` — Common voltage
@@ -121,8 +121,8 @@ The X4 uses a single 111-byte LUT loaded via command 0x32:
 - **ADC Pin** — GPIO 0
 - **Voltage range** — 0-3.3V (after divider)
 - **Divider ratio** — 2:1
-- **Full battery** — ~4.2V
-- **Empty battery** — ~3.0V
+- **Full battery** — approximately 4.2V
+- **Empty battery** — approximately 3.0V
 
 ### Battery Percentage Formula
 
@@ -130,7 +130,7 @@ Uses polynomial fit for LiPo discharge curve:
 ```
 percentage = -144.9390*V^3 + 1655.8629*V^2 - 6158.8520*V + 7501.3202
 ```
-Where V is battery voltage (clamped to 0-100% range).
+V is battery voltage (limited to the 0-100% range).
 
 ### USB Detection
 
@@ -139,9 +139,9 @@ Where V is battery voltage (clamped to 0-100% range).
 
 ### Power States
 
-- **Active** — Normal operation (~50 mA)
-- **WiFi active** — ~150 mA
-- **Deep sleep** — ~10 µA (wake on power button GPIO 3)
+- **Active** — Usual operation (approximately 50 mA)
+- **WiFi active** — approximately 150 mA
+- **Deep sleep** — approximately 10 µA (wake on power button GPIO 3)
 
 ---
 
@@ -165,4 +165,4 @@ Where V is battery voltage (clamped to 0-100% range).
 
 ## Sunlight Fading
 
-The X4's SSD1677 driver IC is packaged as "Gold Bump Die" without resin protection, making it susceptible to UV radiation. White X4 devices are more affected. Enable **Sunlight Fading Fix** in Settings to power down the display after each refresh (~100-200ms overhead per page turn). See [SSD1677 Driver Guide § Sunlight Fading](ssd1677-driver.md#sunlight-fading-issue) for details.
+The X4 SSD1677 driver IC is packaged as "Gold Bump Die" with no resin protection. UV radiation can damage it. White X4 devices are more affected. Set **Sunlight Fading Fix** to on in Settings to power down the display after each refresh (approximately 100-200ms overhead for each page turn). See [SSD1677 Driver Guide § Sunlight Fading](ssd1677-driver.md#sunlight-fading-issue) for more data.

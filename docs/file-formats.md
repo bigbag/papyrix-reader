@@ -1,14 +1,14 @@
 # File Formats
 
-This document describes the binary cache formats used by Papyrix for EPUB, TXT, Markdown, FB2, and HTML files.
+This document describes the binary cache formats that Papyrix uses for EPUB, TXT, Markdown, FB2, and HTML files.
 
 ## TXT Cache Files
 
-TXT files use a simple cache format stored in `.papyrix/txt_<hash>/`.
+TXT files use a simple cache format in `.papyrix/txt_<hash>/`.
 
 ### `progress.bin`
 
-Stores the current reading position as a single 4-byte little-endian unsigned integer (page number).
+Stores the current reading position as one 4-byte little-endian unsigned integer (page number).
 
 ```
 Offset  Size  Description
@@ -17,7 +17,7 @@ Offset  Size  Description
 
 ### `index.bin`
 
-Stores the page index - byte offsets where each page starts in the source file. The index is invalidated and rebuilt when file size, viewport width, or lines-per-page changes.
+Stores the page index. These are byte offsets where each page starts in the source file. The index is not valid and is built again when file size, viewport width, or lines-per-page changes.
 
 ```
 Offset  Size        Description
@@ -30,7 +30,7 @@ Offset  Size        Description
 
 ### `cover.bmp`
 
-Optional cover image, discovered by searching for (case-insensitive):
+Optional cover image. Found by a search for (case-insensitive):
 1. `<filename>.jpg`, `<filename>.jpeg`, `<filename>.png`, or `<filename>.bmp` (matching the TXT filename)
 2. `cover.jpg`, `cover.jpeg`, `cover.png`, or `cover.bmp` in the same directory
 
@@ -40,7 +40,7 @@ The image is converted to 1-bit dithered BMP format for display.
 
 ## Markdown Cache Files
 
-Markdown files (`.md`, `.markdown`) use a cache format stored in `.papyrix/md_<hash>/`.
+Markdown files (`.md`, `.markdown`) use a cache format in `.papyrix/md_<hash>/`.
 
 ### `progress.bin`
 
@@ -53,13 +53,13 @@ Offset  Size  Description
 
 ### `section.bin`
 
-Stores the parsed and laid-out pages. The format is similar to EPUB section files but with a simpler header.
+Stores the parsed pages after layout. The format is almost the same as EPUB section files, but the header is simpler.
 
 #### Version 1
 
 ```
 Offset  Size        Description
-0x00    1           Version (uint8_t) - currently 1
+0x00    1           Version (uint8_t) - version 1
 0x01    4           Font ID (int32_t)
 0x05    4           Line compression (float)
 0x09    1           Indent level (uint8_t)
@@ -79,7 +79,7 @@ The page data uses the same `Page` structure as EPUB section files (see below).
 
 ### `cover.bmp`
 
-Optional cover image, discovered by searching for (case-insensitive):
+Optional cover image. Found by a search for (case-insensitive):
 1. `<filename>.jpg`, `<filename>.jpeg`, `<filename>.png`, or `<filename>.bmp` (matching the Markdown filename)
 2. `cover.jpg`, `cover.jpeg`, `cover.png`, or `cover.bmp` in the same directory
 
@@ -87,14 +87,14 @@ The image is converted to 1-bit dithered BMP format for display.
 
 ### Supported Markdown Features
 
-- **Headers** (`#`, `##`, etc.) - Rendered bold and centered
+- **Headers** (`#`, `##`, and more) - Shown bold and centered
 - **Bold** (`**text**`) - Bold font style
 - **Italic** (`*text*`) - Italic font style
 - **Lists** (`-`, `*`, `1.`) - Bulleted with `•` prefix
-- **Blockquotes** (`>`) - Rendered in italic
-- **Inline code** (`` `code` ``) - Rendered in italic
-- **Horizontal rules** (`---`) - Rendered as centered line
-- **Links** - Text displayed (URL not shown)
+- **Blockquotes** (`>`) - Shown in italic
+- **Inline code** (`` `code` ``) - Shown in italic
+- **Horizontal rules** (`---`) - Shown as a centered line
+- **Links** - Text shown (URL not shown)
 - **Images** - Placeholder `[Image]` shown
 - **Code blocks** - Placeholder `[Code: ...]` shown
 - **Tables** - Placeholder `[Table omitted]` shown
@@ -103,15 +103,15 @@ The image is converted to 1-bit dithered BMP format for display.
 
 ## FB2 Cache Files
 
-FB2 (FictionBook 2.0) files use a cache format stored in `.papyrix/fb2_<hash>/`.
+FB2 (FictionBook 2.0) files use a cache format in `.papyrix/fb2_<hash>/`.
 
 ### `meta.bin`
 
-Caches parsed metadata (title, author, cover reference, TOC) to avoid re-parsing the full XML on subsequent loads. Invalidated by version changes.
+Caches parsed metadata (title, author, cover reference, TOC). This prevents a new parse of the full XML on later loads. Not valid after version changes.
 
 ```
 Offset  Size        Description
-0x00    1           Version (uint8_t) — currently 2
+0x00    1           Version (uint8_t) — version 2
 0x01    4+N         Title (length-prefixed UTF-8 string)
 ...     4+N         Author (length-prefixed UTF-8 string)
 ...     4+N         Cover path (length-prefixed UTF-8 string)
@@ -129,11 +129,11 @@ Stores the current reading position (same format as EPUB).
 
 ### `sections/`
 
-Cached chapter pages, same format as EPUB section files. Files named by section index (`0.bin`, `1.bin`, etc.).
+Cached chapter pages, same format as EPUB section files. Files named by section index (`0.bin`, `1.bin`, and more).
 
 ### `cover.bmp`
 
-Optional cover image, discovered by searching for (case-insensitive):
+Optional cover image. Found by a search for (case-insensitive):
 1. `<filename>.jpg`, `<filename>.jpeg`, `<filename>.png`, or `<filename>.bmp` (matching the FB2 filename)
 2. `cover.jpg`, `cover.jpeg`, `cover.png`, or `cover.bmp` in the same directory
 
@@ -142,21 +142,21 @@ The image is converted to 1-bit dithered BMP format for display.
 ### Supported FB2 Features
 
 - **Metadata** — Title from `<book-title>`, author from `<first-name>` + `<last-name>` (from `<title-info>` only)
-- **Sections** — `<section>` elements treated as chapters with page breaks between them
-- **Titles/Subtitles** — Rendered bold and centered
-- **Paragraphs** (`<p>`) — Standard paragraph layout with configurable alignment
+- **Sections** — `<section>` elements used as chapters with page breaks between them
+- **Titles/Subtitles** — Shown bold and centered
+- **Paragraphs** (`<p>`) — Standard paragraph layout with alignment that you can set
 - **Emphasis** (`<emphasis>`) — Italic font style
-- **Code** (`<code>`) — Italic font style (no monospace font is bundled; mirrors `<emphasis>`)
+- **Code** (`<code>`) — Italic font style (no monospace font is included; same as `<emphasis>`)
 - **Strong** (`<strong>`) — Bold font style
 - **Empty lines** (`<empty-line>`) — Vertical spacing
-- **Poetry** (`<poem>`, `<stanza>`, `<v>`) — Verse lines rendered left-aligned with spacing between stanzas
+- **Poetry** (`<poem>`, `<stanza>`, `<v>`) — Verse lines shown left-aligned with spacing between stanzas
 - **Text attribution** (`<text-author>`) — Author attribution lines
 - **Quotations** (`<cite>`) — Block quotations with visual spacing
 - **Epigraphs** (`<epigraph>`) — Epigraph blocks with visual spacing
 - **Annotations** (`<annotation>`) — Annotation blocks with visual spacing
-- **TOC navigation** — Built from section titles, supports jumping to sections
-- **RTL detection** — Arabic text detected from first chunk, enables RTL layout
-- **Namespace handling** — Strips XML namespace prefixes for compatibility
+- **TOC navigation** — Built from section titles. Supports jump to sections
+- **RTL detection** — Arabic text found from the first chunk. Enables RTL layout
+- **Namespace handling** — Removes XML namespace prefixes for compatibility
 - **Binary skip** — `<binary>` tags (embedded images) skipped to save memory
 - **Images** — Not supported (inline images are skipped)
 
@@ -164,19 +164,19 @@ The image is converted to 1-bit dithered BMP format for display.
 
 ## HTML Cache Files
 
-HTML files (`.html`, `.htm`) use a cache format stored in `.papyrix/html_<hash>/`. HTML is parsed using the same pipeline as EPUB chapters (HTML5 normalization → Expat XML → page layout).
+HTML files (`.html`, `.htm`) use a cache format in `.papyrix/html_<hash>/`. HTML is parsed with the same pipeline as EPUB chapters (HTML5 normalization → Expat XML → page layout).
 
 ### `progress.bin`
 
-Stores the current reading position (same format as TXT/Markdown — 4-byte little-endian, section page in lower 2 bytes).
+Stores the current reading position (same format as TXT/Markdown — 4-byte little-endian, section page in the lower 2 bytes).
 
 ### `pages_<fontId>.bin`
 
-Stores the parsed and laid-out pages (same section format as Markdown and FB2). The filename includes the font ID hash so the cache is invalidated when the font changes.
+Stores the parsed pages after layout (same section format as Markdown and FB2). The filename includes the font ID hash. The cache is not valid when the font changes.
 
 ### `cover.bmp`
 
-Optional cover image, discovered by searching for (case-insensitive):
+Optional cover image. Found by a search for (case-insensitive):
 1. `<filename>.jpg`, `<filename>.jpeg`, `<filename>.png`, or `<filename>.bmp` (matching the HTML filename)
 2. `cover.jpg`, `cover.jpeg`, `cover.png`, or `cover.bmp` in the same directory
 
@@ -184,13 +184,13 @@ The image is converted to 1-bit dithered BMP format for display.
 
 ### Supported HTML Features
 
-- **Title** — Extracted from `<title>` tag (falls back to filename)
-- **Headings** (`<h1>`–`<h6>`) — Rendered bold and centered
-- **Paragraphs** (`<p>`) — Standard paragraph layout with configurable alignment
+- **Title** — From the `<title>` tag (uses filename if there is no title)
+- **Headings** (`<h1>`–`<h6>`) — Shown bold and centered
+- **Paragraphs** (`<p>`) — Standard paragraph layout with alignment that you can set
 - **Bold** (`<b>`, `<strong>`) — Bold font style
-- **Italic** (`<i>`, `<em>`, `<code>`, `<tt>`, `<kbd>`, `<samp>`) — Italic font style (no monospace font is bundled; code-ish inline tags render italic)
-- **Preformatted** (`<pre>`) — Block element, forced left-align; line breaks preserved, tabs expand to 4 spaces, and runs of spaces are preserved via non-breaking spaces
-- **List items** (`<li>`) — Rendered as block elements (list containers `<ul>`/`<ol>` are treated as inline)
+- **Italic** (`<i>`, `<em>`, `<code>`, `<tt>`, `<kbd>`, `<samp>`) — Italic font style (no monospace font is included; code-like inline tags show italic)
+- **Preformatted** (`<pre>`) — Block element, forced left-align. Line breaks stay. Tabs expand to 4 spaces. Runs of spaces stay through non-breaking spaces
+- **List items** (`<li>`) — Shown as block elements (list containers `<ul>`/`<ol>` are used as inline)
 - **Blockquotes** (`<blockquote>`) — Indented block style
 - **Divs** (`<div>`) — Block-level grouping
 - **Line breaks** (`<br>`) — Inline line breaks
@@ -201,13 +201,13 @@ The image is converted to 1-bit dithered BMP format for display.
 
 ## EPUB Cache Files
 
-EPUB files use a more complex cache format stored in `.papyrix/epub_<hash>/`.
+EPUB files use a more complex cache format in `.papyrix/epub_<hash>/`.
 
 ### Image Cache (`images/` subdirectory)
 
 Inline images are converted to BMP and cached:
 - `<hash>.bmp` — Converted image (FNV-1a hash of resolved image path)
-- `<hash>.failed` — Marker file for failed conversions (prevents re-attempts)
+- `<hash>.failed` — Marker file for failed conversions (prevents new tries)
 
 ## `book.bin`
 
@@ -460,11 +460,11 @@ Each bookmark entry (72 bytes):
 ```
 Offset  Size  Description
 0x00    2     Spine index (int16_t) — chapter index for EPUB/FB2, unused for other formats
-0x02    2     Section page (int16_t) — page within chapter/section
+0x02    2     Section page (int16_t) — page in the chapter/section
 0x04    4     Flat page (uint32_t) — absolute page number (used by TXT/Markdown/XTC formats)
 0x08    64    Label (char[64]) — null-terminated bookmark title
 ```
 
 ### `bookmarks.txt`
 
-Human-readable companion file exported alongside `bookmarks.bin`. Contains one line per bookmark with the label and page position. This file is for user reference only and is not read back by the firmware.
+Human-readable companion file exported with `bookmarks.bin`. Contains one line for each bookmark with the label and page position. This file is for user reference only. The firmware does not read it again.
