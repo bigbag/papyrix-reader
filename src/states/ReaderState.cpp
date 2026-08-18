@@ -550,12 +550,20 @@ void ReaderState::createOrExtendCacheImpl(ContentParser& parser, const std::stri
     if (needsExtend) {
       if (!pageCache_->extend(parser, PageCache::DEFAULT_CACHE_CHUNK)) {
         LOG_ERR(TAG, "Cache extend failed");
+        // A failed build reports zero pages and not partial, which is
+        // indistinguishable from a complete empty section. Reload the state that
+        // survived on disk instead, as backgroundCacheImpl does.
+        pageCache_.reset(new PageCache(cachePath));
+        if (!pageCache_->load(config)) pageCache_.reset();
+        return;
       }
       saveAnchorMap(parser, cachePath);
     } else if (needsCreate) {
       parser.reset();
       if (!pageCache_->create(parser, config, PageCache::DEFAULT_CACHE_CHUNK)) {
         LOG_ERR(TAG, "Cache create failed");
+        pageCache_.reset();
+        return;
       }
       saveAnchorMap(parser, cachePath);
     }

@@ -143,8 +143,10 @@ int16_t *pLimit = pDest + (MAX_IMAGE_FLIPS-4);
          {
          iLen += cBits; /* Adjust length */
          cBits = 8;
-         c = *buf++;  /* Get another data byte */
          iCount--;
+         if (iCount < 0)
+            break;
+         c = *buf++;  /* Get another data byte */
          continue; /* Keep doing white until color change */
          }
       c = ~c; /* flip color to count black pixels */
@@ -167,11 +169,11 @@ doblack:
          {
          iLen += cBits; /* Adjust length */
          cBits = 8;
-         c = *buf++;  /* Get another data byte */
-         c = ~c;   /* Flip color to find black */
          iCount--;
          if (iCount < 0)
             break;
+         c = *buf++;  /* Get another data byte */
+         c = ~c;   /* Flip color to find black */
          goto doblack;
          }
    /* Store the black run length */

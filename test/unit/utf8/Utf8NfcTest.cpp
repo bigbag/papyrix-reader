@@ -1,10 +1,9 @@
-#include "test_utils.h"
-
 #include <cstring>
 #include <string>
 #include <vector>
 
 #include "Utf8Nfc.h"
+#include "test_utils.h"
 
 // Pull in the implementation directly (same pattern as Utf8Test.cpp)
 #include "Utf8Nfc.cpp"
@@ -130,14 +129,18 @@ int main() {
 
   {
     // "café" with NFD é
-    char buf[] = "caf" "e\xCC\x81";
+    char buf[] =
+        "caf"
+        "e\xCC\x81";
     size_t len = utf8NormalizeNfc(buf, strlen(buf));
     runner.expectEqual("caf\xC3\xA9", std::string(buf, len), "Mixed: café with NFD e+acute");
   }
 
   {
     // Multiple words with accents
-    char buf[] = "a\xCC\x80 " "e\xCC\x81";  // "à é" in NFD
+    char buf[] =
+        "a\xCC\x80 "
+        "e\xCC\x81";  // "à é" in NFD
     size_t len = utf8NormalizeNfc(buf, strlen(buf));
     runner.expectEqual("\xC3\xA0 \xC3\xA9", std::string(buf, len), "Mixed: à é");
   }
@@ -204,9 +207,14 @@ int main() {
 
   {
     // Combining acute at start — should pass through unchanged
-    char buf[] = "\xCC\x81" "abc";
+    char buf[] =
+        "\xCC\x81"
+        "abc";
     size_t len = utf8NormalizeNfc(buf, strlen(buf));
-    runner.expectEqual("\xCC\x81" "abc", std::string(buf, len), "Orphan combining mark at start: unchanged");
+    runner.expectEqual(
+        "\xCC\x81"
+        "abc",
+        std::string(buf, len), "Orphan combining mark at start: unchanged");
   }
 
   // ============================================
@@ -228,11 +236,12 @@ int main() {
     // Truncated 2-byte sequence at end
     char buf[] = "abc\xC3";
     size_t len = utf8NormalizeNfc(buf, 4);
-    runner.expectTrue(len > 0, "Truncated UTF-8: produces output without crash");
+    runner.expectEq(size_t(4), len, "Truncated UTF-8: output does not expand");
+    runner.expectEqual("abc?", std::string(buf, len), "Truncated UTF-8: malformed byte is replaced safely");
   }
 
   // ============================================
-  // Long string (exceeds STACK_SIZE=256 codepoints, exercises heap path)
+  // Long string (exceeds the stack buffer, exercises heap path)
   // ============================================
 
   {

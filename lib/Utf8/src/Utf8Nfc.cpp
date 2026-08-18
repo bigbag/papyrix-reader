@@ -1,5 +1,7 @@
 #include "Utf8Nfc.h"
 
+#include <esp_heap_caps.h>
+
 #include <cstring>
 #include <new>
 
@@ -8,7 +10,8 @@
 namespace {
 
 // Decode one UTF-8 codepoint from buf at position pos.
-// Advances pos past the codepoint. Returns 0 on end/error.
+// Advances pos past the codepoint. Malformed bytes become '?' so in-place
+// normalization can never expand beyond the caller-provided buffer.
 uint32_t decodeUtf8(const char* buf, size_t len, size_t& pos) {
   if (pos >= len) return 0;
   auto c = static_cast<unsigned char>(buf[pos]);
@@ -18,30 +21,36 @@ uint32_t decodeUtf8(const char* buf, size_t len, size_t& pos) {
   }
   int bytes;
   uint32_t cp;
-  if ((c >> 5) == 0x6) {
+  if (c >= 0xC2 && c <= 0xDF) {
     bytes = 2;
     cp = c & 0x1F;
-  } else if ((c >> 4) == 0xE) {
+  } else if (c >= 0xE0 && c <= 0xEF) {
     bytes = 3;
     cp = c & 0x0F;
-  } else if ((c >> 3) == 0x1E) {
+  } else if (c >= 0xF0 && c <= 0xF4) {
     bytes = 4;
     cp = c & 0x07;
   } else {
     pos++;
-    return 0xFFFD;  // replacement char
+    return '?';
   }
   if (pos + bytes > len) {
-    pos = len;
-    return 0xFFFD;
+    pos++;
+    return '?';
   }
   for (int i = 1; i < bytes; i++) {
     auto cont = static_cast<unsigned char>(buf[pos + i]);
     if ((cont & 0xC0) != 0x80) {
       pos++;
-      return 0xFFFD;
+      return '?';
     }
     cp = (cp << 6) | (cont & 0x3F);
+  }
+  const auto second = static_cast<unsigned char>(buf[pos + 1]);
+  if ((bytes == 3 && ((c == 0xE0 && second < 0xA0) || (c == 0xED && second >= 0xA0))) ||
+      (bytes == 4 && ((c == 0xF0 && second < 0x90) || (c == 0xF4 && second >= 0x90)))) {
+    pos++;
+    return '?';
   }
   pos += bytes;
   return cp;
@@ -121,9 +130,12 @@ size_t utf8NormalizeNfc(char* buf, size_t len) {
   // Decode to codepoints (max codepoints = len, since each UTF-8 char >= 1 byte)
   // Use stack buffer for small strings, heap for large ones.
   // NFC is cosmetic: on OOM leave valid UTF-8 untouched rather than abort.
-  constexpr size_t STACK_SIZE = 256;
+  constexpr size_t STACK_SIZE = 64;
   uint32_t stackBuf[STACK_SIZE];
-  uint32_t* cps = (len <= STACK_SIZE) ? stackBuf : new (std::nothrow) uint32_t[len];
+  if (len > SIZE_MAX / sizeof(uint32_t)) return len;
+  const size_t allocationBytes = len * sizeof(uint32_t);
+  if (len > STACK_SIZE && allocationBytes > heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) * 80 / 100) return len;
+  uint32_t* cps = len <= STACK_SIZE ? stackBuf : new (std::nothrow) uint32_t[len];
   if (cps == nullptr) return len;
 
   size_t cpCount = 0;

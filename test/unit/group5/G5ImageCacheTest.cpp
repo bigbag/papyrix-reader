@@ -15,6 +15,12 @@ std::string makeG5File(const G5ImageHeader& header, size_t payloadSize) {
   return file;
 }
 
+std::string makeG5File(const G5ImageHeader& header, const std::vector<uint8_t>& payload) {
+  std::string file = makeG5File(header, payload.size());
+  memcpy(&file[sizeof(header)], payload.data(), payload.size());
+  return file;
+}
+
 }  // namespace
 
 int main() {
@@ -72,6 +78,52 @@ int main() {
     runner.expectTrue(ok, "roundtrip: decompression succeeds");
     runner.expectEq(rows.size(), decoded.size(), "roundtrip: callback count");
     runner.expectTrue(decoded == rows, "roundtrip: decoded rows match input");
+  }
+
+  {
+    SdMan.reset();
+    const std::vector<uint8_t> rows = {0x00, 0x00, 0xFF, 0xFF, 0xF0, 0x0F};
+    runner.expectTrue(G5ImageCache::compressToFile(rows.data(), 16, 3, "/aligned.g5"),
+                      "aligned: compression succeeds");
+    SdMan.registerFile("/aligned.g5", SdMan.getWrittenData("/aligned.g5"));
+
+    std::vector<uint8_t> decoded;
+    const bool ok = G5ImageCache::decompressFromFile("/aligned.g5", [&](const uint8_t* row, int rowBytes, int) {
+      decoded.insert(decoded.end(), row, row + rowBytes);
+    });
+    runner.expectTrue(ok, "aligned: decompression succeeds");
+    runner.expectTrue(decoded == rows, "aligned: byte-boundary runs round-trip");
+  }
+
+  {
+    SdMan.reset();
+    const G5ImageHeader header{G5_MAGIC, 8, 1, 1};
+    SdMan.registerFile("/short-vlc.g5", makeG5File(header, 1));
+    int callbacks = 0;
+    runner.expectFalse(G5ImageCache::decompressFromFile("/short-vlc.g5", [&](const uint8_t*, int, int) {
+                         callbacks++;
+                       }),
+                       "decoder: short bitstream fails safely");
+    runner.expectEq(0, callbacks, "decoder: short bitstream invokes no callbacks");
+  }
+
+  {
+    SdMan.reset();
+    // Repeated horizontal short/short codes with zero-length runs consume bits
+    // without advancing the row, forcing the decoder to enforce the VLC limit.
+    std::vector<uint8_t> payload(11, 0);
+    for (size_t code = 0; code < 8; ++code) {
+      const size_t oneBit = code * 11 + 2;
+      payload[oneBit / 8] |= static_cast<uint8_t>(0x80 >> (oneBit % 8));
+    }
+    const G5ImageHeader header{G5_MAGIC, 8, 1, static_cast<uint32_t>(payload.size())};
+    SdMan.registerFile("/zero-runs.g5", makeG5File(header, payload));
+    int callbacks = 0;
+    runner.expectFalse(G5ImageCache::decompressFromFile("/zero-runs.g5", [&](const uint8_t*, int, int) {
+                         callbacks++;
+                       }),
+                       "decoder: zero-progress stream stops at input boundary");
+    runner.expectEq(0, callbacks, "decoder: zero-progress stream invokes no callbacks");
   }
 
   return runner.allPassed() ? 0 : 1;

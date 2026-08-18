@@ -19,4 +19,5 @@ tools/fontconvert-bin/papyrix-fontconvert-bin
 tools/monitor/build/
 tools/reader-test/build/
 /monitor
-.worktrees/__pycache__/
+.worktrees/
+__pycache__/

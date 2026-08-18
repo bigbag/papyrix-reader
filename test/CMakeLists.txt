@@ -654,7 +654,8 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/src/content/RecentBooksStore.cpp
       ${TEST_HELPERS}
     )
-  elseif(TEST_NAME STREQUAL "ReadingStatsStoreTest" OR TEST_NAME STREQUAL "ReadingStatsStoreLoadFailureTest")
+  elseif(TEST_NAME STREQUAL "ReadingStatsStoreTest" OR TEST_NAME STREQUAL "ReadingStatsStoreLoadFailureTest" OR
+         TEST_NAME STREQUAL "ReadingStatsStoreIoTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
       ${PROJECT_ROOT}/src/content/ReadingStatsStore.cpp

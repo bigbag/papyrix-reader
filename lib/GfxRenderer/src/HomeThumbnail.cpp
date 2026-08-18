@@ -78,8 +78,12 @@ bool copyFile(FsFile& source, FsFile& output, const std::function<bool()>& shoul
   uint8_t buffer[128];
   while (source.available() > 0) {
     if (isAbortRequested(shouldAbort)) return false;
-    const size_t bytesRead = source.read(buffer, sizeof(buffer));
-    if (bytesRead == 0 || output.write(buffer, bytesRead) != bytesRead) return false;
+    // read() reports I/O errors as -1; a size_t would make that SIZE_MAX and
+    // pass it to write() as a length.
+    const int bytesRead = source.read(buffer, sizeof(buffer));
+    if (bytesRead <= 0) return false;
+    const size_t chunk = static_cast<size_t>(bytesRead);
+    if (output.write(buffer, chunk) != chunk) return false;
   }
   return true;
 }

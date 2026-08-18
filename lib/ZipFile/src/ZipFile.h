@@ -4,6 +4,7 @@
 #include <functional>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 class BuildArena;
@@ -60,7 +61,7 @@ class ZipFile {
   }
 
  private:
-  const std::string& filePath;
+  std::string filePath;
   FsFile file;
   ZipDetails zipDetails = {0, 0, false};
   std::unordered_map<std::string, FileStatSlim> fileStatSlimCache;
@@ -73,7 +74,7 @@ class ZipFile {
   bool loadZipDetails();
 
  public:
-  explicit ZipFile(const std::string& filePath) : filePath(filePath) {}
+  explicit ZipFile(std::string filePath) : filePath(std::move(filePath)) {}
   ~ZipFile() = default;
   // Zip file can be opened and closed by hand in order to allow for quick calculation of inflated file size
   // It is NOT recommended to pre-open it for any kind of inflation due to memory constraints

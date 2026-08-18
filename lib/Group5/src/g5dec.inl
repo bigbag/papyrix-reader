@@ -100,8 +100,8 @@ static void G5DrawLine(G5DECIMAGE *pPage, int16_t *pCurFlips, uint8_t *pOut)
             }
             /* Draw this run */
             lBit = 0xff << (8 - (x & 7));
-            rBit = 0xff >> ((x + run) & 7);
-            len = ((x+run)>>3) - (x >> 3);
+            rBit = ((x + run) & 7) == 0 ? 0 : 0xff >> ((x + run) & 7);
+            len = ((x + run - 1)>>3) - (x >> 3);
             p = &pDest[x >> 3];
             if (len == 0) {
                 lBit |= rBit;
@@ -164,7 +164,7 @@ static int DecodeLine(G5DECIMAGE *pPage)
     int32_t sCode;
     uint32_t lBits;
     uint32_t ulBits, ulBitOff;
-    uint8_t *pBuf/*, *pBufEnd*/;
+    uint8_t *pBuf, *pBufEnd;
     uint32_t u32HMask, u32HLen; // horizontal code mask and length
 
     pCur = CurFlips = pPage->pCur;
@@ -172,7 +172,7 @@ static int DecodeLine(G5DECIMAGE *pPage)
     ulBits = pPage->ulBits;
     ulBitOff = pPage->ulBitOff;
     pBuf = pPage->pBuf;
-    // pBufEnd = &pPage->pSrc[pPage->iVLCSize];
+    pBufEnd = &pPage->pSrc[pPage->iVLCSize];
     u32HLen = pPage->iHLen;
     u32HMask = (1 << u32HLen) - 1;
     a0 = -1;
@@ -182,6 +182,10 @@ static int DecodeLine(G5DECIMAGE *pPage)
         if (ulBitOff > (REGISTER_WIDTH-8)) { // need at least 7 unused bits
             pBuf += (ulBitOff >> 3);
             ulBitOff &= 7;
+            if (pBuf >= pBufEnd) {
+                pPage->iError = G5_DECODE_ERROR;
+                goto pilreadg5z;
+            }
             ulBits = TIFFMOTOLONG(pBuf);
         }
         if ((int32_t)(ulBits << ulBitOff) < 0) { /* V(0) code is the most frequent case (1 bit) */
@@ -228,6 +232,10 @@ static int DecodeLine(G5DECIMAGE *pPage)
                     if (ulBitOff > (REGISTER_WIDTH-16)) { // need at least 16 unused bits
                         pBuf += (ulBitOff >> 3);
                         ulBitOff &= 7;
+                        if (pBuf >= pBufEnd) {
+                            pPage->iError = G5_DECODE_ERROR;
+                            goto pilreadg5z;
+                        }
                         ulBits = TIFFMOTOLONG(pBuf);
                     }
                     a0_p = a0;
@@ -264,6 +272,10 @@ static int DecodeLine(G5DECIMAGE *pPage)
                             if (ulBitOff > (REGISTER_WIDTH-16)) { // need at least 16 unused bits
                                 pBuf += (ulBitOff >> 3);
                                 ulBitOff &= 7;
+                                if (pBuf >= pBufEnd) {
+                                    pPage->iError = G5_DECODE_ERROR;
+                                    goto pilreadg5z;
+                                }
                                 ulBits = TIFFMOTOLONG(pBuf);
                             }
                             tot_run1 = (ulBits >> ((REGISTER_WIDTH - u32HLen) - ulBitOff)) & u32HMask; // get long length
@@ -344,4 +356,3 @@ static int g5_decode_line(G5DECIMAGE *pPage, uint8_t *pOut)
    }
     return pPage->iError;
 } /* Decode() */
-

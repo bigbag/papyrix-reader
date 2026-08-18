@@ -3,6 +3,8 @@
 #include <SDCardManager.h>
 #include <esp_heap_caps.h>
 
+#include <cstring>
+
 bool G5ImageCache::compressToFile(const uint8_t* bitmap, int width, int height, const char* path) {
   if (!bitmap || width <= 0 || height <= 0 || !path) {
     return false;
@@ -101,12 +103,21 @@ bool G5ImageCache::decompressFromFile(const char* path, std::function<void(const
   }
 
   size_t rowBytesSize = 0;
-  if (!validateHeader(header, inFile.size(), rowBytesSize) || !hasAllocationHeadroom(header.compressedSize)) {
+  if (!validateHeader(header, inFile.size(), rowBytesSize)) {
     inFile.close();
     return false;
   }
 
-  uint8_t* compressedData = new (std::nothrow) uint8_t[header.compressedSize];
+  // The Group5 bit reader loads 32-bit windows, including at the final byte.
+  // Keep zero padding addressable without presenting it as encoded data.
+  constexpr size_t DECODER_PADDING = sizeof(uint32_t);
+  const size_t compressedBufferSize = static_cast<size_t>(header.compressedSize) + DECODER_PADDING;
+  if (!hasAllocationHeadroom(compressedBufferSize)) {
+    inFile.close();
+    return false;
+  }
+
+  uint8_t* compressedData = new (std::nothrow) uint8_t[compressedBufferSize];
   if (!compressedData || !hasAllocationHeadroom(rowBytesSize)) {
     delete[] compressedData;
     inFile.close();
@@ -127,6 +138,7 @@ bool G5ImageCache::decompressFromFile(const char* path, std::function<void(const
     inFile.close();
     return false;
   }
+  memset(compressedData + header.compressedSize, 0, DECODER_PADDING);
   inFile.close();
 
   // Decode
