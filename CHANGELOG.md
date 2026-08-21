@@ -1,5 +1,140 @@
 
 
+## v1.28.0 (2026-08-21)
+
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Fix firmware input and task safety [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Fix cache and transition safety. Fix persistence and ZIP validation issues. [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Fix parser, cache, and reading-state failure paths [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Files: Restore recursive deletion and add recycle-bin toggle [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Logging: Stabilize USB serial startup [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Reader: Fix page caching and add persistent Home thumbnails [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  XTC: Stream page planes with bounded memory [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  XTC: Stream cover generation with bounded memory and retryable failures [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  ImageConverter: Convert BMP sidecars to canonical 1-bit covers [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Cpu: Serialize throttle transitions with performance locks [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Tests: Harden storage mock and cover ReaderState/ContentHandle paths [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Cleanup: Untrack bytecode and make reader-test thumbnail mock configurable [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  XTC: Balance cover grayscale threshold to keep scanned backgrounds white [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  XTC: Restore original cover threshold and regenerate stale 2-bit artifacts [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Correct decoder, cache and stats file errors [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  fix: check decoder data, web paths, and settings writes [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Rewrite README and guides in STE100 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.27.0 (2026-08-05)
+
+*  Add recycle bin. Issue #151 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Fix state registry capacity for error state. Issue #156 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Harden fixed capacities against enum drift [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Fix untrusted parsers and clear status-bar ~ for empty sections [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Fix XTC parsing and page metric regressions [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add per-book reading statistics [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Fix localized text overflow [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add SD-backed indexing for large directories [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Reader: Reuse framebuffer memory for EPUB and FB2 parsing [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Support Unicode filenames in Web UI. Issue #155 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.26.2 (2026-07-21)
+
+*  ImageViewer: Add 2-bit grayscale rendering. Issue #149 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  XTC: Force base refresh before grayscale pages [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.26.0 (2026-07-14)
+
+*  Add Recent Books. Issue #141 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Update version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  HomeView: Fix tr() macro expansion with ternary operator [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Epub: Fix TOC skipped permanently on low heap. Issue #148 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  AppLauncher: Ignore ButtonRepeat in app and overlay modes [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.25.0 (2026-07-13)
+
+*  Add Sleep 'Keep Page' mode. Issue #145 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Update version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.24.4 (2026-07-13)
+
+*  Stability: Atomic SD writes and OOM-safe image paths [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Epub: Apply CSS block-level margins and padding to page layout. Issue #139 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add script for generate test books [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Reader: Bump loopTask stack to 12KB to fix PNG convert crash [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Update version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.24.3 (2026-06-16)
+
+*  Network: Fix Recent auto-connect routing and add regression test [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.24.2 (2026-06-16)
+
+*  Network: Add Recent quick-connect option to WiFi mode select. Issue #123 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.24.1 (2026-06-05)
+
+*  Reader: Fix reboot on large text paragraphs. Issue #137 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Reader: Detect partial spines so full-book process finishes. Issue #136 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.24.0 (2026-05-29)
+
+*  Fix cache corruption when device runs low on memory during parsing. Issue #126 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  TXT: Join lines within paragraphs, break only on blank lines. Issue #129 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Fix text loss at batch boundaries in Markdown and TXT parsers. Issue #133 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Epub: Split oversized spine items into smaller sections for constrained RAM. Issue #132 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Fix sparse pages at batch boundaries in Markdown and TXT parsers. Issue #133 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Epub: Fix crash when opening books with large chapters. Issue #132 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Epub: Reduce home screen load time by avoiding full book parse for metadata [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Epub: Reduce memory usage and skip metadata on crash recovery. Issue #131 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Reader: Fix cover ghosting with black/white clearing sequence. Issue #125 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Epub: Fix infinite loop in Full Book Process for split-spine books [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Fb2: Reduce home screen load time by avoiding full book parse for metadata [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Html5: Expand normalizer for XML safety — escape < in attrs, normalize bare attributes. Issue #130 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  SDCardManager: Add directory scan fallback for filenames with leading spaces. Issue #135 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  HtmlSplitter: Add byte-offset HTML splitting with tag tracking and optimize cache LUT for large books [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Epub: Replace per-section files with single body file and byte-range index [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Home: Add battery-only partial refresh and fix sleep screen ghost artifacts. Issue #134 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  InputManager: Fix ADC crosstalk with dummy reads and increase debounce to 20ms [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.23.4 (2026-05-21)
+
+*  Poll battery state on Home screen to update charging icon. Issue #128. [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Fix text loss at page boundaries during cold cache extend. Issue #126. [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.23.3 (2026-05-20)
+
+*  Clear screen after indexing completes or fails to avoid stale display. Issue #125. [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Clear screen before drawing cover to prevent stale content artifacts [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.23.2 (2026-05-16)
+
+*  Add bookmark as short power button action with page-number labels [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.23.1 (2026-05-16)
+
+*  Update changelog [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Apply timezone on clock app entry. Issue #118 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
 ## v1.23.0 (2026-05-16)
 
 *  Update docs [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
