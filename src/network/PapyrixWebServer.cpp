@@ -7,7 +7,6 @@
 #include <SDCardManager.h>
 #include <Utf8Nfc.h>
 #include <WiFi.h>
-#include <esp_heap_caps.h>
 
 #include "../IniParser.h"
 #include "../config.h"
@@ -50,18 +49,6 @@ bool prepareWebPath(String& path) {
 static void sendGzipHtml(WebServer* server, const char* data, size_t len) {
   server->sendHeader("Content-Encoding", "gzip");
   server->send_P(200, "text/html", data, len);
-}
-
-bool PapyrixWebServer::flushUploadBuffer() {
-  if (upload_.bufferPos > 0 && upload_.file) {
-    const size_t written = upload_.file.write(upload_.buffer.data(), upload_.bufferPos);
-    if (written != upload_.bufferPos) {
-      upload_.bufferPos = 0;
-      return false;
-    }
-    upload_.bufferPos = 0;
-  }
-  return true;
 }
 
 PapyrixWebServer::PapyrixWebServer() = default;
@@ -132,19 +119,19 @@ void PapyrixWebServer::stop() {
   delay(50);
   server_.reset();
 
-  // Clear upload state
-  if (upload_.file) {
-    upload_.file.close();
+  if (upload_.file) upload_.file.close();
+  if (upload_.ownsFile && !upload_.success) {
+    String filePath = upload_.path;
+    if (!filePath.endsWith("/")) filePath += "/";
+    filePath += upload_.fileName;
+    SdMan.remove(filePath.c_str());
   }
+  upload_.ownsFile = false;
   upload_.fileName = "";
   upload_.path = "/";
   upload_.size = 0;
   upload_.success = false;
   upload_.error = "";
-  upload_.bufferPos = 0;
-  upload_.buffer.clear();
-  upload_.buffer.shrink_to_fit();
-
   LOG_INF(TAG, "Server stopped (free heap: %d)", ESP.getFreeHeap());
 }
 
@@ -240,11 +227,18 @@ void PapyrixWebServer::handleUpload() {
   HTTPUpload& upload = server_->upload();
 
   if (upload.status == UPLOAD_FILE_START) {
+    if (upload_.file) upload_.file.close();
+    if (upload_.ownsFile && !upload_.success) {
+      String oldPath = upload_.path;
+      if (!oldPath.endsWith("/")) oldPath += "/";
+      oldPath += upload_.fileName;
+      SdMan.remove(oldPath.c_str());
+    }
+    upload_.ownsFile = false;
     upload_.fileName = upload.filename;
     upload_.size = 0;
     upload_.success = false;
     upload_.error = "";
-    upload_.bufferPos = 0;
 
     const web::FileNameError nameError = prepareWebFileName(upload_.fileName);
     if (nameError != web::FileNameError::None) {
@@ -282,12 +276,6 @@ void PapyrixWebServer::handleUpload() {
       return;
     }
 
-    if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < UploadState::BUFFER_SIZE * 2) {
-      upload_.error = "Insufficient memory for upload";
-      return;
-    }
-    upload_.buffer.resize(UploadState::BUFFER_SIZE);
-
     if (SdMan.exists(filePath.c_str())) {
       SdMan.remove(filePath.c_str());
     }
@@ -297,64 +285,53 @@ void PapyrixWebServer::handleUpload() {
       LOG_ERR(TAG, "Failed to create: %s", filePath.c_str());
       return;
     }
-
+    upload_.ownsFile = true;
   } else if (upload.status == UPLOAD_FILE_WRITE) {
     if (upload_.file && upload_.error.isEmpty()) {
-      const uint8_t* data = upload.buf;
-      size_t remaining = upload.currentSize;
-
-      while (remaining > 0) {
-        size_t space = UploadState::BUFFER_SIZE - upload_.bufferPos;
-        size_t toCopy = remaining < space ? remaining : space;
-        memcpy(upload_.buffer.data() + upload_.bufferPos, data, toCopy);
-        upload_.bufferPos += toCopy;
-        data += toCopy;
-        remaining -= toCopy;
-
-        if (upload_.bufferPos >= UploadState::BUFFER_SIZE) {
-          if (!flushUploadBuffer()) {
-            upload_.error = "Write failed - disk full?";
-            upload_.file.close();
-            return;
-          }
-        }
+      const size_t written = upload_.file.write(upload.buf, upload.currentSize);
+      if (written != upload.currentSize) {
+        upload_.error = "Write failed - disk full?";
+        upload_.file.close();
+        return;
       }
-
-      upload_.size += upload.currentSize;
+      upload_.size += written;
     }
 
   } else if (upload.status == UPLOAD_FILE_END) {
-    if (upload_.file) {
-      if (upload_.error.isEmpty() && !flushUploadBuffer()) {
-        upload_.error = "Write failed - disk full?";
-      }
-      upload_.file.close();
-      if (upload_.error.isEmpty()) {
-        upload_.success = true;
-        LOG_INF(TAG, "Upload complete: %s (%zu bytes)", upload_.fileName.c_str(), upload_.size);
-      }
+    const bool hadFile = static_cast<bool>(upload_.file);
+    if (hadFile && upload_.error.isEmpty() && !upload_.file.sync()) {
+      upload_.error = "Write failed - disk full?";
     }
-    upload_.buffer.clear();
-    upload_.buffer.shrink_to_fit();
-
-  } else if (upload.status == UPLOAD_FILE_ABORTED) {
-    upload_.bufferPos = 0;
-    upload_.buffer.clear();
-    upload_.buffer.shrink_to_fit();
-    if (upload_.file) {
-      upload_.file.close();
+    if (upload_.file) upload_.file.close();
+    if (hadFile && upload_.error.isEmpty()) {
+      upload_.success = true;
+      LOG_INF(TAG, "Upload complete: %s (%zu bytes)", upload_.fileName.c_str(), upload_.size);
+    } else if (upload_.ownsFile) {
       String filePath = upload_.path;
       if (!filePath.endsWith("/")) filePath += "/";
       filePath += upload_.fileName;
       SdMan.remove(filePath.c_str());
+      upload_.ownsFile = false;
     }
-    upload_.error = "Upload aborted";
+  } else if (upload.status == UPLOAD_FILE_ABORTED) {
+    if (upload_.success) return;
+    if (upload_.file) upload_.file.close();
+    if (upload_.ownsFile) {
+      String filePath = upload_.path;
+      if (!filePath.endsWith("/")) filePath += "/";
+      filePath += upload_.fileName;
+      SdMan.remove(filePath.c_str());
+      upload_.ownsFile = false;
+    }
+    if (upload_.error.isEmpty()) upload_.error = "Upload aborted";
+    upload_.success = false;
     LOG_ERR(TAG, "Upload aborted");
   }
 }
 
 void PapyrixWebServer::handleUploadPost() {
   if (upload_.success) {
+    upload_.ownsFile = false;
     server_->send(200, "text/plain", "File uploaded: " + upload_.fileName);
   } else {
     String error = upload_.error.isEmpty() ? "Unknown error" : upload_.error;
@@ -602,18 +579,19 @@ void PapyrixWebServer::handleLocaleUpload() {
   HTTPUpload& upload = server_->upload();
 
   if (upload.status == UPLOAD_FILE_START) {
+    if (upload_.file) upload_.file.close();
+    if (upload_.ownsFile && !upload_.success) {
+      String oldPath = upload_.path;
+      if (!oldPath.endsWith("/")) oldPath += "/";
+      oldPath += upload_.fileName;
+      SdMan.remove(oldPath.c_str());
+    }
+    upload_.ownsFile = false;
     upload_.fileName = "locale.txt";
     upload_.path = PAPYRIX_DIR;
     upload_.size = 0;
     upload_.success = false;
     upload_.error = "";
-    upload_.bufferPos = 0;
-
-    if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < UploadState::BUFFER_SIZE * 2) {
-      upload_.error = "Insufficient memory for upload";
-      return;
-    }
-    upload_.buffer.resize(UploadState::BUFFER_SIZE);
 
     if (!FsHelpers::hasExtension(upload.filename.c_str(), ".txt")) {
       upload_.error = "Only .txt files accepted";
@@ -630,61 +608,48 @@ void PapyrixWebServer::handleLocaleUpload() {
       upload_.error = "Failed to create locale file";
       return;
     }
-
+    upload_.ownsFile = true;
   } else if (upload.status == UPLOAD_FILE_WRITE) {
     if (upload_.file && upload_.error.isEmpty()) {
-      const uint8_t* data = upload.buf;
-      size_t remaining = upload.currentSize;
-
-      while (remaining > 0) {
-        size_t space = UploadState::BUFFER_SIZE - upload_.bufferPos;
-        size_t toCopy = remaining < space ? remaining : space;
-        memcpy(upload_.buffer.data() + upload_.bufferPos, data, toCopy);
-        upload_.bufferPos += toCopy;
-        data += toCopy;
-        remaining -= toCopy;
-
-        if (upload_.bufferPos >= UploadState::BUFFER_SIZE) {
-          if (!flushUploadBuffer()) {
-            upload_.error = "Write failed - disk full?";
-            upload_.file.close();
-            return;
-          }
-        }
+      const size_t written = upload_.file.write(upload.buf, upload.currentSize);
+      if (written != upload.currentSize) {
+        upload_.error = "Write failed - disk full?";
+        upload_.file.close();
+        return;
       }
-
-      upload_.size += upload.currentSize;
+      upload_.size += written;
     }
 
   } else if (upload.status == UPLOAD_FILE_END) {
-    if (upload_.file) {
-      if (upload_.error.isEmpty() && !flushUploadBuffer()) {
-        upload_.error = "Write failed - disk full?";
-      }
-      upload_.file.close();
-      if (upload_.error.isEmpty()) {
-        upload_.success = true;
-        LOG_INF(TAG, "Locale upload complete: %zu bytes", upload_.size);
-      }
+    const bool hadFile = static_cast<bool>(upload_.file);
+    if (hadFile && upload_.error.isEmpty() && !upload_.file.sync()) {
+      upload_.error = "Write failed - disk full?";
     }
-    upload_.buffer.clear();
-    upload_.buffer.shrink_to_fit();
+    if (upload_.file) upload_.file.close();
+    if (hadFile && upload_.error.isEmpty()) {
+      upload_.success = true;
+      LOG_INF(TAG, "Locale upload complete: %zu bytes", upload_.size);
+    } else if (upload_.ownsFile) {
+      SdMan.remove(LOCALE_PATH);
+      upload_.ownsFile = false;
+    }
 
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
-    upload_.bufferPos = 0;
-    upload_.buffer.clear();
-    upload_.buffer.shrink_to_fit();
-    if (upload_.file) {
-      upload_.file.close();
+    if (upload_.success) return;
+    if (upload_.file) upload_.file.close();
+    if (upload_.ownsFile) {
       SdMan.remove(LOCALE_PATH);
+      upload_.ownsFile = false;
     }
-    upload_.error = "Upload aborted";
+    upload_.success = false;
+    if (upload_.error.isEmpty()) upload_.error = "Upload aborted";
     LOG_ERR(TAG, "Locale upload aborted");
   }
 }
 
 void PapyrixWebServer::handleLocaleUploadPost() {
   if (upload_.success) {
+    upload_.ownsFile = false;
     server_->send(200, "text/plain", "Locale file uploaded");
   } else {
     String error = upload_.error.isEmpty() ? "Unknown error" : upload_.error;
@@ -732,18 +697,19 @@ void PapyrixWebServer::handleFirmwareUpload() {
   HTTPUpload& upload = server_->upload();
 
   if (upload.status == UPLOAD_FILE_START) {
+    if (upload_.file) upload_.file.close();
+    if (upload_.ownsFile && !upload_.success) {
+      String oldPath = upload_.path;
+      if (!oldPath.endsWith("/")) oldPath += "/";
+      oldPath += upload_.fileName;
+      SdMan.remove(oldPath.c_str());
+    }
+    upload_.ownsFile = false;
     upload_.fileName = "firmware.bin";
     upload_.path = "/";
     upload_.size = 0;
     upload_.success = false;
     upload_.error = "";
-    upload_.bufferPos = 0;
-
-    if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < UploadState::BUFFER_SIZE * 2) {
-      upload_.error = "Insufficient memory for upload";
-      return;
-    }
-    upload_.buffer.resize(UploadState::BUFFER_SIZE);
 
     if (!FsHelpers::hasExtension(upload.filename.c_str(), ".bin")) {
       upload_.error = "Only .bin files accepted";
@@ -760,61 +726,48 @@ void PapyrixWebServer::handleFirmwareUpload() {
       upload_.error = "Failed to create firmware file";
       return;
     }
-
+    upload_.ownsFile = true;
   } else if (upload.status == UPLOAD_FILE_WRITE) {
     if (upload_.file && upload_.error.isEmpty()) {
-      const uint8_t* data = upload.buf;
-      size_t remaining = upload.currentSize;
-
-      while (remaining > 0) {
-        size_t space = UploadState::BUFFER_SIZE - upload_.bufferPos;
-        size_t toCopy = remaining < space ? remaining : space;
-        memcpy(upload_.buffer.data() + upload_.bufferPos, data, toCopy);
-        upload_.bufferPos += toCopy;
-        data += toCopy;
-        remaining -= toCopy;
-
-        if (upload_.bufferPos >= UploadState::BUFFER_SIZE) {
-          if (!flushUploadBuffer()) {
-            upload_.error = "Write failed - disk full?";
-            upload_.file.close();
-            return;
-          }
-        }
+      const size_t written = upload_.file.write(upload.buf, upload.currentSize);
+      if (written != upload.currentSize) {
+        upload_.error = "Write failed - disk full?";
+        upload_.file.close();
+        return;
       }
-
-      upload_.size += upload.currentSize;
+      upload_.size += written;
     }
 
   } else if (upload.status == UPLOAD_FILE_END) {
-    if (upload_.file) {
-      if (upload_.error.isEmpty() && !flushUploadBuffer()) {
-        upload_.error = "Write failed - disk full?";
-      }
-      upload_.file.close();
-      if (upload_.error.isEmpty()) {
-        upload_.success = true;
-        LOG_INF(TAG, "Firmware upload complete: %zu bytes", upload_.size);
-      }
+    const bool hadFile = static_cast<bool>(upload_.file);
+    if (hadFile && upload_.error.isEmpty() && !upload_.file.sync()) {
+      upload_.error = "Write failed - disk full?";
     }
-    upload_.buffer.clear();
-    upload_.buffer.shrink_to_fit();
+    if (upload_.file) upload_.file.close();
+    if (hadFile && upload_.error.isEmpty()) {
+      upload_.success = true;
+      LOG_INF(TAG, "Firmware upload complete: %zu bytes", upload_.size);
+    } else if (upload_.ownsFile) {
+      SdMan.remove(PAPYRIX_FIRMWARE_FILE);
+      upload_.ownsFile = false;
+    }
 
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
-    upload_.bufferPos = 0;
-    upload_.buffer.clear();
-    upload_.buffer.shrink_to_fit();
-    if (upload_.file) {
-      upload_.file.close();
+    if (upload_.success) return;
+    if (upload_.file) upload_.file.close();
+    if (upload_.ownsFile) {
       SdMan.remove(PAPYRIX_FIRMWARE_FILE);
+      upload_.ownsFile = false;
     }
-    upload_.error = "Upload aborted";
+    if (upload_.error.isEmpty()) upload_.error = "Upload aborted";
+    upload_.success = false;
     LOG_ERR(TAG, "Firmware upload aborted");
   }
 }
 
 void PapyrixWebServer::handleFirmwareUploadPost() {
   if (upload_.success) {
+    upload_.ownsFile = false;
     server_->send(200, "text/plain", "Firmware file uploaded");
   } else {
     String error = upload_.error.isEmpty() ? "Unknown error" : upload_.error;

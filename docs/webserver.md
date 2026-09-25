@@ -137,6 +137,10 @@ The Books tab is the default view. It shows files and folders on the SD card roo
 
 **Note:** Files with uppercase extensions (for example, `Book.EPUB`) are changed to lowercase on upload. Unsupported file types are rejected.
 
+The server writes each received multipart block to the SD card. It does not
+allocate a second upload buffer. A failed write or sync rejects the upload.
+The server then removes the incomplete file that the request created.
+
 #### Creating Folders
 
 1. Click the **New Folder** button.

@@ -37,11 +37,36 @@ class LocalsendHeaderParser {
 
   uint64_t contentLength = 0;
   bool chunked = false;
+  bool invalid = false;
 
   HeaderFeed feed(const char* line);
 
  private:
   int lines_ = 0;
+  bool hasContentLength_ = false;
+  bool hasTransferEncoding_ = false;
+};
+
+enum class ChunkFeed : uint8_t { NeedInput, Complete, Invalid };
+
+// Incremental, bounded HTTP chunk decoder. It emits decoded bytes only.
+class LocalsendChunkDecoder {
+ public:
+  explicit LocalsendChunkDecoder(uint64_t expectedBytes) : expectedBytes_(expectedBytes) {}
+
+  ChunkFeed feed(const uint8_t* input, size_t inputLen, size_t* inputUsed, uint8_t* output, size_t outputCap,
+                 size_t* outputLen);
+
+ private:
+  enum class State : uint8_t { Line, Data, DataCR, DataLF, Trailers, Done, Failed };
+  State state_ = State::Line;
+  uint64_t expectedBytes_;
+  uint64_t decodedBytes_ = 0;
+  uint64_t chunkRemaining_ = 0;
+  char line_[128] = {};
+  size_t lineLen_ = 0;
+  int trailerLines_ = 0;
+  bool sawCR_ = false;
 };
 
 // Computes the destination pointer and the remaining room for one body read.

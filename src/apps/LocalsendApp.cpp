@@ -12,6 +12,7 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 
+#include <cstring>
 #include <new>
 
 #include "../core/Core.h"
@@ -157,6 +158,36 @@ class LineReader {
     }
     return true;
   }
+  bool readChunkedBodyTo(FsFile* sink, uint64_t expectedBytes, uint8_t* buf, size_t bufLen, uint64_t* written) {
+    LocalsendChunkDecoder decoder(expectedBytes);
+    unsigned long stallStart = millis();
+    *written = 0;
+    for (;;) {
+      if (budgetMs != 0 && millis() - startedMs >= budgetMs) return false;
+      if (aborted()) return false;
+      if (client_.available() > 0) {
+        const int n = client_.read(buf, bufLen);
+        if (n <= 0) return false;
+        stallStart = millis();
+        size_t used = 0;
+        size_t produced = 0;
+        const ChunkFeed result = decoder.feed(buf, static_cast<size_t>(n), &used, buf, bufLen, &produced);
+        if (result == ChunkFeed::Invalid) return false;
+        if (produced > 0) {
+          if (sink->write(buf, produced) != produced) return false;
+          *written += produced;
+        }
+        if (result == ChunkFeed::Complete) return true;
+        if (used != static_cast<size_t>(n)) return false;
+        pumpInput();
+        continue;
+      }
+      if (!client_.connected()) return false;
+      if (millis() - stallStart > CLIENT_READ_TIMEOUT_MS) return false;
+      pumpInput();
+      delay(2);
+    }
+  }
 
   bool writeAll(const char* data, size_t len) {
     while (len > 0) {
@@ -170,6 +201,60 @@ class LineReader {
 
  private:
   WiFiClient& client_;
+};
+
+class PrepareBodyReader {
+ public:
+  PrepareBodyReader(LineReader& io, uint64_t length) : io_(io), remaining_(length) {}
+
+  int read() {
+    if (pos_ == filled_ && !refill()) return -1;
+    return buffer_[pos_++];
+  }
+
+  size_t readBytes(char* out, size_t length) {
+    size_t copied = 0;
+    while (copied < length) {
+      if (pos_ == filled_ && !refill()) break;
+      const size_t available = filled_ - pos_;
+      const size_t take = available < length - copied ? available : length - copied;
+      memcpy(out + copied, buffer_ + pos_, take);
+      copied += take;
+      pos_ += take;
+    }
+    return copied;
+  }
+
+  bool finish() {
+    if (failed_) return false;
+    int c;
+    while ((c = read()) >= 0) {
+      if (c != ' ' && c != '\t' && c != '\r' && c != '\n') return false;
+    }
+    return !failed_ && remaining_ == 0;
+  }
+
+ private:
+  bool refill() {
+    if (failed_ || remaining_ == 0) return false;
+    const size_t want = remaining_ < sizeof(buffer_) ? static_cast<size_t>(remaining_) : sizeof(buffer_);
+    uint64_t got = 0;
+    if (!io_.readBodyTo(buffer_, sizeof(buffer_), want, nullptr, &got) || got != want) {
+      failed_ = true;
+      return false;
+    }
+    remaining_ -= got;
+    pos_ = 0;
+    filled_ = static_cast<size_t>(got);
+    return true;
+  }
+
+  LineReader& io_;
+  uint64_t remaining_;
+  uint8_t buffer_[256];
+  size_t pos_ = 0;
+  size_t filled_ = 0;
+  bool failed_ = false;
 };
 
 uint32_t nowMs() { return millis(); }
@@ -237,13 +322,7 @@ void handlePrepareUpload(LineReader& io, uint64_t contentLength, const char* cli
     sendEmpty(io, 400);
     return;
   }
-  static char body[JSON_BODY_CAP];  // static: 16KB must not land on the stack
-  uint64_t got = 0;
-  if (!io.readBodyTo(reinterpret_cast<uint8_t*>(body), sizeof(body), contentLength, nullptr, &got) ||
-      got != contentLength) {
-    sendEmpty(io, 400);
-    return;
-  }
+  PrepareBodyReader body(io, contentLength);
 
   // Filter: only the three used fields allocate. Sender previews and
   // metadata stay out of the heap.
@@ -252,8 +331,7 @@ void handlePrepareUpload(LineReader& io, uint64_t contentLength, const char* cli
   filter["files"]["*"]["fileName"] = true;
   filter["files"]["*"]["size"] = true;
   JsonDocument doc;
-  if (deserializeJson(doc, body, static_cast<size_t>(contentLength), DeserializationOption::Filter(filter)) !=
-          DeserializationError::Ok ||
+  if (deserializeJson(doc, body, DeserializationOption::Filter(filter)) != DeserializationError::Ok || !body.finish() ||
       !doc["files"].is<JsonObject>()) {
     sendEmpty(io, 400);
     return;
@@ -301,7 +379,7 @@ void handlePrepareUpload(LineReader& io, uint64_t contentLength, const char* cli
   LOG_INF(TAG, "LocalSend session started");
 }
 
-void handleUpload(LineReader& io, const char* target, uint64_t contentLength, const char* clientIp) {
+void handleUpload(LineReader& io, const char* target, uint64_t contentLength, bool chunked, const char* clientIp) {
   char sid[17], fileId[65], token[17];
   if (!queryParam(target, "sessionId", sid, sizeof(sid)) || !queryParam(target, "fileId", fileId, sizeof(fileId)) ||
       !queryParam(target, "token", token, sizeof(token))) {
@@ -313,10 +391,7 @@ void handleUpload(LineReader& io, const char* target, uint64_t contentLength, co
     sendEmpty(io, 403);
     return;
   }
-  // The announced size is part of the accepted session: a different body
-  // length means a truncated or wrong upload, not a received file. Sizes are
-  // already capped at prepare, so a match implies the cap holds here.
-  if (contentLength != entry->size) {
+  if (!chunked && contentLength != entry->size) {
     sendEmpty(io, 400);
     return;
   }
@@ -344,9 +419,11 @@ void handleUpload(LineReader& io, const char* target, uint64_t contentLength, co
   }
   static uint8_t buf[4096];
   uint64_t written = 0;
-  const bool ok = io.readBodyTo(buf, sizeof(buf), contentLength, &out, &written);
+  const bool ok = chunked ? io.readChunkedBodyTo(&out, entry->size, buf, sizeof(buf), &written)
+                          : io.readBodyTo(buf, sizeof(buf), contentLength, &out, &written);
+  const bool synced = ok && written == entry->size && out.sync();
   out.close();
-  if (!ok || written != contentLength) {
+  if (!synced) {
     sendEmpty(io, 500);
     SdMan.remove(full);  // a partial file is not a received file: drop it
     return;
@@ -387,13 +464,17 @@ void serveClient(WiFiClient& client, LineReader& io) {
       return;
     }
   }
-  if (headers.chunked) {
-    // LocalSend senders use Content-Length; chunked needs the chunked codec.
+  if (headers.invalid) {
     sendEmpty(io, 400);
     return;
   }
   const uint64_t contentLength = headers.contentLength;
-  switch (matchLocalsendRoute(method, target)) {
+  const LocalsendRoute route = matchLocalsendRoute(method, target);
+  if (headers.chunked && route != LocalsendRoute::Upload) {
+    sendEmpty(io, 400);
+    return;
+  }
+  switch (route) {
     case LocalsendRoute::Register:
       handleRegister(io, contentLength);
       break;
@@ -401,7 +482,7 @@ void serveClient(WiFiClient& client, LineReader& io) {
       handlePrepareUpload(io, contentLength, clientIp);
       break;
     case LocalsendRoute::Upload:
-      handleUpload(io, target, contentLength, clientIp);
+      handleUpload(io, target, contentLength, headers.chunked, clientIp);
       break;
     case LocalsendRoute::Cancel: {
       char sid[17];

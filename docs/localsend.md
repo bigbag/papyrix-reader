@@ -52,9 +52,14 @@ last file.
 * Upload connections have no total time cap once the file body starts. A
   transfer that stalls for 2.5 seconds is aborted. Other requests allow
   120 seconds.
+* File uploads accept a `Content-Length` body or a chunked body. Other routes
+  do not accept chunked bodies. The receiver removes an incomplete file when
+  framing or storage fails. It does not count that file as received.
 * File names are made safe for the SD card: the device takes the base name,
   removes unsafe characters, and truncates to 128 characters.
 * The device accepts a maximum of 16 files per session.
+* A preparation request can contain up to 16 KiB of JSON. The receiver reads
+  it in small blocks instead of keeping the complete request in RAM.
 
 ## Logo
 

@@ -4,7 +4,6 @@
 #include <WebServer.h>
 
 #include <memory>
-#include <vector>
 
 namespace papyrix {
 
@@ -26,15 +25,10 @@ class PapyrixWebServer {
     String fileName;
     String path = "/";
     size_t size = 0;
+    bool ownsFile = false;
     bool success = false;
     String error = "";
-
-    static constexpr size_t BUFFER_SIZE = 4096;
-    std::vector<uint8_t> buffer;
-    size_t bufferPos = 0;
   };
-
-  bool flushUploadBuffer();
 
   std::unique_ptr<WebServer> server_;
   bool running_ = false;
