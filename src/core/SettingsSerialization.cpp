@@ -81,7 +81,7 @@ SettingsReadStatus readSettingsFile(FsFile& file, const Settings& defaults, Sett
   READ_SETTING(serialization::readPodValidated(file, candidate.sleepScreen, uint8_t(5)));
   READ_SETTING(serialization::readPodValidated(file, candidate.textLayout, uint8_t(3)));
   READ_SETTING(serialization::readPodValidated(file, candidate.shortPwrBtn, uint8_t(4)));
-  READ_SETTING(serialization::readPodValidated(file, candidate.statusBar, uint8_t(3)));
+  READ_SETTING(serialization::readPodValidated(file, candidate.statusBar, uint8_t(4)));
   READ_SETTING(serialization::readPodValidated(file, candidate.orientation, uint8_t(4)));
   READ_SETTING(serialization::readPodValidated(file, candidate.fontSize, uint8_t(4)));
   READ_SETTING(serialization::readPodValidated(file, candidate.pagesPerRefresh, uint8_t(6)));

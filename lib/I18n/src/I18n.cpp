@@ -257,6 +257,7 @@ static constexpr KeyMapping KEY_MAP[] = {
     {"INVALID_SSID", StrId::STR_INVALID_SSID},
     {"NETWORK_LIMIT", StrId::STR_NETWORK_LIMIT},
     {"SSID_ALREADY_SAVED", StrId::STR_SSID_ALREADY_SAVED},
+    {"FILENAME_VAL", StrId::STR_FILENAME_VAL},
 };
 // clang-format on
 

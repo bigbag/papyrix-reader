@@ -141,7 +141,7 @@ int main() {
     expected.sleepScreen = Settings::SleepCover;
     expected.textLayout = Settings::LayoutLarge;
     expected.shortPwrBtn = Settings::PowerBookmark;
-    expected.statusBar = Settings::StatusChapter;
+    expected.statusBar = Settings::StatusFilename;
     expected.orientation = Settings::LandscapeCCW;
     expected.fontSize = Settings::FontLarge;
     expected.pagesPerRefresh = Settings::PPR30;
@@ -179,6 +179,7 @@ int main() {
     Settings decoded;
     expectStatus(runner, SettingsReadStatus::Ok, readSettingsFile(file, Settings{}, decoded),
                  "full_settings_read_success");
+    runner.expectEq<uint8_t>(Settings::StatusFilename, decoded.statusBar, "filename_status_mode_roundtrip");
     const bool scalarMatch =
         decoded.sleepScreen == expected.sleepScreen && decoded.textLayout == expected.textLayout &&
         decoded.shortPwrBtn == expected.shortPwrBtn && decoded.statusBar == expected.statusBar &&

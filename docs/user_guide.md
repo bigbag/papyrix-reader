@@ -209,12 +209,13 @@ Text and reading settings, in menu order:
   - Show inline images in EPUB content and book covers
   - Set to off for faster page rendering (images show an "[Image]" placeholder)
 
-- **Status Bar** (default: Full)
-  - Options: None, No Progress, Full
-  - Controls the reading screen status bar display
-  - **Full:** Shows battery, book title, and page number (for example, "5 / 12")
-  - **No Progress:** Shows battery and book title only
-  - **None:** Hides the status bar fully for maximum reading area
+- **Status Bar** (default: Title)
+  - Options: None, Title, Chapter, Filename.
+  - **Title:** Shows the book title, battery, and page number.
+  - **Chapter:** Shows the current chapter when available. Otherwise, it shows the book title.
+  - **Filename:** Shows the file name on the SD card, including its extension.
+  - **None:** Hides the status bar to give more space for book text.
+  - Long titles and file names are shortened to fit the status bar.
   - The page indicator marks estimated totals with `~`. See [Status Bar](#status-bar).
 
 - **Touch page turns** (X4 Pro only, default: ON)
@@ -540,7 +541,7 @@ After you open a book, the button layout changes to help you read.
 
 ### Status Bar
 
-When **Settings → Reader → Status Bar** is on, the bottom of the reading screen shows battery, current chapter or book title, and the page indicator on the right. The page indicator has three forms:
+When **Settings → Reader → Status Bar** is not **None**, the bottom of the reading screen shows the battery, the selected title, chapter, or file name, and the page indicator on the right. The page indicator has three forms:
 
 - **`123/456`** — exact total. The full book is laid out and cached.
 - **`123/456~`** — the total is an estimate. The cache is still built in increments (the number increases as you read) or — for non-EPUB formats with no cache yet (for example, immediately after **Clear Book Cache**) — it is a file-size estimate. The number changes to the exact total when cache completes.

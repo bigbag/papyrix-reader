@@ -278,3 +278,4 @@ SAVE_FAILED=Save failed
 INVALID_SSID=SSID: 1-32 characters
 NETWORK_LIMIT=Network limit reached
 SSID_ALREADY_SAVED=Already saved
+FILENAME_VAL=Filename

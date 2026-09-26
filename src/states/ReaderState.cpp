@@ -1779,6 +1779,10 @@ void ReaderState::renderStatusBar(Core& core, int marginRight, int marginBottom,
   ui::ReaderStatusBarData data{};
   data.mode = core.settings.statusBar;
   data.title = core.content.metadata().title;
+  if (data.mode == Settings::StatusFilename) {
+    const char* filename = strrchr(contentPath_, '/');
+    data.title = filename ? filename + 1 : contentPath_;
+  }
 
   // Resolve chapter title if in Chapter mode (cached to avoid SD I/O on every render).
   // EPUB resolution opens an .anchors file on SD, so we cache the page range over

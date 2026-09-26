@@ -16,7 +16,7 @@ void ReaderSettingsView::initDefs() {
   static const char* textLayoutValues[3];
   static const char* lineSpacingValues[4];
   static const char* alignmentValues[4];
-  static const char* statusBarValues[3];
+  static const char* statusBarValues[4];
 
   fontSizeValues[0] = tr(XSMALL);
   fontSizeValues[1] = tr(SMALL);
@@ -36,6 +36,7 @@ void ReaderSettingsView::initDefs() {
   statusBarValues[0] = tr(NONE_VAL);
   statusBarValues[1] = tr(TITLE_VAL);
   statusBarValues[2] = tr(CHAPTER_VAL);
+  statusBarValues[3] = tr(FILENAME_VAL);
 
   DEFS[0] = {tr(FONT_SIZE), SettingType::Enum, fontSizeValues, 4};
   DEFS[1] = {tr(TEXT_LAYOUT), SettingType::Enum, textLayoutValues, 3};
@@ -43,7 +44,7 @@ void ReaderSettingsView::initDefs() {
   DEFS[3] = {tr(PARAGRAPH_ALIGNMENT), SettingType::Enum, alignmentValues, 4};
   DEFS[4] = {tr(HYPHENATION), SettingType::Toggle, nullptr, 0};
   DEFS[5] = {tr(SHOW_IMAGES), SettingType::Toggle, nullptr, 0};
-  DEFS[6] = {tr(STATUS_BAR), SettingType::Enum, statusBarValues, 3};
+  DEFS[6] = {tr(STATUS_BAR), SettingType::Enum, statusBarValues, 4};
   DEFS[7] = {tr(TOUCH_PAGE_TURNS), SettingType::Toggle, nullptr, 0};
   DEFS[8] = {tr(FULL_BOOK_PROCESS), SettingType::Toggle, nullptr, 0};
 }

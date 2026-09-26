@@ -281,6 +281,7 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "SSID: 1-32 characters",           // INVALID_SSID
     "Network limit reached",           // NETWORK_LIMIT
     "Already saved",                   // SSID_ALREADY_SAVED
+    "Filename",                        // FILENAME_VAL
 };
 // clang-format on
 
