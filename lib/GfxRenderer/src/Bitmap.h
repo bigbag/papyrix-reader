@@ -43,6 +43,8 @@ class Bitmap {
   BmpReaderError rewindToData() const;
   bool hasCompletePixelData() const;
   bool preloadAllRows() const;
+  bool preloadRowsInPsram() const;
+  void disablePreload() const { preloadDisabled_ = true; }
   bool isPreloaded() const { return preloadedRows_ != nullptr; }
   const uint8_t* preloadedRow(int rowIndex) const;
   int getWidth() const { return width; }
@@ -66,6 +68,9 @@ class Bitmap {
   uint8_t paletteLum[256] = {};
   bool isIdentityPalette_ = false;
   mutable uint8_t* preloadedRows_ = nullptr;
+  mutable bool preloadedInPsram_ = false;
+  mutable bool preloadDisabled_ = false;
+  bool preloadRows(bool inPsram) const;
 
   BmpReaderError loadRawRow(uint8_t* rowBuffer, int storageRowY) const;
 

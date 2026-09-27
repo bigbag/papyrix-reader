@@ -2,6 +2,7 @@
 
 #include <ImageConverter.h>
 #include <SDCardManager.h>
+#include <freertos/task.h>
 
 #include <cstdint>
 #include <string>
@@ -40,6 +41,11 @@ int main() {
 
   ImageConvertConfig config;
   config.logTag = "TEST";
+  mockTaskStackHighWaterMarkBytes = 2048;
+  runner.expectFalse(ImageConverterFactory::convertToBmp("/wrong.png", "/low-stack.bmp", config),
+                     "2 KB of actual free stack prevents image conversion");
+  runner.expectFalse(SdMan.exists("/low-stack.bmp"), "low-stack image is not published");
+  mockTaskStackHighWaterMarkBytes = 4096;
   runner.expectTrue(ImageConverterFactory::convertToBmp("/wrong.png", "/jpeg.bmp", config),
                     "misleading extension converts by JPEG signature");
   runner.expectTrue(SdMan.getWrittenData("/jpeg.bmp") == "JPEG", "JPEG converter selected");

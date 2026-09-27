@@ -161,12 +161,11 @@ This makes sure that some damaged images do not prevent you from reading the rem
 
 ## Memory Management
 
-### Heap Monitoring
+### Heap and Stack Checks
 
-Before the firmware processes each image:
-1. Check `heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)`.
-2. If less than 8KB, skip the image and show a placeholder.
-3. Write a warning to the log for diagnostics.
+The converter checks the lowest recorded free stack of the current task. It stops below 4096 bytes on ESP32-S3 or below 1024 bytes on ESP32-C3. BMP conversion also checks row-buffer memory when it needs more than 1024 bytes. It stops if the estimated buffers need more than 80% of the largest free 8-bit heap block.
+
+The ESP32-S3 reader and cache tasks each use a 20 KiB stack. The ESP32-C3 reader and cache tasks each use a 12 KiB stack.
 
 ### Temporary Files
 
@@ -203,7 +202,7 @@ If you set images to off:
 1. Enable **Settings > Reader > Show Images**.
 2. Check that the image uses JPEG, PNG, or BMP format.
 3. Check the free space on the SD card.
-4. Try to clear the book cache (**Settings > Cleanup > Clear Book Cache**).
+4. Clear the book cache (**Settings > Cleanup > Clear Book Cache**) after a conversion failure. A `.failed` marker prevents automatic retry.
 
 ### Slow Page Loading with Images
 

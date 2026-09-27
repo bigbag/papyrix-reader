@@ -8,6 +8,7 @@
 #include <Logging.h>
 #include <Page.h>
 #include <ParsedText.h>
+#include <ParserScratch.h>
 #include <SDCardManager.h>
 #include <Utf8.h>
 #include <core/PerfLog.h>
@@ -127,7 +128,8 @@ void Fb2Parser::reset() {
 bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint32_t maxPages,
                            const AbortCallback& shouldAbort) {
   const uint32_t scratchStarted = millis();
-  BuildArena scratch(renderer_.getFrameBuffer(), renderer_.getBufferSize());
+  ParserScratch scratchBuffer(renderer_.getFrameBuffer(), renderer_.getBufferSize());
+  BuildArena scratch(scratchBuffer.data(), scratchBuffer.capacity());
   ScratchReporter scratchReporter(TAG, scratch, scratchStarted);
   buildScratch_ = &scratch;
   struct ClearScratch {
@@ -168,6 +170,14 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
     if (pendingSpacing_ > 0) {
       currentPageNextY_ += pendingSpacing_;
       pendingSpacing_ = 0;
+    }
+    if (currentTextBlock_) {
+      if (currentTextBlock_->isEmpty()) {
+        currentTextBlock_.reset();
+      } else {
+        makePages();
+        if (stopRequested_) return true;
+      }
     }
 
     auto status = XML_ResumeParser(xmlParser_);
@@ -226,7 +236,7 @@ bool Fb2Parser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onP
   while (resumeFile_.available() > 0) {
     if (++abortCheckCounter % 10 == 0) {
 #ifdef ARDUINO
-      esp_task_wdt_reset();
+      if (esp_task_wdt_status(nullptr) == ESP_OK) esp_task_wdt_reset();
 #endif
     }
     if (shouldAbort_ && (abortCheckCounter % 10 == 0) && shouldAbort_()) {
@@ -336,19 +346,17 @@ void XMLCALL Fb2Parser::startElement(void* userData, const XML_Char* name, const
       if (self->currentPage_ && !self->currentPage_->elements.empty()) {
         self->onPageComplete_(std::move(self->currentPage_));
         self->pagesCreated_++;
-        if (self->maxPages_ > 0 && self->pagesCreated_ >= self->maxPages_) {
-          self->hitMaxPages_ = true;
-          self->stopRequested_ = true;
-          XML_StopParser(self->xmlParser_, XML_TRUE);
-          self->depth_++;
-          return;
-        }
       }
       self->startNewPage();
     }
     self->firstSection_ = false;
     // Record anchor for TOC navigation: section_N → page where this section starts
     self->anchorMap_.emplace_back("section_" + std::to_string(self->sectionCounter_ - 1), self->pagesCreated_);
+    if (self->maxPages_ > 0 && self->pagesCreated_ >= self->maxPages_ && !self->stopRequested_) {
+      self->hitMaxPages_ = true;
+      self->stopRequested_ = true;
+      XML_StopParser(self->xmlParser_, XML_TRUE);
+    }
   } else if (strcmp(localName, "title") == 0) {
     self->inTitle_ = true;
     self->boldUntilDepth_ = std::min(self->boldUntilDepth_, self->depth_);
@@ -590,7 +598,9 @@ void Fb2Parser::addLineToPage(std::shared_ptr<TextBlock> line) {
     if (maxPages_ > 0 && pagesCreated_ >= maxPages_) {
       hitMaxPages_ = true;
       stopRequested_ = true;
-      XML_StopParser(xmlParser_, XML_TRUE);
+      XML_ParsingStatus status;
+      XML_GetParsingStatus(xmlParser_, &status);
+      if (status.parsing != XML_SUSPENDED) XML_StopParser(xmlParser_, XML_TRUE);
     }
   }
 

@@ -1,6 +1,9 @@
 #include "ReaderState.h"
 
 #include <Arduino.h>
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC
+#include <BitmapTurnCache.h>
+#endif
 #include <ContentParser.h>
 #include <CoverHelpers.h>
 #include <EpubChapterParser.h>
@@ -17,6 +20,7 @@
 #include <PlainTextParser.h>
 #include <SDCardManager.h>
 #include <Serialization.h>
+#include <TargetConfig.h>
 #include <TouchTransform.h>
 #include <esp_heap_caps.h>
 #include <esp_system.h>
@@ -46,7 +50,7 @@
 
 namespace papyrix {
 
-static constexpr int kCacheTaskStackSize = 12288;
+static constexpr int kCacheTaskStackSize = (PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC) ? 20480 : 12288;
 static constexpr int kCacheTaskStopTimeoutMs = 10000;  // 10s - generous for slow SD operations
 
 namespace {
@@ -1574,6 +1578,9 @@ void ReaderState::renderCachedPage(Core& core) {
   const int fontId = core.settings.getReaderFontId(theme);
 
   page->warmGlyphs(renderer_, fontId);
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC
+  BitmapTurnCache bitmapCache(renderer_);
+#endif
 
   renderPageContents(core, *page, vp.marginTop, vp.marginRight, vp.marginBottom, vp.marginLeft);
   renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
@@ -1929,7 +1936,20 @@ bool ReaderState::renderCoverPage(Core& core) {
 }
 
 void ReaderState::startBackgroundCaching(Core& core) {
-  if (core.content.metadata().type == ContentType::Xtc && thumbnailDone_ && coverDone_) return;
+  const auto type = core.content.metadata().type;
+  if (type == ContentType::Xtc && thumbnailDone_ && coverDone_) return;
+  if (type == ContentType::Epub || type == ContentType::Fb2) {
+    if (currentSpineIndex_ < 0) return;
+    if (type == ContentType::Epub) {
+      const auto* provider = core.content.asEpub();
+      if (!provider || !provider->getEpub() ||
+          currentSpineIndex_ >= static_cast<int>(provider->getEpub()->getSpineItemsCount()))
+        return;
+    } else {
+      const auto* provider = core.content.asFb2();
+      if (!provider || currentSpineIndex_ >= static_cast<int>(provider->getSectionCount())) return;
+    }
+  }
 
   // BackgroundTask rejects an unpublished prior generation without blocking.
   if (cacheTask_.isRunning()) {
@@ -2283,8 +2303,6 @@ void ReaderState::processIndexingChunk(Core& core) {
       indexingParser_.reset();
       renderer_.clearWidthCache();
       indexingSpine_++;
-    } else {
-      indexingParser_->clearAnchorMap();
     }
 
     if (!suppressRender_) {

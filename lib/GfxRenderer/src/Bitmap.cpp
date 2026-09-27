@@ -15,7 +15,10 @@ constexpr bool USE_ATKINSON = true;  // Use Atkinson dithering instead of Floyd-
 // ============================================================================
 
 Bitmap::~Bitmap() {
-  delete[] preloadedRows_;
+  if (preloadedInPsram_)
+    heap_caps_free(preloadedRows_);
+  else
+    delete[] preloadedRows_;
   delete atkinsonDitherer;
   delete fsDitherer;
 }
@@ -340,28 +343,38 @@ bool Bitmap::hasCompletePixelData() const {
 }
 
 bool Bitmap::preloadAllRows() const {
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC
+  return preloadRows(true);
+#else
+  return preloadRows(false);
+#endif
+}
+
+bool Bitmap::preloadRowsInPsram() const { return preloadRows(true); }
+
+bool Bitmap::preloadRows(bool inPsram) const {
   if (preloadedRows_) return true;
-  if (rowBytes <= 0 || height <= 0) return false;
+  if (preloadDisabled_ || rowBytes <= 0 || height <= 0) return false;
 
   if (static_cast<size_t>(rowBytes) > SIZE_MAX / static_cast<size_t>(height)) return false;
   const size_t total = static_cast<size_t>(rowBytes) * static_cast<size_t>(height);
   if (total > 256 * 1024) return false;
-  if (total > 1024 && total > heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) * 80 / 100) return false;
+  const uint32_t caps = inPsram ? MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT : MALLOC_CAP_8BIT;
+  if (total > 1024 && total > heap_caps_get_largest_free_block(caps) * 80 / 100) return false;
 
-  preloadedRows_ = new (std::nothrow) uint8_t[total];
-  if (!preloadedRows_) return false;
+  uint8_t* rows = inPsram ? static_cast<uint8_t*>(heap_caps_malloc(total, caps)) : new (std::nothrow) uint8_t[total];
+  if (!rows) return false;
 
-  if (!file.seek(bfOffBits)) {
-    delete[] preloadedRows_;
-    preloadedRows_ = nullptr;
-    return false;
-  }
-  if (file.read(preloadedRows_, total) != static_cast<int>(total)) {
-    delete[] preloadedRows_;
-    preloadedRows_ = nullptr;
+  if (!file.seek(bfOffBits) || file.read(rows, total) != static_cast<int>(total)) {
+    if (inPsram)
+      heap_caps_free(rows);
+    else
+      delete[] rows;
     file.seek(bfOffBits);
     return false;
   }
+  preloadedRows_ = rows;
+  preloadedInPsram_ = inPsram;
   return true;
 }
 

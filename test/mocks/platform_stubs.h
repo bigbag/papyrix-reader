@@ -1,6 +1,8 @@
 #pragma once
 
+#include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
@@ -9,18 +11,56 @@
 
 #include "Print.h"
 
-// ESP32 heap caps stubs
-#ifndef MALLOC_CAP_8BIT
-#define MALLOC_CAP_8BIT 0x01
-#endif
-inline size_t& testLargestFreeBlock() {
-  static size_t value = 200000;
-  return value;
+// Keep these values equal to ESP-IDF esp_heap_caps.h.
+#define MALLOC_CAP_8BIT (1 << 2)
+#define MALLOC_CAP_DMA (1 << 3)
+#define MALLOC_CAP_SPIRAM (1 << 10)
+#define MALLOC_CAP_INTERNAL (1 << 11)
+#define MALLOC_CAP_DEFAULT (1 << 12)
+
+struct TestHeapPool {
+  size_t freeSize;
+  size_t largestBlock;
+};
+
+inline TestHeapPool& testInternalHeap() {
+  static TestHeapPool pool{200000, 200000};
+  return pool;
 }
-inline void testSetLargestFreeBlock(size_t value) { testLargestFreeBlock() = value; }
-inline void testResetLargestFreeBlock() { testLargestFreeBlock() = 200000; }
-inline size_t heap_caps_get_largest_free_block(uint32_t) { return testLargestFreeBlock(); }
-inline size_t heap_caps_get_free_size(uint32_t) { return testLargestFreeBlock(); }
+inline TestHeapPool& testPsramHeap() {
+  static TestHeapPool pool{200000, 200000};
+  return pool;
+}
+inline bool& testPsramAllocationFailure() {
+  static bool fail = false;
+  return fail;
+}
+inline void testSetHeapPool(uint32_t caps, size_t freeSize, size_t largestBlock) {
+  auto& pool = (caps & MALLOC_CAP_SPIRAM) ? testPsramHeap() : testInternalHeap();
+  pool = {freeSize, largestBlock};
+}
+inline void testSetPsramAllocationFailure(bool fail) { testPsramAllocationFailure() = fail; }
+inline void testSetLargestFreeBlock(size_t value) {
+  testInternalHeap() = {value, value};
+  testPsramHeap() = {value, value};
+}
+inline void testResetLargestFreeBlock() {
+  testInternalHeap() = {200000, 200000};
+  testPsramHeap() = {200000, 200000};
+  testPsramAllocationFailure() = false;
+}
+inline size_t heap_caps_get_largest_free_block(uint32_t caps) {
+  if ((caps & (MALLOC_CAP_SPIRAM | MALLOC_CAP_INTERNAL)) == (MALLOC_CAP_SPIRAM | MALLOC_CAP_INTERNAL)) return 0;
+  if (caps & MALLOC_CAP_SPIRAM) return testPsramHeap().largestBlock;
+  if (caps & MALLOC_CAP_INTERNAL) return testInternalHeap().largestBlock;
+  return (caps & MALLOC_CAP_8BIT) ? std::max(testInternalHeap().largestBlock, testPsramHeap().largestBlock) : 0;
+}
+inline size_t heap_caps_get_free_size(uint32_t caps) {
+  if ((caps & (MALLOC_CAP_SPIRAM | MALLOC_CAP_INTERNAL)) == (MALLOC_CAP_SPIRAM | MALLOC_CAP_INTERNAL)) return 0;
+  if (caps & MALLOC_CAP_SPIRAM) return testPsramHeap().freeSize;
+  if (caps & MALLOC_CAP_INTERNAL) return testInternalHeap().freeSize;
+  return (caps & MALLOC_CAP_8BIT) ? testInternalHeap().freeSize + testPsramHeap().freeSize : 0;
+}
 
 // PROGMEM / pgm_read helpers for host builds
 #ifndef PROGMEM

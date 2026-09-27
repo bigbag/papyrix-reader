@@ -56,15 +56,15 @@ class ContentParser {
   virtual void reset() = 0;
 
   /**
-   * Get anchor-to-page mapping (element id → page index).
-   * Only meaningful for EPUB parsers; returns empty for other formats.
+   * Get collected anchor IDs and zero-based page indexes.
+   * EPUB indexes use chapter-wide offsets, also during partial parsing.
+   * Return rows in source order. The reader uses the first matching ID.
+   * Return an empty map when the format does not support anchors.
    */
   virtual const std::vector<std::pair<std::string, uint32_t>>& getAnchorMap() const {
     static const std::vector<std::pair<std::string, uint32_t>> empty;
     return empty;
   }
-
-  virtual void clearAnchorMap() {}
 
   /**
    * Bytes consumed from the source by the parser so far. Used to extrapolate

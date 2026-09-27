@@ -68,7 +68,7 @@ XtcPageRenderer::RenderResult XtcPageRenderer::render1Bit(xtc::XtcParser& parser
             if ((byte & static_cast<uint8_t>(0x80U >> bit)) == 0) renderer_.drawPixel(x, y, true);
           }
         }
-        esp_task_wdt_reset();
+        if (esp_task_wdt_status(nullptr) == ESP_OK) esp_task_wdt_reset();
         return true;
       },
       4096);
@@ -186,7 +186,7 @@ XtcPageRenderer::RenderResult XtcPageRenderer::compose2BitPass(xtc::XtcParser& p
           }
         }
 
-        esp_task_wdt_reset();
+        if (esp_task_wdt_status(nullptr) == ESP_OK) esp_task_wdt_reset();
         return true;
       },
       4096);

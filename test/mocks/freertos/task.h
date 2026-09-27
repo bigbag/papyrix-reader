@@ -15,7 +15,8 @@
 typedef void (*TaskFunction_t)(void*);
 using StackType_t = uint32_t;
 
-inline UBaseType_t uxTaskGetStackHighWaterMark(TaskHandle_t) { return 4096; }
+inline UBaseType_t mockTaskStackHighWaterMarkBytes = 4096;
+inline UBaseType_t uxTaskGetStackHighWaterMark(TaskHandle_t) { return mockTaskStackHighWaterMarkBytes; }
 inline const char* pcTaskGetName(TaskHandle_t) { return "test"; }
 
 // Mock task structure

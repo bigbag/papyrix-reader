@@ -6,6 +6,7 @@
 // revision 6fabbec80c4d0d7cb6654046caef367a3c750c36. The license is in
 // ../FREEINK_LICENSE.
 
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 
@@ -293,7 +294,7 @@ bool Uc8179X4ProDriver::copyGrayscaleLsb(Uc8279Bus& bus, const uint8_t* plane) {
     invalidate();
     return false;
   }
-  for (uint32_t i = 0; i < BUFFER_SIZE; ++i) grayBase_[i] = static_cast<uint8_t>(grayBase_[i] | plane[i]);
+  for (uint32_t i = 0; i < BUFFER_SIZE; ++i) grayBase_[i] |= plane[i];
   streamPlane(bus, CMD_DTM1, grayBase_);
   // LSB overwrites DTM1, so the resident black-white old plane is gone.
   oldPlaneValid_ = false;
@@ -311,9 +312,7 @@ bool Uc8179X4ProDriver::copyGrayscaleMsb(Uc8279Bus& bus, const uint8_t* plane) {
     return false;
   }
   streamPlaneXor(bus, CMD_DTM2, grayBase_, plane);
-  for (uint32_t i = 0; i < BUFFER_SIZE; ++i) {
-    grayBase_[i] = static_cast<uint8_t>(grayBase_[i] & (grayBase_[i] ^ plane[i]));
-  }
+  for (uint32_t i = 0; i < BUFFER_SIZE; ++i) grayBase_[i] &= grayBase_[i] ^ plane[i];
   grayBaseValid_ = true;
   msbValid_ = true;
   return true;

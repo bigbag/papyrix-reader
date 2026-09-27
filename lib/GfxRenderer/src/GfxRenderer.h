@@ -16,6 +16,7 @@
 class ExternalFont;
 // Forward declaration for streaming font support
 class StreamingEpdFont;
+class BitmapTurnCache;
 
 class GfxRenderer {
  public:
@@ -51,6 +52,9 @@ class GfxRenderer {
   // Mutable: getStreamingFont may trigger lazy loading of bold variant via resolver
   mutable std::map<int, std::array<StreamingEpdFont*, EpdFontFamily::kExternalStyleCount>> _streamingFonts;
   ExternalFont* _externalFont = nullptr;
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC
+  BitmapTurnCache* bitmapTurnCache_ = nullptr;
+#endif
 
   // Font IDs excluded from external font lookup (UI/status bar fonts stay builtin)
   static constexpr size_t MAX_EXCLUDED_FONT_IDS = 4;
@@ -136,6 +140,10 @@ class GfxRenderer {
 
   // Setup
   void begin();
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC
+  void setBitmapTurnCache(BitmapTurnCache* cache) { bitmapTurnCache_ = cache; }
+  BitmapTurnCache* bitmapTurnCache() const { return bitmapTurnCache_; }
+#endif
   void insertFont(int fontId, EpdFontFamily font);
   void removeFont(int fontId);
   void clearWidthCache() const {

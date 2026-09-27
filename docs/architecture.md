@@ -83,6 +83,7 @@ The controller driver owns waveform selection, RAM synchronization, and sleep.
 The reader reuses the framebuffer for grayscale masks.
 It does not require a full-page backup for antialiasing.
 See the [rendering pipeline](rendering-pipeline.md) for memory and cache ownership.
+See the [S3 reader platform](s3-platform.md) for optional PSRAM buffers and fallback paths.
 
 ## Fonts and Text
 

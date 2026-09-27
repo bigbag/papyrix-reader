@@ -291,7 +291,7 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint32
         LOG_DBG(TAG, "Page %u cached", pageCount_ - 1);
 
 #ifdef ARDUINO
-        if (pageCount_ % 10 == 0) esp_task_wdt_reset();
+        if (pageCount_ % 10 == 0 && esp_task_wdt_status(nullptr) == ESP_OK) esp_task_wdt_reset();
 #endif
 
         if (maxPages > 0 && pageCount_ >= maxPages) {

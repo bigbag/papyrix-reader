@@ -317,7 +317,7 @@ bool Uc8279X4ProDriver::copyGrayscaleLsb(Uc8279Bus& bus, const uint8_t* plane) {
     invalidate();
     return false;
   }
-  for (uint32_t i = 0; i < BUFFER_SIZE; ++i) grayBase_[i] = static_cast<uint8_t>(grayBase_[i] | plane[i]);
+  for (uint32_t i = 0; i < BUFFER_SIZE; ++i) grayBase_[i] |= plane[i];
   streamPlane(bus, CMD_DTM1, grayBase_, true);
   // LSB overwrites DTM1, so the resident black-white old plane is gone.
   oldPlaneValid_ = false;
@@ -335,9 +335,7 @@ bool Uc8279X4ProDriver::copyGrayscaleMsb(Uc8279Bus& bus, const uint8_t* plane) {
     return false;
   }
   streamPlaneXor(bus, CMD_DTM2, grayBase_, plane, true);
-  for (uint32_t i = 0; i < BUFFER_SIZE; ++i) {
-    grayBase_[i] = static_cast<uint8_t>(grayBase_[i] & (grayBase_[i] ^ plane[i]));
-  }
+  for (uint32_t i = 0; i < BUFFER_SIZE; ++i) grayBase_[i] &= grayBase_[i] ^ plane[i];
   grayBaseValid_ = true;
   msbValid_ = true;
   return true;

@@ -8,6 +8,7 @@
 #include <Hyphenation.h>
 #include <Logging.h>
 #include <Page.h>
+#include <ParserScratch.h>
 #include <SDCardManager.h>
 #include <core/PerfLog.h>
 #include <esp_heap_caps.h>
@@ -76,6 +77,7 @@ void EpubChapterParser::reset() {
   parseHtmlPath_.clear();
   chapterBasePath_.clear();
   anchorMap_.clear();
+  capturedSubSectionAnchors_ = 0;
   currentSubSection_ = 0;
   totalSubSections_ = 0;
   subSectionPageOffset_ = 0;
@@ -83,17 +85,32 @@ void EpubChapterParser::reset() {
 }
 
 const std::vector<std::pair<std::string, uint32_t>>& EpubChapterParser::getAnchorMap() const {
-  if (liveParser_) {
+  if (liveParser_ && totalSubSections_ == 0) {
     return liveParser_->getAnchorMap();
   }
   return anchorMap_;
 }
 
+void EpubChapterParser::captureSubSectionAnchors() {
+  if (totalSubSections_ == 0) return;
+  const auto& anchors = liveParser_->getAnchorMap();
+  for (; capturedSubSectionAnchors_ < anchors.size(); ++capturedSubSectionAnchors_) {
+    const auto& anchor = anchors[capturedSubSectionAnchors_];
+    anchorMap_.emplace_back(anchor.first, anchor.second + static_cast<uint32_t>(subSectionPageOffset_));
+  }
+}
+
 bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint32_t maxPages,
                                    const AbortCallback& shouldAbort) {
   const uint32_t scratchStarted = millis();
-  BuildArena scratch(renderer_.getFrameBuffer(), renderer_.getBufferSize());
+  ParserScratch scratchBuffer(renderer_.getFrameBuffer(), renderer_.getBufferSize());
+  BuildArena scratch(scratchBuffer.data(), scratchBuffer.capacity());
   ScratchReporter scratchReporter(TAG, scratch, scratchStarted);
+  activeDict_ = scratchBuffer.data();
+  struct ClearDict {
+    uint8_t*& slot;
+    ~ClearDict() { slot = nullptr; }
+  } clearDict{activeDict_};
 
   onPageComplete_ = onPageComplete;
   maxPages_ = maxPages;
@@ -108,6 +125,7 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
     liveParser_->setBuildScratch(&scratch);
     bool success = liveParser_->resumeParsing();
     liveParser_->setBuildScratch(nullptr);
+    captureSubSectionAnchors();
     currentSubSectionPages_ += pagesCreated_;
 
     hasMore_ = liveParser_->isSuspended() || liveParser_->wasAborted() || (!success && pagesCreated_ > 0);
@@ -119,10 +137,6 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
     bool wasAborted = liveParser_->wasAborted();
 
     if (totalSubSections_ > 0 && currentSubSection_ < totalSubSections_ - 1) {
-      const auto& subAnchors = liveParser_->getAnchorMap();
-      for (const auto& anchor : subAnchors) {
-        anchorMap_.emplace_back(anchor.first, anchor.second + static_cast<uint32_t>(subSectionPageOffset_));
-      }
       subSectionPageOffset_ += currentSubSectionPages_;
       currentSubSectionPages_ = 0;
       currentSubSection_++;
@@ -137,12 +151,7 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
       }
       // Fall through to INIT loop for next sub-section
     } else {
-      if (totalSubSections_ > 0) {
-        const auto& subAnchors = liveParser_->getAnchorMap();
-        for (const auto& anchor : subAnchors) {
-          anchorMap_.emplace_back(anchor.first, anchor.second + static_cast<uint32_t>(subSectionPageOffset_));
-        }
-      } else {
+      if (totalSubSections_ == 0) {
         anchorMap_ = liveParser_->getAnchorMap();
       }
       liveParser_.reset();
@@ -169,7 +178,7 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
       } else {
         size_t itemSize = 0;
         if (epub_->getItemSize(localPath, &itemSize) && itemSize > Epub::MAX_SECTION_SIZE) {
-          if (epub_->splitSingleSpineItem(spineIndex_, renderer_.getFrameBuffer())) {
+          if (epub_->splitSingleSpineItem(spineIndex_, scratchBuffer.data())) {
             vsCount = epub_->getVirtualSectionCount(spineIndex_);
             if (vsCount > 0) {
               totalSubSections_ = vsCount;
@@ -255,7 +264,7 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
           continue;
         }
         const uint32_t extractionStarted = perfMsNow();
-        extracted = epub_->readItemContentsToStream(localPath, tmpHtml, 1024, renderer_.getFrameBuffer(), &scratch);
+        extracted = epub_->readItemContentsToStream(localPath, tmpHtml, 1024, scratchBuffer.data(), &scratch);
         readerPerfLog("epub-extract", extractionStarted);
         tmpHtml.close();
 
@@ -279,7 +288,7 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
     }
 
     auto readItemFn = [this](const std::string& href, Print& out, size_t chunkSize, BuildArena* arena) -> bool {
-      return epub_->readItemContentsToStream(href, out, chunkSize, renderer_.getFrameBuffer(), arena);
+      return epub_->readItemContentsToStream(href, out, chunkSize, activeDict_, arena);
     };
 
     uint32_t pagesBeforeThisSubSection = pagesCreated_;
@@ -300,6 +309,7 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
     liveParser_.reset(new ChapterHtmlSlimParser(parseHtmlPath_, renderer_, config_, wrappedCallback, nullptr,
                                                 chapterBasePath_, imageCachePath_, readItemFn, epub_->getCssParser(),
                                                 shouldAbort));
+    capturedSubSectionAnchors_ = 0;
 
     // Index-based byte-range mode: read section from .body file using .idx metadata
     if (totalSubSections_ > 0 && parseHtmlPath_.size() > 5 &&
@@ -345,6 +355,7 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
     liveParser_->setBuildScratch(&scratch);
     bool success = liveParser_->parseAndBuildPages();
     liveParser_->setBuildScratch(nullptr);
+    captureSubSectionAnchors();
     initialized_ = true;
     currentSubSectionPages_ = pagesCreated_ - pagesBeforeThisSubSection;
 
@@ -355,10 +366,6 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
     }
 
     if (totalSubSections_ > 0 && currentSubSection_ < totalSubSections_ - 1) {
-      const auto& subAnchors = liveParser_->getAnchorMap();
-      for (const auto& anchor : subAnchors) {
-        anchorMap_.emplace_back(anchor.first, anchor.second + static_cast<uint32_t>(subSectionPageOffset_));
-      }
       subSectionPageOffset_ += currentSubSectionPages_;
       currentSubSectionPages_ = 0;
       currentSubSection_++;
@@ -375,12 +382,7 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
       return success || pagesCreated_ > 0;
     }
 
-    if (totalSubSections_ > 0) {
-      const auto& subAnchors = liveParser_->getAnchorMap();
-      for (const auto& anchor : subAnchors) {
-        anchorMap_.emplace_back(anchor.first, anchor.second + static_cast<uint32_t>(subSectionPageOffset_));
-      }
-    } else {
+    if (totalSubSections_ == 0) {
       anchorMap_ = liveParser_->getAnchorMap();
     }
     liveParser_.reset();

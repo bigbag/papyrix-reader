@@ -3,6 +3,7 @@
 #include <Epub.h>
 #include <RenderConfig.h>
 
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <utility>
@@ -26,6 +27,7 @@ class EpubChapterParser : public ContentParser {
   RenderConfig config_;
   std::string imageCachePath_;
   bool hasMore_ = true;
+  uint8_t* activeDict_ = nullptr;
 
   // Persistent parser state for incremental parsing (hot extend)
   std::unique_ptr<ChapterHtmlSlimParser> liveParser_;
@@ -43,8 +45,9 @@ class EpubChapterParser : public ContentParser {
   uint32_t pagesCreated_ = 0;
   bool hitMaxPages_ = false;
 
-  // Captured anchor map from parser (persisted after liveParser_ is destroyed)
+  // Chapter-wide anchors from parsed sub-sections.
   std::vector<std::pair<std::string, uint32_t>> anchorMap_;
+  size_t capturedSubSectionAnchors_ = 0;
 
   // Sub-section chaining for on-demand spine splitting
   int currentSubSection_ = 0;
@@ -53,6 +56,7 @@ class EpubChapterParser : public ContentParser {
   uint32_t currentSubSectionPages_ = 0;
 
   void cleanupTempFiles();
+  void captureSubSectionAnchors();
 
  public:
   EpubChapterParser(std::shared_ptr<Epub> epub, int spineIndex, GfxRenderer& renderer, const RenderConfig& config,
@@ -65,8 +69,4 @@ class EpubChapterParser : public ContentParser {
   bool canResume() const override { return initialized_ && liveParser_ != nullptr; }
   void reset() override;
   const std::vector<std::pair<std::string, uint32_t>>& getAnchorMap() const override;
-  void clearAnchorMap() override {
-    anchorMap_.clear();
-    anchorMap_.shrink_to_fit();
-  }
 };

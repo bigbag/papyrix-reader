@@ -103,6 +103,37 @@ bool filledWith(const CommandRecord& record, uint8_t value) {
   return std::all_of(record.data.begin(), record.data.end(), [value](uint8_t current) { return current == value; });
 }
 
+uint8_t mixedByte(uint32_t& state) {
+  state ^= state << 13;
+  state ^= state >> 17;
+  state ^= state << 5;
+  return static_cast<uint8_t>(state >> 16);
+}
+
+std::vector<uint8_t> mixedPlane(uint32_t seed) {
+  std::vector<uint8_t> plane(Uc8179X4ProDriver::BUFFER_SIZE);
+  uint32_t state = seed != 0 ? seed : 1;
+  for (auto& byte : plane) byte = mixedByte(state);
+  return plane;
+}
+
+std::vector<uint8_t> streamedFromBase(const std::vector<uint8_t>& base) {
+  std::vector<uint8_t> streamed(Uc8179X4ProDriver::TRANSFER_SIZE, 0xFF);
+  for (uint16_t row = 0; row < Uc8179X4ProDriver::HEIGHT; ++row) {
+    const size_t from = static_cast<size_t>(row) * Uc8179X4ProDriver::WIDTH_BYTES;
+    const size_t to = static_cast<size_t>(Uc8179X4ProDriver::HEIGHT - 1 - row) * Uc8179X4ProDriver::WIDTH_BYTES;
+    std::copy(base.begin() + from, base.begin() + from + Uc8179X4ProDriver::WIDTH_BYTES, streamed.begin() + to);
+  }
+  return streamed;
+}
+
+size_t unalignedCopy(std::vector<uint8_t>& storage, const std::vector<uint8_t>& source) {
+  size_t offset = 0;
+  while (offset < 4 && (reinterpret_cast<uintptr_t>(storage.data() + offset) % 4) == 0) ++offset;
+  std::copy(source.begin(), source.end(), storage.data() + offset);
+  return offset;
+}
+
 }  // namespace
 
 int main() {
@@ -268,6 +299,91 @@ int main() {
   runner.expectTrue(eventIndex(powerOffBus, "C:02") >= 0 &&
                         eventIndex(powerOffBus, "C:07") > eventIndex(powerOffBus, "W:8179_power_down"),
                     "deep sleep enters only after the power-off retry completes");
+
+  const std::vector<uint8_t> mixedBase = mixedPlane(0x1234567);
+  const std::vector<uint8_t> mixedLsb = mixedPlane(0x9E3779B9);
+  const std::vector<uint8_t> mixedMsb = mixedPlane(0xDEADBEEF);
+
+  std::vector<uint8_t> expectedBase = mixedBase;
+  for (uint32_t i = 0; i < Uc8179X4ProDriver::BUFFER_SIZE; ++i) {
+    expectedBase[i] = static_cast<uint8_t>(mixedBase[i] | mixedLsb[i]);
+  }
+  const std::vector<uint8_t> expectedAfterLsb = expectedBase;
+
+  Uc8179X4ProDriver mixedDriver;
+  RecordingBus mixedBus;
+  runner.expectTrue(mixedDriver.begin(mixedBus), "mixed-plane driver initializes");
+  runner.expectTrue(mixedDriver.display(mixedBus, mixedBase.data(), Uc8179RefreshMode::Full, false),
+                    "mixed base refresh completes");
+  mixedBus.clear();
+  runner.expectTrue(mixedDriver.copyGrayscaleLsb(mixedBus, mixedLsb.data()), "mixed LSB plane loads");
+  auto mixedDtm1 = recordsFor(mixedBus, 0x10);
+  runner.expectEq(1, static_cast<int>(mixedDtm1.size()), "mixed LSB load writes one DTM1 plane");
+  if (mixedDtm1.size() == 1) {
+    runner.expectTrue(mixedDtm1[0]->data == streamedFromBase(expectedAfterLsb),
+                      "mixed DTM1 matches the byte-wise OR reference in reversed row order");
+  }
+
+  std::vector<uint8_t> expectedDtm2(Uc8179X4ProDriver::BUFFER_SIZE);
+  for (uint32_t i = 0; i < Uc8179X4ProDriver::BUFFER_SIZE; ++i) {
+    uint8_t merged = expectedBase[i];
+    const uint8_t msb = mixedMsb[i];
+    expectedDtm2[i] = static_cast<uint8_t>(merged ^ msb);
+    merged &= merged ^ msb;
+    expectedBase[i] = merged;
+  }
+
+  mixedBus.clear();
+  runner.expectTrue(mixedDriver.copyGrayscaleMsb(mixedBus, mixedMsb.data()), "mixed MSB plane loads");
+  auto mixedDtm2 = recordsFor(mixedBus, 0x13);
+  runner.expectEq(1, static_cast<int>(mixedDtm2.size()), "mixed MSB load writes one DTM2 plane");
+  if (mixedDtm2.size() == 1) {
+    runner.expectTrue(mixedDtm2[0]->data == streamedFromBase(expectedDtm2),
+                      "mixed DTM2 matches the byte-wise XOR reference in reversed row order");
+  }
+  mixedBus.clear();
+  runner.expectTrue(mixedDriver.displayGray(mixedBus, false), "mixed grayscale activation completes");
+  auto mixedGrayDtm1 = recordsFor(mixedBus, 0x10);
+  auto mixedGrayDtm2 = recordsFor(mixedBus, 0x13);
+  runner.expectTrue(mixedGrayDtm1.size() == 1 && mixedGrayDtm2.size() == 1 &&
+                        mixedGrayDtm1[0]->data == streamedFromBase(expectedBase) &&
+                        mixedGrayDtm2[0]->data == streamedFromBase(expectedBase),
+                    "grayscale activation replays the merged base to both planes");
+
+  std::vector<uint8_t> shiftedLsbStorage(mixedLsb.size() + 3);
+  const uint8_t* shiftedLsb = shiftedLsbStorage.data() + unalignedCopy(shiftedLsbStorage, mixedLsb);
+  runner.expectNe(uintptr_t{0}, static_cast<uintptr_t>(reinterpret_cast<uintptr_t>(shiftedLsb) % 4),
+                  "unaligned LSB plane pointer is not 4-byte aligned");
+
+  Uc8179X4ProDriver unalignedDriver;
+  RecordingBus unalignedBus;
+  runner.expectTrue(unalignedDriver.begin(unalignedBus), "unaligned-plane driver initializes");
+  runner.expectTrue(unalignedDriver.display(unalignedBus, mixedBase.data(), Uc8179RefreshMode::Full, false),
+                    "unaligned base refresh completes");
+  unalignedBus.clear();
+  runner.expectTrue(unalignedDriver.copyGrayscaleLsb(unalignedBus, shiftedLsb), "unaligned LSB plane loads");
+  auto unalignedDtm1 = recordsFor(unalignedBus, 0x10);
+  runner.expectEq(1, static_cast<int>(unalignedDtm1.size()), "unaligned LSB load writes one DTM1 plane");
+  if (unalignedDtm1.size() == 1) {
+    runner.expectTrue(unalignedDtm1[0]->data == streamedFromBase(expectedAfterLsb),
+                      "unaligned LSB merges byte for byte like the aligned path");
+  }
+
+  std::vector<uint8_t> shiftedMsbStorage(mixedMsb.size() + 3);
+  const uint8_t* shiftedMsb = shiftedMsbStorage.data() + unalignedCopy(shiftedMsbStorage, mixedMsb);
+  unalignedBus.clear();
+  runner.expectTrue(unalignedDriver.copyGrayscaleMsb(unalignedBus, shiftedMsb), "unaligned MSB plane loads");
+  auto unalignedDtm2 = recordsFor(unalignedBus, 0x13);
+  runner.expectEq(1, static_cast<int>(unalignedDtm2.size()), "unaligned MSB load writes one DTM2 plane");
+  if (unalignedDtm2.size() == 1) {
+    runner.expectTrue(unalignedDtm2[0]->data == streamedFromBase(expectedDtm2),
+                      "unaligned MSB XORs byte for byte like the aligned path");
+  }
+  unalignedBus.clear();
+  runner.expectTrue(unalignedDriver.displayGray(unalignedBus, false), "unaligned grayscale activation completes");
+  auto unalignedGrayDtm2 = recordsFor(unalignedBus, 0x13);
+  runner.expectTrue(unalignedGrayDtm2.size() == 1 && unalignedGrayDtm2[0]->data == streamedFromBase(expectedBase),
+                    "unaligned path leaves the same merged base as the aligned path");
 
   return runner.allPassed() ? 0 : 1;
 }

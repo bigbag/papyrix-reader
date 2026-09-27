@@ -51,6 +51,9 @@ inline constexpr uint16_t kTargetMaxDisplayWidth = 800;
 inline constexpr uint16_t kTargetMaxDisplayHeight = PAPYRIX_TARGET_XTEINK_C3 ? 528 : 480;
 inline constexpr uint32_t kTargetFrameBufferBytes =
     PAPYRIX_TARGET_XTEINK_C3 ? static_cast<uint32_t>(792 / 8) * 528 : static_cast<uint32_t>(800 / 8) * 480;
+inline constexpr uint32_t kTargetBitmapTurnCacheBytes = PAPYRIX_TARGET_XTEINK_C3 ? 0 : 256 * 1024;
+inline constexpr uint32_t kTargetGlyphBitmapSlabBytes = PAPYRIX_TARGET_XTEINK_C3 ? 0 : 96 * 1024;
+inline constexpr uint32_t kTargetParserScratchBytes = PAPYRIX_TARGET_XTEINK_C3 ? 0 : 64 * 1024;
 inline constexpr bool kTargetHasVerifiedPanelDriver = true;
 
 }  // namespace papyrix::board

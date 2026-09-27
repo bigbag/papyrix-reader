@@ -1384,7 +1384,7 @@ void GfxRenderer::warmCodepointsBatch(const int fontId, const uint32_t* codepoin
 
   StreamingEpdFont* streamingFont = getStreamingFont(fontId, style);
   if (streamingFont) {
-    const size_t warmCount = std::min(count, static_cast<size_t>(StreamingEpdFont::getCacheSize()));
+    const size_t warmCount = std::min(count, static_cast<size_t>(streamingFont->getCacheSize()));
     if (count > warmCount) {
       LOG_DBG(TAG, "Streaming glyph warm capped: count=%zu cap=%zu style=%u", count, warmCount,
               static_cast<unsigned>(style));

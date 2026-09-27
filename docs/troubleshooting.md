@@ -12,7 +12,21 @@ Use the [firmware recovery procedure](#firmware-recovery) to install the correct
 Do not erase the chip or factory NVS.
 Classic uses factory NVS data for panel selection.
 
----
+## Serial Log Capture
+
+Use `scripts/capture_serial.py` to record the device serial log.
+The script appends data to the output file across USB disconnects.
+Use a Python environment that contains `pyserial`.
+
+```bash
+python3 scripts/capture_serial.py USB_SERIAL_NUMBER serial.log
+```
+
+Replace `USB_SERIAL_NUMBER` with the number that `pio device list` shows for the connected reader.
+The script reconnects when USB lists the device again.
+It waits while the reader sleeps.
+Opening the serial port can reset the reader.
+Stop the script with Ctrl+C.
 
 ## X3 Display Controller Diagnostics
 

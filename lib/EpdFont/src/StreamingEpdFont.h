@@ -1,7 +1,11 @@
 #pragma once
 
 #include <SDCardManager.h>
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC
+#include <TargetConfig.h>
+#endif
 
+#include <cstddef>
 #include <cstdint>
 
 #include "EpdFontData.h"
@@ -97,10 +101,16 @@ class StreamingEpdFont {
   /**
    * Get the configured cache size.
    */
-  static constexpr int getCacheSize() { return CACHE_SIZE; }
+  int getCacheSize() const { return _capacity; }
 
  private:
-  static constexpr int CACHE_SIZE = 192;
+  static constexpr int FALLBACK_CACHE_SIZE = 192;
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC
+  static constexpr int CACHE_SIZE = 256;
+  static constexpr size_t SLAB_SIZE = papyrix::board::kTargetGlyphBitmapSlabBytes;
+#else
+  static constexpr int CACHE_SIZE = FALLBACK_CACHE_SIZE;
+#endif
   static constexpr uint32_t INVALID_CODEPOINT = 0xFFFFFFFF;
 
   // Maximum allowed glyph bitmap size (defense against corrupted font files)
@@ -111,8 +121,7 @@ class StreamingEpdFont {
   static constexpr int16_t HASH_EMPTY = -1;
   static constexpr int16_t HASH_TOMBSTONE = -2;
 
-  // Rehash when tombstones exceed 25% of table size to maintain O(1) lookup
-  static constexpr int TOMBSTONE_REHASH_THRESHOLD = CACHE_SIZE / 4;
+  // Rehash when tombstones exceed 25% of active slots.
 
   // Font metadata (in RAM)
   EpdFontData _fontData;
@@ -139,6 +148,9 @@ class StreamingEpdFont {
   CachedBitmap _cache[CACHE_SIZE];
   int16_t _hashTable[CACHE_SIZE];
   uint32_t _accessCounter = 0;
+  int _capacity = FALLBACK_CACHE_SIZE;
+  uint8_t* _slab = nullptr;
+  size_t _slabUsed = 0;
   size_t _totalCacheAllocation = 0;  // Track total bytes allocated in cache
   int _tombstoneCount = 0;           // Track tombstones to trigger rehashing
 
@@ -155,11 +167,13 @@ class StreamingEpdFont {
   mutable GlyphCacheEntry _glyphCache[GLYPH_CACHE_SIZE];
 
   // Helper methods
-  static int hashIndex(uint32_t index) { return index % CACHE_SIZE; }
+  int hashIndex(uint32_t index) const { return index % _capacity; }
   int findInBitmapCache(uint32_t glyphIndex);
   int getLruSlot();
   uint32_t advanceAccessCounter();
   bool loadGlyphBitmap(uint32_t glyphIndex, CachedBitmap& entry);
+  void evictSlot(int slot);
+  void compactSlab();
   const EpdGlyph* lookupGlyph(uint32_t cp) const;
   void rehashTable();  // Rebuild hash table to clear tombstones
 };

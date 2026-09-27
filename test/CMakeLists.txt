@@ -463,7 +463,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/src/core/ReaderButtonDispatcher.cpp
       ${TEST_HELPERS}
     )
-  elseif(TEST_NAME STREQUAL "ContentHandleThumbnailTest")
+  elseif(TEST_NAME STREQUAL "ContentHandleThumbnailTest" OR TEST_NAME STREQUAL "EpubIndexAnchorsTest")
     find_package(EXPAT REQUIRED)
     add_executable(${TEST_NAME}
       ${TEST_SRC}
@@ -851,7 +851,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/GfxRenderer/src/BitmapHelpers.cpp
       ${TEST_HELPERS}
     )
-  elseif(TEST_NAME STREQUAL "BmpPolarityRoundTripTest")
+  elseif(TEST_NAME STREQUAL "BmpPolarityRoundTripTest" OR TEST_NAME STREQUAL "BitmapTurnCacheTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
       ${PROJECT_ROOT}/lib/GfxRenderer/src/GfxRenderer.cpp
@@ -865,6 +865,24 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/ExternalFont/src
       ${PROJECT_ROOT}/lib/ThaiShaper/src
     )
+    if(TEST_NAME STREQUAL "BitmapTurnCacheTest")
+      target_sources(${TEST_NAME} PRIVATE
+        ${PROJECT_ROOT}/lib/RenderTypes/src/BitmapTurnCache.cpp
+        ${PROJECT_ROOT}/lib/RenderTypes/src/blocks/ImageBlock.cpp
+        ${PROJECT_ROOT}/lib/ScriptDetector/src/ScriptDetector.cpp
+        ${PROJECT_ROOT}/lib/Utf8/src/Utf8.cpp
+        ${PROJECT_ROOT}/lib/EpdFont/src/EpdFontFamily.cpp
+        ${PROJECT_ROOT}/lib/EpdFont/src/EpdFont.cpp
+        ${PROJECT_ROOT}/lib/EpdFont/src/StreamingEpdFont.cpp
+        ${PROJECT_ROOT}/lib/ExternalFont/src/ExternalFont.cpp
+        ${PROJECT_ROOT}/lib/ThaiShaper/src/ThaiClusterBuilder.cpp
+        ${PROJECT_ROOT}/lib/ThaiShaper/src/ThaiCharacter.cpp
+        ${PROJECT_ROOT}/lib/ArabicShaper/src/ArabicShaper.cpp
+        ${PROJECT_ROOT}/lib/ArabicShaper/src/ArabicCharacter.cpp
+      )
+      target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_X4PRO=1)
+      target_include_directories(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/RenderTypes/src/blocks)
+    endif()
     if(MSVC)
       target_compile_options(${TEST_NAME} PRIVATE /Gy)
       target_link_options(${TEST_NAME} PRIVATE /OPT:REF)
@@ -1082,7 +1100,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/src/core/SettingsSerialization.cpp
       ${TEST_HELPERS}
     )
-  elseif(TEST_NAME STREQUAL "PageCacheIntegrationTest")
+  elseif(TEST_NAME STREQUAL "PageCacheIntegrationTest" OR TEST_NAME STREQUAL "PageCacheWatchdogTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
       ${PROJECT_ROOT}/lib/PageCache/src/PageCache.cpp
@@ -1091,6 +1109,9 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/Utf8/src/Utf8.cpp
       ${TEST_HELPERS}
     )
+    if(TEST_NAME STREQUAL "PageCacheWatchdogTest")
+      target_compile_definitions(${TEST_NAME} PRIVATE ARDUINO=1)
+    endif()
   elseif(TEST_NAME STREQUAL "PageSerializationTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
@@ -1336,6 +1357,9 @@ foreach(TEST_SRC ${TEST_SOURCES})
     target_include_directories(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/SDCardManager/include)
   else()
     add_executable(${TEST_NAME} ${TEST_SRC} ${TEST_HELPERS})
+  endif()
+  if(TEST_NAME STREQUAL "StreamingEpdFontS3Test" OR TEST_NAME STREQUAL "ParserScratchTest")
+    target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_X4PRO=1)
   endif()
 
   target_include_directories(${TEST_NAME} PRIVATE

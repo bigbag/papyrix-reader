@@ -98,6 +98,47 @@ bool filledWith(const CommandRecord& record, uint8_t value) {
   return std::all_of(record.data.begin(), record.data.end(), [value](uint8_t current) { return current == value; });
 }
 
+uint8_t mixedByte(uint32_t index, uint32_t seed) {
+  uint32_t value = index * 2654435761u ^ seed;
+  value ^= value >> 13;
+  value *= 2246822519u;
+  value ^= value >> 16;
+  return static_cast<uint8_t>(value & 0xFF);
+}
+
+std::vector<uint8_t> orPlane(const std::vector<uint8_t>& base, const std::vector<uint8_t>& plane) {
+  std::vector<uint8_t> merged(base.size());
+  for (size_t i = 0; i < base.size(); ++i) merged[i] = static_cast<uint8_t>(base[i] | plane[i]);
+  return merged;
+}
+
+std::vector<uint8_t> andXorPlane(const std::vector<uint8_t>& base, const std::vector<uint8_t>& plane) {
+  std::vector<uint8_t> merged(base.size());
+  for (size_t i = 0; i < base.size(); ++i) {
+    merged[i] = static_cast<uint8_t>(base[i] & (base[i] ^ plane[i]));
+  }
+  return merged;
+}
+
+std::vector<uint8_t> expectedGrayPlane(const std::vector<uint8_t>& source, bool invert) {
+  std::vector<uint8_t> plane(Uc8279X4ProDriver::TRANSFER_SIZE, 0xFF);
+  for (uint16_t row = 0; row < Uc8279X4ProDriver::HEIGHT; ++row) {
+    const size_t at = Uc8279X4ProDriver::GATE_OFFSET_BYTES + static_cast<size_t>(row) * Uc8279X4ProDriver::WIDTH_BYTES;
+    for (size_t i = 0; i < Uc8279X4ProDriver::WIDTH_BYTES; ++i) {
+      const uint8_t value = source[static_cast<size_t>(row) * Uc8279X4ProDriver::WIDTH_BYTES + i];
+      plane[at + i] = invert ? static_cast<uint8_t>(~value) : value;
+    }
+  }
+  return plane;
+}
+
+std::vector<uint8_t> xorPlane(const std::vector<uint8_t>& base, const std::vector<uint8_t>& plane) {
+  std::vector<uint8_t> result(base.size());
+  for (size_t i = 0; i < base.size(); ++i) result[i] = static_cast<uint8_t>(base[i] ^ plane[i]);
+  return result;
+}
+
+
 }  // namespace
 
 int main() {
@@ -192,6 +233,57 @@ int main() {
     runner.expectEq(49, static_cast<int>(tables[0]->data.size()), "grayscale table has the UC8279 source length");
     runner.expectEq(command == 0x22 || command == 0x23 ? uint8_t{0x83} : uint8_t{0x03}, tables[0]->data[2],
                     "LUT version 68 selects its waveform bytes");
+  }
+
+  for (int offset : {0, 1, 3}) {
+    Uc8279X4ProDriver trial;
+    RecordingBus trialBus;
+    std::vector<uint32_t> lsbStorage((Uc8279X4ProDriver::BUFFER_SIZE + 3) / 4 + 1);
+    std::vector<uint32_t> msbStorage((Uc8279X4ProDriver::BUFFER_SIZE + 3) / 4 + 1);
+    auto* lsbBytes = reinterpret_cast<uint8_t*>(lsbStorage.data());
+    auto* msbBytes = reinterpret_cast<uint8_t*>(msbStorage.data());
+    std::vector<uint8_t> base(Uc8279X4ProDriver::BUFFER_SIZE);
+    std::vector<uint8_t> lsbPlane(Uc8279X4ProDriver::BUFFER_SIZE);
+    std::vector<uint8_t> msbPlane(Uc8279X4ProDriver::BUFFER_SIZE);
+    for (size_t i = 0; i < base.size(); ++i) {
+      base[i] = mixedByte(static_cast<uint32_t>(i), 0x51);
+      lsbPlane[i] = mixedByte(static_cast<uint32_t>(i), 0xA3);
+      msbPlane[i] = mixedByte(static_cast<uint32_t>(i), 0xC7);
+      lsbBytes[i + static_cast<size_t>(offset)] = lsbPlane[i];
+      msbBytes[i + static_cast<size_t>(offset)] = msbPlane[i];
+    }
+    const std::string tag = offset == 0 ? "aligned" : "unaligned offset " + std::to_string(offset);
+    const uint8_t* lsbInput = lsbBytes + offset;
+    const uint8_t* msbInput = msbBytes + offset;
+    runner.expectEq(offset, static_cast<int>(reinterpret_cast<uintptr_t>(lsbInput) & 3),
+                    tag + " plane pointer has the expected word alignment");
+
+    runner.expectTrue(trial.begin(trialBus, 0x68, true), tag + " trial driver initializes");
+    trialBus.clear();
+    runner.expectTrue(trial.display(trialBus, base.data(), Uc8279X4RefreshMode::Full, false),
+                      tag + " mixed base refresh completes");
+    trialBus.clear();
+    runner.expectTrue(trial.copyGrayscaleLsb(trialBus, lsbInput), tag + " mixed LSB plane loads");
+    const auto lsbRecords = recordsFor(trialBus, 0x10);
+    runner.expectEq(1, static_cast<int>(lsbRecords.size()), tag + " LSB load writes one DTM1 plane");
+    if (lsbRecords.size() == 1) {
+      const auto expected = expectedGrayPlane(orPlane(base, lsbPlane), true);
+      runner.expectTrue(lsbRecords[0]->data == expected, tag + " DTM1 matches the byte-wise inverted OR");
+    }
+    trialBus.clear();
+    runner.expectTrue(trial.copyGrayscaleMsb(trialBus, msbInput), tag + " mixed MSB plane loads");
+    const auto msbRecords = recordsFor(trialBus, 0x13);
+    runner.expectEq(1, static_cast<int>(msbRecords.size()), tag + " MSB load writes one DTM2 plane");
+    if (msbRecords.size() == 1) {
+      const auto expected = expectedGrayPlane(xorPlane(orPlane(base, lsbPlane), msbPlane), true);
+      runner.expectTrue(msbRecords[0]->data == expected, tag + " DTM2 matches the byte-wise inverted XOR");
+    }
+    trialBus.clear();
+    runner.expectTrue(trial.displayGray(trialBus, false), tag + " mixed grayscale activation completes");
+    const auto activated = recordsFor(trialBus, 0x10);
+    const auto activatedExpected = expectedGrayPlane(andXorPlane(orPlane(base, lsbPlane), msbPlane), false);
+    runner.expectTrue(activated.size() == 1 && activated[0]->data == activatedExpected,
+                      tag + " activated DTM1 matches the byte-wise AND-XOR base");
   }
 
   bus.clear();

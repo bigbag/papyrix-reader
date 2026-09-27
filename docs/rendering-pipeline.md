@@ -40,8 +40,10 @@ It uses the same framebuffer as the page.
 ## Fonts
 
 Built-in font bitmaps remain in Flash.
-Glyph caches use RAM.
-Streaming `.epdfont` files keep metadata in RAM and read bitmap data from SD.
+The C3 `.epdfont` cache retains up to 192 glyph bitmaps in RAM.
+On S3, a 96 KiB PSRAM slab retains up to 256 glyph bitmaps when space is available.
+If the PSRAM allocation fails, S3 uses the 192-entry RAM cache.
+Streaming `.epdfont` files keep metadata in RAM and read cache misses from SD.
 Bold and italic variants load when text requires them.
 CJK fonts use a bounded bitmap cache.
 Actual font memory use depends on the font data and loaded styles.
@@ -55,6 +57,10 @@ For grayscale text, it renders the two grayscale masks into the same framebuffer
 The display driver sends each mask to the controller.
 The controller applies its grayscale waveform.
 The reader then renders black-and-white data again to restore the controller state.
+On S3, the reader retains up to four current-page BMP files for one render turn.
+It uses at most 256 KiB of PSRAM for their rows.
+Images that do not fit use a separate bitmap object for each render pass.
+The C3 reader opens each BMP for each render pass.
 The status bar uses one-bit rendering.
 
 Classic uses monochrome rendering when the panel has no supported grayscale waveform.
@@ -67,6 +73,9 @@ Do not reuse SSD1677 commands on UC8253, UC8279, or UC8179.
 ## Page Cache
 
 The parser writes page records to the SD card.
+EPUB and FB2 parsers use a separate 64 KiB PSRAM scratch buffer on S3 when space is available.
+If that allocation fails, they use the framebuffer.
+The C3 parsers always borrow the framebuffer.
 The cache stores a lookup table of page offsets.
 Viewport, font, hyphenation, and rendering settings determine cache compatibility.
 A layout change invalidates incompatible pages.
@@ -79,6 +88,8 @@ The previous header remains valid if extension stops before that update.
 
 EPUB caches chapters separately.
 Markdown, FB2, HTML, and TXT use a page cache for the document.
+EPUB partial and complete cache saves keep anchors in source order.
+Split-spine anchors use chapter-wide page indexes.
 See [file formats](file-formats.md) for record layouts.
 
 ## Cache Scheduling

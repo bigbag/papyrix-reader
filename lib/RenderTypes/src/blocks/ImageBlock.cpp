@@ -1,6 +1,9 @@
 #include "ImageBlock.h"
 
 #include <Bitmap.h>
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC
+#include <BitmapTurnCache.h>
+#endif
 #include <GfxRenderer.h>
 #include <Logging.h>
 #include <SDCardManager.h>
@@ -23,6 +26,15 @@ void ImageBlock::render(GfxRenderer& renderer, const int fontId, const int x, co
     return;
   }
 
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC
+  if (auto* cache = renderer.bitmapTurnCache()) {
+    if (auto* bitmap = cache->get(cachedBmpPath)) {
+      renderer.drawBitmap(*bitmap, x, y, width, height);
+      return;
+    }
+  }
+#endif
+
   FsFile bmpFile;
   if (!SdMan.openFileForRead("IMB", cachedBmpPath, bmpFile)) {
     LOG_ERR(TAG, "Failed to open cached BMP: %s", cachedBmpPath.c_str());
@@ -31,6 +43,9 @@ void ImageBlock::render(GfxRenderer& renderer, const int fontId, const int x, co
   }
 
   Bitmap bitmap(bmpFile, true);
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC
+  if (renderer.bitmapTurnCache()) bitmap.disablePreload();
+#endif
   const BmpReaderError err = bitmap.parseHeaders();
   if (err != BmpReaderError::Ok) {
     LOG_ERR(TAG, "BMP parse error: %s", Bitmap::errorToString(err));

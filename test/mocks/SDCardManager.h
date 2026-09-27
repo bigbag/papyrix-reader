@@ -68,6 +68,7 @@ class SDCardManager {
     modifyDateTimes_.clear();
     openFailCount_ = 0;
     openFileForReadFailCount_ = 0;
+    readOpenCount_ = 0;
     mallocFailCount_ = 0;
     readLimit_ = 0;
     readLimitActive_ = false;
@@ -93,6 +94,7 @@ class SDCardManager {
 
   // Failure injection: first N openFileForRead() calls for a path fail
   void setOpenFileForReadFailCount(int count) { openFileForReadFailCount_ = count; }
+  size_t readOpenCount() const { return readOpenCount_; }
 
   // Failure injection: next N malloc calls return nullptr
   void setMallocFailCount(int count) { mallocFailCount_ = count; }
@@ -192,6 +194,7 @@ class SDCardManager {
       openFileForReadFailCount_--;
       return false;
     }
+    ++readOpenCount_;
     file = open(path, O_RDONLY);
     return static_cast<bool>(file);
   }
@@ -314,6 +317,7 @@ class SDCardManager {
   std::map<std::string, std::pair<uint16_t, uint16_t>> modifyDateTimes_;
   int openFailCount_ = 0;
   int openFileForReadFailCount_ = 0;
+  size_t readOpenCount_ = 0;
   int mallocFailCount_ = 0;
   size_t readLimit_ = 0;
   bool readLimitActive_ = false;
