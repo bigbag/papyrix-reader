@@ -34,6 +34,10 @@ int main() {
   runner.expectEq(size_t(1), store.pruneMissing(), "missing file pruned");
   runner.expectEq(size_t(1), store.books().size(), "existing file remains");
   runner.expectEq(std::string("/b.epub"), store.books()[0].path, "correct file remains");
+  store.remove("/b.epub");
+  runner.expectTrue(store.load(), "removed recent entry reloads");
+  runner.expectTrue(store.books().empty(), "removed book stays out of recent");
+  runner.expectTrue(SdMan.exists("/b.epub"), "removing recent entry keeps book file");
 
   runner.expectTrue(store.clearAndSave(), "clear recent persists");
   runner.expectTrue(store.books().empty(), "clear recent empties memory");

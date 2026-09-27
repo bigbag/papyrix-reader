@@ -6,6 +6,7 @@
 #include "../content/RecentBooksStore.h"
 #include "../ui/views/HomeView.h"
 #include "../ui/views/ReaderViews.h"
+#include "../ui/views/SettingsViews.h"
 #include "State.h"
 
 class GfxRenderer;
@@ -13,7 +14,7 @@ class GfxRenderer;
 namespace papyrix {
 
 class RecentState : public State {
-  enum class Screen : uint8_t { Browse, Stats };
+  enum class Screen : uint8_t { Browse, Stats, ConfirmRemove };
 
  public:
   static constexpr Button FILES_BUTTON = Button::Left;
@@ -33,12 +34,15 @@ class RecentState : public State {
   bool needsRender_ = true;
   Screen currentScreen_ = Screen::Browse;
   ui::BookStatsView statsView_;
+  ui::ConfirmDialogView confirmView_;
 
   void moveUp();
   void moveDown();
   StateTransition openSelected(Core& core);
   size_t displayedCount() const;
   void showSelectedStats();
+  void confirmRemove();
+  void removeSelected();
   void renderBrowse(Core& core);
   void renderStats(Core& core);
   int rowHeight() const;

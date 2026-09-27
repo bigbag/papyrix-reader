@@ -97,7 +97,8 @@ The Books screen keeps a maximum of ten books that you opened before. It shows a
 - **Open / Confirm:** Continue the selected book at its saved reading position.
 - **Files / Left:** Open the file browser (below).
 - **Info / Right:** Open Book Stats for the selected book. This shows Progress, Time read, and Sessions.
-- Missing files are removed from the list. There is no Remove action for each book.
+- Missing files are removed from the list.
+- **Remove:** On Book Stats, select **Remove** and confirm **Remove from recent?**. This removes the book from Recent only. The book file and reading progress stay. Open the book again to add the entry.
 - After you read a book that you opened from here, you go back to the Books screen.
 
 #### File Browser

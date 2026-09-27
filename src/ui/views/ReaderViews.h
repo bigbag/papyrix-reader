@@ -134,7 +134,7 @@ inline void formatBookStatsSummary(char* out, size_t outSize, bool hasProgress, 
 }
 
 struct BookStatsView {
-  enum class Hit : uint8_t { None, Back, Open };
+  enum class Hit : uint8_t { None, Back, Open, Remove };
   static constexpr int MAX_TITLE_LINES = 2;
 
   char title[129] = {};
@@ -143,6 +143,7 @@ struct BookStatsView {
   char timeRead[24] = {};
   char sessions[16] = {};
   bool showOpen = false;
+  bool showRemove = false;
   bool needsRender = true;
 
   void setBook(const char* bookTitle, const char* bookAuthor) {
@@ -167,6 +168,7 @@ struct BookStatsView {
     const int action = touch::semanticButtonBarIndex(point, screenWidth, screenHeight, frontLrbc);
     if (action == 0) return Hit::Back;
     if (action == 1 && showOpen) return Hit::Open;
+    if (action == 3 && showRemove) return Hit::Remove;
     return Hit::None;
   }
 };

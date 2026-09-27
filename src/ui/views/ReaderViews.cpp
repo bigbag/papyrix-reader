@@ -87,7 +87,7 @@ void render(const GfxRenderer& r, const Theme& t, const BookStatsView& v) {
   twoColumnRow(r, t, 110, tr(PROGRESS), v.progress);
   twoColumnRow(r, t, 150, tr(TIME_READ), v.timeRead);
   twoColumnRow(r, t, 190, tr(SESSIONS), v.sessions);
-  ui::buttonBar(r, t, tr(BACK), v.showOpen ? tr(OPEN) : "", "", "");
+  ui::buttonBar(r, t, tr(BACK), v.showOpen ? tr(OPEN) : "", "", v.showRemove ? tr(REMOVE_RECENT) : "");
   r.displayBuffer();
 }
 

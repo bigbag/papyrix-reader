@@ -51,6 +51,13 @@ int main() {
                "reader statistics hides open action");
   r.expectTrue(stats.hitTest({75, 430}, 800, 480) == ui::BookStatsView::Hit::Back,
                "book statistics back action");
+  r.expectTrue(stats.hitTest({619, 430}, 800, 480) == ui::BookStatsView::Hit::None,
+               "reader statistics hides remove action");
+  stats.showRemove = true;
+  r.expectTrue(stats.hitTest({619, 430}, 800, 480) == ui::BookStatsView::Hit::Remove,
+               "recent statistics offers remove action");
+  r.expectTrue(stats.hitTest({256, 430}, 800, 480, true) == ui::BookStatsView::Hit::Remove,
+               "recent statistics maps LRBC remove action");
 
   ui::OverlayTapGuard guard;
   r.expectTrue(!guard.suppressPageTap(900), "inactive close guard allows page taps");

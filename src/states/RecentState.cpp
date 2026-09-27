@@ -6,6 +6,7 @@
 #include <Logging.h>
 #include <SDCardManager.h>
 #include <Theme.h>
+#include <Utf8.h>
 #include <esp_system.h>
 
 #include <algorithm>
@@ -53,11 +54,7 @@ StateTransition RecentState::openSelected(Core& core) {
   const std::string path = books[selected_].path;
 
   if (!SdMan.exists(path.c_str())) {
-    RecentBooksStore::instance().remove(path);
-    const size_t count = displayedCount();
-    if (selected_ > 0 && selected_ >= count) selected_--;
-    currentScreen_ = Screen::Browse;
-    needsRender_ = true;
+    removeSelected();
     return StateTransition::stay(StateId::Recent);
   }
 
@@ -100,9 +97,52 @@ StateTransition RecentState::update(Core& core) {
           statsView_.hitTest({e.touch.x, e.touch.y}, renderer_.getScreenWidth(), renderer_.getScreenHeight(),
                              core.settings.frontButtonLayout == Settings::FrontLRBC);
       if (hit == ui::BookStatsView::Hit::None) continue;
-      e = Event::buttonPress(hit == ui::BookStatsView::Hit::Back ? Button::Back : Button::Center);
+      if (hit == ui::BookStatsView::Hit::Back) e = Event::buttonPress(Button::Back);
+      if (hit == ui::BookStatsView::Hit::Open) e = Event::buttonPress(Button::Center);
+      if (hit == ui::BookStatsView::Hit::Remove) e = Event::buttonPress(Button::Right);
+    }
+    if (e.type == EventType::Tap && currentScreen_ == Screen::ConfirmRemove) {
+      const auto layout = ui::confirmDialogBounds(renderer_, THEME, confirmView_);
+      const auto hit =
+          confirmView_.hitTest({e.touch.x, e.touch.y}, layout, core.settings.frontButtonLayout == Settings::FrontLRBC);
+      if (hit == ui::ConfirmDialogView::Hit::Yes) {
+        removeSelected();
+      } else if (hit == ui::ConfirmDialogView::Hit::No || hit == ui::ConfirmDialogView::Hit::Back) {
+        currentScreen_ = Screen::Stats;
+        needsRender_ = true;
+      } else if (hit == ui::ConfirmDialogView::Hit::Select) {
+        e = Event::buttonPress(Button::Center);
+      }
+      if (hit != ui::ConfirmDialogView::Hit::Select) continue;
     }
     if (e.type != EventType::ButtonPress) continue;
+
+    if (currentScreen_ == Screen::ConfirmRemove) {
+      switch (e.button) {
+        case Button::Up:
+        case Button::Down:
+        case Button::Left:
+        case Button::Right:
+          confirmView_.toggleSelection();
+          needsRender_ = true;
+          break;
+        case Button::Center:
+          if (confirmView_.isYesSelected()) {
+            removeSelected();
+          } else {
+            currentScreen_ = Screen::Stats;
+            needsRender_ = true;
+          }
+          break;
+        case Button::Back:
+          currentScreen_ = Screen::Stats;
+          needsRender_ = true;
+          break;
+        default:
+          break;
+      }
+      continue;
+    }
 
     if (currentScreen_ == Screen::Stats) {
       if (e.button == Button::Back) {
@@ -110,6 +150,8 @@ StateTransition RecentState::update(Core& core) {
         needsRender_ = true;
       } else if (e.button == Button::Center) {
         return openSelected(core);
+      } else if (e.button == Button::Right) {
+        confirmRemove();
       }
       continue;
     }
@@ -144,6 +186,8 @@ void RecentState::render(Core& core) {
 
   if (currentScreen_ == Screen::Stats) {
     renderStats(core);
+  } else if (currentScreen_ == Screen::ConfirmRemove) {
+    ui::render(renderer_, THEME, confirmView_);
   } else {
     renderBrowse(core);
   }
@@ -162,7 +206,37 @@ void RecentState::showSelectedStats() {
     statsView_.setStats(false, 0, 0, 0);
   }
   statsView_.showOpen = true;
+  statsView_.showRemove = true;
   currentScreen_ = Screen::Stats;
+  needsRender_ = true;
+}
+
+void RecentState::confirmRemove() {
+  const auto& books = RecentBooksStore::instance().books();
+  if (selected_ >= displayedCount()) return;
+
+  char title[ui::ConfirmDialogView::MAX_LINE_LEN];
+  const size_t length = utf8SafeCopy(title, sizeof(title) - 4, books[selected_].title.c_str());
+  if (length < books[selected_].title.size()) {
+    title[length] = '.';
+    title[length + 1] = '.';
+    title[length + 2] = '.';
+    title[length + 3] = '\0';
+  }
+  confirmView_.setup(tr(REMOVE_RECENT_Q), tr(CLEAR_RECENT_MSG), title);
+  currentScreen_ = Screen::ConfirmRemove;
+  needsRender_ = true;
+}
+
+void RecentState::removeSelected() {
+  const auto& books = RecentBooksStore::instance().books();
+  if (selected_ >= displayedCount()) return;
+
+  const std::string path = books[selected_].path;
+  RecentBooksStore::instance().remove(path);
+  const size_t count = displayedCount();
+  if (selected_ > 0 && selected_ >= count) selected_--;
+  currentScreen_ = Screen::Browse;
   needsRender_ = true;
 }
 

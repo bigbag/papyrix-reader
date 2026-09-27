@@ -217,6 +217,8 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "Books",                  // BOOKS
     "Recent",                 // RECENT_BOOKS
     "No recent books",        // NO_RECENT_BOOKS
+    "Remove",                 // REMOVE_RECENT
+    "Remove from recent?",    // REMOVE_RECENT_Q
     "Delete this file?",      // DELETE_FILE_Q
     "Delete this folder?",    // DELETE_FOLDER_Q
     "Enter Password",         // ENTER_PASSWORD
