@@ -14,16 +14,16 @@ const MiniApp APPS[] = {
      nullptr, nullptr},
     {"LocalSend", localsend_app::enter, localsend_app::update, localsend_app::onButton, localsend_app::render,
      localsend_app::exit, nullptr, nullptr},
-    {"Clock", clock_app::enter, clock_app::update, nullptr, clock_app::render, clock_app::exit, clock_app::renderMenu,
-     clock_app::onMenuButton},
     {"Pomodoro", pomodoro_app::enter, pomodoro_app::update, pomodoro_app::onButton, pomodoro_app::render,
      pomodoro_app::exit, pomodoro_app::renderMenu, pomodoro_app::onMenuButton},
+    {"Clock", clock_app::enter, clock_app::update, nullptr, clock_app::render, clock_app::exit, clock_app::renderMenu,
+     clock_app::onMenuButton},
 };
 const uint8_t APP_COUNT = sizeof(APPS) / sizeof(APPS[0]);
 const int8_t APP_IMAGEVIEWER = 0;
 const int8_t APP_PRINTER = 1;
 const int8_t APP_LOCALSEND = 2;
-const int8_t APP_CLOCK = 3;
-const int8_t APP_POMODORO = 4;
+const int8_t APP_POMODORO = 3;
+const int8_t APP_CLOCK = 4;
 
 }  // namespace papyrix

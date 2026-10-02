@@ -149,6 +149,10 @@ StateTransition AppLauncherState::update(Core& core) {
       case Mode::Overlay:
         if (e.type == EventType::ButtonRepeat) break;
         if (activeApp_ == APP_CLOCK && e.button == Button::Center) break;
+        if (activeApp_ == APP_POMODORO && e.button != Button::Back && e.button != Button::Left &&
+            e.button != Button::Right) {
+          break;
+        }
         core.cpu.unthrottle();
         switch (e.button) {
           case Button::Back:
@@ -180,6 +184,8 @@ StateTransition AppLauncherState::update(Core& core) {
     // Ensure full CPU speed for responsive display I/O when rendering
     if (needsRender_) {
       core.cpu.unthrottle();
+    } else if (mode_ == Mode::Overlay && activeApp_ == APP_POMODORO) {
+      core.cpu.throttle();
     }
   }
 
@@ -238,13 +244,13 @@ void AppLauncherState::render(Core& core) {
         if (APPS[activeApp_].renderMenu) {
           APPS[activeApp_].renderMenu(core);
         }
-        if (activeApp_ != APP_CLOCK) {
+        if (activeApp_ != APP_CLOCK && activeApp_ != APP_POMODORO) {
           const int btnY = renderer_.getScreenHeight() - 50;
           renderer_.clearArea(0, btnY, renderer_.getScreenWidth(), 50, THEME.backgroundColor);
           ui::ButtonBar buttons(tr(BACK), tr(CONFIRM), "<", ">");
           ui::buttonBar(renderer_, THEME, buttons);
         }
-        renderer_.displayBuffer(papyrix::hal::Display::FAST_REFRESH);
+        renderer_.displayBuffer(papyrix::hal::Display::FAST_REFRESH, activeApp_ == APP_POMODORO);
       }
       break;
   }

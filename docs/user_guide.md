@@ -530,7 +530,7 @@ Press **Start** to begin a 25 minute focus period. Press **Pause** to stop the c
 
 A short break lasts 5 minutes. A long break lasts 15 minutes. The long break follows every fourth completed focus period. Press **Skip** during a break to end that break. Manual then waits for **Start**. Auto starts the next period.
 
-Open **Menu** to select **Manual** or **Auto**. Manual waits for **Start** at the end of each period. Auto starts the next period. Manual is the default. The device saves this choice.
+Open **Menu** to select **Manual** or **Auto**. Manual waits for **Start** at the end of each period. Auto starts the next period. Auto is the default. The device saves this choice.
 
 The book cat marks a focus period. The cup cat marks a break. The colors follow the current theme.
 

@@ -31,13 +31,13 @@ int main() {
   Timer timer;
 
   expectIdleFocus(runner, timer, "new timer is idle focus");
-  runner.expectEq(modeId(StartMode::Manual), modeId(timer.startMode), "new timer is manual");
+  runner.expectEq(modeId(StartMode::Auto), modeId(timer.startMode), "new timer is auto");
   runner.expectEq(25u, papyrix::pomodoro::displayedMinutes(timer.remainingMs), "idle shows 25 minutes");
 
   char label[32];
   papyrix::pomodoro::writePeriodLabel(timer, label, sizeof(label));
   runner.expectEqual("Focus · session 1 of 4", label, "idle focus label");
-  runner.expectEqual("Ready · Manual", papyrix::pomodoro::statusLabel(timer), "idle status");
+  runner.expectEqual("Ready · Auto", papyrix::pomodoro::statusLabel(timer), "idle status");
   runner.expectEqual("Start", papyrix::pomodoro::thirdButtonLabel(timer), "idle button");
 
   papyrix::pomodoro::start(timer, 1000);
@@ -53,6 +53,7 @@ int main() {
   runner.expectEq(frozen - 60000u, timer.remainingMs, "resume continues from the frozen time");
 
   timer = Timer{};
+  timer.startMode = StartMode::Manual;
   papyrix::pomodoro::start(timer, 0);
   papyrix::pomodoro::tick(timer, kFocusMs + kShortBreakMs);
   runner.expectEq(stateId(RunState::Waiting), stateId(timer.run), "a late tick waits once");
@@ -60,6 +61,7 @@ int main() {
   runner.expectEq(kShortBreakMs, timer.remainingMs, "the next period keeps its full duration");
 
   timer = Timer{};
+  timer.startMode = StartMode::Manual;
   for (int focus = 1; focus <= 3; ++focus) {
     papyrix::pomodoro::start(timer, 10);
     completeRunningPeriod(timer);
@@ -82,7 +84,6 @@ int main() {
   runner.expectEq(0, static_cast<int>(timer.completedFocus), "a long break clears the count");
 
   timer = Timer{};
-  timer.startMode = StartMode::Auto;
   papyrix::pomodoro::start(timer, 0);
   completeRunningPeriod(timer);
   runner.expectEq(stateId(RunState::Running), stateId(timer.run), "auto starts the next period");
@@ -91,6 +92,7 @@ int main() {
   runner.expectEq(periodId(Period::ShortBreak), periodId(timer.period), "start during running does nothing");
 
   timer = Timer{};
+  timer.startMode = StartMode::Manual;
   papyrix::pomodoro::start(timer, 0);
   completeRunningPeriod(timer);
   papyrix::pomodoro::start(timer, 5);
@@ -114,6 +116,7 @@ int main() {
   papyrix::pomodoro::reset(timer);
   expectIdleFocus(runner, timer, "reset from paused returns to idle focus");
   runner.expectEq(modeId(StartMode::Auto), modeId(timer.startMode), "reset from paused keeps auto");
+  timer.startMode = StartMode::Manual;
   papyrix::pomodoro::start(timer, 210);
   completeRunningPeriod(timer);
   papyrix::pomodoro::reset(timer);
@@ -131,6 +134,7 @@ int main() {
   runner.expectEq(1u, papyrix::pomodoro::displayedMinutes(1), "1 ms shows 1 minute");
 
   timer = Timer{};
+  timer.startMode = StartMode::Manual;
   papyrix::pomodoro::start(timer, 0xFFFF0000u);
   papyrix::pomodoro::tick(timer, timer.deadlineMs - 1u);
   runner.expectEq(stateId(RunState::Running), stateId(timer.run), "wrap still has time before the deadline");

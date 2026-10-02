@@ -18,7 +18,7 @@ inline constexpr uint8_t kFocusPerCycle = 4;
 struct Timer {
   Period period = Period::Focus;
   RunState run = RunState::Idle;
-  StartMode startMode = StartMode::Manual;
+  StartMode startMode = StartMode::Auto;
   uint8_t completedFocus = 0;
   uint32_t remainingMs = kFocusMs;
   uint32_t deadlineMs = 0;

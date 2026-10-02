@@ -20,7 +20,7 @@ extern GfxRenderer renderer;
 namespace papyrix::pomodoro_app {
 namespace {
 constexpr const char* kSettingsPath = "/.papyrix/apps/pomodoro.txt";
-constexpr int kCellSize = 18;
+constexpr int kCellSize = 26;
 struct State {
   pomodoro::Timer timer;
   bool settingsChanged = false;
@@ -37,7 +37,9 @@ void loadSettings(Core& core) {
   while (line && *line) {
     char* nl = std::strchr(line, '\n');
     if (nl) *nl = '\0';
-    if (std::strncmp(line, "startMode=", 10) == 0 && std::strcmp(line + 10, "auto") == 0) {
+    if (std::strcmp(line, "startMode=manual") == 0) {
+      state.timer.startMode = pomodoro::StartMode::Manual;
+    } else if (std::strcmp(line, "startMode=auto") == 0) {
       state.timer.startMode = pomodoro::StartMode::Auto;
     }
     line = nl ? nl + 1 : nullptr;
@@ -103,25 +105,27 @@ bool render(Core& core) {
   (void)core;
   const Theme& theme = THEME;
   renderer.clearScreen(theme.backgroundColor);
-  const int width = renderer.getScreenWidth();
-  const int height = renderer.getScreenHeight();
-  const int centerX = width / 2;
+  const auto layout = clock_face_primitives::makeLayout(renderer);
   char label[32];
   pomodoro::writePeriodLabel(state.timer, label, sizeof(label));
-  renderer.drawCenteredText(theme.uiFontId, theme.screenMarginTop, label, theme.primaryTextBlack);
+  renderer.drawCenteredText(theme.uiFontId, layout.top + 12, label, theme.secondaryTextBlack);
 
-  const int digitY = theme.screenMarginTop + renderer.getLineHeight(theme.uiFontId) + 8;
+  constexpr int digitHeight = 7 * kCellSize;
+  constexpr int catSize = PomodoroFocusCatSize;
+  const int smallLineHeight = renderer.getLineHeight(theme.smallFontId);
+  const int groupHeight = digitHeight + 8 + smallLineHeight + 24 + catSize + 12 + smallLineHeight;
+  const int digitY = layout.top + (layout.contentHeight - groupHeight) / 2;
   const uint32_t minutes = pomodoro::displayedMinutes(state.timer.remainingMs);
-  drawMinutes(renderer, centerX, digitY, minutes, theme.primaryTextBlack);
-  const int unitY = digitY + 7 * kCellSize + 6;
-  renderer.drawCenteredText(theme.smallFontId, unitY, "minutes left", theme.primaryTextBlack);
+  drawMinutes(renderer, layout.centerX, digitY, minutes, theme.primaryTextBlack);
+  const int unitY = digitY + digitHeight + 8;
+  renderer.drawCenteredText(theme.smallFontId, unitY, "minutes left", theme.secondaryTextBlack);
 
-  const int catY = unitY + renderer.getLineHeight(theme.smallFontId) + 6;
+  const int catY = unitY + smallLineHeight + 24;
   const uint8_t* cat = state.timer.period == pomodoro::Period::Focus ? PomodoroFocusCat : PomodoroBreakCat;
-  ui::inkBitmap(renderer, cat, PomodoroFocusCatSize, centerX - PomodoroFocusCatSize / 2, catY, theme.primaryTextBlack);
+  ui::inkBitmap(renderer, cat, catSize, layout.centerX - catSize / 2, catY, theme.primaryTextBlack);
 
-  const int statusY = height - 50 - renderer.getLineHeight(theme.smallFontId) - 4;
-  renderer.drawCenteredText(theme.smallFontId, statusY, pomodoro::statusLabel(state.timer), theme.primaryTextBlack);
+  renderer.drawCenteredText(theme.smallFontId, catY + catSize + 12, pomodoro::statusLabel(state.timer),
+                            theme.secondaryTextBlack);
   ui::ButtonBar buttons("Back", "Menu", pomodoro::thirdButtonLabel(state.timer), "Reset");
   ui::buttonBar(renderer, theme, buttons);
   return false;
