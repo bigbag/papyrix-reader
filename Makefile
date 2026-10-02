@@ -37,7 +37,9 @@ flash-x4pro: ## Build and flash release firmware for X4 Pro (hold Power)
 	pio run -e release_x4pro --target upload
 
 flash-x4c: ## Build and flash release firmware for X4 Classic
-	pio run -e release_x4c --target upload
+	@port="$${PLATFORMIO_UPLOAD_PORT:-}"; \
+	if [ -z "$$port" ]; then port=$$(python3 scripts/select_usb_jtag_port.py) || exit 1; fi; \
+	pio run -e release_x4c --target upload --upload-port "$$port"
 
 # Aliases
 upload-release: flash-xteink-c3 ## Alias for flash-xteink-c3 (X3/X4)
@@ -163,6 +165,7 @@ test-tools: ## Host-tool tests (packaging, HTML, clock simulators)
 	@python3 test/scripts/test_clock_display.py
 	@python3 test/scripts/test_package_firmware.py
 	@python3 test/scripts/test_build_html.py
+	@python3 scripts/test_select_usb_jtag_port.py
 
 test-clean: ## Clean test build artifacts
 	@rm -rf test/build

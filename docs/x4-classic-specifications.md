@@ -98,6 +98,18 @@ The application must fit the selected slot.
 Back up factory NVS and preserve it at `0x9000`.
 Factory NVS supplies the panel identity used by Classic.
 
+To build and flash the Classic release image over USB, use:
+
+```sh
+make flash-x4c
+```
+
+The target selects one connected Espressif USB-Serial/JTAG port and stops if
+it finds none or more than one. Pro and Classic use the same USB identifier.
+Confirm that the connected reader is Classic before you flash. Stop serial log
+capture and keep the reader awake during the upload. Set
+`PLATFORMIO_UPLOAD_PORT=/dev/ttyACM0` to select a port when needed.
+
 The standard partition table uses these regions:
 
 - **NVS:** `0x9000`, size `0x5000`
