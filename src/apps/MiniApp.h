@@ -26,5 +26,6 @@ extern const int8_t APP_IMAGEVIEWER;
 extern const int8_t APP_CLOCK;
 extern const int8_t APP_PRINTER;
 extern const int8_t APP_LOCALSEND;
+extern const int8_t APP_POMODORO;
 
 }  // namespace papyrix

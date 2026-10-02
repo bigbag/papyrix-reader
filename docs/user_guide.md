@@ -522,6 +522,22 @@ Press **Back** to stop the receiver and shut the WiFi down.
 
 ---
 
+### 3.11 Pomodoro
+
+Open **Apps → Pomodoro**. The screen shows the remaining minutes for the current period.
+
+Press **Start** to begin a 25 minute focus period. Press **Pause** to stop the countdown. Press **Resume** to continue. Press **Reset** to return to a new focus period.
+
+A short break lasts 5 minutes. A long break lasts 15 minutes. The long break follows every fourth completed focus period. Press **Skip** during a break to end that break. Manual then waits for **Start**. Auto starts the next period.
+
+Open **Menu** to select **Manual** or **Auto**. Manual waits for **Start** at the end of each period. Auto starts the next period. Manual is the default. The device saves this choice.
+
+The book cat marks a focus period. The cup cat marks a break. The colors follow the current theme.
+
+Press **Back** to leave the app. The device discards the current timer. The timer does not run while you read or while the device sleeps.
+
+---
+
 ## 4. Reading Mode
 
 After you open a book, the button layout changes to help you read.

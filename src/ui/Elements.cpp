@@ -17,14 +17,12 @@ static uint8_t frontButtonLayout_ = 0;
 
 void setFrontButtonLayout(uint8_t layout) { frontButtonLayout_ = layout; }
 
-namespace {
-
-void blitInkBitmap(const GfxRenderer& r, const uint8_t* data, int srcSize, int x0, int y0, bool ink) {
-  if (data == nullptr || srcSize <= 0) return;
-  const int rowBytes = srcSize / 8;
-  for (int y = 0; y < srcSize; y++) {
+void inkBitmap(const GfxRenderer& r, const uint8_t* data, int size, int x0, int y0, bool ink) {
+  if (data == nullptr || size <= 0) return;
+  const int rowBytes = size / 8;
+  for (int y = 0; y < size; y++) {
     int run = -1;
-    for (int x = 0; x < srcSize; x++) {
+    for (int x = 0; x < size; x++) {
       const bool isInk = (data[y * rowBytes + (x / 8)] & (0x80 >> (x & 7))) == 0;
       if (isInk) {
         if (run < 0) run = x;
@@ -33,11 +31,9 @@ void blitInkBitmap(const GfxRenderer& r, const uint8_t* data, int srcSize, int x
         run = -1;
       }
     }
-    if (run >= 0) r.fillRect(x0 + run, y0 + y, srcSize - run, 1, ink);
+    if (run >= 0) r.fillRect(x0 + run, y0 + y, size - run, 1, ink);
   }
 }
-
-}  // namespace
 
 void title(const GfxRenderer& r, const Theme& t, int y, const char* text) {
   r.drawCenteredText(t.readerFontId, y, text, t.primaryTextBlack, EpdFontFamily::BOLD);
@@ -173,13 +169,12 @@ void image(const GfxRenderer& r, int x, int y, const uint8_t* data, int w, int h
 }
 
 void localsendLogo(const GfxRenderer& r, const Theme& t, int cx, int cy) {
-  blitInkBitmap(r, LocalsendLogo, LocalsendLogoSize, cx - LocalsendLogoSize / 2, cy - LocalsendLogoSize / 2,
-                t.primaryTextBlack);
+  inkBitmap(r, LocalsendLogo, LocalsendLogoSize, cx - LocalsendLogoSize / 2, cy - LocalsendLogoSize / 2,
+            t.primaryTextBlack);
 }
 
 void printerLogo(const GfxRenderer& r, const Theme& t, int cx, int cy) {
-  blitInkBitmap(r, PrinterLogo, PrinterLogoSize, cx - PrinterLogoSize / 2, cy - PrinterLogoSize / 2,
-                t.primaryTextBlack);
+  inkBitmap(r, PrinterLogo, PrinterLogoSize, cx - PrinterLogoSize / 2, cy - PrinterLogoSize / 2, t.primaryTextBlack);
 }
 
 void dialog(const GfxRenderer& r, const Theme& t, const char* titleText, const char* msg, int selected) {

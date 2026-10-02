@@ -7,7 +7,12 @@ lib/EpdFont/fontsrc
 CLAUDE.md
 AGENTS.md
 .claude/
-docs/superpowers/
+docs/superpowers/*
+!docs/superpowers/specs/
+!docs/superpowers/specs/**
+!docs/superpowers/plans/
+!docs/superpowers/plans/**
+.superpowers/
 node_modules/
 scripts/node_modules/
 tmp/*

@@ -56,6 +56,7 @@ int textWrapped(const GfxRenderer& r, const Theme& t, int y, const char* str, in
 void image(const GfxRenderer& r, int x, int y, const uint8_t* data, int w, int h);
 void localsendLogo(const GfxRenderer& r, const Theme& t, int cx, int cy);
 void printerLogo(const GfxRenderer& r, const Theme& t, int cx, int cy);
+void inkBitmap(const GfxRenderer& r, const uint8_t* data, int size, int x, int y, bool ink);
 
 // Dialog - Yes/No confirmation dialog
 void dialog(const GfxRenderer& r, const Theme& t, const char* title, const char* msg, int selected);

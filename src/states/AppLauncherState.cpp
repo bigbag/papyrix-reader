@@ -226,7 +226,8 @@ void AppLauncherState::render(Core& core) {
     case Mode::App:
       if (activeApp_ >= 0 && APPS[activeApp_].render) {
         if (!APPS[activeApp_].render(core)) {
-          renderer_.displayBuffer(papyrix::hal::Display::FAST_REFRESH, activeApp_ == APP_CLOCK);
+          renderer_.displayBuffer(papyrix::hal::Display::FAST_REFRESH,
+                                  activeApp_ == APP_CLOCK || activeApp_ == APP_POMODORO);
         }
       }
       break;
