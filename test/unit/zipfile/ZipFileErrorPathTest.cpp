@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <utility>
@@ -352,8 +353,7 @@ int main() {
     MockPrint failOut;
     uint8_t failBytes[33024] = {};
     BuildArena failArena(failBytes, sizeof(failBytes));
-    const auto failed =
-        zipFail.readFileToStreamDetailed("chapter.xhtml", failOut, 64, nullptr, nullptr, &failArena);
+    const auto failed = zipFail.readFileToStreamDetailed("chapter.xhtml", failOut, 64, nullptr, nullptr, &failArena);
     runner.expectTrue(failed == StreamReadResult::DecompressionError, "deflated extract rejects negative read");
     runner.expectEq<size_t>(0, failArena.used(), "deflated negative read releases arena");
   }
@@ -551,6 +551,37 @@ int main() {
     const int found = zip.findFirstExisting(candidates, 2, [&checks]() { return ++checks >= 3; });
     runner.expectEq<int>(-1, found, "FindFirstExisting_Abort_ReturnsNotFound");
     runner.expectTrue(checks >= 3, "FindFirstExisting_Abort_CheckedDuringScan");
+  }
+
+  // Oversize in-memory entry is rejected before allocation (zip-bomb guard).
+  // The raised heap mock keeps the 80% guard out of the way, so only the cap decides.
+  {
+    SdMan.reset();
+    testSetLargestFreeBlock(1024 * 1024);
+    const std::string big(600 * 1024, 'x');
+    SdMan.setFileData("/big.zip", createStoredZip("big.xhtml", big));
+    ZipFile zip("/big.zip");
+    size_t size = 0;
+    uint8_t* data = zip.readFileToMemory("big.xhtml", &size);
+    runner.expectTrue(data == nullptr, "ReadOversizeEntry_RejectsWithoutAlloc");
+    if (data) free(data);
+    testResetLargestFreeBlock();
+  }
+
+  // An entry exactly at the cap is accepted with intact content.
+  {
+    SdMan.reset();
+    testSetLargestFreeBlock(1024 * 1024);
+    const std::string edge(512 * 1024, 'y');
+    SdMan.setFileData("/edge.zip", createStoredZip("edge.xhtml", edge));
+    ZipFile zip("/edge.zip");
+    size_t size = 0;
+    uint8_t* data = zip.readFileToMemory("edge.xhtml", &size);
+    runner.expectTrue(data != nullptr, "ReadAtCapEntry_Accepts");
+    runner.expectEq<size_t>(edge.size(), size, "ReadAtCapEntry_SizeMatches");
+    runner.expectTrue(data == nullptr || (data[0] == 'y' && data[size - 1] == 'y'), "ReadAtCapEntry_ContentMatches");
+    free(data);
+    testResetLargestFreeBlock();
   }
 
   SdMan.reset();

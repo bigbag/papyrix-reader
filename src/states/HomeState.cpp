@@ -145,7 +145,12 @@ void HomeState::updateBattery(Core& core) {
   view_.setBatteryCharging(core.usb.isConnected());
 }
 
-void HomeState::onUsbStateChanged(Core& core) { updateBattery(core); }
+void HomeState::onUsbStateChanged(Core& core) {
+  updateBattery(core);
+  // A connect/disconnect edge can leave a stale BootView frame after the X4
+  // power transition (docs/x4-specifications.md). Repaint fully to replace it.
+  view_.needsRender = true;
+}
 
 StateTransition HomeState::activate(Core& core, ui::HomeView::Hit hit) {
   switch (hit) {

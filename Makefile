@@ -163,6 +163,7 @@ test-tools: ## Host-tool tests (packaging, HTML, clock simulators)
 	@python3 test/scripts/test_clock_app.py
 	@python3 test/scripts/test_clock_faces.py
 	@python3 test/scripts/test_clock_display.py
+	@python3 test/scripts/test_home_usb_repaint.py
 	@python3 test/scripts/test_package_firmware.py
 	@python3 test/scripts/test_build_html.py
 	@python3 scripts/test_select_usb_jtag_port.py

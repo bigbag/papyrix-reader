@@ -439,7 +439,18 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
     return nullptr;
   }
 
+  constexpr size_t kMaxInMemoryFileSize = 512 * 1024;
+  if (inflatedDataSize > kMaxInMemoryFileSize) {
+    LOG_ERR(TAG, "ZIP entry too large (%zu > %zu)", inflatedDataSize, kMaxInMemoryFileSize);
+    if (!wasOpen) close();
+    return nullptr;
+  }
   const size_t dataSize = inflatedDataSize + (trailingNullByte ? 1 : 0);
+  if (dataSize > 1024 && dataSize > heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) * 80 / 100) {
+    LOG_ERR(TAG, "Insufficient heap for ZIP entry (%zu bytes)", dataSize);
+    if (!wasOpen) close();
+    return nullptr;
+  }
   const auto data = static_cast<uint8_t*>(malloc(dataSize));
   if (data == nullptr) {
     LOG_ERR(TAG, "Failed to allocate memory for output buffer (%zu bytes)", dataSize);

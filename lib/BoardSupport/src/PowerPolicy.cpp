@@ -28,6 +28,8 @@ void prepareDeepSleepPins(const BoardProfile& profile, bool externalPower) {
     holdOutput(profile.storage.powerPin, !profile.storage.powerActiveHigh);
     holdOutput(profile.display.rst, true);
     holdOutput(profile.power.latchPin, profile.power.latchActiveHigh);
+    holdOutput(profile.frontLight.gpio, !profile.frontLight.activeHigh);
+    holdOutput(profile.frontLight.warmGpio, !profile.frontLight.activeHigh);
     return;
   }
   if (profile.storage.transport == StorageTransport::Spi && profile.storage.powerPin != kPinUnused) {

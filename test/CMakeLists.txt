@@ -211,6 +211,8 @@ foreach(TEST_SRC ${TEST_SOURCES})
     add_executable(${TEST_NAME}
       ${TEST_SRC}
       ${PROJECT_ROOT}/lib/BoardSupport/src/X4ProBoard.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/FrontLightBackend.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
       ${PROJECT_ROOT}/lib/BoardSupport/src/BootHardware.cpp
       ${PROJECT_ROOT}/lib/BoardSupport/src/PowerPolicy.cpp
       ${PROJECT_ROOT}/lib/SDCardManager/src/SDPowerControl.cpp

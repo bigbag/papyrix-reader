@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <HardwareIdentity.h>
+#include <driver/gpio.h>
 
 #include "TargetConfig.h"
 
@@ -11,6 +12,8 @@ bool FrontLightBackend::begin() {
   config_ = HardwareIdentity::instance().profile().frontLight;
   if (config_.gpio == kPinUnused) return false;
 
+  gpio_hold_dis(static_cast<gpio_num_t>(config_.gpio));
+  if (config_.warmGpio != kPinUnused) gpio_hold_dis(static_cast<gpio_num_t>(config_.warmGpio));
   const bool coolAttached = ledcAttach(config_.gpio, config_.pwmHz, config_.resolutionBits);
   const bool warmAttached =
       config_.warmGpio == kPinUnused || ledcAttach(config_.warmGpio, config_.pwmHz, config_.resolutionBits);

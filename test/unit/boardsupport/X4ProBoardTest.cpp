@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <BoardProfiles.h>
 #include <BootHardware.h>
+#include <FrontLightBackend.h>
 #include <PowerPolicy.h>
 #include <X4ProBoard.h>
 
@@ -39,13 +40,12 @@ int main() {
     runner.expectTrue(eventIndex(TestGpioEventType::PinMode, pin, INPUT_PULLUP) >= 0,
                       "boot configures active-low buttons with pull-ups");
   }
-  runner.expectTrue(eventIndex(TestGpioEventType::DigitalWrite, 4, LOW) <
-                       eventIndex(TestGpioEventType::DigitalWrite, 4, HIGH),
-                    "boot releases touch reset after assertion");
-  runner.expectTrue(eventIndex(TestGpioEventType::PinMode, 10, INPUT) >
-                       eventIndex(TestGpioEventType::DigitalWrite, 10, LOW),
-                    "boot releases the touch interrupt after address selection");
-
+  runner.expectTrue(
+      eventIndex(TestGpioEventType::DigitalWrite, 4, LOW) < eventIndex(TestGpioEventType::DigitalWrite, 4, HIGH),
+      "boot releases touch reset after assertion");
+  runner.expectTrue(
+      eventIndex(TestGpioEventType::PinMode, 10, INPUT) > eventIndex(TestGpioEventType::DigitalWrite, 10, LOW),
+      "boot releases the touch interrupt after address selection");
 
   testResetGpioEvents();
   papyrix::board::x4pro::prepareCharacterization(profile);
@@ -71,9 +71,19 @@ int main() {
   runner.expectTrue(eventIndex(TestGpioEventType::DigitalWrite, 2, HIGH) >= 0, "sleep disables the touch rail");
   runner.expectTrue(eventIndex(TestGpioEventType::DigitalWrite, 14, HIGH) >= 0, "sleep keeps panel reset high");
   runner.expectTrue(eventIndex(TestGpioEventType::DigitalWrite, 1, HIGH) >= 0, "sleep keeps the master latch asserted");
-  runner.expectTrue(eventIndex(TestGpioEventType::HoldEnable, 1, 0) >
-                       eventIndex(TestGpioEventType::DigitalWrite, 1, HIGH),
-                    "sleep holds the asserted master latch");
+  runner.expectTrue(eventIndex(TestGpioEventType::DigitalWrite, 8, LOW) >= 0, "sleep drives front-light cool off");
+  runner.expectTrue(eventIndex(TestGpioEventType::DigitalWrite, 9, LOW) >= 0, "sleep drives front-light warm off");
+  runner.expectTrue(eventIndex(TestGpioEventType::HoldEnable, 8, 0) >= 0, "sleep holds front-light cool off");
+  runner.expectTrue(eventIndex(TestGpioEventType::HoldEnable, 9, 0) >= 0, "sleep holds front-light warm off");
+  runner.expectTrue(
+      eventIndex(TestGpioEventType::HoldEnable, 1, 0) > eventIndex(TestGpioEventType::DigitalWrite, 1, HIGH),
+      "sleep holds the asserted master latch");
+
+  testResetGpioEvents();
+  papyrix::board::FrontLightBackend wakeLight;
+  runner.expectTrue(wakeLight.begin(), "wake re-initializes the front light");
+  runner.expectTrue(eventIndex(TestGpioEventType::HoldDisable, 8, 0) >= 0, "wake releases the cool hold");
+  runner.expectTrue(eventIndex(TestGpioEventType::HoldDisable, 9, 0) >= 0, "wake releases the warm hold");
 
   testResetGpioEvents();
   papyrix::board::shutdownRecoveryRails(profile);

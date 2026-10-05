@@ -124,6 +124,8 @@ class InputManager {
 
   static constexpr int ADC_NO_BUTTON = 3900;
   static constexpr unsigned long DEBOUNCE_DELAY = 20;
+  static constexpr unsigned long ACTIVE_SAMPLE_INTERVAL_MS = 5;
+  static constexpr unsigned long IDLE_SAMPLE_INTERVAL_MS = 50;
 
   static const char* BUTTON_NAMES[];
   BackgroundTask samplingTask_;

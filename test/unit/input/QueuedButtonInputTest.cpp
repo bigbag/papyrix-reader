@@ -7,6 +7,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
+#include <vector>
 
 #include "hal/Input.h"
 #include "test_utils.h"
@@ -101,6 +102,36 @@ int main() {
   runner.expectTrue(queue.pop(restarted) && restarted.type == EventType::ButtonPress &&
                         restarted.button == Button::Back,
                     "restart does not replay stale transitions");
+  runner.expectTrue(holdBack(false), "restart hold clears through the sampler");
+  {
+    Event event{};
+    for (int i = 0; i < 8; ++i) {
+      inputManager.update();
+      input.poll();
+      while (queue.pop(event)) {
+      }
+    }
+  }
+  runner.expectFalse(input.isPressed(Button::Back), "restart hold is released before the tap test");
+  runner.expectTrue(holdBack(true), "sampler observes the tap press");
+  runner.expectTrue(holdBack(false), "sampler observes the tap release");
+  {
+    // The press below spans several samples, so it survives the slow idle rate.
+    // This is an acknowledged tradeoff, not full coverage: a press contained
+    // entirely between two 50 ms idle samples is still lost.
+    std::vector<Event> tap;
+    Event event{};
+    for (int i = 0; i < 8; ++i) {
+      inputManager.update();
+      input.poll();
+      while (queue.pop(event)) tap.push_back(event);
+    }
+    const bool pressThenRelease =
+        tap.size() == 2 && tap[0].type == EventType::ButtonPress && tap[0].button == Button::Back &&
+        tap[1].type == EventType::ButtonRelease && tap[1].button == Button::Back;
+    runner.expectTrue(pressThenRelease, "idle-rate sampling keeps a normal tap press and release in order");
+  }
+
   input.shutdown();
   testSetDigitalReadHook(nullptr);
   testSetAnalogReadHook(nullptr);
