@@ -281,3 +281,4 @@ INVALID_SSID=SSID: 1-32 caracteres
 NETWORK_LIMIT=Límite de redes
 SSID_ALREADY_SAVED=Ya guardada
 FILENAME_VAL=Nombre de archivo
+LOW_SPACE_WARNING=Tarjeta SD llena. Libere espacio.

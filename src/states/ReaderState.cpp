@@ -42,6 +42,7 @@
 #include "../core/Core.h"
 #include "../core/EmergencyBootTransition.h"
 #include "../core/ExitToUiTransition.h"
+#include "../core/StorageLimits.h"
 #include "../ui/Elements.h"
 #include "../ui/views/ReaderViews.h"
 #include "ThemeManager.h"
@@ -710,6 +711,16 @@ void ReaderState::enter(Core& core) {
   const auto& transition = getTransition();
   sourceState_ =
       (transition.isValid() && transition.returnTo == ReturnTo::FILE_MANAGER) ? StateId::FileList : StateId::Home;
+
+  // Hard gate: refuse the book when free space drops below the open
+  // threshold. The update loop routes loadFailed_ with a message to
+  // ErrorState, so the book never opens and the warning stays visible.
+  if (!openBookAllowed(SdMan.freeBytes())) {
+    LOG_ERR(TAG, "Refuse book open: low SD space");
+    snprintf(core.buf.text, sizeof(core.buf.text), "%s", tr(LOW_SPACE_WARNING));
+    loadFailed_ = true;
+    return;
+  }
 
   LOG_INF(TAG, "Entering with path: %s", contentPath_);
 

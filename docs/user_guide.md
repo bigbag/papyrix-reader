@@ -231,6 +231,8 @@ Text and reading settings, in menu order:
   - After indexing, the exact total page count is immediately available in the status bar
   - Useful for books where you want accurate page counts from the start (skipped for XTC/XTCH files)
   - Sections that are already cached are skipped, so a book that you indexed before opens immediately
+  - Opening any book needs at least 20 MB free space on the SD card, with this setting on or off and for all formats
+  - Below 20 MB the device shows a warning and does not open the book
 
 
 

@@ -281,3 +281,4 @@ INVALID_SSID=SSID: 1-32 символи
 NETWORK_LIMIT=Ліміт мереж
 SSID_ALREADY_SAVED=Уже збережено
 FILENAME_VAL=Ім'я файлу
+LOW_SPACE_WARNING=SD-картка заповнена. Звільніть місце.

@@ -284,6 +284,7 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "Network limit reached",           // NETWORK_LIMIT
     "Already saved",                   // SSID_ALREADY_SAVED
     "Filename",                        // FILENAME_VAL
+    "SD card full. Free space.",       // LOW_SPACE_WARNING
 };
 // clang-format on
 

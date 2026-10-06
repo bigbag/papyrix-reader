@@ -87,3 +87,10 @@ Remove the SD card and restart the device.
 If USB becomes available, install the correct release artifact.
 Do not connect wires to SD contacts to force download mode.
 This repository does not provide a verified device-specific procedure for that operation.
+
+## Full SD Card
+
+A full card cannot store page caches. The device shows **SD card full. Free
+space.** and does not open the book. Free space to continue reading. Delete
+books over USB, or use **Clear Book Cache** in settings. Clearing the cache
+also deletes reading progress.

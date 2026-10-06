@@ -260,6 +260,7 @@ static constexpr KeyMapping KEY_MAP[] = {
     {"NETWORK_LIMIT", StrId::STR_NETWORK_LIMIT},
     {"SSID_ALREADY_SAVED", StrId::STR_SSID_ALREADY_SAVED},
     {"FILENAME_VAL", StrId::STR_FILENAME_VAL},
+    {"LOW_SPACE_WARNING", StrId::STR_LOW_SPACE_WARNING},
 };
 // clang-format on
 

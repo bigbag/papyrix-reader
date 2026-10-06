@@ -33,6 +33,9 @@ class SDCardManager {
   FsFile open(const char* path, oflag_t oflag = O_RDONLY);
   bool mkdir(const char* path, const bool pFlag = true) { return sd.mkdir(path, pFlag); }
   bool exists(const char* path);
+  // Free space in bytes. Returns 0 when the card is not initialized or the
+  // query fails. Read-only: safe to call before any write.
+  uint64_t freeBytes();
   bool remove(const char* path) { return sd.remove(path); }
   bool rmdir(const char* path) { return sd.rmdir(path); }
   bool rename(const char* path, const char* newPath) { return sd.rename(path, newPath); }

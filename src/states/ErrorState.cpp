@@ -9,6 +9,7 @@
 
 #include "../core/BootMode.h"
 #include "../core/Core.h"
+#include "../core/EmergencyBootTransition.h"
 #include "../ui/WrappedText.h"
 #include "ThemeManager.h"
 
@@ -53,6 +54,8 @@ StateTransition ErrorState::update(Core& core) {
       if (core.bootMode == BootMode::READER) {
         LOG_INF(TAG, "Reader-mode error dismissed — rebooting to UI");
         showTransitionNotification(tr(RETURNING_TO_LIBRARY));
+        // RTC first: settings save needs SD writes and fails on a full card.
+        saveEmergencyUiTransition(ReturnTo::FILE_MANAGER);
         saveTransition(BootMode::UI, nullptr, ReturnTo::FILE_MANAGER);
         vTaskDelay(50 / portTICK_PERIOD_MS);
         ESP.restart();

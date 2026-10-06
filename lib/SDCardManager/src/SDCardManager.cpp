@@ -3,9 +3,11 @@
 #include <HardwareIdentity.h>
 #include <Logging.h>
 
+#include <cstdint>
 #include <cstring>
 
 #include "SDPowerControl.h"
+#include "SdFreeSpace.h"
 #include "SdmmcBlockDevice.h"
 
 #define TAG "SD"
@@ -260,6 +262,11 @@ bool SDCardManager::exists(const char* path) {
     return true;
   }
   return false;
+}
+
+uint64_t SDCardManager::freeBytes() {
+  if (!initialized) return 0;
+  return papyrix::sd::freeBytesFromClusters(sd.freeClusterCount(), sd.sectorsPerCluster());
 }
 
 bool SDCardManager::openByDirScan(const char* path, oflag_t oflag, FsFile& file) {
