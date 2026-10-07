@@ -1201,9 +1201,9 @@ void Display::displayBuffer(RefreshMode mode, const bool turnOffScreen) {
     }
 
     const bool wasOff = !isScreenOn;
-    if (wasOff || doFullSync) {
+    if (wasOff) {  // POWER_ON only after real power-off; a powered panel needs no PON
       sendCommand(0x04);
-      if (wasOff) waitForRefresh(" X3_CMD04");
+      waitForRefresh(" X3_CMD04");
       isScreenOn = true;
     }
 
