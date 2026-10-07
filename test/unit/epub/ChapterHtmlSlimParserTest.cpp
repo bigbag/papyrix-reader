@@ -185,6 +185,18 @@ class TestParser {
       return;
     }
 
+    // Skip elements with the HTML hidden attribute (name only: with or
+    // without a value); before image/table handlers so no placeholders emit
+    if (atts) {
+      for (int i = 0; atts[i]; i += 2) {
+        if (strcmp(atts[i], "hidden") == 0) {
+          self->skipUntilDepth = self->depth;
+          self->depth++;
+          return;
+        }
+      }
+    }
+
     // Image handling
     if (matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS)) {
       self->flushText();
@@ -455,8 +467,11 @@ class TestParser {
     // element close so the styled run captures its style before the flag resets.
     const bool closingCssStyle =
         self->cssBoldUntilDepth == self->depth - 1 || self->cssItalicUntilDepth == self->depth - 1;
+    // A closing tag inside or exiting a skip region must not flush the
+    // accumulated text of the surrounding visible run
+    const bool closingSkipped = self->skipUntilDepth <= self->depth - 1;
     size_t prevCount = self->elements.size();
-    if (headerOrBlockTag || italicOrBoldTag || closingCssStyle) {
+    if (!closingSkipped && (headerOrBlockTag || italicOrBoldTag || closingCssStyle)) {
       self->flushText();
     }
 
@@ -543,6 +558,15 @@ class TestParser {
   bool hasImagePlaceholder() const {
     for (const auto& elem : elements) {
       if (elem.type == ParsedElement::IMAGE_PLACEHOLDER) return true;
+    }
+    return false;
+  }
+
+  bool hasImagePlaceholderContaining(const std::string& needle) const {
+    for (const auto& elem : elements) {
+      if (elem.type == ParsedElement::IMAGE_PLACEHOLDER && elem.content.find(needle) != std::string::npos) {
+        return true;
+      }
     }
     return false;
   }
@@ -649,6 +673,75 @@ int main() {
     runner.expectTrue(parser.getAllText().find("Cell1") == std::string::npos,
                       "table_placeholder: table content skipped");
   }
+
+  // Test 5b: Skip elements carrying the HTML hidden attribute
+  {
+    TestParser parser;
+    bool ok = parser.parse(
+        "<html><body>"
+        "<p>Question 1</p>"
+        "<div hidden=\"\"><p>Answer key</p><span>teacher note</span></div>"
+        "<span hidden=\"hidden\">ocr layer text</span>"
+        "<p>Question 2</p>"
+        "</body></html>");
+    runner.expectTrue(ok, "skip_hidden_attr: parses successfully");
+    runner.expectTrue(parser.getAllText().find("Answer key") == std::string::npos,
+                      "skip_hidden_attr: subtree content skipped");
+    runner.expectTrue(parser.getAllText().find("teacher note") == std::string::npos,
+                      "skip_hidden_attr: nested content skipped");
+    runner.expectTrue(parser.getAllText().find("ocr layer") == std::string::npos,
+                      "skip_hidden_attr: valued form skipped");
+    runner.expectTrue(parser.getAllText().find("Question 1") != std::string::npos,
+                      "skip_hidden_attr: visible text before kept");
+    runner.expectTrue(parser.getAllText().find("Question 2") != std::string::npos,
+                      "skip_hidden_attr: visible text after kept");
+  }
+
+  // Test 5c: Hidden images and tables emit no placeholders
+  {
+    TestParser parser;
+    bool ok = parser.parse(
+        "<html><body>"
+        "<img src=\"scan.png\" hidden=\"\" alt=\"OCR text layer\"/>"
+        "<table hidden=\"\"><tr><td>HIDTBL</td></tr></table>"
+        "<img src=\"vis.png\" alt=\"visible art\"/>"
+        "</body></html>");
+    runner.expectTrue(ok, "skip_hidden_media: parses successfully");
+    runner.expectTrue(!parser.hasImagePlaceholderContaining("OCR text layer"),
+                      "skip_hidden_media: no placeholder for hidden image");
+    runner.expectTrue(parser.hasImagePlaceholderContaining("visible art"),
+                      "skip_hidden_media: visible image placeholder kept");
+    runner.expectTrue(!parser.hasTablePlaceholder(),
+                      "skip_hidden_media: no placeholder for hidden table");
+    runner.expectTrue(parser.getAllText().find("HIDTBL") == std::string::npos,
+                      "skip_hidden_media: hidden table content skipped");
+  }
+
+  // Test 5d: A hidden inline style tag must not split the visible word
+  {
+    TestParser parser;
+    bool ok = parser.parse("<html><body><p>some<b hidden=\"\">SECRET</b>thing</p></body></html>");
+    runner.expectTrue(ok, "hidden_inline_split: parses successfully");
+    runner.expectTrue(parser.getAllText().find("SECRET") == std::string::npos,
+                      "hidden_inline_split: hidden content skipped");
+    runner.expectTrue(parser.getAllText().find("something") != std::string::npos,
+                      "hidden_inline_split: visible word not split");
+  }
+
+  // Test 5e: A hidden style tag nested in a visible style run keeps the run
+  {
+    TestParser parser;
+    bool ok = parser.parse("<html><body><p>aa<i>bb<b hidden=\"\">CC</b>dd</i>ee</p></body></html>");
+    runner.expectTrue(ok, "hidden_nested_style: parses successfully");
+    runner.expectTrue(parser.getAllText().find("CC") == std::string::npos,
+                      "hidden_nested_style: hidden content skipped");
+    runner.expectTrue(parser.getAllText().find("bbdd") != std::string::npos &&
+                          parser.getAllText().find("bb dd") == std::string::npos,
+                      "hidden_nested_style: visible run kept together");
+    runner.expectTrue(parser.getAllText().find("ee") != std::string::npos,
+                      "hidden_nested_style: text after run kept");
+  }
+
 
   // Test 6: Skip head element content
   {

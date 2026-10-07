@@ -193,6 +193,21 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     return;
   }
 
+  // The HTML hidden attribute carries answer keys, notes, and metadata that
+  // must not show; PDF-converted books also hide their OCR layer with it.
+  // Check the attribute name only: it can appear with or without a value.
+  // This runs before the image and table handlers so hidden subtrees cannot
+  // emit placeholders either.
+  if (atts != nullptr) {
+    for (int i = 0; atts[i]; i += 2) {
+      if (strcmp(atts[i], "hidden") == 0) {
+        self->skipUntilDepth = self->depth;
+        self->depth += 1;
+        return;
+      }
+    }
+  }
+
   if (matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS)) {
     std::string srcAttr;
     std::string altText;
@@ -598,7 +613,12 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
   (void)name;
 
-  if (self->partWordBufferIndex > 0) {
+  // A closing tag inside or exiting a skip region (hidden, display:none,
+  // table, aria-hidden) must not break the surrounding word: the skipped
+  // element never opened a style context, so the buffered part-word belongs
+  // to the visible text around it.
+  const bool closingSkipped = self->skipUntilDepth <= self->depth - 1;
+  if (!closingSkipped && self->partWordBufferIndex > 0) {
     // Only flush out part word buffer if we're closing a block tag or are at the top of the HTML file.
     // We don't want to flush out content when closing inline tags like <span>.
     // Currently this also flushes out on closing <b> and <i> tags, but they are line tags so that shouldn't happen,
