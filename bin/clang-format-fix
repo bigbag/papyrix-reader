@@ -20,6 +20,7 @@ if [[ "$1" == "-g" ]]; then
     # --exclude-standard: ignores files in .gitignore
     git ls-files --modified --exclude-standard \
         | grep -E '\.(c|cpp|h|hpp)$' \
+        | grep -v '^lib/SdFat/' \
         | xargs -r clang-format $STYLE_ARGS
 
     # NOTE: We skip the 'git add' step from before.
@@ -28,6 +29,8 @@ if [[ "$1" == "-g" ]]; then
 
 else
     # Executes original working command directly.
-    find src lib \( -name "*.c" -o -name "*.cpp" -o -name "*.h" -o -name "*.hpp" \) -exec clang-format $STYLE_ARGS {} +
+    # lib/SdFat is a vendored upstream snapshot: only the reviewed patch may
+    # change its bytes, so the formatter must not touch it.
+    find src lib -path lib/SdFat -prune -o \( -name "*.c" -o -name "*.cpp" -o -name "*.h" -o -name "*.hpp" \) -exec clang-format $STYLE_ARGS {} +
 
 fi

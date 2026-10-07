@@ -1029,6 +1029,19 @@ foreach(TEST_SRC ${TEST_SOURCES})
     target_include_directories(${TEST_NAME} PRIVATE
       ${PROJECT_ROOT}/lib/BatteryMonitor/include
     )
+  elseif(TEST_NAME STREQUAL "FsCacheInvalidationTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/SdFat/src/common/FsCache.cpp
+      ${TEST_HELPERS}
+    )
+    target_include_directories(${TEST_NAME} PRIVATE
+      ${PROJECT_ROOT}/lib/SdFat/src
+    )
+    target_compile_definitions(${TEST_NAME} PRIVATE
+      USE_BLOCK_DEVICE_INTERFACE=1 ENABLE_ARDUINO_FEATURES=0 SPI_DRIVER_SELECT=3)
+    target_compile_options(${TEST_NAME} PRIVATE
+      $<$<COMPILE_LANGUAGE:CXX>:-include ${CMAKE_CURRENT_SOURCE_DIR}/mocks/SdFatHostCompat.h>)
   elseif(TEST_NAME STREQUAL "TxtBatchTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}

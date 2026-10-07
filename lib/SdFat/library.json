@@ -1,0 +1,8 @@
+{
+  "name": "SdFat",
+  "version": "2.3.1-papyrix",
+  "description": "Vendored SdFat 2.3.1 (greiman, MIT) with the crosspoint-reader cache-invalidation patch applied; see patches/. DigitalIO files under src/SdCard/SdSpiCard/SpiDriver/DigitalIO are GPL-3.0 (see LICENSE.GPL-3.0)",
+  "build": {
+    "srcDir": "src"
+  }
+}
