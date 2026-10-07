@@ -87,6 +87,8 @@ struct BatteryConfig {
   bool chargeStatusActiveHigh;
   uint32_t i2cHz = 100000;
   const uint8_t* gaugeProfile = nullptr;
+  // BQ27220: cell capacity loaded into the gauge; 0 leaves the gauge alone.
+  uint16_t designCapacityMah = 0;
 };
 
 struct RtcConfig {

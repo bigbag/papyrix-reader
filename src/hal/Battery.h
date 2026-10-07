@@ -15,6 +15,12 @@ class Battery {
   bool isInitialized() const { return initialized_; }
   bool isAvailable() const { return monitor_.has_value(); }
   Status readStatus() const;
+  // Advance the fuel-gauge design-capacity load (BQ27220 boards). One short
+  // I2C step per call; call from the main loop.
+  bool serviceDesignCapacity();
+  // Close a pending load before deep sleep: leave CONFIG UPDATE and seal the
+  // gauge, then verify the sealed state.
+  bool finishDesignCapacity();
 
  private:
   std::optional<BatteryMonitor> monitor_;

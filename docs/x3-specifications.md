@@ -146,8 +146,8 @@ The bus connects three chips:
 
 ### USB Detection
 
-- **Method** — BQ27220 current register
-- **Logic** — Positive current = charging (USB connected)
+- **Method** — BQ27220 current register plus the native USB peripheral
+- **Logic** — Positive current means the battery charges, so external power is present. Near-zero current does not tell cable state: charge termination at 100 % reads as "not connected" in the same way as an unplugged cable. The native USB serial/JTAG peripheral reports an attached host without this limit.
 
 The X4 reads UART0_RXD on GPIO20. The X3 uses GPIO20 for I²C SDA. The pin is HIGH when the bus is idle. If device detection does not run first, the firmware can detect a false USB connection. The device can then enter sleep during a cold startup.
 

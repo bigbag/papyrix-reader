@@ -42,7 +42,7 @@ void Battery::init() {
     adcBackend_ = true;
     if (esp_reset_reason() == ESP_RST_POWERON) retainedX4Estimate = {};
   } else if (config.backend == board::BatteryBackend::Bq27220) {
-    monitor_.emplace(BatteryMonitor::Bq27220Config{config.sda, config.scl, config.i2cHz});
+    monitor_.emplace(BatteryMonitor::Bq27220Config{config.sda, config.scl, config.i2cHz, config.designCapacityMah});
   }
 #elif PAPYRIX_CAP_BATTERY_CW2017
   if (config.backend == board::BatteryBackend::Cw2017) {
@@ -93,5 +93,9 @@ Battery::Status Battery::readStatus() const {
   return {};
 #endif
 }
+
+bool Battery::serviceDesignCapacity() { return monitor_ && monitor_->serviceDesignCapacity(); }
+
+bool Battery::finishDesignCapacity() { return monitor_ ? monitor_->finishDesignCapacity() : true; }
 
 }  // namespace papyrix::hal

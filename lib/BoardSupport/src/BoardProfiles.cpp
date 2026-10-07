@@ -21,7 +21,7 @@ constexpr BoardProfile kX3Profile = {
     {TouchController::None, kPinUnused, kPinUnused, kPinUnused, kPinUnused, 0, kPinUnused, false, false, false, false,
      false},
     {StorageTransport::Spi, 12, 7, kPinUnused, kPinUnused, kPinUnused, 13, true},
-    {BatteryBackend::Bq27220, kPinUnused, 20, 0, 0x55, kPinUnused, false, 400000},
+    {BatteryBackend::Bq27220, kPinUnused, 20, 0, 0x55, kPinUnused, false, 400000, nullptr, 650},
     {RtcType::Ds3231, 20, 0, 400000, 0x68},
     {kPinUnused, kPinUnused, 0, 0, false},
     {kPinUnused, true, true},

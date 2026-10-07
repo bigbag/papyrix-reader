@@ -38,6 +38,11 @@ class Input {
   // Reset idle timer (e.g., when WiFi activity should prevent auto-sleep)
   void resetIdleTimer();
 
+  // Consume power-button presses until a release is observed: a press still
+  // held from setup must not emit a long press (Home routes it to Sleep).
+  void suppressPowerUntilRelease() { powerSuppressed_ = true; }
+  bool powerSuppressed() const { return powerSuppressed_; }
+
   // Direct state queries (for hold detection)
   bool isPressed(Button btn) const;
 
@@ -54,6 +59,7 @@ class Input {
   uint8_t orientationRevision_ = 0;
   uint32_t touchSuppressionRevision_ = 0;
   bool homeDown_ = false;
+  bool powerSuppressed_ = false;
   bool homeReady_ = false;
   static constexpr uint32_t TOUCH_POLL_INTERVAL_MS = 10;
   uint32_t nextTouchPollMs_ = 0;

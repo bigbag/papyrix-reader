@@ -1019,6 +1019,16 @@ foreach(TEST_SRC ${TEST_SOURCES})
     target_include_directories(${TEST_NAME} PRIVATE
       ${PROJECT_ROOT}/lib/BatteryMonitor/include
     )
+  elseif(TEST_NAME STREQUAL "BatteryMonitorCapacityTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/BatteryMonitor/src/BatteryMonitor.cpp
+      ${PROJECT_ROOT}/lib/BatteryMonitor/src/Cw2017Backend.cpp
+      ${TEST_HELPERS}
+    )
+    target_include_directories(${TEST_NAME} PRIVATE
+      ${PROJECT_ROOT}/lib/BatteryMonitor/include
+    )
   elseif(TEST_NAME STREQUAL "TxtBatchTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}

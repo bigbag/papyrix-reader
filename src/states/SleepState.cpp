@@ -19,6 +19,7 @@
 #include <Xtc.h>
 #include <esp_heap_caps.h>
 #include <esp_sleep.h>
+#include <esp_system.h>
 
 #include <cstring>
 #include <string>
@@ -35,6 +36,7 @@ extern InputManager inputManager;
 extern uint16_t rtcPowerButtonDurationMs;
 
 #define TAG "SLEEP"
+static constexpr uint32_t POWER_RELEASE_TIMEOUT_MS = 5000;
 
 namespace papyrix {
 
@@ -101,6 +103,15 @@ void SleepState::enter(Core& core) {
   rtcPowerButtonDurationMs = core.settings.getPowerButtonDuration();
   const bool externalPower = core.usb.isConnected();
 
+  // A stuck power switch must not sleep the device: deep sleep arms an
+  // active-low GPIO wake, so an asserted button would storm wake cycles.
+  if (waitForPowerRelease(POWER_RELEASE_TIMEOUT_MS)) {
+    LOG_ERR(TAG, "Power button stuck; sleep cancelled");
+    snprintf(core.buf.text, sizeof(core.buf.text), "Power button stuck. Sleep cancelled.");
+    core.input.resetIdleTimer();
+    return;
+  }
+
   if (!core.display.deepSleep()) {
     LOG_ERR(TAG, "Display power-off failed; sleep cancelled");
     snprintf(core.buf.text, sizeof(core.buf.text), "Display power-off failed. Sleep cancelled.");
@@ -114,8 +125,18 @@ void SleepState::enter(Core& core) {
   }
 
   LittleFS.end();
+  if (!core.battery.finishDesignCapacity()) {
+    LOG_ERR(TAG, "Fuel-gauge close-out failed; sleeping anyway");
+  }
 
-  waitForPowerRelease();
+  // Teardown is done, so a still-asserted wake source cannot enter deep sleep
+  // safely, and un-doing teardown is not sound either. Restart instead: boot
+  // then reaches the bounded check above, which keeps the device awake while
+  // the button stays held. No wake storm, and the sleep screen never hangs.
+  if (waitForPowerRelease(POWER_RELEASE_TIMEOUT_MS)) {
+    LOG_ERR(TAG, "Power button held through teardown; restarting");
+    esp_restart();
+  }
 
   LOG_INF(TAG, "Entering deep sleep (external power: %s)", externalPower ? "yes" : "no");
   hal::enterDeepSleepWithHardwareShutdown(externalPower);
@@ -303,12 +324,20 @@ void SleepState::renderBitmapSleepScreen(const Bitmap& bitmap) const {
   }
 }
 
-void SleepState::waitForPowerRelease() const {
+// Returns true only when the button is still held after timeoutMs elapsed.
+// timeoutMs 0 waits without a bound.
+bool SleepState::waitForPowerRelease(uint32_t timeoutMs) const {
   inputManager.update();
+  const uint32_t startedMs = millis();
   while (inputManager.isPressed(InputManager::BTN_POWER)) {
+    if (timeoutMs != 0 && millis() - startedMs >= timeoutMs) {
+      LOG_ERR(TAG, "Power button still held after %lu ms", static_cast<unsigned long>(timeoutMs));
+      return true;
+    }
     delay(50);
     inputManager.update();
   }
+  return false;
 }
 
 }  // namespace papyrix

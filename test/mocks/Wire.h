@@ -30,7 +30,11 @@ class TwoWire {
     return 1;
   }
 
-  uint8_t endTransmission(bool = true) {
+  uint8_t endTransmission(bool stop = true) {
+    if (writeHook_ && txLength_ > 0 && !(!stop && txLength_ == 1)) {
+      registerPointer_[txAddress_] = tx_[0];
+      return writeHook_(txAddress_, tx_, txLength_) ? 0 : 2;
+    }
     if (!present_[txAddress_]) return 4;
     if (txLength_ == 0) return 0;
     const size_t width = wideAddress_[txAddress_] ? 2 : 1;
@@ -50,6 +54,12 @@ class TwoWire {
   }
 
   uint8_t requestFrom(int address, int length) {
+    if (readHook_) {
+      rxIndex_ = 0;
+      const size_t n = static_cast<size_t>(length) > sizeof(rx_) ? sizeof(rx_) : static_cast<size_t>(length);
+      rxLength_ = readHook_(static_cast<uint8_t>(address), static_cast<uint8_t>(registerPointer_[address]), rx_, n) ? n : 0;
+      return static_cast<uint8_t>(rxLength_);
+    }
     if (invalidState_) return 0;
     if (faultRemaining_ > 0 && faultAddress_ == address && registerPointer_[address] == faultReg_) {
       --faultRemaining_;
@@ -90,6 +100,8 @@ class TwoWire {
     frequency_ = 0;
     timeout_ = 0;
     beginCount_ = 0;
+    writeHook_ = nullptr;
+    readHook_ = nullptr;
   }
 
   void setPresent(uint8_t address, bool present) { present_[address] = present; }
@@ -102,6 +114,13 @@ class TwoWire {
     faultAddress_ = address;
     faultReg_ = reg;
     faultRemaining_ = occurrences;
+  }
+  // Optional device model. When set it replaces the register-file behavior, so
+  // a test can model a real chip's responses and quirks.
+  void setDeviceHooks(bool (*writeHook)(uint8_t, const uint8_t*, size_t),
+                      bool (*readHook)(uint8_t, uint8_t, uint8_t*, size_t)) {
+    writeHook_ = writeHook;
+    readHook_ = readHook;
   }
   void setRegister(uint8_t address, uint16_t reg, uint8_t value) {
     registers_[(static_cast<uint32_t>(address) << 16) | reg] = value;
@@ -166,6 +185,8 @@ class TwoWire {
   uint16_t faultReg_ = 0;
   uint16_t faultRemaining_ = 0;
   std::unordered_map<uint32_t, size_t> registerWrites_;
+  bool (*writeHook_)(uint8_t, const uint8_t*, size_t) = nullptr;
+  bool (*readHook_)(uint8_t, uint8_t, uint8_t*, size_t) = nullptr;
 };
 
 extern TwoWire Wire;

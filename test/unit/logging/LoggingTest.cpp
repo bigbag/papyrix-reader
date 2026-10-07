@@ -120,12 +120,15 @@ int main() {
     expectEq("[300] [DBG] [GFX] render took 42 ms\n", captureState.output, "LOG_DBG macro");
   }
 
-  // --- Serial disabled produces no output ---
+  // --- Serial reported disconnected still writes: HWCDC::write buffers when
+  // the host is briefly gone (10 MHz idle window after wake), so log lines
+  // must not be dropped on the connected flag. ---
   {
     reset();
+    millisValue = 400;
     captureState.enabled = false;
-    logPrintf("[INF]", "TEST", "should not appear\n");
-    expectTrue(captureState.output.empty(), "serial disabled: no output");
+    logPrintf("[INF]", "TEST", "kept in the ring\n");
+    expectEq("[400] [INF] [TEST] kept in the ring\n", captureState.output, "serial disconnected: output kept");
   }
 
   // --- Long origin truncated, no crash ---

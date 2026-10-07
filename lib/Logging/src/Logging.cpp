@@ -1,9 +1,6 @@
 #include "Logging.h"
 
 void logPrintf(const char* level, const char* origin, const char* format, ...) {
-  if (!logSerial) {
-    return;
-  }
   va_list args;
   va_start(args, format);
   char buf[256];

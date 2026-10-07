@@ -35,6 +35,19 @@ int main() {
     runner.expectEq(std::string("A2"), r[0].title, "addToList dedup: title refreshed");
   }
 
+  // addToList: duplicates already in stored data collapse to the one promoted entry
+  {
+    auto books = makeBooks({"/b", "/a", "/a", "/c", "/a"});
+    auto r = RecentBooksStore::addToList(books, "/a", "A2", "", 10);
+    runner.expectEq(size_t(3), r.size(), "addToList collapses stored duplicates");
+    runner.expectEq(std::string("/a"), r[0].path, "addToList duplicate collapse: promoted to front");
+    runner.expectEq(std::string("A2"), r[0].title, "addToList duplicate collapse: title refreshed");
+    size_t count = 0;
+    for (const auto& b : r)
+      if (b.path == "/a") ++count;
+    runner.expectEq(size_t(1), count, "addToList duplicate collapse: single entry left");
+  }
+
   // addToList: trims to maxCount (oldest evicted from the tail)
   {
     auto books = makeBooks({"/a", "/b"});

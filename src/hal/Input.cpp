@@ -94,6 +94,9 @@ void Input::checkButton(Button btn, uint8_t mask) {
   }
 
   isDown = mappedInputManager.isPressed(mappedBtn);
+  // Clear on any observed up, not only on a release edge: a release between
+  // polls never produces the edge, and the latch must not eat the next press.
+  if (btn == Button::Power && !isDown) powerSuppressed_ = false;
 
   if (isDown) {
     currButtonState_ |= mask;
@@ -126,8 +129,14 @@ void Input::checkButton(Button btn, uint8_t mask) {
         lastActivityMs_ = now;
       }
     } else if (!longPressFired_[idx] && heldMs >= LONG_PRESS_MS) {
-      queue_->push(Event::buttonLongPress(btn));
-      longPressFired_[idx] = true;
+      // A press still held from setup must not emit a long press: the event
+      // routes Home to Sleep. Consume it until release is observed.
+      if (btn == Button::Power && powerSuppressed_) {
+        longPressFired_[idx] = true;
+      } else {
+        queue_->push(Event::buttonLongPress(btn));
+        longPressFired_[idx] = true;
+      }
     }
   }
 

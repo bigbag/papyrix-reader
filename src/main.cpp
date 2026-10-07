@@ -202,16 +202,31 @@ void verifyWakeupLongPress(esp_reset_reason_t resetReason) {
   }
 
   if (abort) {
+    if (!papyrix::core.battery.finishDesignCapacity()) {
+      LOG_ERR(TAG, "Fuel-gauge close-out failed; sleeping anyway");
+    }
     papyrix::hal::enterDeepSleepWithHardwareShutdown(papyrix::core.usb.isConnected());
   }
 }
 
-void waitForPowerRelease() {
+static constexpr uint32_t POWER_RELEASE_TIMEOUT_MS = 5000;
+
+// A power press still held from setup is consumed by hal::Input until a
+// release is observed; see Input::suppressPowerUntilRelease().
+
+bool waitForPowerRelease() {
   inputManager.update();
+  const uint32_t startedMs = millis();
   while (inputManager.isPressed(InputManager::BTN_POWER)) {
+    if (millis() - startedMs >= POWER_RELEASE_TIMEOUT_MS) {
+      LOG_ERR(TAG, "Power button still held after %lu ms; continuing",
+              static_cast<unsigned long>(POWER_RELEASE_TIMEOUT_MS));
+      return true;
+    }
     delay(50);
     inputManager.update();
   }
+  return false;
 }
 
 // Register only the reader font for the active size (saves ~4.5KB in READER mode)
@@ -608,7 +623,9 @@ void setup() {
   }
 
   // Ensure we're not still holding the power button before leaving setup
-  waitForPowerRelease();
+  if (waitForPowerRelease()) {
+    papyrix::core.input.suppressPowerUntilRelease();
+  }
 }
 
 void loop() {
@@ -631,6 +648,9 @@ void loop() {
       }
     }
   }
+
+  // One short fuel-gauge step per tick while the design-capacity load runs.
+  papyrix::core.battery.serviceDesignCapacity();
 
   inputManager.update();
 
@@ -664,7 +684,9 @@ void loop() {
     const unsigned long loopGap = loopStartTime - prevPowerCheckMs;
     prevPowerCheckMs = loopStartTime;
 
-    if (inputManager.isPressed(InputManager::BTN_POWER)) {
+    if (papyrix::core.input.powerSuppressed()) {
+      // hal::Input clears the flag when it observes the release.
+    } else if (inputManager.isPressed(InputManager::BTN_POWER)) {
       if (powerHeldSinceMs == 0 || loopGap > 100) {
         powerHeldSinceMs = loopStartTime;
       }

@@ -46,9 +46,18 @@ class RecentBooksStore {
 
   static std::vector<RecentBook> addToList(std::vector<RecentBook> books, const std::string& path,
                                            const std::string& title, const std::string& author, int maxCount) {
-    books.erase(std::remove_if(books.begin(), books.end(), [&](const RecentBook& b) { return b.path == path; }),
-                books.end());
-    books.insert(books.begin(), {path, title, author});
+    const auto it = std::find_if(books.begin(), books.end(), [&](const RecentBook& b) { return b.path == path; });
+    if (it == books.end()) {
+      books.insert(books.begin(), {path, title, author});
+    } else {
+      it->title = title;
+      it->author = author;
+      std::rotate(books.begin(), it, it + 1);
+      // Deserialized data may carry duplicates; drop them so the promoted
+      // entry is the only one left.
+      books.erase(std::remove_if(books.begin() + 1, books.end(), [&](const RecentBook& b) { return b.path == path; }),
+                  books.end());
+    }
     return trimList(std::move(books), maxCount);
   }
 

@@ -478,7 +478,12 @@ void PapyrixWebServer::handleDownload() {
   while (file.available()) {
     size_t bytesRead = file.read(buf, sizeof(buf));
     if (bytesRead == 0) break;
-    server_->client().write(buf, bytesRead);
+    const size_t bytesWritten = server_->client().write(buf, bytesRead);
+    if (bytesWritten != bytesRead) {
+      LOG_ERR(TAG, "Download of %s aborted: wrote %zu of %zu bytes", filePath.c_str(), bytesWritten, bytesRead);
+      server_->client().stop();
+      break;
+    }
   }
 
   file.close();

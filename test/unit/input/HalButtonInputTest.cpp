@@ -79,6 +79,57 @@ int main() {
   sample(5430);
   runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonLongPress && event.button == Button::Power,
                     "a physical hold still emits long press");
+  pressedPin = -1;
+  sample(5455);
+  sample(5480);
+  queue.pop(event);  // power release from the case above
+
+  // Suppression models setup: the button is debounce-stable held before the
+  // latch arms, and the hold past 700 ms must not emit a long press.
+  pressedPin = 3;
+  sample(5485);
+  sample(5515);
+  runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonPress && event.button == Button::Power,
+                    "press before suppression is delivered");
+  input.suppressPowerUntilRelease();
+  runner.expectTrue(input.powerSuppressed(), "suppression armed while held");
+  sample(6250);
+  runner.expectTrue(input.powerSuppressed(), "suppression survives the hold");
+  runner.expectFalse(queue.pop(event), "suppressed hold emits no long press");
+  pressedPin = -1;
+  sample(6275);
+  sample(6300);
+  runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonRelease && event.button == Button::Power,
+                    "suppressed hold releases normally");
+  runner.expectFalse(input.powerSuppressed(), "release clears suppression");
+  pressedPin = 3;
+  sample(6400);
+  sample(6430);
+  queue.pop(event);  // press
+  sample(7150);
+  runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonLongPress && event.button == Button::Power,
+                    "press after suppression emits long press again");
+  pressedPin = -1;
+  sample(7175);
+  sample(7200);
+  queue.pop(event);  // release
+
+  // A release before the first poll must clear the latch without an edge.
+  input.suppressPowerUntilRelease();
+  pressedPin = 3;
+  // No polls while the button is down.
+  pressedPin = -1;
+  sample(7300);
+  runner.expectFalse(input.powerSuppressed(), "release before first poll clears suppression");
+  runner.expectFalse(queue.pop(event), "no events from an unobserved press");
+  pressedPin = 3;
+  sample(7400);
+  sample(7430);
+  runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonPress && event.button == Button::Power,
+                    "press after edgeless clear is delivered");
+  sample(8150);
+  runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonLongPress && event.button == Button::Power,
+                    "hold after edgeless clear emits long press");
   input.shutdown();
   cleanupMockTasks();
   testSetDigitalReadHook(nullptr);

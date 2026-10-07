@@ -38,6 +38,11 @@ class StateTracker {
 constexpr Status evaluate(const board::UsbConfig& config, const Inputs& inputs) {
   bool available = false;
   bool connected = false;
+  // Gauge charging is the only wall-charger signal on boards without a detect
+  // pin, so it feeds "connected". Caveat: charge termination at 100 % draws
+  // near-zero current and reads as "not connected" until charging resumes.
+  // Keep this separate from host detection (native USB) when a future consumer
+  // needs cable state rather than external power.
   if (config.viaBatteryStatus && inputs.gaugeAvailable) {
     available = true;
     connected = inputs.gaugeCharging;
