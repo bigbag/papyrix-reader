@@ -1,5 +1,6 @@
 # Papyrix
 
+> Chào mừng đến với Papyrix Reader — firmware máy đọc sách e-ink mã nguồn mở. Chúc bạn đọc sách vui vẻ!
 [![Changelog](https://img.shields.io/badge/changelog-CHANGELOG.md-blue)](CHANGELOG.md)
 [![User Guide](https://img.shields.io/badge/docs-User_Guide-green)](docs/user_guide.md)
 [![Customization](https://img.shields.io/badge/docs-Customization-green)](docs/customization.md)
