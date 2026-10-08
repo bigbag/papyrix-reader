@@ -15,7 +15,7 @@ namespace ui {
 // ============================================================================
 
 struct SettingsMenuView {
-  static constexpr const char* const ITEMS[] = {"Reader", "Device", "Cleanup", "System Info"};
+  static constexpr const char* const ITEMS[] = {"Trình đọc", "Thiết bị", "Dọn dẹp", "Thông tin hệ thống"};
   static constexpr int ITEM_COUNT = 4;
 
   ButtonBar buttons{"Back", "Open", "", ""};
