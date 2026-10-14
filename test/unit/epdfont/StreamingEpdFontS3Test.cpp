@@ -1,14 +1,12 @@
-#include "test_utils.h"
-
+#include "EpdFontLoader.cpp"
 #include "LittleFS.h"
 #include "SDCardManager.h"
 #include "SdFat.h"
+#include "StreamingEpdFont.cpp"
+#include "Utf8.cpp"
 #include "platform_stubs.h"
 #include "test_font_data.h"
-
-#include "Utf8.cpp"
-#include "EpdFontLoader.cpp"
-#include "StreamingEpdFont.cpp"
+#include "test_utils.h"
 
 int main() {
   TestUtils::TestRunner runner("StreamingEpdFontS3");
@@ -34,8 +32,7 @@ int main() {
     for (uint32_t i = 0; i < 220; ++i) {
       const EpdGlyph* glyph = font.getGlyph(0x1000 + i);
       const uint8_t* pixels = font.getGlyphBitmap(glyph);
-      allSlabPixels &= pixels && pixels[0] == static_cast<uint8_t>(i) &&
-                       pixels[399] == static_cast<uint8_t>(i);
+      allSlabPixels &= pixels && pixels[0] == static_cast<uint8_t>(i) && pixels[399] == static_cast<uint8_t>(i);
     }
     runner.expectTrue(allSlabPixels, "220 glyphs retain correct PSRAM pixels");
     const size_t readsBefore = gMockBufferReadCalls;
@@ -50,6 +47,45 @@ int main() {
     runner.expectTrue(allCompactedPixels, "evicted and compacted glyphs stay correct");
     const uint8_t* reloaded = font.getGlyphBitmap(font.getGlyph(0x1000));
     runner.expectTrue(reloaded && reloaded[399] == 0, "LRU eviction reloads correct pixels");
+  }
+
+  glyphs.clear();
+  for (uint32_t i = 0; i < 24; ++i) {
+    TestFontData::GlyphSpec glyph{};
+    glyph.codepoint = 0x2000 + i;
+    glyph.width = 128;
+    glyph.height = 128;
+    glyph.advanceX = 128;
+    glyph.top = 128;
+    glyph.bitmap.assign(4096, static_cast<uint8_t>(i));
+    glyphs.push_back(std::move(glyph));
+  }
+  TestFontData::GlyphSpec emptyGlyph{};
+  emptyGlyph.codepoint = 0x2018;
+  emptyGlyph.width = 8;
+  emptyGlyph.height = 8;
+  emptyGlyph.advanceX = 8;
+  glyphs.push_back(std::move(emptyGlyph));
+  SdMan.registerFile("/fonts/empty-glyph.epdfont", TestFontData::generateFont(glyphs, 128, 128, 0, true));
+  {
+    StreamingEpdFont font;
+    runner.expectTrue(font.load("/fonts/empty-glyph.epdfont"), "font with empty glyph loads");
+    bool fullSlabPixels = true;
+    for (uint32_t i = 0; i < 24; ++i) {
+      const uint8_t* pixels = font.getGlyphBitmap(font.getGlyph(0x2000 + i));
+      fullSlabPixels &= pixels && pixels[0] == static_cast<uint8_t>(i) && pixels[4095] == static_cast<uint8_t>(i);
+    }
+    runner.expectTrue(fullSlabPixels, "glyph bitmaps fill the slab with correct pixels");
+    const size_t readsBefore = gMockBufferReadCalls;
+    runner.expectTrue(font.getGlyphBitmap(font.getGlyph(0x2018)) == nullptr,
+                      "empty glyph has no bitmap after the slab fills");
+    runner.expectTrue(font.getGlyphBitmap(font.getGlyph(0x2018)) == nullptr, "repeated empty glyph has no bitmap");
+    bool retainedPixels = true;
+    for (uint32_t i = 0; i < 24; ++i) {
+      const uint8_t* pixels = font.getGlyphBitmap(font.getGlyph(0x2000 + i));
+      retainedPixels &= pixels && pixels[0] == static_cast<uint8_t>(i) && pixels[4095] == static_cast<uint8_t>(i);
+    }
+    runner.expectTrue(retainedPixels && gMockBufferReadCalls == readsBefore, "empty glyph evicts no cached glyph");
   }
 
   testSetPsramAllocationFailure(true);

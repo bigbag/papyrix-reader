@@ -10,8 +10,9 @@ import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
-from capture_serial import capture, list_ports
+from capture_serial import capture, list_ports, serial
 
 
 def run_capture(devices, output, status):
@@ -23,7 +24,75 @@ def run_capture(devices, output, status):
         capture("CLASSIC", output)
 
 
+def run_retains_before_disconnect(output):
+    import sys
+
+    sys.stdout = open(os.devnull, "w")
+    master, slave = pty.openpty()
+    device = os.ttyname(slave)
+    payload = b"Entering deep sleep\n"
+    received = bytearray()
+    sleeps = []
+    idle = True
+    open_port = serial.Serial.open
+    read_port_method = serial.Serial.read
+    fd_read = os.read
+
+    def open_and_send(port):
+        open_port(port)
+        os.write(master, payload)
+
+    def read_port(port, size=1):
+        nonlocal idle
+        if idle:
+            idle = False
+            return b""
+        return read_port_method(port, size)
+
+    def read_and_disconnect(fd, size):
+        nonlocal master
+        data = fd_read(fd, size)
+        received.extend(data)
+        if received == payload and master is not None:
+            os.close(master)
+            master = None
+        return data
+
+    try:
+        with patch.object(serial.Serial, "open", open_and_send), \
+                patch.object(serial.Serial, "read", read_port), \
+                patch("serial.serialposix.os.read", read_and_disconnect), \
+                patch.object(list_ports, "comports", side_effect=[
+                    [SimpleNamespace(serial_number="CLASSIC", device=device)], KeyboardInterrupt]), \
+                patch("capture_serial.time.sleep", side_effect=sleeps.append):
+            try:
+                capture("CLASSIC", output)
+            except KeyboardInterrupt:
+                pass
+        if 0.01 not in sleeps:
+            raise AssertionError("Capture does not pause after an empty read")
+    finally:
+        if master is not None:
+            os.close(master)
+        os.close(slave)
+
+
 class CaptureSerialTest(unittest.TestCase):
+    def test_retains_bytes_received_before_disconnect(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "capture.log"
+            process = multiprocessing.get_context("fork").Process(
+                target=run_retains_before_disconnect, args=(output,))
+            process.start()
+            try:
+                process.join(6)
+                self.assertFalse(process.is_alive(), "Capture does not finish after disconnect")
+                self.assertEqual(process.exitcode, 0)
+                self.assertEqual(output.read_bytes(), b"Entering deep sleep\n")
+            finally:
+                process.terminate()
+                process.join(5)
+
     def test_append_across_disconnect_and_sleep(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

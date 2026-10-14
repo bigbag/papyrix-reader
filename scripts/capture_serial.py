@@ -33,7 +33,7 @@ def capture(serial_number, output):
                 continue
             sleeping = False
             try:
-                with serial.Serial(port=None, baudrate=115200, timeout=0.25, exclusive=True) as port:
+                with serial.Serial(port=None, baudrate=115200, timeout=0, exclusive=True) as port:
                     port.dtr = False
                     port.rts = False
                     port.port = device
@@ -47,6 +47,8 @@ def capture(serial_number, output):
                             window += data
                             sleeping = sleeping or b"Entering deep sleep" in window
                             window = window[-64:]
+                        else:
+                            time.sleep(0.01)
             except serial.SerialException as error:
                 if sleeping:
                     sleeping_device = identity

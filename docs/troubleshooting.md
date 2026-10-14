@@ -16,6 +16,7 @@ Classic uses factory NVS data for panel selection.
 
 Use `scripts/capture_serial.py` to record the device serial log.
 The script appends data to the output file across USB disconnects.
+The script saves each received data block without waiting for a full serial read.
 Use a Python environment that contains `pyserial`.
 
 ```bash

@@ -65,6 +65,7 @@ C3 uses this path for every image.
 
 `StreamingEpdFont` reads glyphs from user-installed `.epdfont` files on SD.
 It keeps bitmap data in a least-recently-used cache.
+It returns no bitmap for a glyph with zero bitmap bytes.
 On S3, it requests a PSRAM buffer of `kTargetGlyphBitmapSlabBytes` (96 KiB).
 With this buffer, the cache holds up to 256 glyph bitmaps.
 If the buffer allocation fails, S3 uses the 192-entry cache.

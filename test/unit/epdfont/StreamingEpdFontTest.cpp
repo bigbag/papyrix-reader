@@ -10,8 +10,8 @@
 #include "test_font_data.h"
 
 // Include dependencies first
-#include "Utf8.cpp"
 #include "EpdFontLoader.cpp"
+#include "Utf8.cpp"
 
 // Include the library under test (private→public for counter overflow testing)
 #define private public
@@ -685,6 +685,58 @@ int main() {
       }
     }
     runner.expectTrue(lastUsedA > minLastUsed, "counter_overflow_lru: recently used entry not oldest");
+
+    font.unload();
+  }
+
+  // Test 28: empty glyph returns no bitmap and evicts nothing from a full cache
+  {
+    SdMan.clearFiles();
+    std::vector<TestFontData::GlyphSpec> glyphs;
+    for (uint32_t i = 0; i < 192; ++i) {
+      TestFontData::GlyphSpec glyph{};
+      glyph.codepoint = 0x2000 + i;
+      glyph.width = 8;
+      glyph.height = 8;
+      glyph.advanceX = 8;
+      glyph.top = 8;
+      glyph.bitmap.assign(8, static_cast<uint8_t>(i));
+      glyphs.push_back(std::move(glyph));
+    }
+    TestFontData::GlyphSpec space{};
+    space.codepoint = ' ';
+    space.advanceX = 5;
+    glyphs.push_back(std::move(space));
+    SdMan.registerFile("/fonts/empty-space.epdfont", TestFontData::generateFont(glyphs));
+
+    StreamingEpdFont font;
+    runner.expectTrue(font.load("/fonts/empty-space.epdfont"), "empty_glyph_no_evict: font loads");
+    runner.expectTrue(font._slab == nullptr, "empty_glyph_no_evict: heap path without slab");
+    runner.expectEq(192, font.getCacheSize(), "empty_glyph_no_evict: cache holds 192 glyphs");
+
+    bool filled = true;
+    for (uint32_t i = 0; i < 192; ++i) {
+      const uint8_t* pixels = font.getGlyphBitmap(font.getGlyph(0x2000 + i));
+      filled &= pixels && pixels[0] == static_cast<uint8_t>(i) && pixels[7] == static_cast<uint8_t>(i);
+    }
+    runner.expectTrue(filled, "empty_glyph_no_evict: cache fills with correct pixels");
+
+    const size_t readsBefore = gMockBufferReadCalls;
+    const int tombstonesBefore = font._tombstoneCount;
+    const uint32_t missesBefore = font._cacheMisses;
+    runner.expectTrue(font.getGlyphBitmap(font.getGlyph(' ')) == nullptr, "empty_glyph_no_evict: space has no bitmap");
+    runner.expectTrue(font.getGlyphBitmap(font.getGlyph(' ')) == nullptr,
+                      "empty_glyph_no_evict: repeated space has no bitmap");
+    runner.expectTrue(font._tombstoneCount == tombstonesBefore && font._cacheMisses == missesBefore,
+                      "empty_glyph_no_evict: space evicts no cached glyph");
+
+    bool retained = true;
+    for (uint32_t i = 0; i < 192; ++i) {
+      const uint8_t* pixels = font.getGlyphBitmap(font.getGlyph(0x2000 + i));
+      retained &= pixels && pixels[0] == static_cast<uint8_t>(i) && pixels[7] == static_cast<uint8_t>(i);
+    }
+    runner.expectTrue(retained && gMockBufferReadCalls == readsBefore,
+                      "empty_glyph_no_evict: cached glyphs stay without SD reads");
 
     font.unload();
   }

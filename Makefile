@@ -167,6 +167,7 @@ test-tools: ## Host-tool tests (packaging, HTML, clock simulators)
 	@python3 test/scripts/test_package_firmware.py
 	@python3 test/scripts/test_build_html.py
 	@python3 scripts/test_select_usb_jtag_port.py
+	@python3 scripts/test_capture_serial.py
 
 test-clean: ## Clean test build artifacts
 	@rm -rf test/build

@@ -218,8 +218,7 @@ bool StreamingEpdFont::loadGlyphBitmap(uint32_t glyphIndex, CachedBitmap& entry)
   const EpdGlyph& glyph = _glyphs[glyphIndex];
   const uint16_t dataLen = glyph.dataLength;
 
-  // Validate dataLength against maximum (defense against corrupted font files)
-  if (dataLen > MAX_GLYPH_BITMAP_SIZE) {
+  if (dataLen == 0 || dataLen > MAX_GLYPH_BITMAP_SIZE) {
     return false;
   }
 
@@ -279,6 +278,8 @@ const uint8_t* StreamingEpdFont::getGlyphBitmap(const EpdGlyph* glyph) {
   if (glyph < _glyphs || glyph >= _glyphs + _glyphCount) {
     return nullptr;
   }
+
+  if (glyph->dataLength == 0) return nullptr;
 
   // Calculate glyph index from pointer arithmetic (now safe after validation)
   uint32_t glyphIndex = glyph - _glyphs;
