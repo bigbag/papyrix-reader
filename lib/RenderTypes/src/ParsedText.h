@@ -24,8 +24,15 @@ class ParsedText {
   enum class ScratchLayoutResult : uint8_t { Completed, Fallback, Aborted };
   enum class SplitResult : uint8_t { NotSplit, Split, Exhausted };
 
+  // Per-word style plus occurrence index: one index per addWord, split
+  // pieces inherit the index of the word they came from.
+  struct WordInfo {
+    EpdFontFamily::Style style;
+    uint32_t source;
+  };
   std::list<std::string> words;
-  std::list<EpdFontFamily::Style> wordStyles;
+  std::list<WordInfo> wordInfos;
+  uint32_t nextSourceIndex_ = 0;
   TextBlock::BLOCK_STYLE style;
   uint8_t indentLevel;
   bool indentApplied = false;
@@ -39,13 +46,11 @@ class ParsedText {
                                               std::vector<uint16_t>& wordWidths,
                                               const AbortCallback& shouldAbort = nullptr);
   bool trySplitWordForLineEnd(const GfxRenderer& renderer, int fontId, int remainingWidth,
-                              std::list<std::string>::iterator wordIt,
-                              std::list<EpdFontFamily::Style>::iterator styleIt, size_t wordIndex,
-                              std::vector<uint16_t>& wordWidths);
+                              std::list<std::string>::iterator wordIt, std::list<WordInfo>::iterator infoIt,
+                              size_t wordIndex, std::vector<uint16_t>& wordWidths);
   SplitResult trySplitWordForLineEnd(const GfxRenderer& renderer, int fontId, int remainingWidth,
-                                     std::list<std::string>::iterator wordIt,
-                                     std::list<EpdFontFamily::Style>::iterator styleIt, size_t wordIndex,
-                                     FixedLayoutWorkspace& workspace);
+                                     std::list<std::string>::iterator wordIt, std::list<WordInfo>::iterator infoIt,
+                                     size_t wordIndex, FixedLayoutWorkspace& workspace);
   void extractLine(size_t breakIndex, int pageWidth, int spaceWidth, const uint16_t* wordWidths,
                    const size_t* lineBreakIndices, size_t lineBreakCount,
                    const std::function<void(std::shared_ptr<TextBlock>)>& processLine);
@@ -91,4 +96,5 @@ class ParsedText {
                              const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
                              bool includeLastLine = true, const AbortCallback& shouldAbort = nullptr,
                              BuildArena* scratch = nullptr);
+  uint32_t sourceWordCount() const { return nextSourceIndex_; }
 };

@@ -131,6 +131,7 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
 
   partWordBuffer[partWordBufferIndex] = '\0';
   partWordBufferIndex = utf8NormalizeNfc(partWordBuffer, partWordBufferIndex);
+  noteAnchorWord(currentTextBlock->sourceWordCount());
   currentTextBlock->addWord(partWordBuffer, fontStyle);
   partWordBufferIndex = 0;
 }
@@ -221,21 +222,29 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   if (matches(name, IMAGE_TAGS, NUM_IMAGE_TAGS)) {
     std::string srcAttr;
     std::string altText;
+    std::string idAttr;
     if (atts != nullptr) {
       for (int i = 0; atts[i]; i += 2) {
         if (strcmp(atts[i], "src") == 0 && atts[i + 1][0] != '\0') {
           srcAttr = atts[i + 1];
         } else if (strcmp(atts[i], "alt") == 0 && atts[i + 1][0] != '\0') {
           altText = atts[i + 1];
+        } else if (strcmp(atts[i], "id") == 0 && atts[i + 1][0] != '\0') {
+          idAttr = atts[i + 1];
         }
       }
     }
+    // Registration is per path: a skipped image (unsupported, aborted, tiny)
+    // defers its id without flushing, so the next visible word — fused with
+    // any buffered text — adopts it. Visible placement paths defer after
+    // draining prior text, so the id names the image or placeholder itself.
 
     LOG_DBG(TAG, "Found image: src=%s", srcAttr.empty() ? "(empty)" : srcAttr.c_str());
 
     // Silently skip unsupported image formats (GIF, SVG, WebP, etc.)
     if (!srcAttr.empty() && !ImageConverterFactory::isSupported(srcAttr)) {
       LOG_DBG(TAG, "Skipping unsupported format: %s", srcAttr.c_str());
+      self->deferAnchor(idAttr);
       self->depth += 1;
       return;
     }
@@ -244,11 +253,13 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     if (!srcAttr.empty() && self->readItemFn && !self->imageCachePath.empty()) {
       // Check abort before and after image caching (conversion can take 10+ seconds for large JPEGs)
       if (self->externalAbortCallback_ && self->externalAbortCallback_()) {
+        self->deferAnchor(idAttr);
         self->depth += 1;
         return;
       }
       std::string cachedPath = self->cacheImage(srcAttr);
       if (self->externalAbortCallback_ && self->externalAbortCallback_()) {
+        self->deferAnchor(idAttr);
         self->depth += 1;
         return;
       }
@@ -261,6 +272,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
             // Skip tiny decorative images (e.g. 1px-tall line separators) - invisible on e-paper
             if (bitmap.getWidth() < 20 || bitmap.getHeight() < 20) {
               bmpFile.close();
+              self->deferAnchor(idAttr);
               self->depth += 1;
               return;
             }
@@ -268,8 +280,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
             auto imageBlock = std::make_shared<ImageBlock>(cachedPath, bitmap.getWidth(), bitmap.getHeight());
             bmpFile.close();
 
-            // Flush any pending word and text block before adding image
+            // Flush any pending word and text block before adding image;
+            // the id must name the image page, never the flushed text.
             self->flushPartWordBuffer();
+            self->deferAnchor(idAttr);
             if (self->currentTextBlock && !self->currentTextBlock->isEmpty()) {
               self->makePages();
             }
@@ -290,9 +304,12 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
               self->readItemFn != nullptr, !self->imageCachePath.empty());
     }
 
-    // Keep the placeholder out of a block that still has pending text.
+    // Keep the placeholder out of a block that still has pending text. The
+    // id defers after the drain above so the placeholder word adopts it.
     self->startNewTextBlock(TextBlock::CENTER_ALIGN);
+    self->deferAnchor(idAttr);
     if (self->currentTextBlock && !self->pendingNewTextBlock_) {
+      self->noteAnchorWord(self->currentTextBlock->sourceWordCount());
       if (!altText.empty()) {
         std::string placeholder = "[Image: " + altText + "]";
         self->currentTextBlock->addWord(placeholder.c_str(), EpdFontFamily::ITALIC);
@@ -315,8 +332,20 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   if (strcmp(name, "table") == 0) {
     // For now, add placeholder text. Defer it when the batch limit suspended
     // startNewTextBlock(), so it lands in the deferred centered block on resume.
+    std::string idAttr;
+    if (atts != nullptr) {
+      for (int i = 0; atts[i]; i += 2) {
+        if (strcmp(atts[i], "id") == 0 && atts[i + 1][0] != '\0') {
+          idAttr = atts[i + 1];
+        }
+      }
+    }
+    // Same ordering rule as images: commit the buffered word before the id.
+    self->flushPartWordBuffer();
+    self->deferAnchor(std::move(idAttr));
     self->startNewTextBlock(TextBlock::CENTER_ALIGN);
     if (self->currentTextBlock && !self->pendingNewTextBlock_) {
+      self->noteAnchorWord(self->currentTextBlock->sourceWordCount());
       self->currentTextBlock->addWord("[Table omitted]", EpdFontFamily::ITALIC);
     } else {
       self->pendingPlaceholder_ = "[Table omitted]";
@@ -516,6 +545,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
           strcpy(marker, "\xe2\x80\xa2");  // U+2022 BULLET
         }
         if (self->currentTextBlock && !self->pendingNewTextBlock_) {
+          self->noteAnchorWord(self->currentTextBlock->sourceWordCount());
           self->currentTextBlock->addWord(marker, EpdFontFamily::REGULAR);
         } else {
           memcpy(self->pendingListMarker_, marker, sizeof(self->pendingListMarker_));
@@ -526,10 +556,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->listStack_.push_back({self->depth, strcmp(name, "ol") == 0, 0});
   }
 
-  // Record anchor-to-page mapping (after block handling so pagesCreated_ reflects current page)
-  if (!idAttr.empty()) {
-    self->anchorMap_.emplace_back(std::move(idAttr), self->pagesCreated_);
-  }
+  // Defer the anchor page until its first content is placed: the open-time
+  // page count can precede the page that receives the target.
+  self->deferAnchor(std::move(idAttr));
 
   self->depth += 1;
 }
@@ -766,6 +795,7 @@ void ChapterHtmlSlimParser::cleanupParser() {
   currentTextBlock.reset();
   pendingImage_.reset();
   std::string{}.swap(pendingPlaceholder_);
+  pendingAnchors_.clear();
   suspended_ = false;
   xmlDone_ = false;
 }
@@ -821,6 +851,9 @@ bool ChapterHtmlSlimParser::initParser() {
   bytesRead_ = 0;
   lastProgress_ = -1;
   pagesCreated_ = 0;
+  anchorMap_.clear();
+  pendingAnchors_.clear();
+  lastLinePage_ = 0;
 
   // Allow parsing documents with undeclared HTML entities (e.g. &nbsp;, &mdash;).
   // Without this, Expat returns XML_ERROR_UNDEFINED_ENTITY for any entity
@@ -971,6 +1004,9 @@ bool ChapterHtmlSlimParser::parseLoop() {
       file_.close();
       return true;
     }
+    // Anchors with no content bind to the final page; none exists yet only
+    // when nothing was placed, then the last completed page is the closest.
+    resolvePendingAnchors(currentPage ? pagesCreated_ : (pagesCreated_ > 0 ? pagesCreated_ - 1 : 0), false);
     if (currentPage) {
       completePageFn(std::move(currentPage));
     }
@@ -1023,6 +1059,7 @@ bool ChapterHtmlSlimParser::resumeParsing() {
       }
     }
 
+    resolvePendingAnchors(currentPage ? pagesCreated_ : (pagesCreated_ > 0 ? pagesCreated_ - 1 : 0), false);
     if (currentPage) {
       completePageFn(std::move(currentPage));
     }
@@ -1084,10 +1121,12 @@ bool ChapterHtmlSlimParser::resumeParsing() {
     currentTextBlock.reset(
         new ParsedText(pendingBlockStyle_, config.indentLevel, config.hyphenation, true, pendingRtl_));
     if (pendingListMarker_[0] != '\0') {
+      noteAnchorWord(currentTextBlock->sourceWordCount());
       currentTextBlock->addWord(pendingListMarker_, EpdFontFamily::REGULAR);
       pendingListMarker_[0] = '\0';
     }
     if (!pendingPlaceholder_.empty()) {
+      noteAnchorWord(currentTextBlock->sourceWordCount());
       currentTextBlock->addWord(pendingPlaceholder_.c_str(), EpdFontFamily::ITALIC);
       std::string{}.swap(pendingPlaceholder_);
     }
@@ -1124,6 +1163,7 @@ bool ChapterHtmlSlimParser::resumeParsing() {
         file_.close();
         return true;
       }
+      resolvePendingAnchors(currentPage ? pagesCreated_ : (pagesCreated_ > 0 ? pagesCreated_ - 1 : 0), false);
       if (currentPage) {
         completePageFn(std::move(currentPage));
       }
@@ -1136,6 +1176,61 @@ bool ChapterHtmlSlimParser::resumeParsing() {
 
   // Continue the file-reading loop
   return parseLoop();
+}
+
+// Queues an id for binding to the page of its first placed content.
+void ChapterHtmlSlimParser::deferAnchor(std::string id) {
+  if (id.empty()) return;
+  if (pendingAnchors_.size() >= MAX_PENDING_ANCHORS) {
+    // ponytail: past the cap, bind the queue at its record-time pages;
+    // per-id word tracking if a real book exceeds 32 simultaneous ids.
+    for (auto& pending : pendingAnchors_) {
+      if (pending.page == kPageUnset) pending.page = pending.fallbackPage;
+    }
+    flushResolvedAnchors();
+  }
+  pendingAnchors_.push_back({std::move(id), kNoSource, kPageUnset, pagesCreated_});
+}
+
+// The next word to be added becomes the first content of every id still
+// waiting for one.
+void ChapterHtmlSlimParser::noteAnchorWord(const uint32_t sourceIndex) {
+  for (auto& pending : pendingAnchors_) {
+    if (pending.sourceIndex == kNoSource) pending.sourceIndex = sourceIndex;
+  }
+}
+
+// A placed line binds the ids whose source word occurs in it. Split pieces
+// share the source index, so a hyphenated target binds where it starts.
+void ChapterHtmlSlimParser::bindAnchorsInLine(const TextBlock& line, const uint32_t page) {
+  for (auto& pending : pendingAnchors_) {
+    if (pending.page == kPageUnset && pending.sourceIndex != kNoSource && pending.sourceIndex >= line.sourceFirst() &&
+        pending.sourceIndex <= line.sourceLast()) {
+      pending.page = page;
+    }
+  }
+  flushResolvedAnchors();
+}
+
+// Binds ids still waiting for their first word, and optionally all remaining
+// ones (end of parse).
+void ChapterHtmlSlimParser::resolvePendingAnchors(const uint32_t page, const bool wordlessOnly) {
+  for (auto& pending : pendingAnchors_) {
+    if (pending.page == kPageUnset && (!wordlessOnly || pending.sourceIndex == kNoSource)) {
+      pending.page = page;
+    }
+  }
+  flushResolvedAnchors();
+}
+
+// Moves the resolved prefix, in record order, into the anchor map.
+void ChapterHtmlSlimParser::flushResolvedAnchors() {
+  size_t count = 0;
+  while (count < pendingAnchors_.size() && pendingAnchors_[count].page != kPageUnset) ++count;
+  for (size_t i = 0; i < count; ++i) {
+    anchorMap_.emplace_back(std::move(pendingAnchors_[i].id), pendingAnchors_[i].page);
+  }
+  pendingAnchors_.erase(pendingAnchors_.begin(), pendingAnchors_.begin() + static_cast<long>(count));
 }
 
 void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
@@ -1157,6 +1252,8 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
       currentPageNextY = 0;
       currentPage->elements.push_back(std::make_shared<PageLine>(line, currentLeftInset_, currentPageNextY));
       currentPageNextY += lineHeight;
+      lastLinePage_ = pagesCreated_;
+      bindAnchorsInLine(*line, pagesCreated_);
       stopRequested_ = true;
       if (xmlParser_) {
         XML_StopParser(xmlParser_, XML_TRUE);  // Resumable suspend
@@ -1170,6 +1267,8 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
 
   currentPage->elements.push_back(std::make_shared<PageLine>(line, currentLeftInset_, currentPageNextY));
   currentPageNextY += lineHeight;
+  lastLinePage_ = pagesCreated_;
+  bindAnchorsInLine(*line, pagesCreated_);
 }
 
 void ChapterHtmlSlimParser::makePages() {
@@ -1401,6 +1500,7 @@ void ChapterHtmlSlimParser::addImageToPage(std::shared_ptr<ImageBlock> image) {
 
   // Tall images get a dedicated page: flush current page if it has content
   if (isTallImage && currentPageNextY > 0) {
+    ++pagesCreated_;
     if (!completePageFn(std::move(currentPage))) {
       // Page before the image was submitted; the image itself is not on any
       // page yet — retain it for insertion on resume.
@@ -1418,6 +1518,7 @@ void ChapterHtmlSlimParser::addImageToPage(std::shared_ptr<ImageBlock> image) {
 
   // Check if image fits on current page
   if (currentPageNextY + imageHeight > config.viewportHeight) {
+    ++pagesCreated_;
     if (!completePageFn(std::move(currentPage))) {
       // Current page submitted to make room; image not on any page yet — retain it.
       pendingImage_ = std::move(image);
@@ -1444,9 +1545,11 @@ void ChapterHtmlSlimParser::addImageToPage(std::shared_ptr<ImageBlock> image) {
 
   currentPage->elements.push_back(std::make_shared<PageImage>(std::move(image), xPos, yPos));
   currentPageNextY = yPos + imageHeight + lineHeight;
+  resolvePendingAnchors(pagesCreated_, true);
 
   // Complete the page after a tall image so text continues on the next page
   if (isTallImage) {
+    ++pagesCreated_;
     if (!completePageFn(std::move(currentPage))) {
       stopRequested_ = true;
       if (xmlParser_) {

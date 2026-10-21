@@ -107,17 +107,17 @@ void anchorFixture(uint8_t version) {
 int main() {
   RenderConfig config;
   std::vector<MetricsEntry> metrics;
-  metricsFixture(4, config);
-  check(!readMetricsIndexFile("/sections", config, 1, metrics), "old metrics must not supply exact page counts");
   metricsFixture(5, config);
+  check(!readMetricsIndexFile("/sections", config, 1, metrics), "old metrics must not supply exact page counts");
+  metricsFixture(kMetricsIndexVersion, config);
   check(readMetricsIndexFile("/sections", config, 1, metrics), "current metrics must load");
   check(metrics.size() == 1 && metrics[0].pages == 19 && metrics[0].exact && metrics[0].byteSize == 2300,
         "current metrics preserve page counts and byte sizes");
-  anchorFixture(1);
+  anchorFixture(2);
   check(ReaderState::loadAnchorPage("/sections/0.bin", "heading") == -1,
         "old anchor must not choose a page before the section cache is rebuilt");
   check(ReaderState::loadAnchorMap("/sections/0.bin").empty(), "old anchors must not supply chapter ranges");
-  anchorFixture(2);
+  anchorFixture(kAnchorMapVersion);
   check(ReaderState::loadAnchorPage("/sections/0.bin", "heading") == 7, "current anchor selects its page");
   const auto anchors = ReaderState::loadAnchorMap("/sections/0.bin");
   check(anchors.size() == 1 && anchors[0].first == "heading" && anchors[0].second == 7,
@@ -137,7 +137,7 @@ int main() {
     check(ReaderState::loadAnchorPage("/sections/0.bin", "heading") == 7, "regeneration writes current anchors");
   }
 
-  anchorFixture(1);
+  anchorFixture(2);
   check(ReaderState::loadAnchorPage("/sections/0.bin", "heading") == -1, "old anchors still do not resolve");
   check(SdMan.exists("/sections/0.bin.anchors"), "old anchor file exists beside the complete cache");
   {
@@ -158,7 +158,7 @@ int main() {
     check(!ReaderState::anchorMapCurrent("/sections/0.bin"), "truncated anchor header is not current");
     check(SdMan.openFileForWrite("TEST", "/sections/0.bin.anchors", file), "rewrite anchor fixture");
     serialization::writePod(file, uint32_t{0x44434241});
-    serialization::writePod(file, uint8_t{2});
+    serialization::writePod(file, kAnchorMapVersion);
     serialization::writePod(file, uint16_t{1});
     file.close();
     check(!ReaderState::anchorMapCurrent("/sections/0.bin"), "bad magic is not current");

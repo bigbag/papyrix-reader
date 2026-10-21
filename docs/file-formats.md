@@ -226,7 +226,7 @@ Inline images are converted to BMP and cached:
 
 ## `book.bin`
 
-### Version 3
+### Version 7
 
 ImHex Pattern:
 
@@ -236,7 +236,7 @@ import std.string;
 import std.core;
 
 // === Configuration ===
-#define EXPECTED_VERSION 3
+#define EXPECTED_VERSION 7
 #define MAX_STRING_LENGTH 65535
 
 // === String Structure ===
@@ -258,6 +258,7 @@ fn format_string(String s) {
 struct Metadata {
     String title [[comment("Book title")]];
     String author [[comment("Book author")]];
+    String language [[comment("Book language tag")]];
     String coverItemHref [[comment("Path to cover image")]];
     String textReferenceHref [[comment("Path to guided first text reference")]];
 } [[comment("Book metadata information")]];
@@ -325,13 +326,19 @@ if (parsedSize != fileSize) {
 }
 ```
 
+### Related Files
+
+- `toc.retry` — One-byte recovery state. Values from `0` to `3` record the number of recovery attempts. `0xFF` means no declared table of contents.
+- `book.bin.new` — Replacement metadata in the `book.bin` format.
+- `book.bin.bak` — Previous metadata in the `book.bin` format.
+
 ## `section.bin`
 
-### Version 24
+### Version 25
 
 PapyriX rebuilds section caches with an unsupported format version when it opens the book.
 
-The page-count index (`metrics.bin`) uses version 5. Anchor maps (`.anchors`) use version 2. PapyriX rejects indexes with an unsupported version before it uses their page counts or anchor positions. It rebuilds a section cache if its anchor map is missing or has an invalid header. A valid empty anchor map does not cause a rebuild.
+The page-count index (`metrics.bin`) uses version 6. Anchor maps (`.anchors`) use version 3. PapyriX rejects indexes with an unsupported version before it uses their page counts or anchor positions. It rebuilds a section cache if its anchor map is missing or has an invalid header. A valid empty anchor map does not cause a rebuild.
 
 ImHex Pattern:
 
@@ -341,7 +348,7 @@ import std.string;
 import std.core;
 
 // === Configuration ===
-#define EXPECTED_VERSION 24
+#define EXPECTED_VERSION 25
 #define MAX_STRING_LENGTH 65535
 
 // === String Structure ===

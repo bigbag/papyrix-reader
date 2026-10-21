@@ -27,12 +27,21 @@ class TextBlock final : public Block {
  private:
   std::vector<WordData> wordData;
   BLOCK_STYLE style;
+  // Occurrence index range of the source words in this line; split pieces
+  // share the index of the word they came from. Not serialized.
+  uint32_t sourceFirst_ = 0;
+  uint32_t sourceLast_ = 0;
 
  public:
-  explicit TextBlock(std::vector<WordData> data, const BLOCK_STYLE style) : wordData(std::move(data)), style(style) {}
+  explicit TextBlock(std::vector<WordData> data, const BLOCK_STYLE style, const uint32_t sourceFirst = 0,
+                     const uint32_t sourceLast = 0)
+      : wordData(std::move(data)), style(style), sourceFirst_(sourceFirst), sourceLast_(sourceLast) {}
   ~TextBlock() override = default;
   void setStyle(const BLOCK_STYLE style) { this->style = style; }
   BLOCK_STYLE getStyle() const { return style; }
+  uint32_t sourceFirst() const { return sourceFirst_; }
+  uint32_t sourceLast() const { return sourceLast_; }
+
   bool isEmpty() override { return wordData.empty(); }
   void layout(GfxRenderer& renderer) override {};
   // given a renderer works out where to break the words into lines

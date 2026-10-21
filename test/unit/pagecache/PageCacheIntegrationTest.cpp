@@ -56,7 +56,7 @@ bool writeSyntheticCache(const char* path, const RenderConfig& config, uint32_t 
   FsFile file;
   if (!SdMan.openFileForWrite("CACHE", path, file)) return false;
 
-  constexpr uint8_t version = 24;
+  constexpr uint8_t version = 25;
   constexpr uint32_t headerSize = 43;
   constexpr uint32_t lutOffset = 45;
   constexpr uint32_t pagePosition = headerSize;
@@ -105,6 +105,24 @@ bool readCommittedSpan(const char* path, uint32_t& pageCount, uint32_t& lutOffse
 int main() {
   TestUtils::TestRunner runner("PageCacheIntegration");
   const RenderConfig config{};
+
+  {
+    SdMan.reset();
+    constexpr const char* path = "/cache/previous-layout.bin";
+    CountingParser parser(1, false);
+    PageCache cache(path);
+    runner.expectTrue(cache.create(parser, config, 0), "layout fixture is created");
+    PageCache current(path);
+    runner.expectTrue(current.loadRaw(), "the current layout remains readable without a config");
+    std::string previousLayout = SdMan.getWrittenData(path);
+    previousLayout[0] = 24;
+    SdMan.setFileData(path, previousLayout);
+    runner.expectFalse(PageCache::probe(path, config).valid, "the previous layout does not supply page counts");
+    PageCache raw(path);
+    runner.expectFalse(raw.loadRaw(), "the previous layout is not accepted by the raw loader");
+    PageCache configured(path);
+    runner.expectFalse(configured.load(config), "the previous layout is not used for rendering");
+  }
 
   {
     SdMan.reset();

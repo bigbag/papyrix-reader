@@ -44,6 +44,10 @@ class BookMetadataCache {
   uint32_t lutOffset;
   uint16_t spineCount;
   uint16_t tocCount;
+  // Distinct spine items covered by the parsed TOC candidate (not row count).
+  uint16_t usableTocCount;
+  // Scratch bitset, one bit per spine index, capped by the 500-entry limit.
+  uint8_t coveredSpineBits[63];
   uint32_t dataOffset;
   uint32_t cacheFileSize;
   bool loaded;
@@ -60,6 +64,7 @@ class BookMetadataCache {
   SpineEntry readSpineEntry(FsFile& file) const;
   TocEntry readTocEntry(FsFile& file) const;
   bool readEntryPosition(uint32_t lutEntryOffset, uint32_t& entryPosition);
+  bool publishBookBin(const std::string& tmpBookPath);
 
  public:
   BookMetadata coreMetadata;
@@ -69,6 +74,8 @@ class BookMetadataCache {
         lutOffset(0),
         spineCount(0),
         tocCount(0),
+        usableTocCount(0),
+        coveredSpineBits(),
         dataOffset(0),
         cacheFileSize(0),
         loaded(false),
@@ -86,6 +93,12 @@ class BookMetadataCache {
   bool endTocPass();
   bool skipTocPass();
   bool endWrite();
+  // TOC candidate selection and recovery
+  int getUsableTocCount() const { return usableTocCount; }
+  bool stashTocCandidate();
+  void discardStashedTocCandidate();
+  bool restoreStashedTocCandidate(uint16_t stashedTocCount, uint16_t stashedUsableCount);
+  bool beginTocRecovery();
   bool cleanupTmpFiles() const;
 
   // Post-processing to update mappings and sizes

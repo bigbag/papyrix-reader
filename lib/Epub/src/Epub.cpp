@@ -21,6 +21,37 @@
 #include "Epub/parsers/TocNavParser.h"
 #include "Epub/parsers/TocNcxParser.h"
 
+namespace {
+constexpr size_t MIN_HEAP_FOR_TOC = 20 * 1024;
+constexpr int MAX_TOC_RECOVERY_ATTEMPTS = 3;
+constexpr uint8_t TOC_RETRY_NO_TOC = 0xFF;
+constexpr char tocRetryFile[] = "/toc.retry";
+
+// Retry state values: attempts reserved, TOC_RETRY_ABSENT when no state file
+// exists, TOC_RETRY_READ_ERROR when an existing file is unreadable.
+constexpr int TOC_RETRY_ABSENT = -1;
+constexpr int TOC_RETRY_READ_ERROR = -2;
+
+int readTocRetryState(const std::string& dir) {
+  const std::string path = dir + tocRetryFile;
+  if (!SdMan.exists(path.c_str())) return TOC_RETRY_ABSENT;
+  FsFile file;
+  if (!SdMan.openFileForRead("EPUB", path, file)) return TOC_RETRY_READ_ERROR;
+  uint8_t value = 0;
+  const bool read = file.read(&value, 1) == 1;
+  file.close();
+  return read ? value : TOC_RETRY_READ_ERROR;
+}
+
+bool writeTocRetryState(const std::string& dir, const uint8_t state) {
+  FsFile file;
+  if (!SdMan.openFileForWrite("EPUB", dir + tocRetryFile, file)) return false;
+  const bool ok = file.write(&state, 1) == 1 && file.sync();
+  file.close();
+  return ok;
+}
+}  // namespace
+
 bool Epub::findContentOpfFile(std::string* contentOpfFile) const {
   const auto containerPath = "META-INF/container.xml";
   size_t containerSize;
@@ -273,6 +304,110 @@ bool Epub::parseTocNavFile() const {
   return true;
 }
 
+// Parse the declared TOC sources and keep the valid candidate that covers
+// more distinct spine items. The nav wins ties and a nav that covers every
+// spine item skips the NCX entirely. Only completely parsed candidates
+// compete; partial rows from a failed parse are discarded. Each candidate
+// pass is closed before any candidate file is renamed. The caller has opened
+// the TOC pass; this method closes it and returns false only when the pass
+// could not be written.
+bool Epub::parseTocCandidates() {
+  bool passOpen = true;
+  const auto endPass = [&]() {
+    if (!passOpen) return true;
+    passOpen = false;
+    return bookMetadataCache->endTocPass();
+  };
+  const auto beginPass = [&]() {
+    if (!bookMetadataCache->beginTocPass()) return false;
+    passOpen = true;
+    return true;
+  };
+
+  bool navValid = false;
+  uint16_t navCount = 0;
+  int navCoverage = 0;
+  if (!tocNavItem.empty()) {
+    LOG_DBG(TAG, "Attempting to parse EPUB 3 nav document");
+    navValid = parseTocNavFile();
+    if (navValid) {
+      navCount = static_cast<uint16_t>(bookMetadataCache->getTocCount());
+      navCoverage = bookMetadataCache->getUsableTocCount();
+    } else if (bookMetadataCache->getTocCount() > 0) {
+      if (!endPass() || !beginPass()) return false;
+    }
+  }
+
+  const int spineCount = bookMetadataCache->getSpineCount();
+  if (tocNcxItem.empty() || (navValid && spineCount > 0 && navCoverage >= spineCount)) {
+    return endPass();
+  }
+
+  if (!endPass()) return false;
+  if (navCount > 0 && !bookMetadataCache->stashTocCandidate()) return false;
+  if (!beginPass()) return false;
+  LOG_DBG(TAG, "Comparing NCX TOC with the nav document");
+  const bool ncxValid = parseTocNcxFile();
+  const int ncxCoverage = bookMetadataCache->getUsableTocCount();
+  if (!ncxValid && bookMetadataCache->getTocCount() > 0) {
+    if (!endPass() || !beginPass()) return false;
+  }
+  if (!endPass()) return false;
+  if (navCount == 0 || (ncxValid && ncxCoverage > navCoverage)) {
+    bookMetadataCache->discardStashedTocCandidate();
+    return true;
+  }
+  return bookMetadataCache->restoreStashedTocCandidate(navCount, static_cast<uint16_t>(navCoverage));
+}
+
+void Epub::maybeRecoverLostToc() {
+  if (bookMetadataCache->getTocCount() > 0) return;
+  const int state = readTocRetryState(cachePath);
+  // An unreadable state file must not authorize recovery.
+  if (state == TOC_RETRY_READ_ERROR) return;
+  if (state != TOC_RETRY_ABSENT && (state == TOC_RETRY_NO_TOC || state >= MAX_TOC_RECOVERY_ATTEMPTS)) return;
+  // A low-heap open defers the recovery without spending an attempt.
+  if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < MIN_HEAP_FOR_TOC) return;
+
+  // Reserve the attempt before touching the book so a crash or a failed state
+  // write cannot repeat an unrecorded attempt.
+  const uint8_t reserved = static_cast<uint8_t>(state == TOC_RETRY_ABSENT ? 1 : state + 1);
+  if (!writeTocRetryState(cachePath, reserved)) return;
+
+  LOG_INF(TAG, "Cache has no TOC entries, recovery attempt %d", reserved);
+  recoverLostToc();
+}
+
+// Rebuild only the TOC of a loaded cache. The spine temp is seeded from the
+// cache itself, so metadata, spine order and split mappings are preserved and
+// no full-spine vector is held in heap.
+void Epub::recoverLostToc() {
+  const BookMetadataCache::BookMetadata metadata = bookMetadataCache->coreMetadata;
+
+  BookMetadataCache::BookMetadata opfMetadata;
+  tocNcxItem.clear();
+  tocNavItem.clear();
+  if (!parseContentOpf(opfMetadata, true)) return;
+  if (tocNavItem.empty() && tocNcxItem.empty()) {
+    // The book declares no TOC; settle instead of retrying.
+    writeTocRetryState(cachePath, TOC_RETRY_NO_TOC);
+    return;
+  }
+
+  bool committed = false;
+  if (bookMetadataCache->beginTocRecovery() && parseTocCandidates() && bookMetadataCache->getUsableTocCount() > 0) {
+    committed = bookMetadataCache->buildBookBin(filepath, metadata);
+  }
+  bookMetadataCache->cleanupTmpFiles();
+
+  bookMetadataCache.reset(new BookMetadataCache(cachePath));
+  if (!bookMetadataCache->load()) return;
+  if (committed && bookMetadataCache->getTocCount() > 0) {
+    SdMan.remove((cachePath + tocRetryFile).c_str());
+    LOG_INF(TAG, "Recovered TOC with %d entries", bookMetadataCache->getTocCount());
+  }
+}
+
 bool Epub::parseCssFiles() {
   if (cssFiles_.empty()) {
     LOG_DBG(TAG, "No CSS files to parse");
@@ -339,6 +474,13 @@ bool Epub::load(const bool buildIfMissing) {
 
   // Try to load existing cache first
   if (bookMetadataCache->load()) {
+    if (buildIfMissing) {
+      maybeRecoverLostToc();
+      if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+        LOG_ERR(TAG, "Cache became invalid during TOC recovery");
+        return false;
+      }
+    }
     LOG_INF(TAG, "Loaded ePub: %s", filepath.c_str());
     return true;
   }
@@ -382,41 +524,17 @@ bool Epub::load(const bool buildIfMissing) {
   }
 
   // TOC Pass - skip if heap is too low for inflate + expat
-  constexpr size_t MIN_HEAP_FOR_TOC = 20 * 1024;
   const size_t freeHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
-
+  bool tocPassOk;
   if (freeHeap < MIN_HEAP_FOR_TOC) {
     LOG_INF(TAG, "Skipping TOC: heap too low (%zu < %zu)", freeHeap, MIN_HEAP_FOR_TOC);
-    if (!bookMetadataCache->skipTocPass()) {
-      LOG_ERR(TAG, "Could not create empty toc file");
-      return false;
-    }
+    tocPassOk = bookMetadataCache->skipTocPass();
   } else {
-    if (!bookMetadataCache->beginTocPass()) {
-      LOG_ERR(TAG, "Could not begin writing toc pass");
-      return false;
-    }
-
-    bool tocParsed = false;
-
-    if (!tocNavItem.empty()) {
-      LOG_DBG(TAG, "Attempting to parse EPUB 3 nav document");
-      tocParsed = parseTocNavFile();
-    }
-
-    if (!tocParsed && !tocNcxItem.empty()) {
-      LOG_DBG(TAG, "Falling back to NCX TOC");
-      tocParsed = parseTocNcxFile();
-    }
-
-    if (!tocParsed) {
-      LOG_ERR(TAG, "Warning: Could not parse any TOC format");
-    }
-
-    if (!bookMetadataCache->endTocPass()) {
-      LOG_ERR(TAG, "Could not end writing toc pass");
-      return false;
-    }
+    tocPassOk = bookMetadataCache->beginTocPass() && parseTocCandidates();
+  }
+  if (!tocPassOk) {
+    LOG_ERR(TAG, "Could not write toc pass");
+    return false;
   }
 
   // Close the cache files
@@ -429,6 +547,14 @@ bool Epub::load(const bool buildIfMissing) {
   if (!bookMetadataCache->buildBookBin(filepath, bookMetadata)) {
     LOG_ERR(TAG, "Could not update mappings and sizes");
     return false;
+  }
+
+  // Record why the TOC is empty so later opens can recover it.
+  if (bookMetadataCache->getTocCount() == 0) {
+    const uint8_t state = (!tocNavItem.empty() || !tocNcxItem.empty()) ? 0 : TOC_RETRY_NO_TOC;
+    if (!writeTocRetryState(cachePath, state)) {
+      LOG_ERR(TAG, "Could not record TOC retry state");
+    }
   }
 
   if (!bookMetadataCache->cleanupTmpFiles()) {

@@ -21,7 +21,7 @@ bool PageCache::failHeaderCommitOnce_ = false;
 #endif
 
 namespace {
-constexpr uint8_t CACHE_FILE_VERSION = 24;  // v24: resolved element emphasis changes pagination
+constexpr uint8_t CACHE_FILE_VERSION = 25;
 
 // Header layout (offsets are absolute from start of file):
 // - version (1 byte)        @ 0

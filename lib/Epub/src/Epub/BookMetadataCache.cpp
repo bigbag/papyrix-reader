@@ -10,8 +10,10 @@
 namespace {
 constexpr uint8_t BOOK_CACHE_VERSION = 7;
 constexpr char bookBinFile[] = "/book.bin";
+constexpr char bookBinBackupFile[] = "/book.bin.bak";
 constexpr char tmpSpineBinFile[] = "/spine.bin.tmp";
 constexpr char tmpTocBinFile[] = "/toc.bin.tmp";
+constexpr char tmpTocAltFile[] = "/toc.bin.tmp.alt";
 }  // namespace
 
 /* ============= WRITING / BUILDING FUNCTIONS ================ */
@@ -43,6 +45,9 @@ bool BookMetadataCache::endContentOpfPass() {
 
 bool BookMetadataCache::beginTocPass() {
   if (buildFailed) return false;
+  tocCount = 0;
+  usableTocCount = 0;
+  for (auto& byte : coveredSpineBits) byte = 0;
   LOG_DBG(TAG, "Beginning toc pass");
 
   // Open spine file for reading
@@ -69,6 +74,8 @@ bool BookMetadataCache::endTocPass() {
 
 bool BookMetadataCache::skipTocPass() {
   LOG_INF(TAG, "Skipping TOC pass (heap too low)");
+  usableTocCount = 0;
+  for (auto& byte : coveredSpineBits) byte = 0;
   if (!SdMan.openFileForWrite("BMC", cachePath + tmpTocBinFile, tocFile)) {
     buildFailed = true;
     return false;
@@ -77,6 +84,53 @@ bool BookMetadataCache::skipTocPass() {
   tocFile.close();
   if (!success) buildFailed = true;
   return success;
+}
+
+bool BookMetadataCache::stashTocCandidate() {
+  const std::string stashedPath = cachePath + tmpTocAltFile;
+  SdMan.remove(stashedPath.c_str());
+  return SdMan.rename((cachePath + tmpTocBinFile).c_str(), stashedPath.c_str());
+}
+
+void BookMetadataCache::discardStashedTocCandidate() { SdMan.remove((cachePath + tmpTocAltFile).c_str()); }
+
+bool BookMetadataCache::restoreStashedTocCandidate(const uint16_t stashedTocCount, const uint16_t stashedUsableCount) {
+  SdMan.remove((cachePath + tmpTocBinFile).c_str());
+  if (!SdMan.rename((cachePath + tmpTocAltFile).c_str(), (cachePath + tmpTocBinFile).c_str())) return false;
+  tocCount = stashedTocCount;
+  usableTocCount = stashedUsableCount;
+  for (auto& byte : coveredSpineBits) byte = 0;
+  return true;
+}
+
+bool BookMetadataCache::beginTocRecovery() {
+  if (!loaded) return false;
+  const uint16_t loadedSpineCount = spineCount;
+  if (!beginWrite()) return false;
+  // beginWrite resets the build counters; keep the loaded count valid while
+  // the old entries are read.
+  spineCount = loadedSpineCount;
+
+  // Copy the loaded spine into the build temp file one entry at a time so the
+  // recovery needs no full-spine vector in heap.
+  FsFile spineOut;
+  if (!SdMan.openFileForWrite("BMC", cachePath + tmpSpineBinFile, spineOut)) {
+    buildFailed = true;
+    return false;
+  }
+  bool ok = true;
+  for (uint16_t i = 0; i < loadedSpineCount && ok; i++) {
+    const SpineEntry entry = getSpineEntry(i);
+    ok = !entry.href.empty() && writeSpineEntry(spineOut, entry);
+  }
+  ok = ok && spineOut.sync();
+  spineOut.close();
+  if (!ok) {
+    buildFailed = true;
+    cleanupTmpFiles();
+    return false;
+  }
+  return beginTocPass();
 }
 
 bool BookMetadataCache::endWrite() {
@@ -194,12 +248,7 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   spineFile.close();
   tocFile.close();
 
-  const std::string finalPath = cachePath + bookBinFile;
-  SdMan.remove(finalPath.c_str());
-  if (!SdMan.rename(tmpBookPath.c_str(), finalPath.c_str())) {
-    SdMan.remove(tmpBookPath.c_str());
-    return false;
-  }
+  if (!publishBookBin(tmpBookPath)) return false;
 
   LOG_INF(TAG, "Successfully built book.bin");
   return true;
@@ -341,12 +390,7 @@ bool BookMetadataCache::rebuildFromMemory(const BookMetadata& metadata, const st
   SdMan.remove(spineTmpPath.c_str());
   SdMan.remove(tocTmpPath.c_str());
 
-  const std::string finalPath = cachePath + bookBinFile;
-  SdMan.remove(finalPath.c_str());
-  if (!SdMan.rename(tmpBookPath.c_str(), finalPath.c_str())) {
-    SdMan.remove(tmpBookPath.c_str());
-    return false;
-  }
+  if (!publishBookBin(tmpBookPath)) return false;
 
   LOG_INF(TAG, "Rebuilt book.bin: %u spine, %u TOC entries", newSpineCount, newTocCount);
   return true;
@@ -357,11 +401,47 @@ bool BookMetadataCache::cleanupTmpFiles() const {
   if (SdMan.exists(spinePath.c_str())) {
     SdMan.remove(spinePath.c_str());
   }
+  const auto altTocPath = cachePath + tmpTocAltFile;
+  if (SdMan.exists(altTocPath.c_str())) {
+    SdMan.remove(altTocPath.c_str());
+  }
   const auto tocPath = cachePath + tmpTocBinFile;
   if (SdMan.exists(tocPath.c_str())) {
     SdMan.remove(tocPath.c_str());
   }
   return true;
+}
+
+bool BookMetadataCache::publishBookBin(const std::string& tmpBookPath) {
+  const std::string finalPath = cachePath + bookBinFile;
+  const std::string backupPath = cachePath + bookBinBackupFile;
+  const auto pathExists = [&](const std::string& path) { return SdMan.exists(path.c_str()); };
+
+  // Drop a stale backup only while a live final cache exists.
+  if (pathExists(backupPath) && pathExists(finalPath)) SdMan.remove(backupPath.c_str());
+
+  // Stage the previous cache aside. Verify the paths because a rename can
+  // report failure after the move.
+  if (pathExists(finalPath)) {
+    const bool staged = SdMan.rename(finalPath.c_str(), backupPath.c_str()) || !pathExists(finalPath);
+    if (!staged || !pathExists(backupPath)) {
+      SdMan.remove(tmpBookPath.c_str());
+      return false;
+    }
+  }
+
+  if ((SdMan.rename(tmpBookPath.c_str(), finalPath.c_str()) || !pathExists(tmpBookPath)) && pathExists(finalPath)) {
+    SdMan.remove(backupPath.c_str());
+    return true;
+  }
+
+  // The commit failed. Restore the previous cache; when the restore also
+  // fails, keep the backup so the next load() can recover it.
+  if (!pathExists(finalPath) && pathExists(backupPath)) {
+    SdMan.rename(backupPath.c_str(), finalPath.c_str());
+  }
+  SdMan.remove(tmpBookPath.c_str());
+  return false;
 }
 
 bool BookMetadataCache::writeSpineEntry(FsFile& file, const SpineEntry& entry) const {
@@ -416,6 +496,13 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
 
   if (spineIndex == -1) {
     LOG_DBG(TAG, "addTocEntry: Could not find spine item for TOC href %s", href.c_str());
+  } else {
+    const uint16_t bit = static_cast<uint16_t>(spineIndex);
+    const uint8_t mask = 1 << (bit & 7);
+    if ((coveredSpineBits[bit >> 3] & mask) == 0) {
+      coveredSpineBits[bit >> 3] |= mask;
+      usableTocCount++;
+    }
   }
 
   const TocEntry entry(title, href, anchor, level, spineIndex);
@@ -430,8 +517,16 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
 
 bool BookMetadataCache::load() {
   loaded = false;
-  if (!SdMan.openFileForRead("BMC", cachePath + bookBinFile, bookFile)) {
-    return false;
+  const std::string finalPath = cachePath + bookBinFile;
+  if (!SdMan.openFileForRead("BMC", finalPath, bookFile)) {
+    // A backup from an interrupted replacement may be the only survivor.
+    const std::string backupPath = cachePath + bookBinBackupFile;
+    if (SdMan.exists(backupPath.c_str())) {
+      SdMan.rename(backupPath.c_str(), finalPath.c_str());
+    }
+    if (!SdMan.openFileForRead("BMC", finalPath, bookFile)) {
+      return false;
+    }
   }
 
   uint8_t fileVersion = 0;

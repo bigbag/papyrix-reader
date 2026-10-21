@@ -110,6 +110,21 @@ class ChapterHtmlSlimParser {
 
   // Anchor-to-page mapping: element id → page index (0-based)
   std::vector<std::pair<std::string, uint32_t>> anchorMap_;
+  // Ids waiting for their first content. sourceIndex holds the occurrence
+  // index of the next word to add (kNoSource until then); page binds when the
+  // word's line or a following image is placed. Bounded to keep memory flat:
+  // overflow binds the queue at its record-time pages, preserving order.
+  struct PendingAnchor {
+    std::string id;
+    uint32_t sourceIndex;
+    uint32_t page;
+    uint32_t fallbackPage;
+  };
+  std::vector<PendingAnchor> pendingAnchors_;
+  static constexpr size_t MAX_PENDING_ANCHORS = 32;
+  static constexpr uint32_t kNoSource = UINT32_MAX;
+  static constexpr uint32_t kPageUnset = UINT32_MAX;
+  uint32_t lastLinePage_ = 0;
 
   // Check if parsing should abort due to timeout or memory pressure
   bool shouldAbort() const;
@@ -118,6 +133,11 @@ class ChapterHtmlSlimParser {
   void flushPartWordBuffer();
   void reapplyContinuationInsets();
   void makePages();
+  void deferAnchor(std::string id);
+  void noteAnchorWord(uint32_t sourceIndex);
+  void bindAnchorsInLine(const TextBlock& line, uint32_t page);
+  void resolvePendingAnchors(uint32_t page, bool wordlessOnly);
+  void flushResolvedAnchors();
   std::string cacheImage(const std::string& src);
   void addImageToPage(std::shared_ptr<ImageBlock> image);
   // XML callbacks

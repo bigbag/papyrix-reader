@@ -51,6 +51,9 @@ class Epub {
   bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, bool metadataOnly = false);
   bool parseTocNcxFile() const;
   bool parseTocNavFile() const;
+  bool parseTocCandidates();
+  void maybeRecoverLostToc();
+  void recoverLostToc();
 
   bool scanSectionBoundaries(const std::string& htmlPath, SpineSplit& result, int splitDepth, uint8_t* ioBuf) const;
   bool extractSections(const std::string& htmlPath, const SpineSplit& split, uint8_t* ioBuf);

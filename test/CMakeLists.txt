@@ -465,7 +465,8 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/src/core/ReaderButtonDispatcher.cpp
       ${TEST_HELPERS}
     )
-  elseif(TEST_NAME STREQUAL "ContentHandleThumbnailTest" OR TEST_NAME STREQUAL "EpubIndexAnchorsTest")
+  elseif(TEST_NAME STREQUAL "ContentHandleThumbnailTest" OR TEST_NAME STREQUAL "EpubIndexAnchorsTest" OR
+         TEST_NAME STREQUAL "EpubTocRecoveryTest")
     find_package(EXPAT REQUIRED)
     add_executable(${TEST_NAME}
       ${TEST_SRC}
@@ -658,7 +659,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
     )
     target_compile_definitions(${TEST_NAME} PRIVATE XML_GE=0)
     target_link_libraries(${TEST_NAME} PRIVATE EXPAT::EXPAT)
-  elseif(TEST_NAME STREQUAL "ChapterHtmlImageSuspensionTest")
+  elseif(TEST_NAME STREQUAL "ChapterHtmlImageSuspensionTest" OR TEST_NAME STREQUAL "ChapterAnchorPlacementTest")
     find_package(EXPAT REQUIRED)
     add_executable(${TEST_NAME}
       ${TEST_SRC}

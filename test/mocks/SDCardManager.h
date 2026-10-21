@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstring>
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -74,6 +75,7 @@ class SDCardManager {
     openFailCount_ = 0;
     openFileForReadFailCount_ = 0;
     readOpenCount_ = 0;
+    readObserver_ = {};
     mallocFailCount_ = 0;
     readLimit_ = 0;
     readLimitActive_ = false;
@@ -103,6 +105,7 @@ class SDCardManager {
   // Failure injection: first N openFileForRead() calls for a path fail
   void setOpenFileForReadFailCount(int count) { openFileForReadFailCount_ = count; }
   size_t readOpenCount() const { return readOpenCount_; }
+  void setReadObserver(std::function<void(const char*)> observer) { readObserver_ = std::move(observer); }
 
   // Failure injection: next N malloc calls return nullptr
   void setMallocFailCount(int count) { mallocFailCount_ = count; }
@@ -203,6 +206,7 @@ class SDCardManager {
 
   bool openFileForRead(const char* moduleName, const char* path, FsFile& file) {
     (void)moduleName;
+    if (readObserver_) readObserver_(path);
     if (openFileForReadFailCount_ > 0) {
       openFileForReadFailCount_--;
       return false;
@@ -338,6 +342,7 @@ class SDCardManager {
   int openFailCount_ = 0;
   int openFileForReadFailCount_ = 0;
   size_t readOpenCount_ = 0;
+  std::function<void(const char*)> readObserver_;
   int mallocFailCount_ = 0;
   size_t readLimit_ = 0;
   bool readLimitActive_ = false;
