@@ -273,11 +273,17 @@ bool ReadingStatsStore::deserializeRecords(const uint8_t* data, size_t len, std:
 
 bool ReadingStatsStore::load() {
   if (loaded_) return true;
-  loaded_ = true;
-  records_.clear();
 
   FsFile file;
-  if (!SdMan.openFileForRead(TAG, STATS_FILE, file)) return true;
+  if (!SdMan.exists(STATS_FILE)) {
+    records_.clear();
+    loaded_ = true;
+    return true;
+  }
+  if (!SdMan.openFileForRead(TAG, STATS_FILE, file)) {
+    LOG_ERR(TAG, "Failed to open reading stats file");
+    return false;
+  }
 
   const size_t len = file.size();
   if (len < 2 || len > MAX_FILE_SIZE) {
@@ -285,17 +291,23 @@ bool ReadingStatsStore::load() {
     file.close();
     return false;
   }
-  const bool decoded = readRecords(file, len, records_);
+  std::vector<ReadingStatsRecord> staged;
+  const bool decoded = readRecords(file, len, staged);
   file.close();
   if (!decoded) {
     LOG_ERR(TAG, "Corrupt or incomplete reading stats file");
-    std::vector<ReadingStatsRecord>().swap(records_);
     return false;
   }
+  records_ = std::move(staged);
+  loaded_ = true;
   return true;
 }
 
 bool ReadingStatsStore::save() const {
+  if (!loaded_) {
+    LOG_ERR(TAG, "Save refused before successful load");
+    return false;
+  }
   SdMan.mkdir("/.papyrix");
   FsFile file;
   if (!SdMan.openFileForWrite(TAG, STATS_TMP, file)) {
@@ -321,7 +333,7 @@ bool ReadingStatsStore::save() const {
 
 bool ReadingStatsStore::recordSession(const std::string& path, uint32_t seconds, bool hasProgress,
                                       uint8_t progressPercent) {
-  if (!loaded_) load();
+  if (!loaded_ && !load()) return false;
   return applySession(records_, path, seconds, hasProgress, progressPercent);
 }
 

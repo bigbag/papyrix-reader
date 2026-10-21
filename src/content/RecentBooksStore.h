@@ -110,12 +110,19 @@ class RecentBooksStore {
   // ---- Singleton instance API (implemented in .cpp; SdMan-backed) ----
   static RecentBooksStore& instance();
 
+  // No-op when the saved list cannot be loaded; the saved file stays intact.
   void add(const std::string& path, const std::string& title, const std::string& author);
+  // No-op when the saved list cannot be loaded.
   void remove(const std::string& path);
+  // Fails rather than erase a list that could not be loaded.
   bool clearAndSave();
-  size_t pruneMissing();  // drops entries whose source file no longer exists; returns count removed
+  // Drops entries whose source file no longer exists; returns the count
+  // removed. No-op before a successful load.
+  size_t pruneMissing();
 
+  // A failed load keeps the last valid list and blocks changes and saves.
   bool load();
+  // A save requires a successful load.
   bool save();
 
   const std::vector<RecentBook>& books() const { return books_; }

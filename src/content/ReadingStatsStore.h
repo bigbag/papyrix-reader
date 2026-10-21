@@ -33,8 +33,11 @@ class ReadingStatsStore {
   static std::vector<uint8_t> serializeRecords(const std::vector<ReadingStatsRecord>& records);
   static bool deserializeRecords(const uint8_t* data, size_t len, std::vector<ReadingStatsRecord>& out);
 
+  // A failed load blocks changes and saves until a later load succeeds.
   bool load();
+  // A save requires a successful load.
   bool save() const;
+  // Applies a session to the loaded records. Fails when loading failed.
   bool recordSession(const std::string& path, uint32_t seconds, bool hasProgress, uint8_t progressPercent);
   const ReadingStatsRecord* find(const std::string& path) const;
   const std::vector<ReadingStatsRecord>& records() const { return records_; }

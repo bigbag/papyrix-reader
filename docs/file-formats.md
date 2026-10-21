@@ -9,6 +9,14 @@ Cover conversion keeps the aspect ratio. It reduces covers to 528×792 on X3
 or 480×800 on X4, X4 Pro, and X4 v2 Classic.
 It does not enlarge smaller covers.
 
+## Reading History
+
+`/.papyrix/reading-stats.bin` stores up to 64 statistics records. `/.papyrix/recent.bin` stores up to ten recent books.
+
+If a history file is missing, PapyriX starts an empty history. A read, data, or memory error leaves the saved file unchanged. PapyriX retries the load before the next change. A failed reload keeps the last valid recent-books list in memory.
+
+The stores check temporary-file writes and synchronization before replacement. Replacement is not power-loss atomic.
+
 ## TXT Cache Files
 
 TXT files use a simple cache format in `<device-cache>/txt_<hash>/`.

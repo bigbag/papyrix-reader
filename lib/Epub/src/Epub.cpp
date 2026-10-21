@@ -1296,16 +1296,32 @@ bool Epub::splitLargeSpineItems(uint8_t* decompressBuffer) {
 }
 
 bool Epub::extractSections(const std::string& htmlPath, const SpineSplit& split, uint8_t* ioBuf) {
+  constexpr size_t kCopyBufSize = 4096;
   // Ensure sections directory exists
   const std::string sectionsDir = cachePath + "/sections";
   SdMan.mkdir(sectionsDir.c_str());
 
-  // Write base path sidecar for image resolution in virtual sections
   if (!split.chapterBasePath.empty()) {
-    const std::string basePathFile = cachePath + "/sections/" + std::to_string(split.originalSpineIndex) + ".base";
-    FsFile bpFile;
-    if (SdMan.openFileForWrite("EPUB", basePathFile, bpFile)) {
-      bpFile.write(reinterpret_cast<const uint8_t*>(split.chapterBasePath.c_str()), split.chapterBasePath.size());
+    const std::string basePathFile = sectionsDir + "/" + std::to_string(split.originalSpineIndex) + ".base";
+    if (SdMan.exists(basePathFile.c_str())) {
+      FsFile bpFile;
+      const size_t baseSize = split.chapterBasePath.size();
+      if (baseSize > kCopyBufSize || !SdMan.openFileForRead("EPUB", basePathFile, bpFile) ||
+          bpFile.size() != baseSize || bpFile.read(ioBuf, baseSize) != static_cast<int>(baseSize) ||
+          memcmp(ioBuf, split.chapterBasePath.data(), baseSize) != 0) {
+        return false;
+      }
+    } else {
+      FsFile bpFile;
+      if (!SdMan.openFileForWrite("EPUB", basePathFile, bpFile) ||
+          bpFile.write(reinterpret_cast<const uint8_t*>(split.chapterBasePath.c_str()), split.chapterBasePath.size()) !=
+              split.chapterBasePath.size() ||
+          !bpFile.sync()) {
+        LOG_ERR(TAG, "Failed to write base path sidecar: %s", basePathFile.c_str());
+        bpFile.close();
+        SdMan.remove(basePathFile.c_str());
+        return false;
+      }
       bpFile.close();
     }
   }
@@ -1316,13 +1332,18 @@ bool Epub::extractSections(const std::string& htmlPath, const SpineSplit& split,
   const std::string bodyOpen = "<body><div>\n";
   const std::string bodyClose = "\n</div></body>\n</html>\n";
 
-  constexpr size_t kCopyBufSize = 4096;
+  // A failed retry must not remove files from an earlier call.
+  std::vector<int> createdSections;
 
-  auto cleanupSections = [&]() {
-    for (size_t k = 0; k < split.sections.size(); k++) {
-      const std::string path = sectionFilePath(split.originalSpineIndex, static_cast<int>(k));
+  auto failExtract = [&](const char* reason, const std::string& outPath) {
+    LOG_ERR(TAG, "Section extract failed (%s): %s", reason, outPath.c_str());
+    const std::string normPath = outPath + ".norm";
+    if (SdMan.exists(normPath.c_str())) SdMan.remove(normPath.c_str());
+    for (int sectionIndex : createdSections) {
+      const std::string path = sectionFilePath(split.originalSpineIndex, sectionIndex);
       if (SdMan.exists(path.c_str())) SdMan.remove(path.c_str());
     }
+    return false;
   };
 
   for (size_t i = 0; i < split.sections.size(); i++) {
@@ -1333,45 +1354,71 @@ bool Epub::extractSections(const std::string& htmlPath, const SpineSplit& split,
     FsFile outFile;
     if (!SdMan.openFileForWrite("EPUB", outPath, outFile)) {
       LOG_ERR(TAG, "Failed to create section file: %s", outPath.c_str());
-      cleanupSections();
-      return false;
+      return failExtract("create output", outPath);
     }
+    createdSections.push_back(static_cast<int>(i));
 
-    outFile.write(htmlWrapper.c_str(), htmlWrapper.size());
-    if (!split.headHtml.empty()) {
-      outFile.write(split.headHtml.c_str(), split.headHtml.size());
-      outFile.write("\n", 1);
+    const char* reason = "write wrapper";
+
+    bool ok = outFile.write(htmlWrapper.c_str(), htmlWrapper.size()) == htmlWrapper.size();
+    if (ok && !split.headHtml.empty()) {
+      reason = "write head";
+      ok = outFile.write(split.headHtml.c_str(), split.headHtml.size()) == split.headHtml.size() &&
+           outFile.write("\n", 1) == 1;
     }
-    outFile.write(bodyOpen.c_str(), bodyOpen.size());
+    if (ok) {
+      reason = "write body open";
+      ok = outFile.write(bodyOpen.c_str(), bodyOpen.size()) == bodyOpen.size();
+    }
 
     FsFile inFile;
-    if (!SdMan.openFileForRead("EPUB", htmlPath, inFile)) {
-      outFile.close();
-      cleanupSections();
-      return false;
+    if (ok) {
+      reason = "open source";
+      ok = SdMan.openFileForRead("EPUB", htmlPath, inFile);
     }
 
     const uint32_t start = split.sections[i].startOffset;
     const uint32_t end = split.sections[i].endOffset;
-    inFile.seek(start);
-
-    uint32_t remaining = end - start;
-    while (remaining > 0) {
-      const size_t toRead = remaining < kCopyBufSize ? remaining : kCopyBufSize;
-      const size_t bytesRead = inFile.read(ioBuf, toRead);
-      if (bytesRead == 0) break;
-      outFile.write(ioBuf, bytesRead);
-      remaining -= static_cast<uint32_t>(bytesRead);
+    if (ok) {
+      reason = "seek source";
+      ok = start <= end && end <= inFile.size() && inFile.seek(start);
     }
 
+    if (ok) {
+      uint32_t remaining = end - start;
+      while (remaining > 0 && ok) {
+        const size_t toRead = remaining < kCopyBufSize ? remaining : kCopyBufSize;
+        const int bytesRead = inFile.read(ioBuf, toRead);
+        if (bytesRead <= 0) {
+          reason = "read source";
+          LOG_ERR(TAG, "Source read stopped early: %s (section %zu, %u bytes left)", htmlPath.c_str(), i, remaining);
+          ok = false;
+          break;
+        }
+        reason = "write body";
+        ok = outFile.write(ioBuf, static_cast<size_t>(bytesRead)) == static_cast<size_t>(bytesRead);
+        remaining -= static_cast<uint32_t>(bytesRead);
+      }
+    }
     inFile.close();
-    outFile.write(bodyClose.c_str(), bodyClose.size());
+
+    if (ok) {
+      reason = "write body close";
+      ok = outFile.write(bodyClose.c_str(), bodyClose.size()) == bodyClose.size();
+    }
+    if (ok) {
+      reason = "sync output";
+      ok = outFile.sync();
+    }
     outFile.close();
+
+    if (!ok) return failExtract(reason, outPath);
 
     const std::string normPath = outPath + ".norm";
     if (html5::normalizeHtmlForXml(outPath, normPath)) {
-      SdMan.remove(outPath.c_str());
-      SdMan.rename(normPath.c_str(), outPath.c_str());
+      if (!SdMan.commitFile(normPath.c_str(), outPath.c_str())) return failExtract("normalize replace", outPath);
+    } else if (SdMan.exists(normPath.c_str())) {
+      SdMan.remove(normPath.c_str());
     }
   }
 
