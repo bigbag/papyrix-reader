@@ -10,8 +10,8 @@ struct Settings;
 
 inline constexpr uint32_t kSettingsMagic = 0x53585050;
 inline constexpr uint8_t kMinSettingsVersion = 3;
-inline constexpr uint8_t kSettingsFileVersion = 15;
-inline constexpr uint8_t kSettingsFieldCount = 29;
+inline constexpr uint8_t kSettingsFileVersion = 16;
+inline constexpr uint8_t kSettingsFieldCount = 30;
 
 enum class SettingsReadStatus { Ok, InvalidMagic, UnsupportedVersion, Truncated };
 

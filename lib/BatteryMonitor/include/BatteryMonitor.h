@@ -87,6 +87,10 @@ class BatteryMonitor {
   Cw2017Config _cw2017{};
   mutable bool _cw2017Initialized = false;
   mutable unsigned long _cw2017LastInitAttemptMs = 0;
+  mutable bool _cw2017EverInitialized = false;
+  mutable uint8_t _cw2017UnhealthyPolls = 0;
+  mutable uint8_t _cw2017RecoveryFailures = 0;
+  mutable bool _cw2017RestartPending = false;
   mutable bool _cw2017SocPolled = false;
   mutable bool _cw2017MvPolled = false;
   mutable bool _haveCw2017Soc = false;
@@ -125,6 +129,7 @@ class BatteryMonitor {
   bool bq27220WriteParam_(uint16_t address, uint16_t mah);
   bool bq27220LoadStep_(unsigned long now);
   bool ensureCw2017Profile_() const;
+  bool attemptCw2017Init_() const;
   bool readCw2017Soc_(uint16_t* out) const;
   bool readCw2017Mv_(uint16_t* out) const;
 };

@@ -158,6 +158,8 @@ int main() {
     expected.themeName[sizeof(expected.themeName) - 1] = '\0';
     memset(expected.lastBookPath, 'b', sizeof(expected.lastBookPath) - 1);
     expected.lastBookPath[sizeof(expected.lastBookPath) - 1] = '\0';
+    memset(expected.pendingBookPath, 'p', sizeof(expected.pendingBookPath) - 1);
+    expected.pendingBookPath[sizeof(expected.pendingBookPath) - 1] = '\0';
     expected.pendingTransition = 2;
     expected.transitionReturnTo = 2;
     expected.sunlightFadingFix = 1;
@@ -202,6 +204,8 @@ int main() {
                       "full_settings_theme_roundtrip");
     runner.expectTrue(memcmp(decoded.lastBookPath, expected.lastBookPath, sizeof(expected.lastBookPath)) == 0,
                       "full_settings_book_path_roundtrip");
+    runner.expectTrue(memcmp(decoded.pendingBookPath, expected.pendingBookPath, sizeof(expected.pendingBookPath)) == 0,
+                      "pending_book_path_roundtrip");
     runner.expectTrue(memcmp(decoded.fileListDir, expected.fileListDir, sizeof(expected.fileListDir)) == 0,
                       "full_settings_directory_roundtrip");
     runner.expectTrue(
@@ -227,6 +231,41 @@ int main() {
                  "previous_settings_version_accepted");
     runner.expectEq(uint8_t(1), decoded.recycleBinEnabled, "previous_settings_default_recycle_bin_enabled");
     runner.expectEq(uint8_t(1), decoded.touchPageTurns, "previous_settings_default_touch_page_turns");
+  }
+
+  for (const bool pending : {false, true}) {
+    Settings previous;
+    strcpy(previous.lastBookPath, "/old.epub");
+    previous.pendingTransition = pending ? 2 : 0;
+    FsFile file;
+    file.setBuffer("");
+    writeSettingsFile(file, previous);
+    file.seek(sizeof(kSettingsMagic));
+    serialization::writePod(file, uint8_t(15));
+    serialization::writePod(file, uint8_t(29));
+    file.seek(0);
+
+    Settings decoded;
+    expectStatus(runner, SettingsReadStatus::Ok, readSettingsFile(file, Settings{}, decoded),
+                 "v15_book_path_migration");
+    runner.expectEqual(pending ? "/old.epub" : "", decoded.pendingBookPath, "legacy_pending_open_migrated");
+    runner.expectEqual(pending ? "" : "/old.epub", decoded.lastBookPath, "legacy_resume_target_preserved");
+  }
+
+  {
+    Settings pending;
+    strcpy(pending.pendingBookPath, "/new.epub");
+    pending.pendingTransition = 2;
+    FsFile file;
+    file.setBuffer("");
+    writeSettingsFile(file, pending);
+    const auto data = file.getBuffer();
+    file.setBuffer(data.substr(0, data.size() - 1));
+    Settings decoded;
+    strcpy(decoded.lastBookPath, "/good.epub");
+    expectStatus(runner, SettingsReadStatus::Truncated, readSettingsFile(file, Settings{}, decoded),
+                 "truncated_pending_path_rejected");
+    runner.expectEqual("/good.epub", decoded.lastBookPath, "truncated_pending_path_preserves_output");
   }
 
   {

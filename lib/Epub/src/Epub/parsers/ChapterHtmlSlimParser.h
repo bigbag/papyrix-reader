@@ -34,16 +34,19 @@ class ChapterHtmlSlimParser {
   std::function<void(int)> progressFn;                        // Progress callback (0-100)
   int depth = 0;
   int skipUntilDepth = INT_MAX;
-  int boldUntilDepth = INT_MAX;
-  int italicUntilDepth = INT_MAX;
-  int cssBoldUntilDepth = INT_MAX;
-  int cssItalicUntilDepth = INT_MAX;
   int preformattedUntilDepth = INT_MAX;
+  // Effective bold and italic per element, indexed by element open-depth plus one.
+  // Slot zero holds the document level. Explicit CSS normal, initial, and inherit
+  // resolve against the parent slot after the cascade.
+  bool boldAtDepth_[MAX_XML_DEPTH + 2] = {};
+  bool italicAtDepth_[MAX_XML_DEPTH + 2] = {};
   int preWsPending = 0;
   // buffer for building up words from characters, will auto break if longer than this
   // leave one char at end for null pointer
   char partWordBuffer[MAX_WORD_SIZE + 1] = {};
   int partWordBufferIndex = 0;
+  bool partWordBold_ = false;
+  bool partWordItalic_ = false;
   std::unique_ptr<ParsedText> currentTextBlock = nullptr;
   std::unique_ptr<Page> currentPage = nullptr;
   int16_t currentPageNextY = 0;

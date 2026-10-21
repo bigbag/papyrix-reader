@@ -48,6 +48,15 @@ int splitWhitespace(const std::string& str, std::string parts[], int maxParts) {
   return count;
 }
 
+bool isValidFontWeight(const std::string& v) {
+  if (v == "normal" || v == "bold" || v == "bolder" || v == "lighter" || v == "inherit" || v == "initial") {
+    return true;
+  }
+  char* endPtr = nullptr;
+  const long weight = std::strtol(v.c_str(), &endPtr, 10);
+  return endPtr != v.c_str() && *endPtr == '\0' && weight >= 100 && weight <= 900;
+}
+
 }  // namespace
 
 CssParser::CssParser() {}
@@ -339,11 +348,16 @@ void CssParser::parseProperty(const std::string& name, const std::string& rawVal
       style.defined.textAlign = 1;
     }
   } else if (name == "font-style") {
-    style.fontStyle = parseFontStyle(value);
-    style.defined.fontStyle = 1;
+    // Only valid keywords mark the property defined. Invalid values are ignored.
+    if (value == "italic" || value == "oblique" || value == "normal" || value == "inherit" || value == "initial") {
+      style.fontStyle = parseFontStyle(value);
+      style.defined.fontStyle = 1;
+    }
   } else if (name == "font-weight") {
-    style.fontWeight = parseFontWeight(value);
-    style.defined.fontWeight = 1;
+    if (isValidFontWeight(value)) {
+      style.fontWeight = parseFontWeight(value);
+      style.defined.fontWeight = 1;
+    }
   } else if (name == "direction") {
     std::string v = toLower(trim(value));
     if (v == "rtl") {
@@ -409,6 +423,10 @@ CssFontStyle CssParser::parseFontStyle(const std::string& value) {
 
   if (v == "italic" || v == "oblique") {
     return CssFontStyle::Italic;
+  } else if (v == "inherit") {
+    return CssFontStyle::Inherit;
+  } else if (v == "initial") {
+    return CssFontStyle::Initial;
   }
 
   return CssFontStyle::Normal;
@@ -419,6 +437,10 @@ CssFontWeight CssParser::parseFontWeight(const std::string& value) {
 
   if (v == "bold" || v == "bolder" || v == "700" || v == "800" || v == "900") {
     return CssFontWeight::Bold;
+  } else if (v == "inherit") {
+    return CssFontWeight::Inherit;
+  } else if (v == "initial") {
+    return CssFontWeight::Initial;
   }
 
   return CssFontWeight::Normal;

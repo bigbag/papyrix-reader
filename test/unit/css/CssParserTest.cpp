@@ -84,6 +84,22 @@ int main() {
   runner.expectTrue(CssParser::parseInlineStyle("font-weight: 600").fontWeight == CssFontWeight::Normal,
                     "parseFontWeight: '600' is Normal");
 
+  // Test 12: CSS-wide keywords stay distinguishable for later parent resolution
+  runner.expectTrue(CssParser::parseInlineStyle("font-style: inherit").fontStyle == CssFontStyle::Inherit,
+                    "parseFontStyle: 'inherit'");
+  runner.expectTrue(CssParser::parseInlineStyle("font-style: initial").fontStyle == CssFontStyle::Initial,
+                    "parseFontStyle: 'initial'");
+  runner.expectTrue(CssParser::parseInlineStyle("font-weight: inherit").fontWeight == CssFontWeight::Inherit,
+                    "parseFontWeight: 'inherit'");
+  runner.expectTrue(CssParser::parseInlineStyle("font-weight: initial").fontWeight == CssFontWeight::Initial,
+                    "parseFontWeight: 'initial'");
+
+  // Test 13: Invalid values leave the property undefined
+  runner.expectFalse(CssParser::parseInlineStyle("font-weight: var(--w)").hasFontWeight(),
+                     "parseFontWeight: invalid value ignored");
+  runner.expectFalse(CssParser::parseInlineStyle("font-style: var(--s)").hasFontStyle(),
+                     "parseFontStyle: invalid value ignored");
+
   // ============================================
   // parseInlineStyle() tests
   // ============================================

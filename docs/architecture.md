@@ -30,6 +30,7 @@ UI mode provides library management, settings, and network functions.
 Reader mode provides book rendering with lower memory use.
 The device restarts when it changes boot modes.
 Persistent state records the book and reading position.
+The reader records the resume target after a successful page render. If the settings save fails, it retries after the next successful render. It adds the book to recent books after the save succeeds. A pending open uses a separate path. If the reader restarts before it saves the resume target, the next boot returns to the UI. The previous resume target remains available.
 
 ## Hardware
 

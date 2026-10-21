@@ -117,9 +117,8 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
     return;
   }
 
-  // Determine font style from HTML tags and CSS
-  const bool isBold = boldUntilDepth < depth || cssBoldUntilDepth < depth;
-  const bool isItalic = italicUntilDepth < depth || cssItalicUntilDepth < depth;
+  const bool isBold = partWordBold_;
+  const bool isItalic = partWordItalic_;
 
   EpdFontFamily::Style fontStyle = EpdFontFamily::REGULAR;
   if (isBold && isItalic) {
@@ -192,6 +191,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     XML_StopParser(self->xmlParser_, XML_FALSE);
     return;
   }
+
+  // Seed this element's slot with the parent emphasis. Early exits below
+  // (images, skipped subtrees) then read fresh values, not stale ones.
+  self->boldAtDepth_[self->depth + 1] = self->boldAtDepth_[self->depth];
+  self->italicAtDepth_[self->depth + 1] = self->italicAtDepth_[self->depth];
 
   // Middle of skip
   if (self->skipUntilDepth < self->depth) {
@@ -399,17 +403,35 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     return;
   }
 
-  // Apply CSS font-weight and font-style
-  if ((cssStyle.hasFontWeight() && cssStyle.fontWeight == CssFontWeight::Bold) ||
-      (cssStyle.hasFontStyle() && cssStyle.fontStyle == CssFontStyle::Italic)) {
-    self->flushPartWordBuffer();
+  // Resolve effective emphasis: start from the parent, apply the semantic tag
+  // default, then the explicit CSS value. Normal and initial disable the
+  // style, inherit falls back to the parent and drops the tag default.
+  const bool parentBold = self->boldAtDepth_[self->depth];
+  const bool parentItalic = self->italicAtDepth_[self->depth];
+  bool effBold = parentBold || matches(name, BOLD_TAGS, NUM_BOLD_TAGS) || matches(name, HEADER_TAGS, NUM_HEADER_TAGS);
+  bool effItalic = parentItalic || matches(name, ITALIC_TAGS, NUM_ITALIC_TAGS);
+  if (cssStyle.hasFontWeight()) {
+    if (cssStyle.fontWeight == CssFontWeight::Bold) {
+      effBold = true;
+    } else if (cssStyle.fontWeight == CssFontWeight::Inherit) {
+      effBold = parentBold;
+    } else {
+      effBold = false;
+    }
   }
-  if (cssStyle.hasFontWeight() && cssStyle.fontWeight == CssFontWeight::Bold) {
-    self->cssBoldUntilDepth = min(self->cssBoldUntilDepth, self->depth);
+  if (cssStyle.hasFontStyle()) {
+    if (cssStyle.fontStyle == CssFontStyle::Italic) {
+      effItalic = true;
+    } else if (cssStyle.fontStyle == CssFontStyle::Inherit) {
+      effItalic = parentItalic;
+    } else {
+      effItalic = false;
+    }
   }
-  if (cssStyle.hasFontStyle() && cssStyle.fontStyle == CssFontStyle::Italic) {
-    self->cssItalicUntilDepth = min(self->cssItalicUntilDepth, self->depth);
-  }
+  // Emphasis transitions do not flush here: characterData flushes lazily when
+  // text with different emphasis arrives, so empty spans keep words joined.
+  self->boldAtDepth_[self->depth + 1] = effBold;
+  self->italicAtDepth_[self->depth + 1] = effItalic;
 
   // Track direction for next text block creation
   if (cssStyle.hasDirection()) {
@@ -451,7 +473,6 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->blockStyleStack_.push_back(accumulated);
     self->startNewTextBlock(accumulated.alignment);
     applyOrStashBlockStyle(accumulated);
-    self->boldUntilDepth = min(self->boldUntilDepth, self->depth);
   } else if (matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS)) {
     if (strcmp(name, "br") == 0) {
       self->flushPartWordBuffer();
@@ -501,10 +522,6 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         }
       }
     }
-  } else if (matches(name, BOLD_TAGS, NUM_BOLD_TAGS)) {
-    self->boldUntilDepth = min(self->boldUntilDepth, self->depth);
-  } else if (matches(name, ITALIC_TAGS, NUM_ITALIC_TAGS)) {
-    self->italicUntilDepth = min(self->italicUntilDepth, self->depth);
   } else if (strcmp(name, "ul") == 0 || strcmp(name, "ol") == 0) {
     self->listStack_.push_back({self->depth, strcmp(name, "ol") == 0, 0});
   }
@@ -559,6 +576,10 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       }
       // Non-whitespace: flush any pending preserved whitespace as NBSP prefix.
       // Flush mid-drain if the buffer fills, so very long indents don't get truncated.
+      if (self->preWsPending > 0) {
+        self->partWordBold_ = self->boldAtDepth_[self->depth];
+        self->partWordItalic_ = self->italicAtDepth_[self->depth];
+      }
       while (self->preWsPending > 0) {
         if (self->partWordBufferIndex > MAX_WORD_SIZE - 2) {
           self->flushPartWordBuffer();
@@ -587,7 +608,12 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       }
     }
 
-    // If we're about to run out of space, then cut the word off and start a new one
+    // Empty elements must not split a word.
+    if (self->partWordBufferIndex > 0 && (self->boldAtDepth_[self->depth] != self->partWordBold_ ||
+                                          self->italicAtDepth_[self->depth] != self->partWordItalic_)) {
+      self->flushPartWordBuffer();
+    }
+
     if (self->partWordBufferIndex >= MAX_WORD_SIZE) {
       // Back up to last valid UTF-8 codepoint boundary to avoid splitting multi-byte chars
       int safeIdx = self->partWordBufferIndex;
@@ -616,6 +642,8 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     }
 
     self->partWordBuffer[self->partWordBufferIndex++] = s[i];
+    self->partWordBold_ = self->boldAtDepth_[self->depth];
+    self->partWordItalic_ = self->italicAtDepth_[self->depth];
   }
 
   // Flag for deferred split - handled outside XML callback to avoid stack overflow
@@ -634,16 +662,9 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   // to the visible text around it.
   const bool closingSkipped = self->skipUntilDepth <= self->depth - 1;
   if (!closingSkipped && self->partWordBufferIndex > 0) {
-    // Only flush out part word buffer if we're closing a block tag or are at the top of the HTML file.
-    // We don't want to flush out content when closing inline tags like <span>.
-    // Currently this also flushes out on closing <b> and <i> tags, but they are line tags so that shouldn't happen,
-    // text styling needs to be overhauled to fix it.
-    const bool closingCssStyle =
-        self->cssBoldUntilDepth == self->depth - 1 || self->cssItalicUntilDepth == self->depth - 1;
-    const bool shouldBreakText = matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS) ||
-                                 matches(name, HEADER_TAGS, NUM_HEADER_TAGS) ||
-                                 matches(name, BOLD_TAGS, NUM_BOLD_TAGS) ||
-                                 matches(name, ITALIC_TAGS, NUM_ITALIC_TAGS) || closingCssStyle || self->depth == 1;
+    // Inline elements keep their buffered text until the next character.
+    const bool shouldBreakText =
+        matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS) || matches(name, HEADER_TAGS, NUM_HEADER_TAGS) || self->depth == 1;
 
     if (shouldBreakText) {
       self->flushPartWordBuffer();
@@ -653,8 +674,8 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   self->depth -= 1;
 
   // Inside or exiting a skip region (display:none, <head>, <table>, aria-hidden).
-  // startElement returned before pushing blockStyleStack_ or setting style depths,
-  // so do not pop/addBottom or clear *UntilDepth here — that would corrupt parent state.
+  // startElement returned before pushing blockStyleStack_, so do not pop or
+  // addBottom here — that would corrupt parent state.
   if (self->skipUntilDepth <= self->depth) {
     if (self->skipUntilDepth == self->depth) {
       self->skipUntilDepth = INT_MAX;
@@ -669,18 +690,6 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->currentTextBlock->setStyle(static_cast<TextBlock::BLOCK_STYLE>(self->config.paragraphAlignment));
   }
 
-  if (self->boldUntilDepth == self->depth) {
-    self->boldUntilDepth = INT_MAX;
-  }
-  if (self->italicUntilDepth == self->depth) {
-    self->italicUntilDepth = INT_MAX;
-  }
-  if (self->cssBoldUntilDepth == self->depth) {
-    self->cssBoldUntilDepth = INT_MAX;
-  }
-  if (self->cssItalicUntilDepth == self->depth) {
-    self->cssItalicUntilDepth = INT_MAX;
-  }
   if (self->preformattedUntilDepth == self->depth) {
     self->preformattedUntilDepth = INT_MAX;
     self->preWsPending = 0;
@@ -772,6 +781,8 @@ bool ChapterHtmlSlimParser::initParser() {
   xmlDone_ = false;
   blockStyleStack_.clear();
   blockStyleStack_.reserve(8);
+  memset(boldAtDepth_, 0, sizeof(boldAtDepth_));
+  memset(italicAtDepth_, 0, sizeof(italicAtDepth_));
   BlockStyle rootBlockStyle;
   rootBlockStyle.alignment = static_cast<TextBlock::BLOCK_STYLE>(config.paragraphAlignment);
   rootBlockStyle.textAlignDefined = true;

@@ -57,10 +57,10 @@ static constexpr int kCacheTaskStopTimeoutMs = 10000;  // 10s - generous for slo
 namespace {
 constexpr int horizontalPadding = 5;
 constexpr int statusBarMargin = 23;
-constexpr uint8_t kMetricsIndexVersion = 4;
+constexpr uint8_t kMetricsIndexVersion = 5;
 constexpr const char* kMetricsIndexFilename = "metrics.bin";
 constexpr uint32_t kAnchorMapMagic = 0x48434E41;  // "ANCH" in little-endian files
-constexpr uint8_t kAnchorMapVersion = 1;
+constexpr uint8_t kAnchorMapVersion = 2;
 constexpr size_t kColdMinFreeHeap = 28 * 1024;
 constexpr size_t kColdMinLargestBlock = 10 * 1024;
 constexpr size_t kHotMinFreeHeap = 15 * 1024;
@@ -297,6 +297,21 @@ std::vector<std::pair<std::string, uint32_t>> ReaderState::loadAnchorMap(const s
   return anchors;
 }
 
+bool ReaderState::anchorMapCurrent(const std::string& cachePath) {
+  std::string anchorPath = cachePath + ".anchors";
+  FsFile file;
+  if (!SdMan.openFileForRead("RDR", anchorPath, file)) return false;
+
+  uint32_t magic;
+  uint8_t version;
+  uint16_t count;
+  const bool current = serialization::readPodChecked(file, magic) && magic == kAnchorMapMagic &&
+                       serialization::readPodChecked(file, version) && version == kAnchorMapVersion &&
+                       serialization::readPodChecked(file, count);
+  file.close();
+  return current;
+}
+
 // --- Global page metrics (whole-book page counting for EPUB/FB2) ---
 
 void ReaderState::invalidateGlobalPageMetrics() {
@@ -531,8 +546,8 @@ void ReaderState::createOrExtendCacheImpl(ContentParser& parser, const std::stri
   if (!pageCache_) {
     pageCache_.reset(new PageCache(cachePath));
     if (pageCache_->load(config)) {
-      if (!SdMan.exists((cachePath + ".anchors").c_str())) {
-        needsCreate = true;  // Migration: rebuild cache to generate anchor map
+      if (!anchorMapCurrent(cachePath)) {
+        needsCreate = true;
       } else {
         needsExtend = pageCache_->isPartial();
       }
@@ -540,8 +555,8 @@ void ReaderState::createOrExtendCacheImpl(ContentParser& parser, const std::stri
       needsCreate = true;
     }
   } else {
-    if (!SdMan.exists((cachePath + ".anchors").c_str())) {
-      needsCreate = true;  // Migration: rebuild cache to generate anchor map
+    if (!anchorMapCurrent(cachePath)) {
+      needsCreate = true;
     } else {
       needsExtend = pageCache_->isPartial();
     }
@@ -585,8 +600,7 @@ void ReaderState::backgroundCacheImpl(ContentParser& parser, const std::string& 
   // Create/load cache (we own pageCache_ while task is running)
   pageCache_.reset(new PageCache(cachePath));
   bool loaded = pageCache_->load(config);
-  // Migration: rebuild cache to generate anchor map if missing
-  if (loaded && !SdMan.exists((cachePath + ".anchors").c_str())) {
+  if (loaded && !anchorMapCurrent(cachePath)) {
     loaded = false;
   }
   const bool cachePartial = loaded && pageCache_->isPartial();
@@ -685,6 +699,8 @@ void ReaderState::enter(Core& core) {
 
   contentLoaded_ = false;
   loadFailed_ = false;
+  hasRenderedPage_ = false;
+  resumeRegistered_ = false;
   needsRender_ = true;
   readerButtons_ = {};
   indexingInProgress_ = false;
@@ -765,17 +781,6 @@ void ReaderState::enter(Core& core) {
   }
 
   contentLoaded_ = true;
-
-  // Save last book path to settings
-  strncpy(core.settings.lastBookPath, contentPath_, sizeof(core.settings.lastBookPath) - 1);
-  core.settings.lastBookPath[sizeof(core.settings.lastBookPath) - 1] = '\0';
-  core.settings.save(core.storage);
-
-  // Record in recent books list (snapshot title/author from opened provider)
-  {
-    const auto& meta = core.content.metadata();
-    RecentBooksStore::instance().add(contentPath_, meta.title, meta.author);
-  }
 
   // Setup cache directories for all content types
   // Reset state for new book
@@ -899,13 +904,13 @@ void ReaderState::exit(Core& core) {
   invalidateGlobalPageMetrics();
 
   if (contentLoaded_) {
-    // Save progress at last rendered position (not current requested position)
-    ProgressManager::Progress progress;
-    // If on cover, save as (0, 0) - cover is implicit start
-    progress.spineIndex = (lastRenderedSectionPage_ == -1) ? 0 : lastRenderedSpineIndex_;
-    progress.sectionPage = (lastRenderedSectionPage_ == -1) ? 0 : lastRenderedSectionPage_;
-    progress.flatPage = currentPage_;
-    ProgressManager::save(core, core.content.cacheDir(), core.content.metadata().type, progress);
+    if (hasRenderedPage_) {
+      ProgressManager::Progress progress;
+      progress.spineIndex = (lastRenderedSectionPage_ == -1) ? 0 : lastRenderedSpineIndex_;
+      progress.sectionPage = (lastRenderedSectionPage_ == -1) ? 0 : lastRenderedSectionPage_;
+      progress.flatPage = lastRenderedPage_;
+      ProgressManager::save(core, core.content.cacheDir(), core.content.metadata().type, progress);
+    }
     saveBookmarks(core);
 
     // Safe to reset - task is stopped, we own pageCache_/parser_
@@ -1099,11 +1104,31 @@ void ReaderState::render(Core& core) {
     renderTocOverlay(core);
   } else {
     renderCurrentPage(core);
-    lastRenderedSpineIndex_ = currentSpineIndex_;
-    lastRenderedSectionPage_ = currentSectionPage_;
   }
 
   needsRender_ = false;
+}
+
+void ReaderState::onPageRendered(Core& core) {
+  lastRenderedSpineIndex_ = currentSpineIndex_;
+  lastRenderedSectionPage_ = currentSectionPage_;
+  lastRenderedPage_ = currentPage_;
+  hasRenderedPage_ = true;
+  if (resumeRegistered_) return;
+
+  strncpy(core.settings.lastBookPath, contentPath_, sizeof(core.settings.lastBookPath) - 1);
+  core.settings.lastBookPath[sizeof(core.settings.lastBookPath) - 1] = '\0';
+  core.settings.pendingTransition = 0;
+  core.settings.transitionReturnTo = 0;
+  core.settings.pendingBookPath[0] = '\0';
+  if (!core.settings.save(core.storage).ok()) {
+    // The next successful render retries the save.
+    LOG_ERR(TAG, "Failed to save the resume target");
+    return;
+  }
+  resumeRegistered_ = true;
+  const auto& meta = core.content.metadata();
+  RecentBooksStore::instance().add(contentPath_, meta.title, meta.author);
 }
 
 void ReaderState::navigateNext(Core& core) {
@@ -1386,6 +1411,7 @@ void ReaderState::renderCurrentPage(Core& core) {
       if (renderCoverPage(core)) {
         hasCover_ = true;
         readingSession_.updateProgress(0);
+        onPageRendered(core);
         startBackgroundCaching(core);
         return;
       }
@@ -1650,6 +1676,7 @@ void ReaderState::renderCachedPage(Core& core) {
   }
 
   LOG_DBG(TAG, "Rendered page %d/%u", currentSectionPage_ + 1, pageCount);
+  onPageRendered(core);
 }
 
 bool ReaderState::ensurePageCached(Core& core, uint32_t pageNum) {
@@ -1871,6 +1898,7 @@ void ReaderState::renderXtcPage(Core& core) {
       metrics.currentPage = static_cast<int>(currentPage_) + 1;
       metrics.totalPages = static_cast<int>(core.content.pageCount());
       updateReadingProgress(metrics);
+      onPageRendered(core);
       break;
     }
     case XtcPageRenderer::RenderResult::EndOfBook:
@@ -2916,11 +2944,11 @@ void ReaderState::exitToUI(Core& core) {
   flushReadingSession();
 
   // Save progress at last rendered position
-  if (contentLoaded_) {
+  if (contentLoaded_ && hasRenderedPage_) {
     ProgressManager::Progress progress;
     progress.spineIndex = (lastRenderedSectionPage_ == -1) ? 0 : lastRenderedSpineIndex_;
     progress.sectionPage = (lastRenderedSectionPage_ == -1) ? 0 : lastRenderedSectionPage_;
-    progress.flatPage = currentPage_;
+    progress.flatPage = lastRenderedPage_;
     ProgressManager::save(core, core.content.cacheDir(), core.content.metadata().type, progress);
     saveBookmarks(core);
     // Skip pageCache_.reset() and content.close() — ESP.restart() follows,

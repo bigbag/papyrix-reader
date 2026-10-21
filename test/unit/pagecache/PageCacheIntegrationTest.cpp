@@ -56,7 +56,7 @@ bool writeSyntheticCache(const char* path, const RenderConfig& config, uint32_t 
   FsFile file;
   if (!SdMan.openFileForWrite("CACHE", path, file)) return false;
 
-  constexpr uint8_t version = 23;
+  constexpr uint8_t version = 24;
   constexpr uint32_t headerSize = 43;
   constexpr uint32_t lutOffset = 45;
   constexpr uint32_t pagePosition = headerSize;

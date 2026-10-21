@@ -34,9 +34,9 @@ struct CssLength {
 
 enum class TextAlign : uint8_t { None, Left, Right, Center, Justify };
 
-enum class CssFontStyle : uint8_t { Normal, Italic };
+enum class CssFontStyle : uint8_t { Normal, Italic, Inherit, Initial };
 
-enum class CssFontWeight : uint8_t { Normal, Bold };
+enum class CssFontWeight : uint8_t { Normal, Bold, Inherit, Initial };
 
 enum class TextDirection : uint8_t { Ltr, Rtl };
 

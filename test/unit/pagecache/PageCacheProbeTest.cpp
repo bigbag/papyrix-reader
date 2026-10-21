@@ -19,7 +19,7 @@
 
 namespace {
 
-constexpr uint8_t CACHE_FILE_VERSION = 23;
+constexpr uint8_t CACHE_FILE_VERSION = 24;
 constexpr uint32_t kHeaderSize = 43;
 
 RenderConfig defaultConfig() {

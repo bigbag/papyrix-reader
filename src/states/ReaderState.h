@@ -72,6 +72,9 @@ class ReaderState : public State {
   // Last successfully rendered position (for accurate progress saving)
   int lastRenderedSpineIndex_ = 0;
   int lastRenderedSectionPage_ = 0;
+  uint32_t lastRenderedPage_ = 0;
+  bool hasRenderedPage_ = false;
+  bool resumeRegistered_ = false;
 
   // Whether book has a valid cover image
   bool hasCover_ = false;
@@ -120,6 +123,7 @@ class ReaderState : public State {
   void renderCachedPage(Core& core);
   void renderXtcPage(Core& core);
   bool renderCoverPage(Core& core);
+  void onPageRendered(Core& core);
 
   // Helpers
   void renderPageContents(Core& core, Page& page, int marginTop, int marginRight, int marginBottom, int marginLeft);
@@ -174,6 +178,7 @@ class ReaderState : public State {
 
   // Anchor-to-page persistence for intra-spine TOC navigation
   static void saveAnchorMap(const ContentParser& parser, const std::string& cachePath);
+  static bool anchorMapCurrent(const std::string& cachePath);
   static int loadAnchorPage(const std::string& cachePath, const std::string& anchor);
   static std::vector<std::pair<std::string, uint32_t>> loadAnchorMap(const std::string& cachePath);
 

@@ -78,7 +78,7 @@ struct Settings {
   uint8_t _reserved = 0;  // was coverDithering, kept for serialization compatibility
   uint8_t lineSpacing = SpacingNormal;
   char themeName[32] = "light";
-  char lastBookPath[BufferSize::FilePath] = "";   // Path to last opened book
+  char lastBookPath[BufferSize::FilePath] = "";   // Last book with a rendered page
   uint8_t pendingTransition = 0;                  // 0=none, 1=UI, 2=Reader
   uint8_t transitionReturnTo = 0;                 // ReturnTo enum value (0=HOME, 1=FILE_MANAGER, 2=RECENT)
   uint8_t sunlightFadingFix = 0;                  // Power down display after refresh (SSD1677 UV protection)
@@ -90,6 +90,7 @@ struct Settings {
   uint8_t showRecents = 1;        // 1=Show Books (Recent) on home, 0=show Files instead
   uint8_t recycleBinEnabled = 1;  // 1=Move deleted files to /trash, 0=delete permanently
   uint8_t touchPageTurns = 1;
+  char pendingBookPath[BufferSize::FilePath] = "";
 
   // Persistence (using hal::Storage wrapper)
   Result<void> load(hal::Storage& storage);

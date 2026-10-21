@@ -51,6 +51,8 @@ The panel list identifies supported controllers.
   - Front light: None
   - USB detection: Native USB and battery charge state
 
+The CW2017 backend checks MODE, VERSION, and charge readings during polling. On Pro, repeated invalid readings trigger a bounded recovery attempt. Failed recovery attempts use a longer retry interval, up to 32 seconds. Health polling continues during this interval. A valid reading cancels a pending restart. The backend clears the restart command after the MODE sequence completes. Classic receives no calibration writes or restart commands. Both targets retain the last valid reading during a fault.
+
 A valid RTC value sets system time.
 A successful NTP update writes UTC time to an available RTC.
 Wi-Fi starts on demand.

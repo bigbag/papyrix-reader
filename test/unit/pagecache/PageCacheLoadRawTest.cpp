@@ -17,7 +17,7 @@
 
 namespace {
 
-constexpr uint8_t CACHE_FILE_VERSION = 23;
+constexpr uint8_t CACHE_FILE_VERSION = 24;
 
 // Header layout (must match PageCache.cpp):
 // - version (1 byte)

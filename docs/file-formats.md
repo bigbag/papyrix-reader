@@ -319,9 +319,11 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 23
+### Version 24
 
-Version 23 invalidates older pagination caches. The parser keeps a pending word in its original block before it starts a new block. PapyriX rebuilds older caches when it opens the book.
+PapyriX rebuilds section caches with an unsupported format version when it opens the book.
+
+The page-count index (`metrics.bin`) uses version 5. Anchor maps (`.anchors`) use version 2. PapyriX rejects indexes with an unsupported version before it uses their page counts or anchor positions. It rebuilds a section cache if its anchor map is missing or has an invalid header. A valid empty anchor map does not cause a rebuild.
 
 ImHex Pattern:
 
@@ -331,7 +333,7 @@ import std.string;
 import std.core;
 
 // === Configuration ===
-#define EXPECTED_VERSION 23
+#define EXPECTED_VERSION 24
 #define MAX_STRING_LENGTH 65535
 
 // === String Structure ===

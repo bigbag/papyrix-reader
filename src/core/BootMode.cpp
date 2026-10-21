@@ -50,23 +50,27 @@ BootMode detectBootMode() {
     return BootMode::UI;
   }
 
-  // Check settings for pending Reader transition (2=Reader mode)
-  if (core.settings.pendingTransition == 2 && core.settings.lastBookPath[0] != '\0' &&
-      SdMan.exists(core.settings.lastBookPath)) {
-    LOG_INF(TAG, "Pending Reader transition: path=%s, returnTo=%d", core.settings.lastBookPath,
-            core.settings.transitionReturnTo);
+  if (core.settings.pendingTransition == 2) {
+    if (core.settings.pendingBookPath[0] == '\0' || !SdMan.exists(core.settings.pendingBookPath)) {
+      clearTransition();
+      return BootMode::UI;
+    }
 
-    // Set up cached transition for reader mode
     cachedTransition.magic = ModeTransition::MAGIC;
     cachedTransition.mode = BootMode::READER;
     cachedTransition.returnTo = static_cast<ReturnTo>(core.settings.transitionReturnTo);
-    strncpy(cachedTransition.bookPath, core.settings.lastBookPath, sizeof(cachedTransition.bookPath) - 1);
+    strncpy(cachedTransition.bookPath, core.settings.pendingBookPath, sizeof(cachedTransition.bookPath) - 1);
     cachedTransition.bookPath[sizeof(cachedTransition.bookPath) - 1] = '\0';
     transitionCached = true;
 
-    // Clear the pending flag to prevent boot loop
-    clearTransition();
-
+    // A restart before the first page returns to the UI.
+    core.settings.pendingTransition = 1;
+    core.settings.pendingBookPath[0] = '\0';
+    if (!core.settings.saveToFile()) {
+      cachedTransition.mode = BootMode::UI;
+      cachedTransition.bookPath[0] = '\0';
+      return BootMode::UI;
+    }
     return BootMode::READER;
   }
 
@@ -83,10 +87,13 @@ BootMode detectBootMode() {
     cachedTransition.bookPath[sizeof(cachedTransition.bookPath) - 1] = '\0';
     transitionCached = true;
 
-    // Clear lastBookPath to prevent boot loop if reader fails
-    // ReaderState will re-save it after successful open
-    core.settings.lastBookPath[0] = '\0';
-    core.settings.saveToFile();
+    core.settings.pendingTransition = 1;
+    core.settings.transitionReturnTo = static_cast<uint8_t>(ReturnTo::HOME);
+    if (!core.settings.saveToFile()) {
+      cachedTransition.mode = BootMode::UI;
+      cachedTransition.bookPath[0] = '\0';
+      return BootMode::UI;
+    }
 
     return BootMode::READER;
   }
@@ -98,11 +105,10 @@ BootMode detectBootMode() {
 const ModeTransition& getTransition() { return cachedTransition; }
 
 void saveTransition(BootMode mode, const char* bookPath, ReturnTo returnTo) {
-  // Only set lastBookPath when transitioning to Reader mode
-  // For UI transitions, keep existing lastBookPath for "Continue reading"
+  core.settings.pendingBookPath[0] = '\0';
   if (mode == BootMode::READER && bookPath && bookPath[0] != '\0') {
-    strncpy(core.settings.lastBookPath, bookPath, sizeof(core.settings.lastBookPath) - 1);
-    core.settings.lastBookPath[sizeof(core.settings.lastBookPath) - 1] = '\0';
+    strncpy(core.settings.pendingBookPath, bookPath, sizeof(core.settings.pendingBookPath) - 1);
+    core.settings.pendingBookPath[sizeof(core.settings.pendingBookPath) - 1] = '\0';
   }
 
   // Store mode: 1=UI, 2=Reader
@@ -111,12 +117,13 @@ void saveTransition(BootMode mode, const char* bookPath, ReturnTo returnTo) {
   core.settings.saveToFile();
 
   LOG_INF(TAG, "Saved transition to settings: mode=%d, returnTo=%d, path=%s", static_cast<int>(mode),
-          static_cast<int>(returnTo), core.settings.lastBookPath);
+          static_cast<int>(returnTo), core.settings.pendingBookPath);
 }
 
 void clearTransition() {
   core.settings.pendingTransition = 0;
   core.settings.transitionReturnTo = 0;
+  core.settings.pendingBookPath[0] = '\0';
   core.settings.saveToFile();
   LOG_DBG(TAG, "Cleared pending transition");
 }

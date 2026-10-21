@@ -19,7 +19,7 @@ enum class ReturnTo : uint8_t {
   RECENT         // Return to RecentState (Books screen)
 };
 
-// RTC memory structure for mode transitions (persists across restart)
+// Cached mode transition for the current boot.
 struct ModeTransition {
   uint32_t magic;                       // 0xB007MODE - validation marker
   BootMode mode;                        // Target boot mode
@@ -33,10 +33,10 @@ struct ModeTransition {
 };
 
 // Detect which mode to boot into
-// Checks RTC memory first, falls back to settings "Last Document" behavior
+// Consume a pending transition before applying the startup setting.
 BootMode detectBootMode();
 
-// Get the transition data (only valid if detectBootMode returned based on RTC)
+// Get the transition data cached by detectBootMode().
 const ModeTransition& getTransition();
 
 // Save transition data before ESP.restart()

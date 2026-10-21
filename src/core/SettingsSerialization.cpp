@@ -51,7 +51,8 @@ bool writeSettingsFile(FsFile& file, const Settings& settings) {
          serialization::writePodChecked(file, settings.fullBookProcess) &&
          serialization::writePodChecked(file, settings.showRecents) &&
          serialization::writePodChecked(file, settings.recycleBinEnabled) &&
-         serialization::writePodChecked(file, settings.touchPageTurns) && file.sync();
+         serialization::writePodChecked(file, settings.touchPageTurns) &&
+         writeBytes(file, settings.pendingBookPath, sizeof(settings.pendingBookPath)) && file.sync();
 }
 
 SettingsReadStatus readSettingsFile(FsFile& file, const Settings& defaults, Settings& decoded) {
@@ -137,10 +138,16 @@ SettingsReadStatus readSettingsFile(FsFile& file, const Settings& defaults, Sett
   READ_SETTING(serialization::readPodValidated(file, candidate.showRecents, uint8_t(2)));
   READ_SETTING(serialization::readPodValidated(file, candidate.recycleBinEnabled, uint8_t(2)));
   READ_SETTING(serialization::readPodValidated(file, candidate.touchPageTurns, uint8_t(2)));
+  READ_SETTING(readBytes(file, candidate.pendingBookPath, sizeof(candidate.pendingBookPath)));
+  candidate.pendingBookPath[sizeof(candidate.pendingBookPath) - 1] = '\0';
 
 complete:
 #undef READ_SETTING
   if (version < 8) candidate.fontSize++;
+  if (version < 16 && candidate.pendingTransition == 2) {
+    memcpy(candidate.pendingBookPath, candidate.lastBookPath, sizeof(candidate.pendingBookPath));
+    candidate.lastBookPath[0] = '\0';
+  }
   decoded = candidate;
   return SettingsReadStatus::Ok;
 }
