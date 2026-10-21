@@ -83,6 +83,9 @@ class ChapterHtmlSlimParser {
   };
   std::vector<ListEntry> listStack_;
   char pendingListMarker_[12] = {};
+  std::string pendingPlaceholder_;
+
+  std::shared_ptr<ImageBlock> pendingImage_;
 
   bool aborted_ = false;
 

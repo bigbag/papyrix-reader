@@ -5,8 +5,8 @@
 #include <RenderConfig.h>
 #include <Serialization.h>
 
-#include <cstring>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <type_traits>
 
@@ -56,15 +56,14 @@ bool writeSyntheticCache(const char* path, const RenderConfig& config, uint32_t 
   FsFile file;
   if (!SdMan.openFileForWrite("CACHE", path, file)) return false;
 
-  constexpr uint8_t version = 22;
+  constexpr uint8_t version = 23;
   constexpr uint32_t headerSize = 43;
   constexpr uint32_t lutOffset = 45;
   constexpr uint32_t pagePosition = headerSize;
   const uint8_t partial = 1;
   const uint32_t bytesConsumed = 1;
   const uint32_t totalBytes = 2;
-  bool ok = serialization::writePodChecked(file, version) &&
-            serialization::writePodChecked(file, config.fontId) &&
+  bool ok = serialization::writePodChecked(file, version) && serialization::writePodChecked(file, config.fontId) &&
             serialization::writePodChecked(file, config.lineCompression) &&
             serialization::writePodChecked(file, config.indentLevel) &&
             serialization::writePodChecked(file, config.spacingLevel) &&
@@ -73,10 +72,8 @@ bool writeSyntheticCache(const char* path, const RenderConfig& config, uint32_t 
             serialization::writePodChecked(file, config.showImages) &&
             serialization::writePodChecked(file, config.viewportWidth) &&
             serialization::writePodChecked(file, config.viewportHeight) &&
-            serialization::writePodChecked(file, pageCount) &&
-            serialization::writePodChecked(file, partial) &&
-            serialization::writePodChecked(file, lutOffset) &&
-            serialization::writePodChecked(file, bytesConsumed) &&
+            serialization::writePodChecked(file, pageCount) && serialization::writePodChecked(file, partial) &&
+            serialization::writePodChecked(file, lutOffset) && serialization::writePodChecked(file, bytesConsumed) &&
             serialization::writePodChecked(file, totalBytes) &&
             serialization::writePodChecked(file, config.sourceFingerprint) &&
             serialization::writePodChecked(file, config.fontFingerprint);
@@ -97,8 +94,7 @@ bool readCommittedSpan(const char* path, uint32_t& pageCount, uint32_t& lutOffse
     return false;
   }
   uint8_t partial;
-  const bool ok = serialization::readPodChecked(file, partial) &&
-                  serialization::readPodChecked(file, lutOffset);
+  const bool ok = serialization::readPodChecked(file, partial) && serialization::readPodChecked(file, lutOffset);
   fileSize = static_cast<uint32_t>(file.size());
   file.close();
   return ok;
@@ -186,8 +182,7 @@ int main() {
     runner.expectTrue(reloadedCache.extend(coldParser, 5), "cold extend continues beyond one thousand pages");
     runner.expectEq(static_cast<uint32_t>(1002), reloadedCache.pageCount(),
                     "cold extend preserves and appends all pages");
-    runner.expectTrue(reloadedCache.loadPage(999) != nullptr,
-                      "cold extend keeps the former last page readable");
+    runner.expectTrue(reloadedCache.loadPage(999) != nullptr, "cold extend keeps the former last page readable");
     runner.expectFalse(reloadedCache.isPartial(), "cold extend marks exhausted content complete");
   }
 
@@ -221,10 +216,8 @@ int main() {
       runner.expectTrue(cache.extend(parser, PageCache::DEFAULT_CACHE_CHUNK),
                         "background path extends a partial cache before the foreground threshold");
     }
-    runner.expectEq(static_cast<uint32_t>(10), cache.pageCount(),
-                    "background path appends the next read-ahead chunk");
-    runner.expectTrue(cache.loadPage(4) != nullptr,
-                      "hot extend keeps the former last page readable");
+    runner.expectEq(static_cast<uint32_t>(10), cache.pageCount(), "background path appends the next read-ahead chunk");
+    runner.expectTrue(cache.loadPage(4) != nullptr, "hot extend keeps the former last page readable");
     runner.expectTrue(cache.isPartial(), "background path leaves remaining content partial");
   }
 

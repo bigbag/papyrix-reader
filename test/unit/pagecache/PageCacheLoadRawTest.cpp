@@ -5,8 +5,6 @@
 // validates the binary header format contract by writing/reading the same format.
 // If both sides agree on the format, the real loadRaw() works correctly.
 
-#include "test_utils.h"
-
 #include <cstdint>
 #include <cstring>
 #include <string>
@@ -15,10 +13,11 @@
 #include "SDCardManager.h"
 #include "SdFat.h"
 #include "Serialization.h"
+#include "test_utils.h"
 
 namespace {
 
-constexpr uint8_t CACHE_FILE_VERSION = 22;
+constexpr uint8_t CACHE_FILE_VERSION = 23;
 
 // Header layout (must match PageCache.cpp):
 // - version (1 byte)
@@ -114,23 +113,16 @@ LoadRawResult loadRaw(const std::string& path) {
   uint32_t lutOffset = 0;
   uint32_t sourceFingerprint = 0;
   uint32_t fontFingerprint = 0;
-  const bool headerValid = serialization::readPodChecked(file, version) &&
-                           serialization::readPodChecked(file, fontId) &&
-                           serialization::readPodChecked(file, lineCompression) &&
-                           serialization::readPodChecked(file, indentLevel) &&
-                           serialization::readPodChecked(file, spacingLevel) &&
-                           serialization::readPodChecked(file, paragraphAlignment) &&
-                           serialization::readPodChecked(file, hyphenation) &&
-                           serialization::readPodChecked(file, showImages) &&
-                           serialization::readPodChecked(file, viewportWidth) &&
-                           serialization::readPodChecked(file, viewportHeight) &&
-                           serialization::readPodChecked(file, result.pageCount) &&
-                           serialization::readPodChecked(file, partial) &&
-                           serialization::readPodChecked(file, lutOffset) &&
-                           serialization::readPodChecked(file, result.bytesConsumed) &&
-                           serialization::readPodChecked(file, result.totalBytes) &&
-                           serialization::readPodChecked(file, sourceFingerprint) &&
-                           serialization::readPodChecked(file, fontFingerprint);
+  const bool headerValid =
+      serialization::readPodChecked(file, version) && serialization::readPodChecked(file, fontId) &&
+      serialization::readPodChecked(file, lineCompression) && serialization::readPodChecked(file, indentLevel) &&
+      serialization::readPodChecked(file, spacingLevel) && serialization::readPodChecked(file, paragraphAlignment) &&
+      serialization::readPodChecked(file, hyphenation) && serialization::readPodChecked(file, showImages) &&
+      serialization::readPodChecked(file, viewportWidth) && serialization::readPodChecked(file, viewportHeight) &&
+      serialization::readPodChecked(file, result.pageCount) && serialization::readPodChecked(file, partial) &&
+      serialization::readPodChecked(file, lutOffset) && serialization::readPodChecked(file, result.bytesConsumed) &&
+      serialization::readPodChecked(file, result.totalBytes) &&
+      serialization::readPodChecked(file, sourceFingerprint) && serialization::readPodChecked(file, fontFingerprint);
   const size_t lutSize = static_cast<size_t>(result.pageCount) * sizeof(uint32_t);
   if (!headerValid || version != CACHE_FILE_VERSION || partial > 1 || lutOffset < HEADER_SIZE ||
       lutOffset > file.size() || lutSize > file.size() - lutOffset) {

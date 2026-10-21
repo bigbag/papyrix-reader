@@ -3,13 +3,14 @@
 #include <Display.h>
 #include <EpdFontFamily.h>
 #include <Utf8.h>
-#include <cstring>
 
+#include <cstring>
 #include <map>
 #include <string>
 #include <utility>
 #include <vector>
 
+class Bitmap;
 class ExternalFont;
 class StreamingEpdFont;
 
@@ -55,7 +56,8 @@ class GfxRenderer {
   static constexpr int VIEWABLE_MARGIN_BOTTOM = 3;
   static constexpr int VIEWABLE_MARGIN_LEFT = 3;
 
-  explicit GfxRenderer(papyrix::hal::Display& einkDisplay) : einkDisplay(einkDisplay), renderMode(BW), orientation(Portrait) {}
+  explicit GfxRenderer(papyrix::hal::Display& einkDisplay)
+      : einkDisplay(einkDisplay), renderMode(BW), orientation(Portrait) {}
 
   void begin() {}
   void insertFont(int fontId, EpdFontFamily font) { fontMap.emplace(fontId, font); }
@@ -124,9 +126,8 @@ class GfxRenderer {
   const std::string& lastText() const { return lastText_; }
   std::string truncatedText(int, const char* text, int) const { return text ? text : ""; }
 
-  std::vector<std::string> wrapTextWithHyphenation(
-      int, const char* text, int maxWidth, int maxLines,
-      EpdFontFamily::Style = EpdFontFamily::REGULAR) const {
+  std::vector<std::string> wrapTextWithHyphenation(int, const char* text, int maxWidth, int maxLines,
+                                                   EpdFontFamily::Style = EpdFontFamily::REGULAR) const {
     lastWrapMaxWidth_ = maxWidth;
     lastWrapMaxLines_ = maxLines;
     if (!wrappedTextResult_.empty()) return wrappedTextResult_;
@@ -134,7 +135,7 @@ class GfxRenderer {
   }
 
   std::vector<std::string> breakWordWithHyphenation(int fontId, const char* word, int maxWidth,
-                                                     EpdFontFamily::Style style = EpdFontFamily::REGULAR) const {
+                                                    EpdFontFamily::Style style = EpdFontFamily::REGULAR) const {
     std::vector<std::string> chunks;
     if (!word || *word == '\0') return chunks;
     std::string remaining = word;
@@ -222,15 +223,14 @@ class GfxRenderer {
              &data[row * imageWidthBytes], copyBytes);
     }
   }
-  void clearScreen(uint8_t color = 0xFF) const {
-    memset(frameBuffer_, color, papyrix::hal::Display::BUFFER_SIZE);
-  }
+  void clearScreen(uint8_t color = 0xFF) const { memset(frameBuffer_, color, papyrix::hal::Display::BUFFER_SIZE); }
   void invertScreen() const {
     for (uint8_t& byte : frameBuffer_) byte = static_cast<uint8_t>(~byte);
   }
   void drawPixel(int, int, bool = true) const {}
   void drawLine(int, int, int, int, bool = true) const {}
   void drawRect(int, int, int, int, bool = true) const {}
+  void drawBitmap(const Bitmap&, int, int, int, int) const {}
   void fillRect(int x, int y, int w, int h, bool color = true) const { fillRects_.push_back({x, y, w, h, color}); }
   void clearFillRects() const { fillRects_.clear(); }
   const std::vector<FillRectCall>& fillRects() const { return fillRects_; }

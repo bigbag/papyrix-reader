@@ -9,6 +9,11 @@
 
 #include "SdFat.h"
 
+// Injection outcome for a queued rename() call. AfterMutation mirrors
+// FatFile::rename, which removes the old entry before the final cacheSync can
+// fail: the move happens, the call still reports false.
+enum class RenameFailMode { Succeed, FailBeforeMutation, FailAfterMutation };
+
 class SDCardManager {
  public:
   SDCardManager() = default;
@@ -80,6 +85,9 @@ class SDCardManager {
     syncResult_ = true;
     seekEndResult_ = true;
     renameResult_ = true;
+    renameFailures_.clear();
+    renameCalls_ = 0;
+    renameFailOnCall_ = 0;
   }
 
   bool exists(const char* path) {
@@ -129,6 +137,11 @@ class SDCardManager {
     failBufferReadAfterActive_ = true;
   }
   void setRenameResult(bool result) { renameResult_ = result; }
+  void setRenameFailOnCall(size_t call) {
+    renameCalls_ = 0;
+    renameFailOnCall_ = call;
+  }
+  void queueRenameFailure(size_t call, RenameFailMode mode) { renameFailures_[call] = mode; }
 
   FsFile open(const char* path, int mode = O_RDONLY) {
     FsFile file;
@@ -136,6 +149,7 @@ class SDCardManager {
       openFailCount_--;
       return file;
     }
+    if ((mode & O_EXCL) != 0 && exists(path)) return file;
 
     const bool writable = (mode & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC)) != 0;
     if (writable) {
@@ -155,9 +169,8 @@ class SDCardManager {
       if (timestamp != modifyDateTimes_.end()) {
         file.setModifyDateTime(timestamp->second.first, timestamp->second.second);
       }
-      file.setTimestampCallback([this, pathStr = std::string(path)](uint16_t d, uint16_t t) {
-        modifyDateTimes_[pathStr] = {d, t};
-      });
+      file.setTimestampCallback(
+          [this, pathStr = std::string(path)](uint16_t d, uint16_t t) { modifyDateTimes_[pathStr] = {d, t}; });
       if (writeLimitActive_) file.setWriteLimit(writeLimit_);
       file.setSyncResult(syncResult_);
       file.setSeekEndResult(seekEndResult_);
@@ -236,11 +249,18 @@ class SDCardManager {
   }
 
   bool rename(const char* oldPath, const char* newPath) {
-    if (!renameResult_) return false;
-    if (std::strcmp(oldPath, newPath) == 0) return exists(oldPath);
-    const bool knownSource =
-        files_.count(oldPath) != 0 || writtenFiles_.count(oldPath) != 0 || directories_.count(oldPath) != 0 ||
-        modifyDateTimes_.count(oldPath) != 0;
+    const size_t call = ++renameCalls_;
+    RenameFailMode mode = RenameFailMode::Succeed;
+    auto queued = renameFailures_.find(call);
+    if (queued != renameFailures_.end()) {
+      mode = queued->second;
+    } else if (!renameResult_ || call == renameFailOnCall_) {
+      mode = RenameFailMode::FailBeforeMutation;
+    }
+    if (mode == RenameFailMode::FailBeforeMutation) return false;
+    if (std::strcmp(oldPath, newPath) == 0) return mode == RenameFailMode::Succeed && exists(oldPath);
+    const bool knownSource = files_.count(oldPath) != 0 || writtenFiles_.count(oldPath) != 0 ||
+                             directories_.count(oldPath) != 0 || modifyDateTimes_.count(oldPath) != 0;
     if (!knownSource) return false;
     auto it = files_.find(oldPath);
     if (it != files_.end()) {
@@ -262,7 +282,7 @@ class SDCardManager {
       modifyDateTimes_[newPath] = timestamp->second;
       modifyDateTimes_.erase(timestamp);
     }
-    return true;
+    return mode == RenameFailMode::Succeed;
   }
 
   bool commitFile(const char* tmpPath, const char* finalPath) {
@@ -326,6 +346,9 @@ class SDCardManager {
   bool syncResult_ = true;
   bool seekEndResult_ = true;
   bool renameResult_ = true;
+  size_t renameCalls_ = 0;
+  std::map<size_t, RenameFailMode> renameFailures_;
+  size_t renameFailOnCall_ = 0;
   size_t failBufferReadAfter_ = 0;
   bool failBufferReadAfterActive_ = false;
 };

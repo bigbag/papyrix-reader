@@ -319,7 +319,9 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 15
+### Version 23
+
+Version 23 invalidates older pagination caches. The parser keeps a pending word in its original block before it starts a new block. PapyriX rebuilds older caches when it opens the book.
 
 ImHex Pattern:
 
@@ -329,7 +331,7 @@ import std.string;
 import std.core;
 
 // === Configuration ===
-#define EXPECTED_VERSION 15
+#define EXPECTED_VERSION 23
 #define MAX_STRING_LENGTH 65535
 
 // === String Structure ===
@@ -415,13 +417,20 @@ struct SectionBin {
     // Cache busting parameters
     s32 fontId;
     float lineCompression;
-    bool extraParagraphSpacing;
+    u8 indentLevel;
+    u8 spacingLevel;
     u8 paragraphAlignment;
     bool hyphenation;
+    bool showImages;
     u16 viewportWidth;
     u16 viewportHeight;
-    u16 pageCount;
+    u32 pageCount;
+    u8 isPartial;
     u32 lutOffset;
+    u32 bytesConsumed;
+    u32 totalBytes;
+    u32 sourceFingerprint;
+    u32 fontFingerprint;
 
     Page page[pageCount];
 

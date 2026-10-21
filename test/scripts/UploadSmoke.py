@@ -394,8 +394,9 @@ def web_multiple_files(path, manifest, host, port, timeout):
             print(f"[PASS] {case}: downloaded size and SHA-256 match")
 
 
-def web_truncated(path, manifest, host, port, timeout, filename, sample):
+def web_truncated(path, manifest, host, port, timeout, filename, sample, preserve_existing=False):
     expected_path = manifest["web_dir"] + "/" + filename
+    case = "web-truncated-overwrite" if preserve_existing else "web-truncated-multipart"
     boundary = "PapyrixUpload" + uuid.uuid4().hex
     opening, closing = multipart_parts(filename, boundary)
     target = "/upload?" + urllib.parse.urlencode({"path": manifest["web_dir"]})
@@ -412,23 +413,31 @@ def web_truncated(path, manifest, host, port, timeout, filename, sample):
         )
     except Exception as error:
         status, duration = 0, 0.0
-        fail(path, manifest, "web-truncated-multipart", f"transport failed ({type(error).__name__})")
-    check_non_success(path, manifest, "web-truncated-multipart", status)
+        fail(path, manifest, case, f"transport failed ({type(error).__name__})")
+    check_non_success(path, manifest, case, status)
     try:
         actual, _size, _hash, _elapsed = download_info(host, port, expected_path, timeout)
     except Exception as error:
         actual = 0
-        fail(path, manifest, "web-truncated-multipart",
-             f"absence check failed ({type(error).__name__})")
+        fail(path, manifest, case, f"download check failed ({type(error).__name__})")
+    if preserve_existing:
+        sample_size, sample_hash = hash_file(sample)
+        append_item(path, manifest, case, expected_path, sample_size, sample_hash,
+                    status, duration, "present", kind="web")
+        if actual == 200 and _size == sample_size and _hash == sample_hash:
+            print(f"[PASS] {case}: original size and SHA-256 are unchanged")
+        else:
+            fail(path, manifest, case, "interrupted overwrite changed or removed the original")
+        return
     absent = actual == 404
     sample_size, sample_hash = hash_file(sample)
-    append_item(path, manifest, "web-truncated-multipart", expected_path,
+    append_item(path, manifest, case, expected_path,
                 sample_size, sample_hash, status, duration, "absent",
                 absence_checked=absent, kind="web")
     if actual and actual != 404:
-        fail(path, manifest, "web-truncated-multipart", f"partial output is not absent (download HTTP {actual})")
+        fail(path, manifest, case, f"partial output is not absent (download HTTP {actual})")
     elif absent:
-        print("[PASS] web-truncated-multipart: partial output is absent")
+        print(f"[PASS] {case}: partial output is absent")
 
 
 def run_web(args):
@@ -480,6 +489,8 @@ def run_web(args):
     web_case(manifest_path, manifest, args.host, args.port, args.timeout,
              "web-truncated-retry", f"{prefix}-retry.fb2", source=file_chunks(sample),
              size=sample_size, sha256=sample_hash)
+    web_truncated(manifest_path, manifest, args.host, args.port, args.timeout,
+                  f"{prefix}-retry.fb2", sample, preserve_existing=True)
 
     if args.slow_over_120:
         chunk_size = max(1, sample_size // 240)

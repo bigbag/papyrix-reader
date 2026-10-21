@@ -240,6 +240,7 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "Flashing...",          // FLASHING_UPDATE
     "Update complete! Restarting...", // UPDATE_COMPLETE
     "Update failed",        // UPDATE_FAILED
+    "Wrong firmware",      // UPDATE_WRONG_DEVICE
     "No firmware file found on SD card",  // NO_FIRMWARE_FILE
     "Validating...",        // VALIDATING_FIRMWARE
     "Bookmark",             // BOOKMARK_VAL

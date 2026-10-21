@@ -1,7 +1,5 @@
 #pragma once
 
-#include "FreeRTOS.h"
-
 #include <atomic>
 #include <condition_variable>
 #include <cstring>
@@ -10,6 +8,8 @@
 #include <string>
 #include <thread>
 #include <vector>
+
+#include "FreeRTOS.h"
 
 // Task function type
 typedef void (*TaskFunction_t)(void*);
@@ -89,9 +89,9 @@ inline void releaseTaskCreateFailureGate() {
 inline thread_local MockTask* currentMockTask = nullptr;
 
 // xTaskCreatePinnedToCore mock
-inline BaseType_t xTaskCreatePinnedToCore(TaskFunction_t pvTaskCode, const char* const pcName, const uint32_t usStackDepth,
-                                          void* const pvParameters, UBaseType_t uxPriority, TaskHandle_t* const pxCreatedTask,
-                                          const BaseType_t xCoreID) {
+inline BaseType_t xTaskCreatePinnedToCore(TaskFunction_t pvTaskCode, const char* const pcName,
+                                          const uint32_t usStackDepth, void* const pvParameters, UBaseType_t uxPriority,
+                                          TaskHandle_t* const pxCreatedTask, const BaseType_t xCoreID) {
   (void)usStackDepth;
   (void)uxPriority;
   (void)xCoreID;
@@ -130,8 +130,7 @@ inline BaseType_t xTaskCreatePinnedToCore(TaskFunction_t pvTaskCode, const char*
 }
 
 inline BaseType_t xTaskCreate(TaskFunction_t pvTaskCode, const char* const pcName, const uint32_t usStackDepth,
-                              void* const pvParameters, UBaseType_t uxPriority,
-                              TaskHandle_t* const pxCreatedTask) {
+                              void* const pvParameters, UBaseType_t uxPriority, TaskHandle_t* const pxCreatedTask) {
   return xTaskCreatePinnedToCore(pvTaskCode, pcName, usStackDepth, pvParameters, uxPriority, pxCreatedTask, 0);
 }
 
@@ -152,14 +151,21 @@ inline void vTaskDelete(TaskHandle_t xTaskToDelete) {
   }
 }
 
+// vTaskDelay hook: lets a test replace the real sleep with a controlled scheduler.
+using TestVTaskDelayHook = void (*)(TickType_t);
+inline TestVTaskDelayHook& testVTaskDelayHook() {
+  static TestVTaskDelayHook hook = nullptr;
+  return hook;
+}
+inline void testSetVTaskDelayHook(TestVTaskDelayHook hook) { testVTaskDelayHook() = hook; }
+
 // vTaskDelay mock
 inline void vTaskDelay(const TickType_t xTicksToDelay) {
+  if (testVTaskDelayHook()) return testVTaskDelayHook()(xTicksToDelay);
   std::this_thread::sleep_for(std::chrono::milliseconds(xTicksToDelay));
 }
 
-inline void taskYIELD() {
-  std::this_thread::yield();
-}
+inline void taskYIELD() { std::this_thread::yield(); }
 
 // Helper to clean up tasks after test
 inline void cleanupMockTasks() {

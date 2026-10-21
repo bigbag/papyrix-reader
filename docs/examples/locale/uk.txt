@@ -237,6 +237,7 @@ FIRMWARE_FILE_FOUND=Знайдено
 FLASHING_UPDATE=Встановлення
 UPDATE_COMPLETE=Готово. Рестарт...
 UPDATE_FAILED=Помилка прошивки
+UPDATE_WRONG_DEVICE=Несумісна прошивка
 NO_FIRMWARE_FILE=Нема прошивки
 VALIDATING_FIRMWARE=Перевірка
 BOOKMARK_VAL=Закладка

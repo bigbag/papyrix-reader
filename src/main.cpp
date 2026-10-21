@@ -23,6 +23,8 @@
 #include <builtinFonts/reader_xsmall_regular_2b.h>
 #include <esp_system.h>
 
+#include <algorithm>
+
 #include "core/CrashDebug.h"
 // Medium font (16pt)
 #include <builtinFonts/reader_medium_2b.h>
@@ -728,5 +730,7 @@ void loop() {
   // Add delay at the end of the loop to prevent tight spinning
   // Increase delay after idle to save power (~4x less CPU load)
   // Idea: https://github.com/crosspoint-reader/crosspoint-reader/commit/0991782 by @ngxson (https://github.com/ngxson)
-  delay(papyrix::core.cpu.loopDelayMs());
+  const auto loopDelayMs = papyrix::core.cpu.loopDelayMs();
+  delay(inputManager.isSampling() ? loopDelayMs
+                                  : std::min<unsigned long>(loopDelayMs, InputManager::IDLE_SAMPLE_INTERVAL_MS));
 }

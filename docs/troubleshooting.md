@@ -62,6 +62,10 @@ See the [Classic support matrix](device-support-matrix.md#x4-classic) and
 Use **Settings → Firmware Update** for a device that can open the UI. Copy the
 correct artifact to the SD root as `/firmware.bin`.
 
+PapyriX rejects an image for a different MCU before it erases flash. This check
+does not distinguish X4 Pro from X4 v2 Classic because both use ESP32-S3. Always
+select the correct artifact for the device.
+
 If the UI cannot start, copy the artifact as `/force_update.bin`. The boot path
 applies it before UI initialization. It shows **Firmware update in progress**
 and **Do not power off** when the display is available. A display initialization

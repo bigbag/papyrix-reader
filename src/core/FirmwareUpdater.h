@@ -20,6 +20,7 @@ enum class FirmwareUpdateError : uint8_t {
   TooSmall,
   TooLarge,
   BadMagic,
+  BadChip,
   BadSegments,
   BadChecksum,
   BadSha,

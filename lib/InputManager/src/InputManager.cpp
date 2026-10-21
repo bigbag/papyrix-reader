@@ -40,7 +40,7 @@ bool InputManager::startSampling() {
         while (!samplingTask_.shouldStop()) {
           sampleButtons();
           // Pending changes mean the main loop is behind (e.g. mid-refresh): stay fast.
-          // Idle buttons need no 200 Hz polling; this restores pre-task-loop granularity.
+          // Keep enough time to debounce a short tap after the first idle sample.
           const TickType_t interval =
               pdMS_TO_TICKS(isDebouncePending() ? ACTIVE_SAMPLE_INTERVAL_MS : IDLE_SAMPLE_INTERVAL_MS);
           vTaskDelay(interval == 0 ? 1 : interval);

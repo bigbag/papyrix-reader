@@ -15,6 +15,7 @@ class InputManager {
   uint8_t getState();
   bool startSampling();
   void stopSampling();
+  bool isSampling() const { return sampling_; }
 
   /**
    * Updates the button states. Should be called regularly in the main loop.
@@ -72,6 +73,8 @@ class InputManager {
    */
   unsigned long getHeldTime() const;
 
+  static constexpr unsigned long IDLE_SAMPLE_INTERVAL_MS = 10;
+
   // Button indices
   static constexpr uint8_t BTN_BACK = 0;
   static constexpr uint8_t BTN_CONFIRM = 1;
@@ -125,7 +128,6 @@ class InputManager {
   static constexpr int ADC_NO_BUTTON = 3900;
   static constexpr unsigned long DEBOUNCE_DELAY = 20;
   static constexpr unsigned long ACTIVE_SAMPLE_INTERVAL_MS = 5;
-  static constexpr unsigned long IDLE_SAMPLE_INTERVAL_MS = 50;
 
   static const char* BUTTON_NAMES[];
   BackgroundTask samplingTask_;

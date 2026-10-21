@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run SDMMC volume mounts with the SdFat sources installed by make package."""
+"""Check SDMMC volume mounts with the repository SdFat sources."""
 
 import os
 from pathlib import Path
@@ -98,7 +98,7 @@ int main() {
 
 
 def main():
-    sdfat = ROOT / ".pio/libdeps/release_x4pro/SdFat/src"
+    sdfat = ROOT / "lib/SdFat/src"
     sources = {
         "FatLib": "FatFile FatFileLFN FatFilePrint FatFileSFN FatName FatPartition FatVolume",
         "ExFatLib": "ExFatFile ExFatFilePrint ExFatFileWrite ExFatName ExFatPartition ExFatVolume",

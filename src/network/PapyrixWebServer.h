@@ -1,9 +1,10 @@
 #pragma once
 
-#include <SDCardManager.h>
 #include <WebServer.h>
 
 #include <memory>
+
+#include "UploadState.h"
 
 namespace papyrix {
 
@@ -20,16 +21,6 @@ class PapyrixWebServer {
   uint16_t getPort() const { return port_; }
 
  private:
-  struct UploadState {
-    FsFile file;
-    String fileName;
-    String path = "/";
-    size_t size = 0;
-    bool ownsFile = false;
-    bool success = false;
-    String error = "";
-  };
-
   std::unique_ptr<WebServer> server_;
   bool running_ = false;
   bool apMode_ = false;

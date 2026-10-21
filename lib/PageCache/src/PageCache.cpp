@@ -21,7 +21,7 @@ bool PageCache::failHeaderCommitOnce_ = false;
 #endif
 
 namespace {
-constexpr uint8_t CACHE_FILE_VERSION = 22;  // v22: source/font fingerprints; 32-bit indexes
+constexpr uint8_t CACHE_FILE_VERSION = 23;  // v23: pending word flushed at block start changes pagination
 
 // Header layout (offsets are absolute from start of file):
 // - version (1 byte)        @ 0

@@ -18,7 +18,7 @@
 #define O_RDWR 0x02
 #define O_CREAT 0x40
 #define O_TRUNC 0x80
-
+#define O_EXCL 0x100
 
 inline size_t gMockBufferReadCalls = 0;
 
@@ -120,14 +120,12 @@ class FsFile : public Print {
     failBufferReadAfterActive_ = true;
   }
 
-
   bool getModifyDateTime(uint16_t* date, uint16_t* time) const {
     if (!hasModifyDateTime_ || !date || !time) return false;
     *date = modifyDate_;
     *time = modifyTime_;
     return true;
   }
-
 
   // Mirrors SdFat FsFile::timestamp(). T_WRITE sets the modify date/time and
   // reports it through the callback so the mock manager can persist it.

@@ -658,6 +658,47 @@ foreach(TEST_SRC ${TEST_SOURCES})
     )
     target_compile_definitions(${TEST_NAME} PRIVATE XML_GE=0)
     target_link_libraries(${TEST_NAME} PRIVATE EXPAT::EXPAT)
+  elseif(TEST_NAME STREQUAL "ChapterHtmlImageSuspensionTest")
+    find_package(EXPAT REQUIRED)
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/Epub/src/Epub/parsers/ChapterHtmlSlimParser.cpp
+      ${PROJECT_ROOT}/lib/Epub/src/Epub/htmlEntities.cpp
+      ${PROJECT_ROOT}/lib/Epub/src/Epub/css/CssParser.cpp
+      ${PROJECT_ROOT}/lib/RenderTypes/src/ParsedText.cpp
+      ${PROJECT_ROOT}/lib/RenderTypes/src/blocks/TextBlock.cpp
+      ${PROJECT_ROOT}/lib/RenderTypes/src/blocks/ImageBlock.cpp
+      ${PROJECT_ROOT}/lib/RenderTypes/src/Page.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/Bitmap.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/BitmapHelpers.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/PackedCoverReducer.cpp
+      ${PROJECT_ROOT}/lib/ImageConverter/src/ImageConverter.cpp
+      ${PROJECT_ROOT}/lib/FsHelpers/src/FsHelpers.cpp
+      ${PROJECT_ROOT}/lib/EpdFont/src/EpdFont.cpp
+      ${PROJECT_ROOT}/lib/EpdFont/src/EpdFontFamily.cpp
+      ${PROJECT_ROOT}/lib/ScriptDetector/src/ScriptDetector.cpp
+      ${PROJECT_ROOT}/lib/Utf8/src/Utf8.cpp
+      ${PROJECT_ROOT}/lib/Utf8/src/Utf8Nfc.cpp
+      ${PROJECT_ROOT}/lib/Hyphenation/src/Hyphenation.cpp
+      ${PROJECT_ROOT}/lib/Hyphenation/src/HyphenationCommon.cpp
+      ${PROJECT_ROOT}/lib/Hyphenation/src/Hyphenator.cpp
+      ${PROJECT_ROOT}/lib/Hyphenation/src/LanguageRegistry.cpp
+      ${PROJECT_ROOT}/lib/Hyphenation/src/LiangHyphenation.cpp
+      ${TEST_HELPERS}
+    )
+    target_include_directories(${TEST_NAME} BEFORE PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/unit/imageconverter/mocks
+      ${PROJECT_ROOT}/lib/ImageConverter/src
+    )
+    target_include_directories(${TEST_NAME} PRIVATE
+      ${PROJECT_ROOT}/lib/Epub/src
+      ${PROJECT_ROOT}/lib/ExternalFont/src
+      ${PROJECT_ROOT}/lib/Hyphenation/src
+      ${PROJECT_ROOT}/lib/ThaiShaper/src
+    )
+    target_compile_definitions(${TEST_NAME} PRIVATE XML_GE=0 XML_DTD)
+    target_compile_options(${TEST_NAME} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-include Arduino.h>)
+    target_link_libraries(${TEST_NAME} PRIVATE EXPAT::EXPAT)
   elseif(TEST_NAME STREQUAL "ChapterHtmlSlimParserTest")
     # Find expat library - test uses expat directly for XML parsing
     find_package(EXPAT REQUIRED)
@@ -1161,12 +1202,22 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/Html5/src
     )
   elseif(TEST_NAME STREQUAL "FirmwareUpdaterTest")
-    add_executable(${TEST_NAME}
-      ${TEST_SRC}
-      ${PROJECT_ROOT}/src/core/FirmwareUpdater.cpp
-      ${PROJECT_ROOT}/src/core/OtaBootSwitch.cpp
-      ${TEST_HELPERS}
-    )
+    foreach(FIRMWARE_TARGET XTEINK_C3 X4PRO)
+      if(FIRMWARE_TARGET STREQUAL "XTEINK_C3")
+        set(FIRMWARE_TEST FirmwareUpdaterTest)
+      else()
+        set(FIRMWARE_TEST FirmwareUpdaterS3Test)
+      endif()
+      add_executable(${FIRMWARE_TEST}
+        ${TEST_SRC}
+        ${PROJECT_ROOT}/src/core/FirmwareUpdater.cpp
+        ${PROJECT_ROOT}/src/core/OtaBootSwitch.cpp
+        ${TEST_HELPERS}
+      )
+      target_compile_definitions(${FIRMWARE_TEST} PRIVATE PAPYRIX_TARGET_${FIRMWARE_TARGET}=1)
+      set_target_properties(${FIRMWARE_TEST} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+    endforeach()
+    continue()
   elseif(TEST_NAME STREQUAL "G5ImageCacheTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}

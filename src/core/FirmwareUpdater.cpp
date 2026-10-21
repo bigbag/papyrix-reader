@@ -1,6 +1,7 @@
 #include "FirmwareUpdater.h"
 
 #include <SDCardManager.h>
+#include <TargetConfig.h>
 #include <esp_ota_ops.h>
 #include <mbedtls/sha256.h>
 #include <spi_flash_mmap.h>
@@ -14,6 +15,9 @@ namespace papyrix {
 
 namespace {
 constexpr uint8_t ESP_IMAGE_MAGIC = 0xE9;
+constexpr size_t CHIP_ID_OFFSET = 12;
+constexpr uint16_t CHIP_ID_ESP32_C3 = 0x0005;
+constexpr uint16_t CHIP_ID_ESP32_S3 = 0x0009;
 constexpr size_t MIN_FIRMWARE_SIZE = 64 * 1024;
 constexpr size_t CHUNK = 4096;
 constexpr size_t BLOCK = 64 * 1024;
@@ -21,6 +25,13 @@ constexpr size_t SHA_TRAILER = 32;
 constexpr uint8_t CHECKSUM_SEED = 0xEF;
 constexpr size_t HEADER_SIZE = 24;
 constexpr size_t SEG_HEADER_SIZE = 8;
+// Zero means the target MCU family is unknown; validation then rejects every image.
+constexpr uint16_t targetChipId() {
+  return board::kTargetMcuFamily == board::McuFamily::Esp32C3   ? CHIP_ID_ESP32_C3
+         : board::kTargetMcuFamily == board::McuFamily::Esp32S3 ? CHIP_ID_ESP32_S3
+                                                                : 0;
+}
+
 }  // namespace
 
 FirmwareUpdater& FirmwareUpdater::instance() {
@@ -58,6 +69,13 @@ FirmwareUpdateError FirmwareUpdater::validate() {
   if (header[0] != ESP_IMAGE_MAGIC) {
     f.close();
     return FirmwareUpdateError::BadMagic;
+  }
+
+  const uint16_t expectedChipId = targetChipId();
+  const uint16_t imageChipId = static_cast<uint16_t>(header[CHIP_ID_OFFSET] | (header[CHIP_ID_OFFSET + 1] << 8));
+  if (expectedChipId == 0 || imageChipId != expectedChipId) {
+    f.close();
+    return FirmwareUpdateError::BadChip;
   }
 
   const uint8_t segCount = header[1];

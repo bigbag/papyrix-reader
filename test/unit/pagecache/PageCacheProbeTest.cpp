@@ -5,7 +5,7 @@
 // Mirrors the probe() logic by writing the same binary format and exercising
 // the config-matching and edge-case paths.
 
-#include "test_utils.h"
+#include <RenderConfig.h>
 
 #include <cstdint>
 #include <cstring>
@@ -15,12 +15,11 @@
 #include "SDCardManager.h"
 #include "SdFat.h"
 #include "Serialization.h"
-
-#include <RenderConfig.h>
+#include "test_utils.h"
 
 namespace {
 
-constexpr uint8_t CACHE_FILE_VERSION = 22;
+constexpr uint8_t CACHE_FILE_VERSION = 23;
 constexpr uint32_t kHeaderSize = 43;
 
 RenderConfig defaultConfig() {
@@ -81,26 +80,24 @@ ProbeResult probe(const std::string& cachePath, const RenderConfig& config) {
   uint32_t lutOffset;
   uint32_t bytesConsumed;
   uint32_t totalBytes;
-  const bool headerValid = serialization::readPodChecked(file, version) &&
-                           serialization::readPodChecked(file, fileConfig.fontId) &&
-                           serialization::readPodChecked(file, fileConfig.lineCompression) &&
-                           serialization::readPodChecked(file, fileConfig.indentLevel) &&
-                           serialization::readPodChecked(file, fileConfig.spacingLevel) &&
-                           serialization::readPodChecked(file, fileConfig.paragraphAlignment) &&
-                           serialization::readPodChecked(file, fileConfig.hyphenation) &&
-                           serialization::readPodChecked(file, fileConfig.showImages) &&
-                           serialization::readPodChecked(file, fileConfig.viewportWidth) &&
-                           serialization::readPodChecked(file, fileConfig.viewportHeight) &&
-                           serialization::readPodChecked(file, result.pageCount) &&
-                           serialization::readPodChecked(file, partial) &&
-                           serialization::readPodChecked(file, lutOffset) &&
-                           serialization::readPodChecked(file, bytesConsumed) &&
-                           serialization::readPodChecked(file, totalBytes) &&
-                           serialization::readPodChecked(file, fileConfig.sourceFingerprint) &&
-                           serialization::readPodChecked(file, fileConfig.fontFingerprint);
+  const bool headerValid =
+      serialization::readPodChecked(file, version) && serialization::readPodChecked(file, fileConfig.fontId) &&
+      serialization::readPodChecked(file, fileConfig.lineCompression) &&
+      serialization::readPodChecked(file, fileConfig.indentLevel) &&
+      serialization::readPodChecked(file, fileConfig.spacingLevel) &&
+      serialization::readPodChecked(file, fileConfig.paragraphAlignment) &&
+      serialization::readPodChecked(file, fileConfig.hyphenation) &&
+      serialization::readPodChecked(file, fileConfig.showImages) &&
+      serialization::readPodChecked(file, fileConfig.viewportWidth) &&
+      serialization::readPodChecked(file, fileConfig.viewportHeight) &&
+      serialization::readPodChecked(file, result.pageCount) && serialization::readPodChecked(file, partial) &&
+      serialization::readPodChecked(file, lutOffset) && serialization::readPodChecked(file, bytesConsumed) &&
+      serialization::readPodChecked(file, totalBytes) &&
+      serialization::readPodChecked(file, fileConfig.sourceFingerprint) &&
+      serialization::readPodChecked(file, fileConfig.fontFingerprint);
   const size_t lutSize = static_cast<size_t>(result.pageCount) * sizeof(uint32_t);
-  if (!headerValid || version != CACHE_FILE_VERSION || config != fileConfig || partial > 1 ||
-      lutOffset < kHeaderSize || lutOffset > fileSize || lutSize > fileSize - lutOffset) {
+  if (!headerValid || version != CACHE_FILE_VERSION || config != fileConfig || partial > 1 || lutOffset < kHeaderSize ||
+      lutOffset > fileSize || lutSize > fileSize - lutOffset) {
     file.close();
     return result;
   }

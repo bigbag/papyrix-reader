@@ -303,7 +303,9 @@ StateTransition SettingsState::update(Core& core) {
       firmwareView_.state == ui::FirmwareUpdateView::State::Validating && firmwareValidationRendered_) {
     if (!FW_UPDATER.beginUpdate()) {
       firmwareView_.state = ui::FirmwareUpdateView::State::Error;
-      snprintf(firmwareView_.statusLine, sizeof(firmwareView_.statusLine), "%s", tr(UPDATE_FAILED));
+      snprintf(
+          firmwareView_.statusLine, sizeof(firmwareView_.statusLine), "%s",
+          FW_UPDATER.progress().error == FirmwareUpdateError::BadChip ? tr(UPDATE_WRONG_DEVICE) : tr(UPDATE_FAILED));
     } else {
       firmwareView_.state = ui::FirmwareUpdateView::State::Flashing;
       snprintf(firmwareView_.statusLine, sizeof(firmwareView_.statusLine), "%s", tr(FLASHING_UPDATE));

@@ -154,6 +154,11 @@ void ChapterHtmlSlimParser::reapplyContinuationInsets() {
 }
 
 void ChapterHtmlSlimParser::startNewTextBlock(const TextBlock::BLOCK_STYLE style) {
+  // A first word can sit wholly in partWordBuffer while the current block
+  // still reports empty. Commit it to the old block first, so it keeps the
+  // style and direction it was buffered with, before the block is reused or
+  // replaced and the new element changes the effective style.
+  flushPartWordBuffer();
   if (currentTextBlock) {
     // already have a text block running and it is empty - just reuse it
     if (currentTextBlock->isEmpty()) {
@@ -171,6 +176,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const TextBlock::BLOCK_STYLE style
     if (stopRequested_) {
       pendingNewTextBlock_ = true;
       pendingBlockStyle_ = style;
+      pendingBlockStyleFull_ = BlockStyle{};
       return;
     }
   }
@@ -258,12 +264,13 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
             auto imageBlock = std::make_shared<ImageBlock>(cachedPath, bitmap.getWidth(), bitmap.getHeight());
             bmpFile.close();
 
-            // Flush any pending text block before adding image
+            // Flush any pending word and text block before adding image
+            self->flushPartWordBuffer();
             if (self->currentTextBlock && !self->currentTextBlock->isEmpty()) {
               self->makePages();
             }
 
-            self->addImageToPage(imageBlock);
+            self->addImageToPage(std::move(imageBlock));
             self->depth += 1;
             return;
           } else {
@@ -279,15 +286,19 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
               self->readItemFn != nullptr, !self->imageCachePath.empty());
     }
 
-    // Fallback: show placeholder with alt text if image processing failed
+    // Keep the placeholder out of a block that still has pending text.
     self->startNewTextBlock(TextBlock::CENTER_ALIGN);
-    if (self->currentTextBlock) {
+    if (self->currentTextBlock && !self->pendingNewTextBlock_) {
       if (!altText.empty()) {
         std::string placeholder = "[Image: " + altText + "]";
         self->currentTextBlock->addWord(placeholder.c_str(), EpdFontFamily::ITALIC);
       } else {
         self->currentTextBlock->addWord("[Image]", EpdFontFamily::ITALIC);
       }
+    } else if (!altText.empty()) {
+      self->pendingPlaceholder_ = "[Image: " + altText + "]";
+    } else {
+      self->pendingPlaceholder_ = "[Image]";
     }
 
     self->depth += 1;
@@ -298,10 +309,13 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   // TODO: Render tables - parse table structure (thead, tbody, tr, td, th), calculate
   // column widths, handle colspan/rowspan, and render as formatted text grid.
   if (strcmp(name, "table") == 0) {
-    // For now, add placeholder text
+    // For now, add placeholder text. Defer it when the batch limit suspended
+    // startNewTextBlock(), so it lands in the deferred centered block on resume.
     self->startNewTextBlock(TextBlock::CENTER_ALIGN);
-    if (self->currentTextBlock) {
+    if (self->currentTextBlock && !self->pendingNewTextBlock_) {
       self->currentTextBlock->addWord("[Table omitted]", EpdFontFamily::ITALIC);
+    } else {
+      self->pendingPlaceholder_ = "[Table omitted]";
     }
 
     // Skip table contents
@@ -406,7 +420,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   // Capture whether the current text block is empty BEFORE startNewTextBlock may flush it.
   // When empty (e.g. <p> opens inside <blockquote> before any text), the parent's vertical
   // margins must be preserved through CSS margin collapsing.
-  const bool collapseVertical = self->currentTextBlock && self->currentTextBlock->isEmpty();
+  const bool collapseVertical =
+      self->currentTextBlock && self->currentTextBlock->isEmpty() && self->partWordBufferIndex == 0;
 
   // Helper: apply new block style immediately, or stash it if the old block was
   // suspended mid-layout (pendingNewTextBlock_). Without this, resumeParsing would
@@ -740,6 +755,8 @@ void ChapterHtmlSlimParser::cleanupParser() {
   }
   currentPage.reset();
   currentTextBlock.reset();
+  pendingImage_.reset();
+  std::string{}.swap(pendingPlaceholder_);
   suspended_ = false;
   xmlDone_ = false;
 }
@@ -765,6 +782,8 @@ bool ChapterHtmlSlimParser::initParser() {
   currentLeftInset_ = 0;
   listStack_.clear();
   pendingListMarker_[0] = '\0';
+  std::string{}.swap(pendingPlaceholder_);
+  pendingImage_.reset();
   dataUriStripper_.reset();
   startNewTextBlock(static_cast<TextBlock::BLOCK_STYLE>(config.paragraphAlignment));
 
@@ -963,6 +982,11 @@ bool ChapterHtmlSlimParser::resumeParsing() {
   if (!suspended_ || !xmlParser_) {
     return false;
   }
+  if (externalAbortCallback_ && externalAbortCallback_()) {
+    aborted_ = true;
+    cleanupParser();
+    return true;
+  }
 
   // XML parser already finished — just flush remaining content from finalization
   if (xmlDone_) {
@@ -1030,6 +1054,15 @@ bool ChapterHtmlSlimParser::resumeParsing() {
     }
   }
 
+  if (pendingImage_) {
+    addImageToPage(std::move(pendingImage_));
+    if (stopRequested_) {
+      suspended_ = true;
+      file_.close();
+      return true;
+    }
+  }
+
   // Complete the deferred startNewTextBlock() that was interrupted by the batch limit.
   // The XML parser already processed startElement() for the new block tag, so we must
   // create the text block here before resuming — otherwise the new paragraph's text
@@ -1042,6 +1075,10 @@ bool ChapterHtmlSlimParser::resumeParsing() {
     if (pendingListMarker_[0] != '\0') {
       currentTextBlock->addWord(pendingListMarker_, EpdFontFamily::REGULAR);
       pendingListMarker_[0] = '\0';
+    }
+    if (!pendingPlaceholder_.empty()) {
+      currentTextBlock->addWord(pendingPlaceholder_.c_str(), EpdFontFamily::ITALIC);
+      std::string{}.swap(pendingPlaceholder_);
     }
   }
 
@@ -1335,7 +1372,12 @@ std::string ChapterHtmlSlimParser::cacheImage(const std::string& src) {
 }
 
 void ChapterHtmlSlimParser::addImageToPage(std::shared_ptr<ImageBlock> image) {
-  if (stopRequested_) return;
+  if (stopRequested_) {
+    // Batch limit hit while flushing the preceding text block: retain the image
+    // so resumeParsing() can drain that text first and then insert it.
+    pendingImage_ = std::move(image);
+    return;
+  }
 
   const int imageHeight = image->getHeight();
   const int lineHeight = renderer.getEffectiveLineHeight(config.fontId) * config.lineCompression;
@@ -1349,6 +1391,9 @@ void ChapterHtmlSlimParser::addImageToPage(std::shared_ptr<ImageBlock> image) {
   // Tall images get a dedicated page: flush current page if it has content
   if (isTallImage && currentPageNextY > 0) {
     if (!completePageFn(std::move(currentPage))) {
+      // Page before the image was submitted; the image itself is not on any
+      // page yet — retain it for insertion on resume.
+      pendingImage_ = std::move(image);
       stopRequested_ = true;
       if (xmlParser_) {
         XML_StopParser(xmlParser_, XML_TRUE);  // Resumable suspend
@@ -1363,6 +1408,8 @@ void ChapterHtmlSlimParser::addImageToPage(std::shared_ptr<ImageBlock> image) {
   // Check if image fits on current page
   if (currentPageNextY + imageHeight > config.viewportHeight) {
     if (!completePageFn(std::move(currentPage))) {
+      // Current page submitted to make room; image not on any page yet — retain it.
+      pendingImage_ = std::move(image);
       stopRequested_ = true;
       if (xmlParser_) {
         XML_StopParser(xmlParser_, XML_TRUE);  // Resumable suspend
@@ -1384,7 +1431,7 @@ void ChapterHtmlSlimParser::addImageToPage(std::shared_ptr<ImageBlock> image) {
     yPos = (config.viewportHeight - imageHeight) / 2;
   }
 
-  currentPage->elements.push_back(std::make_shared<PageImage>(image, xPos, yPos));
+  currentPage->elements.push_back(std::make_shared<PageImage>(std::move(image), xPos, yPos));
   currentPageNextY = yPos + imageHeight + lineHeight;
 
   // Complete the page after a tall image so text continues on the next page

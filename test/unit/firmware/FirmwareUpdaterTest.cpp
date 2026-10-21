@@ -1,10 +1,10 @@
-#include "test_utils.h"
+#include <TargetConfig.h>
 
 #include <cstring>
 #include <vector>
 
 #include "SDCardManager.h"
-#include "esp_partition.h"
+#include "test_utils.h"
 
 #define PAPYRIX_FIRMWARE_FILE "/firmware.bin"
 #include "FirmwareUpdater.h"
@@ -12,11 +12,19 @@
 using namespace papyrix;
 
 // Build a minimal valid ESP32 firmware image:
-// - 24-byte header (magic=0xE9, 1 segment, hash_appended flag)
+// - 24-byte header (magic=0xE9, chip_id for the target MCU family, 1 segment, hash_appended flag)
 // - 8-byte segment header + N bytes of segment data
 // - Padding to 16-byte alignment with XOR checksum at the last pad byte
 // - 32-byte SHA256 trailer (if hashAppended)
-static std::vector<uint8_t> buildValidFirmware(size_t segDataSize, bool hashAppended = true) {
+constexpr uint16_t CHIP_ID_ESP32_C3 = 0x0005;
+constexpr uint16_t CHIP_ID_ESP32_S3 = 0x0009;
+constexpr uint16_t TARGET_CHIP_ID =
+    board::kTargetMcuFamily == board::McuFamily::Esp32C3 ? CHIP_ID_ESP32_C3 : CHIP_ID_ESP32_S3;
+constexpr uint16_t FOREIGN_CHIP_ID =
+    board::kTargetMcuFamily == board::McuFamily::Esp32C3 ? CHIP_ID_ESP32_S3 : CHIP_ID_ESP32_C3;
+
+static std::vector<uint8_t> buildValidFirmware(size_t segDataSize, bool hashAppended = true,
+                                               uint16_t chipId = TARGET_CHIP_ID) {
   constexpr uint8_t MAGIC = 0xE9;
   constexpr uint8_t CHECKSUM_SEED = 0xEF;
   constexpr size_t HEADER_SIZE = 24;
@@ -26,6 +34,8 @@ static std::vector<uint8_t> buildValidFirmware(size_t segDataSize, bool hashAppe
   img.resize(HEADER_SIZE, 0);
   img[0] = MAGIC;
   img[1] = 1;  // 1 segment
+  img[12] = static_cast<uint8_t>(chipId & 0xFF);
+  img[13] = static_cast<uint8_t>(chipId >> 8);
   img[23] = hashAppended ? 1 : 0;
 
   // Segment header: 4-byte load address (0) + 4-byte length
@@ -68,8 +78,8 @@ static std::vector<uint8_t> buildValidFirmware(size_t segDataSize, bool hashAppe
 }
 
 // Build a firmware that's big enough to pass MIN_FIRMWARE_SIZE (64KB)
-static std::vector<uint8_t> buildMinSizeFirmware(bool hashAppended = true) {
-  return buildValidFirmware(64 * 1024, hashAppended);
+static std::vector<uint8_t> buildMinSizeFirmware(bool hashAppended = true, uint16_t chipId = TARGET_CHIP_ID) {
+  return buildValidFirmware(64 * 1024, hashAppended, chipId);
 }
 
 int main() {
@@ -142,8 +152,8 @@ int main() {
     FW_UPDATER.findFirmwareFile("/small.bin");
     bool ok = FW_UPDATER.beginUpdate();
     runner.expectFalse(ok, "beginUpdate: too small returns false");
-    runner.expectEq(static_cast<int>(FirmwareUpdateError::TooSmall),
-                    static_cast<int>(FW_UPDATER.progress().error), "beginUpdate: TooSmall error");
+    runner.expectEq(static_cast<int>(FirmwareUpdateError::TooSmall), static_cast<int>(FW_UPDATER.progress().error),
+                    "beginUpdate: TooSmall error");
   }
 
   // ============================================================
@@ -160,8 +170,48 @@ int main() {
     FW_UPDATER.findFirmwareFile("/bad_magic.bin");
     bool ok = FW_UPDATER.beginUpdate();
     runner.expectFalse(ok, "beginUpdate: bad magic returns false");
-    runner.expectEq(static_cast<int>(FirmwareUpdateError::BadMagic),
-                    static_cast<int>(FW_UPDATER.progress().error), "beginUpdate: BadMagic error");
+    runner.expectEq(static_cast<int>(FirmwareUpdateError::BadMagic), static_cast<int>(FW_UPDATER.progress().error),
+                    "beginUpdate: BadMagic error");
+  }
+
+  // ============================================================
+  // beginUpdate — validation: wrong MCU family
+  // ============================================================
+
+  {
+    SdMan.reset();
+    FW_UPDATER.reset();
+    ESP_PARTITION.reset();
+    auto data = buildMinSizeFirmware(true, FOREIGN_CHIP_ID);
+    SdMan.setFileData("/wrong_chip.bin", data);
+    FW_UPDATER.findFirmwareFile("/wrong_chip.bin");
+    bool ok = FW_UPDATER.beginUpdate();
+    runner.expectFalse(ok, "beginUpdate: foreign MCU family returns false");
+    runner.expectEq(static_cast<int>(FirmwareUpdateError::BadChip), static_cast<int>(FW_UPDATER.progress().error),
+                    "beginUpdate: BadChip error");
+    runner.expectEq(static_cast<int>(FirmwareUpdatePhase::Error), static_cast<int>(FW_UPDATER.progress().phase),
+                    "beginUpdate: foreign MCU never reaches Flashing");
+    runner.expectEq(0, ESP_PARTITION.eraseCount_, "beginUpdate: foreign MCU triggers no erase");
+    runner.expectEq(0, ESP_PARTITION.writeCount_, "beginUpdate: foreign MCU triggers no write or boot switch");
+  }
+
+  // ============================================================
+  // beginUpdate — validation: invalid chip id
+  // ============================================================
+
+  {
+    SdMan.reset();
+    FW_UPDATER.reset();
+    ESP_PARTITION.reset();
+    auto data = buildMinSizeFirmware(true, 0xFFFF);
+    SdMan.setFileData("/invalid_chip.bin", data);
+    FW_UPDATER.findFirmwareFile("/invalid_chip.bin");
+    bool ok = FW_UPDATER.beginUpdate();
+    runner.expectFalse(ok, "beginUpdate: invalid chip id returns false");
+    runner.expectEq(static_cast<int>(FirmwareUpdateError::BadChip), static_cast<int>(FW_UPDATER.progress().error),
+                    "beginUpdate: invalid chip id → BadChip");
+    runner.expectEq(0, ESP_PARTITION.eraseCount_, "beginUpdate: invalid chip id triggers no erase");
+    runner.expectEq(0, ESP_PARTITION.writeCount_, "beginUpdate: invalid chip id triggers no write or boot switch");
   }
 
   // ============================================================
@@ -179,8 +229,8 @@ int main() {
     FW_UPDATER.findFirmwareFile("/bad_cksum.bin");
     bool ok = FW_UPDATER.beginUpdate();
     runner.expectFalse(ok, "beginUpdate: bad checksum returns false");
-    runner.expectEq(static_cast<int>(FirmwareUpdateError::BadChecksum),
-                    static_cast<int>(FW_UPDATER.progress().error), "beginUpdate: BadChecksum error");
+    runner.expectEq(static_cast<int>(FirmwareUpdateError::BadChecksum), static_cast<int>(FW_UPDATER.progress().error),
+                    "beginUpdate: BadChecksum error");
   }
 
   // ============================================================
@@ -198,8 +248,8 @@ int main() {
     FW_UPDATER.findFirmwareFile("/bad_sha.bin");
     bool ok = FW_UPDATER.beginUpdate();
     runner.expectFalse(ok, "beginUpdate: bad SHA returns false");
-    runner.expectEq(static_cast<int>(FirmwareUpdateError::BadSha),
-                    static_cast<int>(FW_UPDATER.progress().error), "beginUpdate: BadSha error");
+    runner.expectEq(static_cast<int>(FirmwareUpdateError::BadSha), static_cast<int>(FW_UPDATER.progress().error),
+                    "beginUpdate: BadSha error");
   }
 
   // ============================================================
@@ -216,8 +266,8 @@ int main() {
     FW_UPDATER.findFirmwareFile("/fw.bin");
     bool ok = FW_UPDATER.beginUpdate();
     runner.expectFalse(ok, "beginUpdate: no partition returns false");
-    runner.expectEq(static_cast<int>(FirmwareUpdateError::NoPartition),
-                    static_cast<int>(FW_UPDATER.progress().error), "beginUpdate: NoPartition error");
+    runner.expectEq(static_cast<int>(FirmwareUpdateError::NoPartition), static_cast<int>(FW_UPDATER.progress().error),
+                    "beginUpdate: NoPartition error");
   }
 
   // ============================================================
@@ -230,8 +280,8 @@ int main() {
     ESP_PARTITION.reset();
     bool ok = FW_UPDATER.beginUpdate();
     runner.expectFalse(ok, "beginUpdate: not available returns false");
-    runner.expectEq(static_cast<int>(FirmwareUpdateError::NoFile),
-                    static_cast<int>(FW_UPDATER.progress().error), "beginUpdate: NoFile error");
+    runner.expectEq(static_cast<int>(FirmwareUpdateError::NoFile), static_cast<int>(FW_UPDATER.progress().error),
+                    "beginUpdate: NoFile error");
   }
 
   // ============================================================
@@ -248,15 +298,16 @@ int main() {
 
     bool ok = FW_UPDATER.beginUpdate();
     runner.expectTrue(ok, "full flow: beginUpdate success");
-    runner.expectEq(static_cast<int>(FirmwareUpdatePhase::Flashing),
-                    static_cast<int>(FW_UPDATER.progress().phase), "full flow: phase is Flashing");
+    runner.expectEq(static_cast<int>(FirmwareUpdatePhase::Flashing), static_cast<int>(FW_UPDATER.progress().phase),
+                    "full flow: phase is Flashing");
 
     int pumps = 0;
-    while (FW_UPDATER.pump()) { pumps++; }
+    while (FW_UPDATER.pump()) {
+      pumps++;
+    }
 
     const auto& p = FW_UPDATER.progress();
-    runner.expectEq(static_cast<int>(FirmwareUpdatePhase::Complete), static_cast<int>(p.phase),
-                    "full flow: Complete");
+    runner.expectEq(static_cast<int>(FirmwareUpdatePhase::Complete), static_cast<int>(p.phase), "full flow: Complete");
     runner.expectEq(static_cast<uint32_t>(data.size()), p.bytesFlashed, "full flow: all bytes flashed");
     runner.expectEq(static_cast<uint32_t>(data.size()), p.totalBytes, "full flow: totalBytes matches");
 
@@ -286,8 +337,8 @@ int main() {
 
     bool more = FW_UPDATER.pump();
     runner.expectFalse(more, "pump: erase fail returns false");
-    runner.expectEq(static_cast<int>(FirmwareUpdateError::FlashError),
-                    static_cast<int>(FW_UPDATER.progress().error), "pump: erase fail → FlashError");
+    runner.expectEq(static_cast<int>(FirmwareUpdateError::FlashError), static_cast<int>(FW_UPDATER.progress().error),
+                    "pump: erase fail → FlashError");
   }
 
   // ============================================================
@@ -306,8 +357,8 @@ int main() {
 
     bool more = FW_UPDATER.pump();
     runner.expectFalse(more, "pump: write fail returns false");
-    runner.expectEq(static_cast<int>(FirmwareUpdateError::FlashError),
-                    static_cast<int>(FW_UPDATER.progress().error), "pump: write fail → FlashError");
+    runner.expectEq(static_cast<int>(FirmwareUpdateError::FlashError), static_cast<int>(FW_UPDATER.progress().error),
+                    "pump: write fail → FlashError");
   }
 
   // ============================================================
@@ -329,8 +380,8 @@ int main() {
     FW_UPDATER.abort();
     bool more = FW_UPDATER.pump();
     runner.expectFalse(more, "abort: pump after abort returns false");
-    runner.expectEq(static_cast<int>(FirmwareUpdateError::Aborted),
-                    static_cast<int>(FW_UPDATER.progress().error), "abort: Aborted error");
+    runner.expectEq(static_cast<int>(FirmwareUpdateError::Aborted), static_cast<int>(FW_UPDATER.progress().error),
+                    "abort: Aborted error");
   }
 
   // ============================================================
@@ -354,8 +405,7 @@ int main() {
     FW_UPDATER.reset();
     ESP_PARTITION.reset();
     const auto& p = FW_UPDATER.progress();
-    runner.expectEq(static_cast<int>(FirmwareUpdatePhase::Idle), static_cast<int>(p.phase),
-                    "init: phase Idle");
+    runner.expectEq(static_cast<int>(FirmwareUpdatePhase::Idle), static_cast<int>(p.phase), "init: phase Idle");
     runner.expectEq(0u, p.totalBytes, "init: totalBytes is 0");
     runner.expectEq(0u, p.bytesFlashed, "init: bytesFlashed is 0");
   }
@@ -373,9 +423,10 @@ int main() {
     FW_UPDATER.findFirmwareFile();
     bool ok = FW_UPDATER.beginUpdate();
     runner.expectTrue(ok, "no-sha firmware: beginUpdate succeeds");
-    while (FW_UPDATER.pump()) {}
-    runner.expectEq(static_cast<int>(FirmwareUpdatePhase::Complete),
-                    static_cast<int>(FW_UPDATER.progress().phase), "no-sha firmware: Complete");
+    while (FW_UPDATER.pump()) {
+    }
+    runner.expectEq(static_cast<int>(FirmwareUpdatePhase::Complete), static_cast<int>(FW_UPDATER.progress().phase),
+                    "no-sha firmware: Complete");
   }
 
   // ============================================================
