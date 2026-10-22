@@ -291,7 +291,7 @@ int main() {
     for (const size_t limit : limits) {
       SdMan.reset();
       SdMan.registerFile("/read-failure.xtch", buildXtcFile(xtc::XTCH_MAGIC, std::vector<uint8_t>(16, 0)));
-      SdMan.setReadLimit(limit);
+      SdMan.setReadLimit(limit + sizeof(xtc::XtgPageHeader));
       papyrix::hal::Display failureDisplay(0, 0, 0, 0, 0, 0);
       GfxRenderer failureGfx(failureDisplay);
       failureGfx.begin();
@@ -321,19 +321,19 @@ int main() {
 
   {
     SdMan.reset();
-    std::string file = buildXtcFile(xtc::XTCH_MAGIC, std::vector<uint8_t>(16, 0));
+    std::string file = buildMixedDimensionXtc();
     constexpr size_t pageTableOffset = sizeof(xtc::XtcHeader) + 128 + 64;
     auto* data = reinterpret_cast<uint8_t*>(&file[0]);
-    auto* entry = reinterpret_cast<xtc::PageTableEntry*>(data + pageTableOffset);
+    auto* entry = reinterpret_cast<xtc::PageTableEntry*>(data + pageTableOffset) + 1;
     auto* pageHeader = reinterpret_cast<xtc::XtgPageHeader*>(data + entry->dataOffset);
-    pageHeader->width = 16;
+    pageHeader->width = 8;
     SdMan.registerFile("/malformed.xtch", file);
 
     xtc::XtcParser parser;
     runner.expectTrue(parser.open("/malformed.xtch") == xtc::XtcError::OK, "malformed stream: parser opens");
     std::vector<papyrix::XtcPageRenderer::RefreshRequest> requests;
     const auto result = renderer.render(
-        parser, 0, [&requests](papyrix::XtcPageRenderer::RefreshRequest request) { requests.push_back(request); });
+        parser, 1, [&requests](papyrix::XtcPageRenderer::RefreshRequest request) { requests.push_back(request); });
     runner.expectTrue(result == papyrix::XtcPageRenderer::RenderResult::PageLoadFailed,
                       "malformed stream: page load fails safely");
     runner.expectTrue(requests.empty(), "malformed stream: no refresh requested");

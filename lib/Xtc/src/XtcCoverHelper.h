@@ -20,12 +20,8 @@ enum class CoverResult : uint8_t {
 CoverResult generateCoverBmpFromParser(XtcParser& parser, const std::string& coverBmpPath,
                                        const std::function<bool()>& shouldAbort = nullptr);
 
-// One-time invalidation of failure markers persisted by the old
-// page-buffer cover generator (structural 96KB allocation failure), and of
-// cover/thumb artifacts produced by the short-lived >=2 threshold build.
-// Idempotent: guarded by a .cover.v2 sentinel in the cache directory. When
-// purgeArtifacts is set (2-bit source), stale cover.bmp/thumb.bmp are removed
-// so the restored threshold regenerates them.
+// Clear saved failure markers once per cache version.
+// Keep cover artifacts that use the current pixel conversion.
 void migrateStaleFailureMarkers(const std::string& cachePath, bool purgeArtifacts = false);
 
 }  // namespace xtc

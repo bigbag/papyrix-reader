@@ -113,6 +113,10 @@ const std::vector<xtc::ChapterInfo>& Xtc::getChapters() const {
 std::string Xtc::getCoverBmpPath() const { return cachePath + "/cover.bmp"; }
 
 bool Xtc::generateCoverBmp() const {
+  if (loaded && parser) {
+    setupCacheDir();
+    migrateStaleFailureMarkers();
+  }
   const std::string coverPath = getCoverBmpPath();
   const std::string failedMarkerPath = cachePath + "/.cover.failed";
   if (home_thumbnail::validateCover(coverPath)) {
@@ -129,8 +133,6 @@ bool Xtc::generateCoverBmp() const {
     return false;
   }
 
-  setupCacheDir();
-  migrateStaleFailureMarkers();
   const xtc::CoverResult generated =
       xtc::generateCoverBmpFromParser(*const_cast<xtc::XtcParser*>(parser.get()), coverPath);
   const bool valid = generated == xtc::CoverResult::Generated && home_thumbnail::validateCover(coverPath);

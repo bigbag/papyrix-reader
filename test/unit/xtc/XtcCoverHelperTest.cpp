@@ -582,7 +582,7 @@ int main() {
     parser.close();
   }
 
-  // ---- Test: corrupt page 0 is InvalidFile ----
+  // Reject corrupt page data before cover generation.
   {
     SdMan.clearFiles();
     SdMan.clearWrittenFiles();
@@ -594,11 +594,31 @@ int main() {
     SdMan.registerFile("/bad.xtc", data);
 
     xtc::XtcParser parser;
-    parser.open("/bad.xtc");
-    runner.expectTrue(
-        xtc::generateCoverBmpFromParser(parser, "/cache/bad.bmp") == xtc::CoverResult::InvalidFile,
-        "corrupt page: InvalidFile");
+    runner.expectTrue(parser.open("/bad.xtc") == xtc::XtcError::INVALID_MAGIC,
+                      "corrupt page: open rejects the format");
     parser.close();
+  }
+
+  for (const bool failOpen : {false, true}) {
+    SdMan.reset();
+    SdMan.registerFile("/cache/.cover.v2", "");
+    SdMan.registerFile("/cache/cover.bmp", "saved cover");
+    SdMan.registerFile("/cache/thumb.bmp", "saved thumbnail");
+    SdMan.setOpenFileForWriteFailCount(failOpen ? 1 : 0);
+    SdMan.setSyncResult(failOpen);
+    xtc::migrateStaleFailureMarkers("/cache", true);
+    runner.expectTrue(SdMan.exists("/cache/.cover.v2"), "migration: failure keeps the previous marker");
+    runner.expectFalse(SdMan.exists("/cache/.cover.v3"), "migration: failure leaves no replacement marker");
+    runner.expectEq(std::string("saved cover"), SdMan.open("/cache/cover.bmp").getBuffer(),
+                    "migration: failed marker creation preserves the cover");
+    runner.expectEq(std::string("saved thumbnail"), SdMan.open("/cache/thumb.bmp").getBuffer(),
+                    "migration: failed marker creation preserves the thumbnail");
+    SdMan.setSyncResult(true);
+    xtc::migrateStaleFailureMarkers("/cache", true);
+    runner.expectEq(std::string("saved cover"), SdMan.open("/cache/cover.bmp").getBuffer(),
+                    "migration: retry preserves the cover");
+    runner.expectEq(std::string("saved thumbnail"), SdMan.open("/cache/thumb.bmp").getBuffer(),
+                    "migration: retry preserves the thumbnail");
   }
 
   // ---- Test: gray-level threshold (original >=1 semantics) ----

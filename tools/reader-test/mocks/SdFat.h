@@ -70,13 +70,15 @@ class FsFile : public Print {
     return true;
   }
 
-  void close() {
+  bool close() {
+    bool result = true;
     if (fp_) {
-      fclose(fp_);
+      result = fclose(fp_) == 0;
       fp_ = nullptr;
     }
     isOpen_ = false;
     fileSize_ = 0;
+    return result;
   }
 
   int read() {

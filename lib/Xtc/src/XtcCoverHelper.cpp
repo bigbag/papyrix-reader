@@ -200,17 +200,23 @@ CoverResult streamTwoBit(XtcParser& parser, const uint16_t width, const uint16_t
 }  // namespace
 
 void migrateStaleFailureMarkers(const std::string& cachePath, const bool purgeArtifacts) {
-  const std::string migratedPath = cachePath + "/.cover.v2";
+  const std::string migratedPath = cachePath + "/.cover.v3";
   if (SdMan.exists(migratedPath.c_str())) return;
   SdMan.remove((cachePath + "/.cover.failed").c_str());
   SdMan.remove((cachePath + "/.thumb.failed").c_str());
   SdMan.remove((cachePath + "/.cover.migrated").c_str());
-  if (purgeArtifacts) {
+  if (purgeArtifacts && !SdMan.exists((cachePath + "/.cover.v2").c_str())) {
     SdMan.remove((cachePath + "/cover.bmp").c_str());
     SdMan.remove((cachePath + "/thumb.bmp").c_str());
   }
   FsFile migrated;
-  if (SdMan.openFileForWrite("XTC", migratedPath, migrated)) migrated.close();
+  if (SdMan.openFileForWrite("XTC", migratedPath, migrated)) {
+    if (migrated.close()) {
+      SdMan.remove((cachePath + "/.cover.v2").c_str());
+    } else {
+      SdMan.remove(migratedPath.c_str());
+    }
+  }
 }
 
 CoverResult generateCoverBmpFromParser(XtcParser& parser, const std::string& coverBmpPath,

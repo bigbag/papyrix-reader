@@ -193,6 +193,91 @@ int main() {
   runner.expectEq(size_t{16}, xtc::xthPlaneSize(8, 9), "XTH 8x9 plane pads every column");
   runner.expectEq(size_t{48}, xtc::xthBitmapSize(8, 17), "XTH 8x17 bitmap has two padded planes");
 
+  for (const uint32_t pageContainer : {xtc::XTC_MAGIC, xtc::XTCH_MAGIC}) {
+    for (const uint32_t container : {xtc::XTC_MAGIC, xtc::XTCH_MAGIC}) {
+      SdMan.clearFiles();
+      std::string data = buildMultiPageXtc(8, 9, 2, pageContainer);
+      auto* header = reinterpret_cast<xtc::XtcHeader*>(data.data());
+      header->magic = container;
+      const uint8_t depth = pageContainer == xtc::XTCH_MAGIC ? 2 : 1;
+      const size_t size = depth == 2 ? xtc::xthBitmapSize(8, 9) : xtc::xtgBitmapSize(8, 9);
+      SdMan.registerFile("/depth.xtc", data);
+      xtc::XtcParser parser;
+      runner.expectTrue(parser.open("/depth.xtc") == xtc::XtcError::OK, "page depth: container opens");
+      runner.expectEq(depth, parser.getBitDepth(), "page depth: page magic selects depth");
+      xtc::PageInfo info;
+      runner.expectTrue(parser.getPageInfo(1, info), "page depth: later page available");
+      runner.expectEq(depth, info.bitDepth, "page depth: page info uses detected depth");
+      std::vector<uint8_t> expected(size, 1);
+      std::vector<uint8_t> actual(size, 0);
+      runner.expectEq(size, parser.loadPage(1, actual.data(), actual.size()), "page depth: exact bitmap size");
+      runner.expectTrue(actual == expected, "page depth: exact bitmap bytes");
+      actual.clear();
+      runner.expectTrue(parser.loadPageStreaming(1, [&](const uint8_t* bytes, size_t count, size_t offset) {
+        if (offset != actual.size()) return false;
+        actual.insert(actual.end(), bytes, bytes + count);
+        return true;
+      }, 3) == xtc::XtcError::OK, "page depth: streamed read succeeds");
+      runner.expectTrue(actual == expected, "page depth: stream preserves bitmap bytes");
+      if (depth == 2) {
+        std::vector<uint8_t> first, second;
+        runner.expectTrue(parser.loadPagePlanePairs(1, [&](const uint8_t* p1, const uint8_t* p2,
+                                                         size_t count, size_t offset) {
+          if (offset != first.size()) return false;
+          first.insert(first.end(), p1, p1 + count);
+          second.insert(second.end(), p2, p2 + count);
+          return true;
+        }, 3) == xtc::XtcError::OK, "page depth: paired planes succeed");
+        runner.expectTrue(first == std::vector<uint8_t>(size / 2, 1) && second == first,
+                          "page depth: paired planes preserve bytes");
+      }
+    }
+  }
+
+  for (int fault = 0; fault < 5; ++fault) {
+    SdMan.clearFiles();
+    std::string data = buildMultiPageXtc(8, 9, 1, xtc::XTCH_MAGIC);
+    auto* header = reinterpret_cast<xtc::XtcHeader*>(data.data());
+    auto* entry = reinterpret_cast<xtc::PageTableEntry*>(&data[header->pageTableOffset]);
+    auto* page = reinterpret_cast<xtc::XtgPageHeader*>(&data[entry->dataOffset]);
+    if (fault == 0) page->magic = 0;
+    if (fault == 1) entry->dataOffset = UINT64_MAX;
+    if (fault == 2) data.resize(entry->dataOffset + sizeof(xtc::XtgPageHeader) - 1);
+    if (fault == 3) data.pop_back();
+    if (fault == 4) page->compression = 1;
+    SdMan.registerFile("/bad-first.xtc", data);
+    xtc::XtcParser parser;
+    runner.expectTrue(parser.open("/bad-first.xtc") != xtc::XtcError::OK,
+                      "page depth: invalid first page cannot establish a format");
+    runner.expectFalse(parser.isOpen(), "page depth: invalid first page leaves parser closed");
+  }
+
+  for (const uint32_t container : {xtc::XTC_MAGIC, xtc::XTCH_MAGIC}) {
+    SdMan.clearFiles();
+    std::string data = buildMultiPageXtc(8, 8, 2, container);
+    auto* header = reinterpret_cast<xtc::XtcHeader*>(data.data());
+    auto* entries = reinterpret_cast<xtc::PageTableEntry*>(&data[header->pageTableOffset]);
+    auto* page = reinterpret_cast<xtc::XtgPageHeader*>(&data[entries[1].dataOffset]);
+    page->magic = container == xtc::XTC_MAGIC ? xtc::XTH_MAGIC : xtc::XTG_MAGIC;
+    SdMan.registerFile("/mixed.xtc", data);
+    xtc::XtcParser parser;
+    runner.expectTrue(parser.open("/mixed.xtc") == xtc::XtcError::OK, "mixed depth: first page opens");
+    uint8_t buffer[16] = {};
+    runner.expectEq(size_t{0}, parser.loadPage(1, buffer, sizeof(buffer)), "mixed depth: bitmap rejected");
+    bool called = false;
+    runner.expectTrue(parser.loadPageStreaming(1, [&](const uint8_t*, size_t, size_t) {
+      called = true;
+      return true;
+    }) == xtc::XtcError::INVALID_MAGIC, "mixed depth: stream rejected");
+    if (container == xtc::XTCH_MAGIC) {
+      runner.expectTrue(parser.loadPagePlanePairs(1, [&](const uint8_t*, const uint8_t*, size_t, size_t) {
+        called = true;
+        return true;
+      }) == xtc::XtcError::INVALID_MAGIC, "mixed depth: paired planes rejected");
+    }
+    runner.expectFalse(called, "mixed depth: no invalid bytes reach consumers");
+  }
+
   {
     SdMan.clearFiles();
     SdMan.registerFile("/legacy_table.xtc", buildLegacyPageTableXtc());
@@ -563,25 +648,25 @@ int main() {
   {
     constexpr size_t pageTableOffset = sizeof(xtc::XtcHeader) + 128 + 64;
     SdMan.clearFiles();
-    std::string malformed = buildMultiPageXtc(8, 8, 1, xtc::XTCH_MAGIC);
-    auto* entry = reinterpret_cast<xtc::PageTableEntry*>(&malformed[pageTableOffset]);
+    std::string malformed = buildMultiPageXtc(8, 8, 2, xtc::XTCH_MAGIC);
+    auto* entry = reinterpret_cast<xtc::PageTableEntry*>(&malformed[pageTableOffset]) + 1;
     auto* pageHeader = reinterpret_cast<xtc::XtgPageHeader*>(&malformed[entry->dataOffset]);
     pageHeader->dataSize++;
     SdMan.registerFile("/malformed-pairs.xtch", malformed);
     xtc::XtcParser malformedParser;
     malformedParser.open("/malformed-pairs.xtch");
     runner.expectTrue(malformedParser.loadPagePlanePairs(
-                          0, [](const uint8_t*, const uint8_t*, size_t, size_t) { return true; }) ==
+                          1, [](const uint8_t*, const uint8_t*, size_t, size_t) { return true; }) ==
                           xtc::XtcError::CORRUPTED_HEADER,
                       "plane_pairs: rejects inconsistent bitmap size");
 
-    std::string truncated = buildMultiPageXtc(8, 8, 1, xtc::XTCH_MAGIC);
+    std::string truncated = buildMultiPageXtc(8, 8, 2, xtc::XTCH_MAGIC);
     truncated.pop_back();
     SdMan.registerFile("/truncated-pairs.xtch", truncated);
     xtc::XtcParser truncatedParser;
     truncatedParser.open("/truncated-pairs.xtch");
     runner.expectTrue(truncatedParser.loadPagePlanePairs(
-                          0, [](const uint8_t*, const uint8_t*, size_t, size_t) { return true; }) ==
+                          1, [](const uint8_t*, const uint8_t*, size_t, size_t) { return true; }) ==
                           xtc::XtcError::CORRUPTED_HEADER,
                       "plane_pairs: rejects truncated second plane");
   }

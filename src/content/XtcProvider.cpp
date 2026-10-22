@@ -47,8 +47,6 @@ Result<void> XtcProvider::open(const char* path, const char* cacheDir) {
     snprintf(meta.cachePath, sizeof(meta.cachePath), "%s/xtc_%zu", cacheDir, hash);
     SdMan.mkdir(meta.cachePath);
 
-    // One-time invalidation of failure markers persisted by the old
-    // page-buffer cover generator (structural 96KB allocation failure).
     xtc::migrateStaleFailureMarkers(meta.cachePath, parser.getBitDepth() == 2);
   } else {
     meta.cachePath[0] = '\0';

@@ -43,7 +43,7 @@ XtcParser::XtcParser()
     : m_isOpen(false),
       m_defaultWidth(DISPLAY_WIDTH),
       m_defaultHeight(DISPLAY_HEIGHT),
-      m_bitDepth(1),
+      m_bitDepth(0),
       m_hasChapters(false),
       m_chaptersLoaded(false),
       m_lastError(XtcError::OK) {
@@ -96,6 +96,7 @@ XtcError XtcParser::open(const char* filepath) {
 void XtcParser::close() {
   if (m_file) m_file.close();
   m_isOpen = false;
+  m_bitDepth = 0;
   std::vector<ChapterInfo>().swap(m_chapters);
   m_title.clear();
   m_author.clear();
@@ -115,9 +116,6 @@ XtcError XtcParser::readHeader() {
     LOG_ERR(TAG, "Invalid magic: 0x%08X (expected 0x%08X or 0x%08X)", m_header.magic, XTC_MAGIC, XTCH_MAGIC);
     return XtcError::INVALID_MAGIC;
   }
-
-  // Determine bit depth from file magic
-  m_bitDepth = (m_header.magic == XTCH_MAGIC) ? 2 : 1;
 
   // Check version
   // Currently, version 1.0 is the only valid version, however some generators are swapping the bytes around, so we
@@ -139,9 +137,9 @@ XtcError XtcParser::readHeader() {
     return XtcError::CORRUPTED_HEADER;
   }
 
-  LOG_INF(TAG, "Header: magic=0x%08X (%s), ver=%u.%u, pages=%u, bitDepth=%u", m_header.magic,
+  LOG_INF(TAG, "Header: magic=0x%08X (%s), ver=%u.%u, pages=%u", m_header.magic,
           (m_header.magic == XTCH_MAGIC) ? "XTCH" : "XTC", m_header.versionMajor, m_header.versionMinor,
-          m_header.pageCount, m_bitDepth);
+          m_header.pageCount);
 
   return XtcError::OK;
 }
@@ -192,12 +190,10 @@ XtcError XtcParser::readPageTable() {
     return XtcError::CORRUPTED_HEADER;
   }
 
-  // Read first page entry to get default dimensions
   PageInfo firstPage;
-  if (!readPageEntry(0, firstPage)) {
-    LOG_ERR(TAG, "Failed to read first page table entry");
-    return XtcError::READ_ERROR;
-  }
+  XtgPageHeader pageHeader;
+  size_t bitmapSize = 0;
+  if (!readValidatedPage(0, firstPage, pageHeader, bitmapSize)) return m_lastError;
   m_defaultWidth = firstPage.width;
   m_defaultHeight = firstPage.height;
 
@@ -342,8 +338,8 @@ bool XtcParser::readValidatedPage(uint32_t pageIndex, PageInfo& page, XtgPageHea
     return false;
   }
 
-  const uint32_t expectedMagic = m_bitDepth == 2 ? XTH_MAGIC : XTG_MAGIC;
-  if (pageHeader.magic != expectedMagic) {
+  const uint8_t bitDepth = pageHeader.magic == XTG_MAGIC ? 1 : pageHeader.magic == XTH_MAGIC ? 2 : 0;
+  if (bitDepth == 0 || (m_bitDepth != 0 && bitDepth != m_bitDepth)) {
     m_lastError = XtcError::INVALID_MAGIC;
     return false;
   }
@@ -353,7 +349,7 @@ bool XtcParser::readValidatedPage(uint32_t pageIndex, PageInfo& page, XtgPageHea
     return false;
   }
 
-  bitmapSize = m_bitDepth == 2 ? xthBitmapSize(page.width, page.height) : xtgBitmapSize(page.width, page.height);
+  bitmapSize = bitDepth == 2 ? xthBitmapSize(page.width, page.height) : xtgBitmapSize(page.width, page.height);
   if (bitmapSize == 0 || bitmapSize > XTC_MAX_BITMAP_SIZE || pageHeader.dataSize != bitmapSize) {
     m_lastError = XtcError::CORRUPTED_HEADER;
     return false;
@@ -365,6 +361,8 @@ bool XtcParser::readValidatedPage(uint32_t pageIndex, PageInfo& page, XtgPageHea
     return false;
   }
 
+  m_bitDepth = bitDepth;
+  page.bitDepth = bitDepth;
   return true;
 }
 

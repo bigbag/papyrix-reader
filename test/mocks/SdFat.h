@@ -153,7 +153,8 @@ class FsFile : public Print {
     return true;
   }
 
-  void close() {
+  bool close() {
+    const bool result = !isOpen_ || syncResult_;
     if (sharedBuffer_) {
       *sharedBuffer_ = buffer_;
     }
@@ -176,6 +177,7 @@ class FsFile : public Print {
     modifyDate_ = 0;
     modifyTime_ = 0;
     hasModifyDateTime_ = false;
+    return result;
   }
 
   FsFile openNextFile() {

@@ -134,7 +134,6 @@ int main() {
     provider.open("/book.xtc", "/cache");
     runner.expectFalse(SdMan.exists((cachePath + "/.cover.failed").c_str()), "migrate: cover marker removed");
     runner.expectFalse(SdMan.exists((cachePath + "/.thumb.failed").c_str()), "migrate: thumb marker removed");
-    runner.expectTrue(SdMan.exists((cachePath + "/.cover.v2").c_str()), "migrate: sentinel created");
     provider.close();
 
     // Markers written after migration must persist across re-open
@@ -160,7 +159,7 @@ int main() {
     provider.close();
   }
 
-  // ---- Test: deterministic failure persists a marker and suppresses retry ----
+  // Reject an invalid first page before cover generation.
   {
     SdMan.clearFiles();
     SdMan.clearWrittenFiles();
@@ -171,11 +170,7 @@ int main() {
     SdMan.registerFile("/bad.xtc", corrupt);
 
     papyrix::XtcProvider provider;
-    provider.open("/bad.xtc", "/cache");
-    const std::string badCache = provider.meta.cachePath;
-    runner.expectFalse(provider.generateCoverBmp(), "invalid: generation fails");
-    runner.expectTrue(SdMan.exists((badCache + "/.cover.failed").c_str()), "invalid: marker persisted");
-    runner.expectFalse(provider.generateCoverBmp(), "invalid: marker suppresses retry");
+    runner.expectFalse(provider.open("/bad.xtc", "/cache").ok(), "invalid: open rejects unknown page format");
     provider.close();
   }
 
@@ -220,16 +215,10 @@ int main() {
     SdMan.registerFile("/book.xtch", buildXtcFile2Bit(32, 16, std::vector<uint8_t>(xtc::xthBitmapSize(32, 16))));
 
     papyrix::XtcProvider provider;
-    provider.open("/book.xtch", "/cache");
-    const std::string twoBitCache = provider.meta.cachePath;
-    provider.close();
-
-    // Simulate a device upgrading from the >=2-threshold build: stale
-    // artifacts present, no .cover.v2 sentinel (only the old .cover.migrated).
+    const std::string twoBitCache = "/cache/xtc_" + std::to_string(std::hash<std::string>{}("/book.xtch"));
     SdMan.registerFile(twoBitCache + "/cover.bmp", "stale");
     SdMan.registerFile(twoBitCache + "/thumb.bmp", "stale");
     SdMan.registerFile(twoBitCache + "/.cover.migrated", "");
-    SdMan.remove((twoBitCache + "/.cover.v2").c_str());  // device never had the v2 sentinel
 
     provider.open("/book.xtch", "/cache");
     runner.expectFalse(SdMan.exists((twoBitCache + "/cover.bmp").c_str()),
@@ -238,7 +227,6 @@ int main() {
                        "purge: stale 2-bit thumb removed on first open");
     runner.expectFalse(SdMan.exists((twoBitCache + "/.cover.migrated").c_str()),
                        "purge: legacy sentinel removed");
-    runner.expectTrue(SdMan.exists((twoBitCache + "/.cover.v2").c_str()), "purge: v2 sentinel created");
     runner.expectTrue(provider.generateCoverBmp(), "purge: cover regenerates with restored threshold");
     runner.expectTrue(home_thumbnail::validateCover(provider.getCoverBmpPath()), "purge: regenerated cover valid");
 
@@ -257,20 +245,44 @@ int main() {
     SdMan.registerFile("/book.xtc", buildXtcFile1Bit(16, 8, std::vector<uint8_t>(16, 0xFF)));
 
     papyrix::XtcProvider provider;
-    runner.expectTrue(provider.open("/book.xtc", "/cache").ok(), "1bit migrate: open succeeds");
-    runner.expectTrue(provider.generateCoverBmp(), "1bit migrate: cover generated");
-    provider.close();
-
-    // Reset sentinel to simulate migration pending; cover content is
-    // threshold-independent for 1-bit sources and must be kept.
-    SdMan.remove((cachePath + "/.cover.v2").c_str());
+    SdMan.registerFile(cachePath + "/cover.bmp", "retained cover");
     SdMan.registerFile(cachePath + "/.cover.migrated", "");
-
     provider.open("/book.xtc", "/cache");
     runner.expectTrue(SdMan.exists((cachePath + "/cover.bmp").c_str()),
                       "1bit migrate: 1-bit cover kept");
-    runner.expectTrue(SdMan.exists((cachePath + "/.cover.v2").c_str()), "1bit migrate: sentinel created");
     provider.close();
+  }
+
+  for (const bool twoBit : {false, true}) {
+    SdMan.clearFiles();
+    SdMan.clearWrittenFiles();
+    std::string data = twoBit ? buildXtcFile2Bit(32, 16, std::vector<uint8_t>(128, 0xAA))
+                              : buildXtcFile1Bit(32, 16, std::vector<uint8_t>(64, 0xAA));
+    SdMan.registerFile("/native.xtc", data);
+    papyrix::XtcProvider native;
+    runner.expectTrue(native.open("/native.xtc", "/cache").ok(), "native cover: open");
+    runner.expectTrue(native.generateCoverBmp(), "native cover: generate");
+    const std::string expected = SdMan.getWrittenData(native.getCoverBmpPath());
+
+    reinterpret_cast<xtc::XtcHeader*>(data.data())->magic = twoBit ? xtc::XTC_MAGIC : xtc::XTCH_MAGIC;
+    SdMan.registerFile("/legacy.xtc", data);
+    const std::string legacyCache = "/cache/xtc_" + std::to_string(std::hash<std::string>{}("/legacy.xtc"));
+    SdMan.registerFile(legacyCache + "/.cover.v2", "");
+    SdMan.registerFile(legacyCache + "/.cover.failed", "");
+    SdMan.registerFile(legacyCache + "/.thumb.failed", "");
+    papyrix::XtcProvider legacy;
+    runner.expectTrue(legacy.open("/legacy.xtc", "/cache").ok(), "legacy cover: open");
+    runner.expectTrue(legacy.generateCoverBmp(), "legacy cover: retry saved failure");
+    runner.expectEq(expected, SdMan.getWrittenData(legacy.getCoverBmpPath()), "legacy cover: pixels match native");
+    runner.expectFalse(SdMan.exists(legacyCache + "/.thumb.failed"), "legacy cover: thumbnail can retry");
+    const std::string thumbnail = legacyCache + "/thumb.bmp";
+    runner.expectTrue(home_thumbnail::generateFromCover(legacy.getCoverBmpPath(), thumbnail, nullptr) ==
+                          home_thumbnail::Result::Ready, "legacy cover: thumbnail generation succeeds");
+    runner.expectTrue(home_thumbnail::validate(thumbnail), "legacy cover: thumbnail validates");
+    legacy.close();
+    runner.expectTrue(legacy.open("/legacy.xtc", "/cache").ok(), "legacy cover: reopen");
+    runner.expectEq(expected, SdMan.getWrittenData(legacy.getCoverBmpPath()), "legacy cover: cached pixels remain");
+    runner.expectTrue(home_thumbnail::validate(thumbnail), "legacy cover: cached thumbnail remains");
   }
 
   return runner.allPassed() ? 0 : 1;

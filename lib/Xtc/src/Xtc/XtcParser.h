@@ -39,13 +39,13 @@ class XtcParser {
   uint16_t getPageCount() const { return m_header.pageCount; }
   uint16_t getWidth() const { return m_defaultWidth; }
   uint16_t getHeight() const { return m_defaultHeight; }
-  uint8_t getBitDepth() const { return m_bitDepth; }  // 1 = XTC/XTG, 2 = XTCH/XTH
+  uint8_t getBitDepth() const { return m_bitDepth; }
 
   // Page information (reads from file on each call)
   bool getPageInfo(uint32_t pageIndex, PageInfo& info);
 
   /**
-   * Load page bitmap (raw 1-bit data, skipping XTG header)
+   * Load page bitmap data without the page header.
    *
    * @param pageIndex Page index (0-based)
    * @param buffer Output buffer (caller allocated)
@@ -98,7 +98,7 @@ class XtcParser {
   std::string m_author;
   uint16_t m_defaultWidth;
   uint16_t m_defaultHeight;
-  uint8_t m_bitDepth;  // 1 = XTC/XTG (1-bit), 2 = XTCH/XTH (2-bit)
+  uint8_t m_bitDepth;  // 0 = unknown, 1 = XTG, 2 = XTH
   mutable bool m_hasChapters;
   mutable bool m_chaptersLoaded;
   XtcError m_lastError;

@@ -74,6 +74,7 @@ class SDCardManager {
     modifyDateTimes_.clear();
     openFailCount_ = 0;
     openFileForReadFailCount_ = 0;
+    openFileForWriteFailCount_ = 0;
     readOpenCount_ = 0;
     readObserver_ = {};
     mallocFailCount_ = 0;
@@ -104,6 +105,7 @@ class SDCardManager {
 
   // Failure injection: first N openFileForRead() calls for a path fail
   void setOpenFileForReadFailCount(int count) { openFileForReadFailCount_ = count; }
+  void setOpenFileForWriteFailCount(int count) { openFileForWriteFailCount_ = count; }
   size_t readOpenCount() const { return readOpenCount_; }
   void setReadObserver(std::function<void(const char*)> observer) { readObserver_ = std::move(observer); }
 
@@ -222,6 +224,10 @@ class SDCardManager {
 
   bool openFileForWrite(const char* moduleName, const std::string& path, FsFile& file) {
     (void)moduleName;
+    if (openFileForWriteFailCount_ > 0) {
+      --openFileForWriteFailCount_;
+      return false;
+    }
     auto buf = std::make_shared<std::string>();
     writtenFiles_[path] = buf;
     file.setSharedBuffer(buf);
@@ -341,6 +347,7 @@ class SDCardManager {
   std::map<std::string, std::pair<uint16_t, uint16_t>> modifyDateTimes_;
   int openFailCount_ = 0;
   int openFileForReadFailCount_ = 0;
+  int openFileForWriteFailCount_ = 0;
   size_t readOpenCount_ = 0;
   std::function<void(const char*)> readObserver_;
   int mallocFailCount_ = 0;
