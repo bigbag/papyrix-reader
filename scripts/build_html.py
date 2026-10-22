@@ -1,4 +1,5 @@
 import gzip
+import hashlib
 import os
 import re
 
@@ -59,6 +60,8 @@ for root, _, files in os.walk(SRC_DIR):
                     h.write(f"    {hex_vals},\n")
                 h.write("};\n")
                 h.write(f"constexpr size_t {base_name}CompressedSize = sizeof({base_name});\n")
+                etag = hashlib.sha256(compressed).hexdigest()
+                h.write(f'constexpr char {base_name}ETag[] PROGMEM = "\\"{etag}\\"";\n')
 
             original_size = len(html_content)
             minified_size = len(minified.encode('utf-8'))

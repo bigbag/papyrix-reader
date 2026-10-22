@@ -8,6 +8,8 @@
 #include <Utf8Nfc.h>
 #include <WiFi.h>
 
+#include <string_view>
+
 #include "../IniParser.h"
 #include "../config.h"
 #include "../content/RecentBooksStore.h"
@@ -46,8 +48,41 @@ bool prepareWebPath(String& path) {
 
 }  // namespace
 
-static void sendGzipHtml(WebServer* server, const char* data, size_t len) {
+static bool matchesEtag(std::string_view value, const std::string_view etag) {
+  const size_t first = value.find_first_not_of(" \t");
+  if (first == std::string_view::npos) return false;
+  value.remove_prefix(first);
+  if (value.front() == '*') return value.find_first_not_of(" \t", 1) == std::string_view::npos;
+
+  bool matched = false;
+  while (!value.empty()) {
+    const size_t start = value.find_first_not_of(" \t,");
+    if (start == std::string_view::npos) break;
+    value.remove_prefix(start);
+    if (value.substr(0, 2) == "W/") value.remove_prefix(2);
+    if (value.empty() || value.front() != '"') return false;
+    const size_t end = value.find('"', 1);
+    if (end == std::string_view::npos) return false;
+    matched = matched || value.substr(0, end + 1) == etag;
+    value.remove_prefix(end + 1);
+    const size_t next = value.find_first_not_of(" \t");
+    if (next == std::string_view::npos) break;
+    if (value[next] != ',') return false;
+    value.remove_prefix(next + 1);
+  }
+  return matched;
+}
+
+static void sendGzipHtml(WebServer* server, const char* data, size_t len, const char* etag) {
+  server->sendHeader("ETag", etag);
+  server->sendHeader("Cache-Control", "no-cache");
   server->sendHeader("Content-Encoding", "gzip");
+  const String condition = server->header("If-None-Match");
+  if (matchesEtag(std::string_view(condition.c_str(), condition.length()), etag)) {
+    server->setContentLength(len);
+    server->send(304, "text/html", "");
+    return;
+  }
   server->send_P(200, "text/html", data, len);
 }
 
@@ -130,7 +165,9 @@ void PapyrixWebServer::handleClient() {
   server_->handleClient();
 }
 
-void PapyrixWebServer::handleRoot() { sendGzipHtml(server_.get(), AppPageHtml, AppPageHtmlCompressedSize); }
+void PapyrixWebServer::handleRoot() {
+  sendGzipHtml(server_.get(), AppPageHtml, AppPageHtmlCompressedSize, AppPageHtmlETag);
+}
 
 void PapyrixWebServer::handleNotFound() { server_->send(404, "text/plain", "404 Not Found"); }
 
