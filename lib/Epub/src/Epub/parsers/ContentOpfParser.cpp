@@ -6,6 +6,8 @@
 #include <Serialization.h>
 #include <Utf8.h>
 
+#include <string_view>
+
 #include "../BookMetadataCache.h"
 
 #define TAG "OPF"
@@ -13,6 +15,19 @@
 namespace {
 constexpr char MEDIA_TYPE_NCX[] = "application/x-dtbncx+xml";
 constexpr char itemCacheFile[] = "/.items.bin";
+
+bool hasToken(std::string_view values, const std::string_view token) {
+  while (!values.empty()) {
+    const size_t start = values.find_first_not_of(" \t\r\n");
+    if (start == std::string_view::npos) return false;
+    values.remove_prefix(start);
+    const size_t end = values.find_first_of(" \t\r\n");
+    if (values.substr(0, end) == token) return true;
+    if (end == std::string_view::npos) return false;
+    values.remove_prefix(end);
+  }
+  return false;
+}
 
 // Find the last valid UTF-8 boundary within maxLen bytes
 // Returns the safe length to use for truncation (may be less than maxLen)
@@ -80,7 +95,7 @@ ContentOpfParser::~ContentOpfParser() {
     tempItemStore.close();
   }
   const auto itemCachePath = cachePath + itemCacheFile;
-  if (SdMan.exists(itemCachePath.c_str())) {
+  if (cache && SdMan.exists(itemCachePath.c_str())) {
     SdMan.remove(itemCachePath.c_str());
   }
 }
@@ -231,6 +246,9 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     if (itemId == self->coverItemId) {
       self->coverItemHref = href;
     }
+    if (self->coverIdHref.empty() && (itemId == "cover" || itemId == "cover-image" || itemId == "cover_image")) {
+      self->coverIdHref = href;
+    }
 
     if (mediaType == MEDIA_TYPE_NCX) {
       if (self->tocNcxPath.empty()) {
@@ -249,13 +267,9 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       }
     }
 
-    // EPUB 3: Check for cover image (properties contains "cover-image")
-    if (!properties.empty() && self->coverItemHref.empty()) {
-      if (properties == "cover-image" || properties.find("cover-image ") == 0 ||
-          properties.find(" cover-image") != std::string::npos) {
-        self->coverItemHref = href;
-        LOG_INF(TAG, "Found EPUB 3 cover image: %s", href.c_str());
-      }
+    if (self->coverImageHref.empty() && hasToken(properties, "cover-image")) {
+      self->coverImageHref = href;
+      if (self->coverItemHref.empty()) self->coverItemHref = href;
     }
 
     // Collect CSS files

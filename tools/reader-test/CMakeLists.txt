@@ -37,6 +37,7 @@ add_executable(reader-test
   ${PROJECT_ROOT}/lib/Epub/src/Epub/parsers/ChapterHtmlSlimParser.cpp
   ${PROJECT_ROOT}/lib/Epub/src/Epub/parsers/ContainerParser.cpp
   ${PROJECT_ROOT}/lib/Epub/src/Epub/parsers/ContentOpfParser.cpp
+  ${PROJECT_ROOT}/lib/Epub/src/Epub/parsers/CoverLinkParser.cpp
   ${PROJECT_ROOT}/lib/Epub/src/Epub/parsers/TocNcxParser.cpp
   ${PROJECT_ROOT}/lib/Epub/src/Epub/parsers/TocNavParser.cpp
   ${PROJECT_ROOT}/lib/Epub/src/Epub/htmlEntities.cpp

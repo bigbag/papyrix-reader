@@ -61,8 +61,8 @@ class Epub {
   std::string sectionFilePath(int originalSpineIndex, int sectionIndex) const;
   home_thumbnail::Result extractCoverSource(const std::string& itemHref,
                                             const std::function<bool()>& shouldAbort) const;
-  home_thumbnail::Result prepareCoverSource(std::string& sourcePath, bool& temporary,
-                                            const std::function<bool()>& shouldAbort) const;
+  bool generateCoverFromItem(const std::string& itemHref, bool use1BitDithering,
+                             const std::function<bool()>& shouldAbort) const;
 
  public:
   explicit Epub(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)) {

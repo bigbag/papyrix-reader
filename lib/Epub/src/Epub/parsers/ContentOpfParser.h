@@ -62,6 +62,8 @@ class ContentOpfParser final : public Print {
   std::string tocNcxPath;
   std::string tocNavPath;  // EPUB 3 nav document path
   std::string coverItemHref;
+  std::string coverImageHref;
+  std::string coverIdHref;
   std::string guideCoverPageHref;
   std::string textReferenceHref;
   const std::vector<std::string>& getCssFiles() const { return cssFiles_; }

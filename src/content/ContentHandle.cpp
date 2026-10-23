@@ -305,6 +305,7 @@ home_thumbnail::Result ContentHandle::generateThumbnail(const std::function<bool
     coverPath = generateCover(true, shouldAbort);
   }
   if (shouldAbort && shouldAbort()) return home_thumbnail::Result::Cancelled;
+  if (coverPath.empty()) return home_thumbnail::Result::Unavailable;
   return home_thumbnail::generateFromCover(coverPath, thumbnailPath, shouldAbort);
 }
 

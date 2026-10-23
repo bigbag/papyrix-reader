@@ -63,20 +63,21 @@ set(TEST_HELPERS
 # Auto-discover and build tests
 file(GLOB_RECURSE TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp)
 
+include(FetchContent)
+if(POLICY CMP0135)
+  cmake_policy(SET CMP0135 NEW)
+endif()
+# Match the firmware's pngle 1.0.2 dependency.
+FetchContent_Declare(pngle
+  URL https://codeload.github.com/kikuchan/pngle/tar.gz/745944757fc3f7c75cc65bdd197ef20aa30ad72a
+  URL_HASH SHA256=3c0e6c5a4b70b6e207e7aa2a953caeb4d1360179ed6dbab2a295dca6af8e1b37)
+FetchContent_MakeAvailable(pngle)
+set(PNGLE_DIR "${pngle_SOURCE_DIR}/src")
+
 foreach(TEST_SRC ${TEST_SOURCES})
   get_filename_component(TEST_NAME ${TEST_SRC} NAME_WE)
 
   if(TEST_NAME STREQUAL "ProgressiveJpegFactoryTest")
-    include(FetchContent)
-    if(POLICY CMP0135)
-      cmake_policy(SET CMP0135 NEW)
-    endif()
-    # Match the firmware's pngle 1.0.2 dependency.
-    FetchContent_Declare(pngle
-      URL https://codeload.github.com/kikuchan/pngle/tar.gz/745944757fc3f7c75cc65bdd197ef20aa30ad72a
-      URL_HASH SHA256=3c0e6c5a4b70b6e207e7aa2a953caeb4d1360179ed6dbab2a295dca6af8e1b37)
-    FetchContent_MakeAvailable(pngle)
-    set(PNGLE_DIR "${pngle_SOURCE_DIR}/src")
     foreach(IMAGE_TARGET X4PRO X4CLASSIC XTEINK_C3)
       set(IMAGE_TEST ProgressiveJpegFactory${IMAGE_TARGET}Test)
       add_executable(${IMAGE_TEST} ${TEST_SRC}
@@ -522,7 +523,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${TEST_HELPERS}
     )
   elseif(TEST_NAME STREQUAL "ContentHandleThumbnailTest" OR TEST_NAME STREQUAL "EpubIndexAnchorsTest" OR
-         TEST_NAME STREQUAL "EpubTocRecoveryTest")
+         TEST_NAME STREQUAL "EpubTocRecoveryTest" OR TEST_NAME STREQUAL "EpubCoverDiscoveryTest")
     find_package(EXPAT REQUIRED)
     add_executable(${TEST_NAME}
       ${TEST_SRC}
@@ -550,6 +551,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/Epub/src/Epub/parsers/ChapterHtmlSlimParser.cpp
       ${PROJECT_ROOT}/lib/Epub/src/Epub/parsers/ContainerParser.cpp
       ${PROJECT_ROOT}/lib/Epub/src/Epub/parsers/ContentOpfParser.cpp
+      ${PROJECT_ROOT}/lib/Epub/src/Epub/parsers/CoverLinkParser.cpp
       ${PROJECT_ROOT}/lib/Epub/src/Epub/parsers/TocNcxParser.cpp
       ${PROJECT_ROOT}/lib/Epub/src/Epub/parsers/TocNavParser.cpp
       ${PROJECT_ROOT}/lib/Epub/src/Epub/htmlEntities.cpp
@@ -602,11 +604,20 @@ foreach(TEST_SRC ${TEST_SOURCES})
     target_compile_options(${TEST_NAME} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-include Arduino.h>)
     target_include_directories(${TEST_NAME} BEFORE PRIVATE
       ${CMAKE_CURRENT_SOURCE_DIR}/unit/content/mocks
-      ${CMAKE_CURRENT_SOURCE_DIR}/unit/imageconverter/mocks
-      ${CMAKE_CURRENT_SOURCE_DIR}/unit/jpegconverter/mocks
       ${PROJECT_ROOT}/lib/PngToBmpConverter/src
       ${PROJECT_ROOT}/lib/JpegToBmpConverter/src
     )
+    if(TEST_NAME STREQUAL "EpubCoverDiscoveryTest")
+      target_sources(${TEST_NAME} PRIVATE
+        ${PROJECT_ROOT}/lib/picojpeg/src/picojpeg.c
+        ${PNGLE_DIR}/pngle.c ${PNGLE_DIR}/miniz.c)
+      target_include_directories(${TEST_NAME} BEFORE PRIVATE
+        ${PROJECT_ROOT}/lib/picojpeg/src ${PNGLE_DIR})
+    else()
+      target_include_directories(${TEST_NAME} BEFORE PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/unit/imageconverter/mocks
+        ${CMAKE_CURRENT_SOURCE_DIR}/unit/jpegconverter/mocks)
+    endif()
     target_include_directories(${TEST_NAME} PRIVATE
       ${PROJECT_ROOT}/src/content
       ${PROJECT_ROOT}/lib/Xtc/src

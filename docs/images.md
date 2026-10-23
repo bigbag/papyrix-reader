@@ -17,6 +17,14 @@ EPUB HTML → ChapterHtmlSlimParser → ImageConverter → BMP Cache → GfxRend
 
 ---
 
+## EPUB Covers
+
+An external cover image beside the book takes priority. Inside the EPUB, the reader checks explicit cover declarations before common filenames. It supports cover images, cover pages, guide references, and EPUB 3 cover landmarks. If memory is too low to read cover declarations, the reader tries common filenames.
+
+A cover page can contain several images. The reader prefers the largest usable image and continues past missing or damaged candidates. Embedded cover images must not exceed 512 KiB. Cover pages must not exceed 64 KiB.
+
+Valid cached covers and thumbnails remain available. A temporary cover read, write, or memory failure does not prevent a later attempt.
+
 ## Supported Formats
 
 - **JPEG** (`.jpg`, `.jpeg`) — Baseline on all devices; progressive on X4 Pro and X4 v2 Classic

@@ -12,12 +12,14 @@
 #include <expat.h>
 
 #include <algorithm>
+#include <array>
 
 #define TAG "EPUB"
 
 #include "../../src/config.h"
 #include "Epub/parsers/ContainerParser.h"
 #include "Epub/parsers/ContentOpfParser.h"
+#include "Epub/parsers/CoverLinkParser.h"
 #include "Epub/parsers/TocNavParser.h"
 #include "Epub/parsers/TocNcxParser.h"
 
@@ -49,6 +51,85 @@ bool writeTocRetryState(const std::string& dir, const uint8_t state) {
   const bool ok = file.write(&state, 1) == 1 && file.sync();
   file.close();
   return ok;
+}
+
+constexpr size_t MAX_COVER_IMAGE_SIZE = 512 * 1024;
+constexpr size_t MAX_COVER_WRAPPER_SIZE = 64 * 1024;
+
+std::string coverHref(const std::string& document, const std::string& reference) {
+  if (reference.size() > 512 || reference.find(':') != std::string::npos || reference.compare(0, 2, "//") == 0) {
+    return {};
+  }
+  std::string path = reference.substr(0, reference.find_first_of("?#"));
+  if (path.empty()) return reference.empty() ? path : document;
+  if (path.front() == '/') {
+    path.erase(0, 1);
+  } else {
+    path.insert(0, document.substr(0, document.find_last_of('/') + 1));
+  }
+  for (size_t pos = path.find("/./"); pos != std::string::npos; pos = path.find("/./")) path.erase(pos, 2);
+  while (path.compare(0, 2, "./") == 0) path.erase(0, 2);
+  return FsHelpers::normalisePath(path);
+}
+
+void migrateCoverFailures(const std::string& cachePath) {
+  const std::string versionPath = cachePath + "/.cover-discovery.v1";
+  if (SdMan.exists(versionPath.c_str())) return;
+  for (const char* name : {"/.cover.failed", "/.thumb.failed"}) {
+    const std::string path = cachePath + name;
+    if (SdMan.exists(path.c_str()) && !SdMan.remove(path.c_str())) return;
+  }
+  FsFile version;
+  if (SdMan.openFileForWrite("EPUB", versionPath, version)) {
+    const bool synced = version.sync();
+    version.close();
+    if (!synced) SdMan.remove(versionPath.c_str());
+  }
+}
+
+uint32_t coverImageArea(const std::string& path, const std::function<bool()>& shouldAbort) {
+  FsFile file;
+  if (!SdMan.openFileForRead("EPUB", path, file)) return 0;
+  uint8_t header[26];
+  if (file.read(header, sizeof(header)) != sizeof(header)) return 0;
+  const auto be32 = [](const uint8_t* p) {
+    return (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) | (uint32_t(p[2]) << 8) | p[3];
+  };
+  const auto le32 = [](const uint8_t* p) {
+    return uint32_t(p[0]) | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16) | (uint32_t(p[3]) << 24);
+  };
+  uint32_t width = 0, height = 0;
+  if (memcmp(header, "\x89PNG\r\n\x1a\n", 8) == 0 && memcmp(header + 12, "IHDR", 4) == 0) {
+    width = be32(header + 16);
+    height = be32(header + 20);
+  } else if (header[0] == 'B' && header[1] == 'M' && le32(header + 14) >= 40) {
+    width = le32(header + 18);
+    const uint32_t rawHeight = le32(header + 22);
+    height = (rawHeight & 0x80000000U) ? 0U - rawHeight : rawHeight;
+  } else if (header[0] == 0xFF && header[1] == 0xD8 && file.seek(2)) {
+    while (!CoverHelpers::isAbortRequested(shouldAbort)) {
+      if (file.read() != 0xFF) return 0;
+      int marker;
+      do {
+        if (CoverHelpers::isAbortRequested(shouldAbort)) return 0;
+        marker = file.read();
+      } while (marker == 0xFF);
+      if (marker < 0 || marker == 0xDA || marker == 0xD9) return 0;
+      uint8_t length[2];
+      if (file.read(length, 2) != 2) return 0;
+      const uint16_t size = (uint16_t(length[0]) << 8) | length[1];
+      if (size < 2 || size - 2U > file.size() - file.position()) return 0;
+      if (marker == 0xC0 || marker == 0xC1 || marker == 0xC2) {
+        uint8_t frame[5];
+        if (size < 7 || file.read(frame, 5) != 5 || frame[0] != 8) return 0;
+        height = (uint16_t(frame[1]) << 8) | frame[2];
+        width = (uint16_t(frame[3]) << 8) | frame[4];
+        break;
+      }
+      if (!file.seek(file.position() + size - 2)) return 0;
+    }
+  }
+  return width >= 20 && width <= 2048 && height >= 20 && height <= 3072 ? width * height : 0;
 }
 }  // namespace
 
@@ -119,53 +200,6 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const 
   bookMetadata.language = opfParser.language;
   bookMetadata.coverItemHref = opfParser.coverItemHref;
   bookMetadata.textReferenceHref = opfParser.textReferenceHref;
-
-  if (bookMetadata.coverItemHref.empty() && !opfParser.guideCoverPageHref.empty()) {
-    constexpr size_t MAX_GUIDE_COVER_WRAPPER_SIZE = 64 * 1024;
-    LOG_DBG(TAG, "No cover from metadata, trying guide cover page: %s", opfParser.guideCoverPageHref.c_str());
-
-    size_t wrapperSize = 0;
-    if (getItemSize(opfParser.guideCoverPageHref, &wrapperSize) && wrapperSize > MAX_GUIDE_COVER_WRAPPER_SIZE) {
-      LOG_ERR(TAG, "Guide cover wrapper too large (%zu > %zu), skipping", wrapperSize, MAX_GUIDE_COVER_WRAPPER_SIZE);
-    } else {
-      size_t coverPageSize;
-      uint8_t* coverPageData = readItemContentsToBytes(opfParser.guideCoverPageHref, &coverPageSize, true);
-      if (coverPageData) {
-        const std::string coverPageHtml(reinterpret_cast<const char*>(coverPageData), coverPageSize);
-        free(coverPageData);
-
-        std::string coverPageBase;
-        const auto lastSlash = opfParser.guideCoverPageHref.rfind('/');
-        if (lastSlash != std::string::npos) {
-          coverPageBase = opfParser.guideCoverPageHref.substr(0, lastSlash + 1);
-        }
-
-        std::string imageRef;
-        for (const char* pattern : {"xlink:href=\"", "src=\""}) {
-          const size_t patternLen = strlen(pattern);
-          auto pos = coverPageHtml.find(pattern);
-          while (pos != std::string::npos) {
-            pos += patternLen;
-            const auto endPos = coverPageHtml.find('"', pos);
-            if (endPos == std::string::npos) break;
-            auto ref = coverPageHtml.substr(pos, endPos - pos);
-            ref = ref.substr(0, ref.find_first_of("?#"));
-            if (FsHelpers::isJpegFile(ref) || FsHelpers::isPngFile(ref)) {
-              imageRef = std::move(ref);
-              break;
-            }
-            pos = coverPageHtml.find(pattern, endPos);
-          }
-          if (!imageRef.empty()) break;
-        }
-
-        if (!imageRef.empty()) {
-          bookMetadata.coverItemHref = FsHelpers::normalisePath(coverPageBase + imageRef);
-          LOG_INF(TAG, "Found cover image from guide: %s", bookMetadata.coverItemHref.c_str());
-        }
-      }
-    }
-  }
 
   if (!opfParser.tocNcxPath.empty()) {
     tocNcxItem = opfParser.tocNcxPath;
@@ -482,6 +516,7 @@ bool Epub::load(const bool buildIfMissing) {
       }
     }
     LOG_INF(TAG, "Loaded ePub: %s", filepath.c_str());
+    migrateCoverFailures(cachePath);
     return true;
   }
 
@@ -568,6 +603,7 @@ bool Epub::load(const bool buildIfMissing) {
     return false;
   }
 
+  migrateCoverFailures(cachePath);
   LOG_INF(TAG, "Loaded ePub: %s", filepath.c_str());
   return true;
 }
@@ -784,37 +820,134 @@ std::string Epub::findCoverImage(const std::function<bool()>& shouldAbort) const
 
 home_thumbnail::Result Epub::extractCoverSource(const std::string& itemHref,
                                                 const std::function<bool()>& shouldAbort) const {
-  setupCacheDir();
+  if (CoverHelpers::isAbortRequested(shouldAbort)) return home_thumbnail::Result::Cancelled;
+  size_t size = 0;
+  if (itemHref.empty() || !getItemSize(itemHref, &size) || size == 0 || size > MAX_COVER_IMAGE_SIZE) {
+    return home_thumbnail::Result::Unavailable;
+  }
   const std::string sourcePath = cachePath + "/.cover-source.tmp";
   SdMan.remove(sourcePath.c_str());
 
   FsFile output;
   if (!SdMan.openFileForWrite("EBP", sourcePath, output)) return home_thumbnail::Result::Unavailable;
   const bool extracted = readItemContentsToStream(itemHref, output, 1024, nullptr, nullptr, shouldAbort);
+  const bool synced = extracted && output.sync();
   output.close();
 
   if (CoverHelpers::isAbortRequested(shouldAbort)) {
     SdMan.remove(sourcePath.c_str());
     return home_thumbnail::Result::Cancelled;
   }
-  if (!extracted || ImageConverterFactory::detectFormat(sourcePath) == ImageFormat::Unknown) {
+  if (!synced || ImageConverterFactory::detectFormat(sourcePath) == ImageFormat::Unknown) {
     SdMan.remove(sourcePath.c_str());
     return home_thumbnail::Result::Unavailable;
   }
   return home_thumbnail::Result::Ready;
 }
 
-home_thumbnail::Result Epub::prepareCoverSource(std::string& sourcePath, bool& temporary,
-                                                const std::function<bool()>& shouldAbort) const {
-  temporary = false;
-  sourcePath = findCoverImage(shouldAbort);
-  if (CoverHelpers::isAbortRequested(shouldAbort)) return home_thumbnail::Result::Cancelled;
-  if (!sourcePath.empty()) return home_thumbnail::Result::Ready;
+bool Epub::generateCoverFromItem(const std::string& itemHref, const bool use1BitDithering,
+                                 const std::function<bool()>& shouldAbort) const {
+  const std::string href = coverHref("", itemHref);
+  if (href.empty() || CoverHelpers::isAbortRequested(shouldAbort)) return false;
+  const std::string sourcePath = cachePath + "/.cover-source.tmp";
+  const auto convert = [&](const std::string& candidate) {
+    if (extractCoverSource(candidate, shouldAbort) != home_thumbnail::Result::Ready) return false;
+    const bool success =
+        CoverHelpers::convertImageToBmp(sourcePath, getCoverBmpPath(), "EBP", use1BitDithering, shouldAbort);
+    SdMan.remove(sourcePath.c_str());
+    return success;
+  };
+  if (convert(href)) return true;
+  if (CoverHelpers::isAbortRequested(shouldAbort)) return false;
 
+  size_t size = 0;
+  if (!getItemSize(href, &size) || size == 0 || size > MAX_COVER_WRAPPER_SIZE) return false;
+  CoverLinkParser wrapper(size, false);
+  if (!wrapper.setup() || !readItemContentsToStream(href, wrapper, 1024, nullptr, nullptr, shouldAbort) ||
+      !wrapper.complete())
+    return false;
+
+  struct Candidate {
+    size_t index;
+    uint32_t area;
+  };
+  std::array<Candidate, MAX_COVER_LINKS> candidates;
+  size_t count = 0;
+  const auto& links = wrapper.links();
+  for (size_t i = 0; i < links.size() && count < candidates.size(); ++i) {
+    const std::string candidate = coverHref(href, links[i]);
+    const auto result = extractCoverSource(candidate, shouldAbort);
+    if (result == home_thumbnail::Result::Cancelled) return false;
+    if (result != home_thumbnail::Result::Ready) continue;
+    const uint32_t area = coverImageArea(sourcePath, shouldAbort);
+    SdMan.remove(sourcePath.c_str());
+    if (area) candidates[count++] = {i, area};
+  }
+  std::sort(candidates.begin(), candidates.begin() + count, [](const Candidate& a, const Candidate& b) {
+    return a.area != b.area ? a.area > b.area : a.index < b.index;
+  });
+  for (size_t i = 0; i < count; ++i) {
+    if (CoverHelpers::isAbortRequested(shouldAbort)) return false;
+    if (convert(coverHref(href, links[candidates[i].index]))) return true;
+  }
+  return false;
+}
+
+bool Epub::generateCoverBmp(const bool use1BitDithering, const std::function<bool()>& shouldAbort) const {
+  if (CoverHelpers::isAbortRequested(shouldAbort)) return false;
   setupCacheDir();
-  const std::string temporarySource = cachePath + "/.cover-source.tmp";
-  SdMan.remove(temporarySource.c_str());
+  migrateCoverFailures(cachePath);
+  const std::string coverPath = getCoverBmpPath();
+  if (home_thumbnail::validateCover(coverPath)) return true;
+  if (SdMan.exists(coverPath.c_str())) SdMan.remove(coverPath.c_str());
+  const auto finish = [&]() {
+    if (CoverHelpers::isAbortRequested(shouldAbort)) {
+      SdMan.remove(coverPath.c_str());
+      return false;
+    }
+    if (!home_thumbnail::validateCover(coverPath)) return false;
+    SdMan.remove((cachePath + "/.thumb.failed").c_str());
+    return true;
+  };
+  const std::string sidecar = findCoverImage(shouldAbort);
+  if (!sidecar.empty()) {
+    return CoverHelpers::convertImageToBmp(sidecar, coverPath, "EBP", use1BitDithering, shouldAbort) && finish();
+  }
+  if (CoverHelpers::isAbortRequested(shouldAbort)) return false;
 
+  std::string opfPath;
+  size_t opfSize = 0;
+  if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) >= MIN_HEAP_FOR_TOC && findContentOpfFile(&opfPath) &&
+      getItemSize(opfPath, &opfSize)) {
+    const std::string basePath = opfPath.substr(0, opfPath.find_last_of('/') + 1);
+    ContentOpfParser opf(cachePath, basePath, opfSize, nullptr);
+    if (opf.setup() && readItemContentsToStream(opfPath, opf, 1024, nullptr, nullptr, shouldAbort)) {
+      const std::string* explicitTargets[] = {&opf.coverImageHref, &opf.coverItemHref, &opf.guideCoverPageHref};
+      for (size_t i = 0; i < 3; ++i) {
+        bool duplicate = false;
+        for (size_t j = 0; j < i; ++j) duplicate |= *explicitTargets[i] == *explicitTargets[j];
+        if (!duplicate && generateCoverFromItem(*explicitTargets[i], use1BitDithering, shouldAbort)) return finish();
+        if (CoverHelpers::isAbortRequested(shouldAbort)) return false;
+      }
+      const std::string navPath = coverHref("", opf.tocNavPath);
+      size_t navSize = 0;
+      if (!navPath.empty() && getItemSize(navPath, &navSize) && navSize <= MAX_COVER_WRAPPER_SIZE) {
+        CoverLinkParser landmarks(navSize, true);
+        if (landmarks.setup() && readItemContentsToStream(navPath, landmarks, 1024, nullptr, nullptr, shouldAbort) &&
+            landmarks.complete()) {
+          for (const auto& link : landmarks.links()) {
+            if (generateCoverFromItem(coverHref(navPath, link), use1BitDithering, shouldAbort)) return finish();
+            if (CoverHelpers::isAbortRequested(shouldAbort)) return false;
+          }
+        }
+      }
+      if (opf.coverIdHref != opf.coverImageHref && opf.coverIdHref != opf.coverItemHref &&
+          opf.coverIdHref != opf.guideCoverPageHref &&
+          generateCoverFromItem(opf.coverIdHref, use1BitDithering, shouldAbort))
+        return finish();
+    }
+  }
+  if (CoverHelpers::isAbortRequested(shouldAbort)) return false;
   static const char* const commonCoverPaths[] = {
       "cover.jpg",
       "cover.jpeg",
@@ -866,66 +999,16 @@ home_thumbnail::Result Epub::prepareCoverSource(std::string& sourcePath, bool& t
       "EPUB/Images/cover.bmp",
   };
 
-  const int foundIndex = ZipFile(filepath).findFirstExisting(
-      commonCoverPaths, sizeof(commonCoverPaths) / sizeof(commonCoverPaths[0]), shouldAbort);
-  if (CoverHelpers::isAbortRequested(shouldAbort)) return home_thumbnail::Result::Cancelled;
-  if (foundIndex >= 0) {
-    const auto result = extractCoverSource(commonCoverPaths[foundIndex], shouldAbort);
-    if (result == home_thumbnail::Result::Ready) {
-      sourcePath = temporarySource;
-      temporary = true;
-      return result;
-    }
-    if (result == home_thumbnail::Result::Cancelled) return result;
+  constexpr int pathCount = sizeof(commonCoverPaths) / sizeof(commonCoverPaths[0]);
+  for (int start = 0; start < pathCount;) {
+    const int found = ZipFile(filepath).findFirstExisting(commonCoverPaths + start, pathCount - start, shouldAbort);
+    if (found < 0 || CoverHelpers::isAbortRequested(shouldAbort)) break;
+    start += found;
+    if (generateCoverFromItem(commonCoverPaths[start], use1BitDithering, shouldAbort)) return finish();
+    ++start;
   }
-
-  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) return home_thumbnail::Result::Unavailable;
-  const std::string coverHref = bookMetadataCache->coreMetadata.coverItemHref;
-  if (coverHref.empty()) return home_thumbnail::Result::Unavailable;
-
-  const auto result = extractCoverSource(coverHref, shouldAbort);
-  if (result == home_thumbnail::Result::Ready) {
-    sourcePath = temporarySource;
-    temporary = true;
-  }
-  return result;
-}
-
-bool Epub::generateCoverBmp(const bool use1BitDithering, const std::function<bool()>& shouldAbort) const {
-  const std::string coverPath = getCoverBmpPath();
-  const std::string failedMarkerPath = cachePath + "/.cover.failed";
-  if (home_thumbnail::validateCover(coverPath)) {
-    SdMan.remove(failedMarkerPath.c_str());
-    return true;
-  }
-  if (SdMan.exists(coverPath.c_str())) SdMan.remove(coverPath.c_str());
-  if (SdMan.exists(failedMarkerPath.c_str())) return false;
-
-  std::string sourcePath;
-  bool temporary = false;
-  const auto sourceResult = prepareCoverSource(sourcePath, temporary, shouldAbort);
-  if (sourceResult != home_thumbnail::Result::Ready) {
-    if (sourceResult == home_thumbnail::Result::Unavailable) {
-      FsFile marker;
-      if (SdMan.openFileForWrite("EBP", failedMarkerPath, marker)) marker.close();
-    }
-    return false;
-  }
-
-  const bool converted = CoverHelpers::convertImageToBmp(sourcePath, coverPath, "EBP", use1BitDithering, shouldAbort);
-  if (temporary) SdMan.remove(sourcePath.c_str());
-
-  const bool cancelled = CoverHelpers::isAbortRequested(shouldAbort);
-  const bool success = converted && !cancelled && home_thumbnail::validateCover(coverPath);
-  if (cancelled) {
-    SdMan.remove(coverPath.c_str());
-  } else if (!success) {
-    FsFile marker;
-    if (SdMan.openFileForWrite("EBP", failedMarkerPath, marker)) marker.close();
-  } else {
-    SdMan.remove(failedMarkerPath.c_str());
-  }
-  return success;
+  SdMan.remove((cachePath + "/.cover-source.tmp").c_str());
+  return false;
 }
 
 uint8_t* Epub::readItemContentsToBytes(const std::string& itemHref, size_t* size, const bool trailingNullByte) const {
