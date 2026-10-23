@@ -50,7 +50,7 @@ class GrayscaleRowScaler {
   uint32_t currentSrcY_ = 0;
   uint32_t currentOutY_ = 0;
   std::unique_ptr<uint32_t[]> rowAccum_;
-  std::unique_ptr<uint16_t[]> rowCount_;
+  std::unique_ptr<uint32_t[]> rowCount_;
   std::unique_ptr<uint8_t[]> meanRow_;
 };
 

@@ -50,6 +50,7 @@ class FsFile : public Print {
     writeLimitActive_ = false;
     syncResult_ = true;
     seekEndResult_ = true;
+    seeksRemaining_ = SIZE_MAX;
     failBufferReadAfterActive_ = false;
     hasModifyDateTime_ = false;
   }
@@ -70,6 +71,7 @@ class FsFile : public Print {
     writeLimitActive_ = false;
     syncResult_ = true;
     seekEndResult_ = true;
+    seeksRemaining_ = SIZE_MAX;
     hasModifyDateTime_ = false;
     failBufferReadAfterActive_ = false;
   }
@@ -202,7 +204,11 @@ class FsFile : public Print {
 
   size_t position() const { return pos_; }
 
+  void setFailSeekAfter(size_t successfulCalls) { seeksRemaining_ = successfulCalls; }
+
   bool seek(size_t pos) {
+    if (seeksRemaining_ == 0) return false;
+    if (seeksRemaining_ != SIZE_MAX) --seeksRemaining_;
     if (pos > buffer_.size()) return false;
     pos_ = pos;
     return true;
@@ -316,6 +322,7 @@ class FsFile : public Print {
   size_t totalWritten_ = 0;
   bool syncResult_ = true;
   bool seekEndResult_ = true;
+  size_t seeksRemaining_ = SIZE_MAX;
   uint16_t modifyDate_ = 0;
   uint16_t modifyTime_ = 0;
   bool hasModifyDateTime_ = false;

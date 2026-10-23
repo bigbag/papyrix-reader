@@ -257,7 +257,7 @@ GrayscaleRowScaler::GrayscaleRowScaler(const int srcWidth, const int srcHeight, 
     needsScaling_ = true;
 
     rowAccum_.reset(new (std::nothrow) uint32_t[outW_]());
-    rowCount_.reset(new (std::nothrow) uint16_t[outW_]());
+    rowCount_.reset(new (std::nothrow) uint32_t[outW_]());
     meanRow_.reset(new (std::nothrow) uint8_t[outW_]());
     if (!rowAccum_ || !rowCount_ || !meanRow_) {
       rowAccum_.reset();
@@ -315,7 +315,7 @@ bool GrayscaleRowScaler::accumulate(const uint8_t* grayRow, const std::function<
       continue;  // upscaling: next output row reuses this source row's data
     }
     memset(rowAccum_.get(), 0, static_cast<size_t>(outW_) * sizeof(uint32_t));
-    memset(rowCount_.get(), 0, static_cast<size_t>(outW_) * sizeof(uint16_t));
+    memset(rowCount_.get(), 0, static_cast<size_t>(outW_) * sizeof(uint32_t));
   }
 
   return true;

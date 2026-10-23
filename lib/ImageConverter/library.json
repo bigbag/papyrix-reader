@@ -6,6 +6,8 @@
     "JpegToBmpConverter": "*",
     "PngToBmpConverter": "*",
     "FsHelpers": "*",
+    "ProgressiveJpeg": "*",
+    "BoardSupport": "*",
     "SDCardManager": "*"
   },
   "platforms": "espressif32",

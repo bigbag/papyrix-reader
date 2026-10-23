@@ -8,6 +8,10 @@
 #define TAG "IMG_CONV"
 #include <PngToBmpConverter.h>
 #include <SDCardManager.h>
+#include <TargetConfig.h>
+#if PAPYRIX_CAP_PROGRESSIVE_JPEG
+#include "ProgressiveJpegImageConverter.h"
+#endif
 #include <esp_heap_caps.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -64,7 +68,7 @@ class BmpImageConverter : public ImageConverter {
     const size_t rawRowBytes = static_cast<size_t>(bitmap.getRowBytes());
     const size_t grayBytes = static_cast<size_t>(bitmap.getWidth());
     const size_t required = grayBytes + rawRowBytes + static_cast<size_t>(outRowBytes) +
-                            (scaler.needsScaling() ? static_cast<size_t>(outW) * 7 : 0);
+                            (scaler.needsScaling() ? static_cast<size_t>(outW) * 9 : 0);
     const size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
     if (required > 1024 && required > largest * 80 / 100) {
       LOG_ERR(config.logTag, "Insufficient heap for BMP conversion");
@@ -137,6 +141,38 @@ JpegImageConverter jpegConverter;
 PngImageConverter pngConverter;
 BmpImageConverter bmpConverter;
 
+#if PAPYRIX_CAP_PROGRESSIVE_JPEG
+ProgressiveJpegImageConverter progressiveConverter;
+
+ImageConverter* selectJpegConverter(FsFile& input, const std::function<bool()>& shouldAbort) {
+  const auto entry = input.position();
+  auto finish = [&](ImageConverter* converter) { return input.seek(entry) ? converter : nullptr; };
+  if (!input.seek(0) || input.read() != 0xFF || input.read() != 0xD8) return finish(nullptr);
+  for (;;) {
+    if (shouldAbort && shouldAbort()) return finish(nullptr);
+    if (input.read() != 0xFF) return finish(nullptr);
+    int marker;
+    do {
+      if (shouldAbort && shouldAbort()) return finish(nullptr);
+      marker = input.read();
+    } while (marker == 0xFF);
+    if (marker < 0 || marker == 0 || marker == 0xD8 || marker == 0xD9 || marker == 0xDA || marker == 0x01 ||
+        (marker >= 0xD0 && marker <= 0xD7))
+      return finish(nullptr);
+    const int hi = input.read(), lo = input.read();
+    if (hi < 0 || lo < 0) return finish(nullptr);
+    const unsigned length = (hi << 8) | lo;
+    const auto position = input.position();
+    if (length < 2 || position > input.size() || length - 2 > input.size() - position) return finish(nullptr);
+    if (marker == 0xC0 || marker == 0xC1) return finish(&jpegConverter);
+    if (marker == 0xC2) return finish(&progressiveConverter);
+    if ((marker >= 0xC3 && marker <= 0xCF && marker != 0xC4 && marker != 0xC8 && marker != 0xCC) || marker == 0xCC)
+      return finish(nullptr);
+    if (!input.seek(position + length - 2)) return finish(nullptr);
+  }
+}
+#endif
+
 ImageFormat detectFormat(FsFile& file) {
   const auto originalPosition = file.position();
   if (!file.seek(0)) return ImageFormat::Unknown;
@@ -199,14 +235,18 @@ bool ImageConverterFactory::convertToBmp(const std::string& inputPath, const std
     return false;
   }
 
-  ImageConverter* converter = converterForFormat(::detectFormat(inputFile));
+  const ImageFormat format = ::detectFormat(inputFile);
+  ImageConverter* converter = converterForFormat(format);
+#if PAPYRIX_CAP_PROGRESSIVE_JPEG
+  if (format == ImageFormat::Jpeg) converter = selectJpegConverter(inputFile, config.shouldAbort);
+#endif
   if (!converter) {
     inputFile.close();
     LOG_ERR(config.logTag, "Unsupported image format: %s", inputPath.c_str());
     return false;
   }
 
-  // Atomic publish: convert to .part then rename so readers never see a half-written BMP.
+  // Convert into a temporary file before replacement.
   const std::string partPath = outputPath + ".part";
   SdMan.remove(partPath.c_str());
 
@@ -217,7 +257,7 @@ bool ImageConverterFactory::convertToBmp(const std::string& inputPath, const std
     return false;
   }
 
-  const bool success = converter->convert(inputFile, outputFile, config);
+  const bool success = converter->convert(inputFile, outputFile, config) && outputFile.sync();
 
   inputFile.close();
   outputFile.close();

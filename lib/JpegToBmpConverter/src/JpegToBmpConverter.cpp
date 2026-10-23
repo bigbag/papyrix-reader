@@ -93,46 +93,6 @@ void writeBmpHeader8bit(Print& bmpOut, const int width, const int height) {
   }
 }
 
-// Helper function: Write BMP header with 2-bit color depth
-static void writeBmpHeader2bit(Print& bmpOut, const int width, const int height) {
-  // Calculate row padding (each row must be multiple of 4 bytes)
-  const int bytesPerRow = (width * 2 + 31) / 32 * 4;  // 2 bits per pixel, round up
-  const int imageSize = bytesPerRow * height;
-  const uint32_t fileSize = 70 + imageSize;  // 14 (file header) + 40 (DIB header) + 16 (palette) + image
-
-  // BMP File Header (14 bytes)
-  bmpOut.write('B');
-  bmpOut.write('M');
-  write32(bmpOut, fileSize);  // File size
-  write32(bmpOut, 0);         // Reserved
-  write32(bmpOut, 70);        // Offset to pixel data
-
-  // DIB Header (BITMAPINFOHEADER - 40 bytes)
-  write32(bmpOut, 40);
-  write32Signed(bmpOut, width);
-  write32Signed(bmpOut, -height);  // Negative height = top-down bitmap
-  write16(bmpOut, 1);              // Color planes
-  write16(bmpOut, 2);              // Bits per pixel (2 bits)
-  write32(bmpOut, 0);              // BI_RGB (no compression)
-  write32(bmpOut, imageSize);
-  write32(bmpOut, 2835);  // xPixelsPerMeter (72 DPI)
-  write32(bmpOut, 2835);  // yPixelsPerMeter (72 DPI)
-  write32(bmpOut, 4);     // colorsUsed
-  write32(bmpOut, 4);     // colorsImportant
-
-  // Color Palette (4 colors x 4 bytes = 16 bytes)
-  // Format: Blue, Green, Red, Reserved (BGRA)
-  uint8_t palette[16] = {
-      0x00, 0x00, 0x00, 0x00,  // Color 0: Black
-      0x55, 0x55, 0x55, 0x00,  // Color 1: Dark gray (85)
-      0xAA, 0xAA, 0xAA, 0x00,  // Color 2: Light gray (170)
-      0xFF, 0xFF, 0xFF, 0x00   // Color 3: White
-  };
-  for (const uint8_t i : palette) {
-    bmpOut.write(i);
-  }
-}
-
 // JPEG SOF markers - detect unsupported encoding types
 // SOF0 (0xC0) = Baseline DCT (supported)
 // SOF1 (0xC1) = Extended sequential DCT (supported)
@@ -306,7 +266,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
     if (!write1BitBmpHeader(bmpOut, outWidth, outHeight)) return false;
     bytesPerRow = (outWidth + 31) / 32 * 4;  // 1 bit per pixel
   } else {
-    writeBmpHeader2bit(bmpOut, outWidth, outHeight);
+    if (!write2BitBmpHeader(bmpOut, outWidth, outHeight)) return false;
     bytesPerRow = (outWidth * 2 + 31) / 32 * 4;
   }
 
@@ -329,7 +289,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
     return false;
   }
 
-  const size_t totalWorkingSet = mcuRowPixels + (needsScaling ? outWidth * 6 : 0) + 2048;
+  const size_t totalWorkingSet = mcuRowPixels + (needsScaling ? outWidth * 8 : 0) + 2048;
   constexpr size_t HEAP_RESERVE = 20 * 1024;
   const size_t availableHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
   if (totalWorkingSet + HEAP_RESERVE > availableHeap) {
@@ -380,14 +340,14 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   // For scaling: accumulate source rows into scaled output rows
   // We need to track which source Y maps to which output Y
   // Using fixed-point: srcY_fp = outY * scaleY_fp (gives source Y in 16.16 format)
-  uint32_t* rowAccum = nullptr;    // Accumulator for each output X (32-bit for larger sums)
-  uint16_t* rowCount = nullptr;    // Count of source pixels accumulated per output X
+  uint32_t* rowAccum = nullptr;  // Accumulator for each output X (32-bit for larger sums)
+  uint32_t* rowCount = nullptr;
   int currentOutY = 0;             // Current output row being accumulated
   uint32_t nextOutY_srcStart = 0;  // Source Y where next output row starts (16.16 fixed point)
 
   if (needsScaling) {
     rowAccum = new (std::nothrow) uint32_t[outWidth]();
-    rowCount = new (std::nothrow) uint16_t[outWidth]();
+    rowCount = new (std::nothrow) uint32_t[outWidth]();
     if (!rowAccum || !rowCount) {
       delete[] rowAccum;
       delete[] rowCount;
@@ -404,7 +364,8 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   // Process MCUs row-by-row and write to BMP as we go (top-down)
   const int mcuPixelWidth = imageInfo.m_MCUWidth;
 
-  for (int mcuY = 0; mcuY < imageInfo.m_MCUSPerCol; mcuY++) {
+  bool writeOk = true;
+  for (int mcuY = 0; mcuY < imageInfo.m_MCUSPerCol && writeOk; mcuY++) {
     if (shouldAbort && shouldAbort()) {
       LOG_INF(TAG, "Abort requested during JPEG conversion");
       if (rowAccum) delete[] rowAccum;
@@ -478,7 +439,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
     const int startRow = mcuY * mcuPixelHeight;
     const int endRow = (mcuY + 1) * mcuPixelHeight;
 
-    for (int y = startRow; y < endRow && y < imageInfo.m_height; y++) {
+    for (int y = startRow; y < endRow && y < imageInfo.m_height && writeOk; y++) {
       const int bufferY = y - startRow;
 
       if (!needsScaling) {
@@ -523,7 +484,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
           else if (fsDitherer)
             fsDitherer->nextRow();
         }
-        bmpOut.write(rowBuffer, bytesPerRow);
+        writeOk = bmpOut.write(rowBuffer, bytesPerRow) == static_cast<size_t>(bytesPerRow);
       } else {
         // Fixed-point area averaging for exact fit scaling
         // For each output pixel X, accumulate source pixels that map to it
@@ -557,7 +518,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
         // For upscaling, one source row may produce multiple output rows.
         const uint32_t srcY_fp = static_cast<uint32_t>(y + 1) << 16;
 
-        while (srcY_fp >= nextOutY_srcStart && currentOutY < outHeight) {
+        while (srcY_fp >= nextOutY_srcStart && currentOutY < outHeight && writeOk) {
           memset(rowBuffer, 0, bytesPerRow);
 
           if (USE_8BIT_OUTPUT && !oneBit) {
@@ -599,7 +560,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
               fsDitherer->nextRow();
           }
 
-          bmpOut.write(rowBuffer, bytesPerRow);
+          writeOk = bmpOut.write(rowBuffer, bytesPerRow) == static_cast<size_t>(bytesPerRow);
           currentOutY++;
 
           nextOutY_srcStart = static_cast<uint32_t>(currentOutY + 1) * scaleY_fp;
@@ -610,7 +571,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
             continue;
           }
           memset(rowAccum, 0, outWidth * sizeof(uint32_t));
-          memset(rowCount, 0, outWidth * sizeof(uint16_t));
+          memset(rowCount, 0, outWidth * sizeof(uint32_t));
         }
       }
     }
@@ -635,7 +596,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   free(mcuRowBuffer);
   free(rowBuffer);
 
-  if (context.aborted || (shouldAbort && shouldAbort())) return false;
+  if (!writeOk || context.aborted || (shouldAbort && shouldAbort())) return false;
   LOG_INF(TAG, "Successfully converted JPEG to BMP");
   return true;
 }

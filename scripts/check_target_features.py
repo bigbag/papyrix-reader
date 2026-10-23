@@ -24,6 +24,7 @@ GROUPS = {
     "X4ProVariant placeholder": re.compile(r"X4ProVariant"),
     "frontlight symbols": re.compile(r"FrontLightBackend::"),
     "Pro touch board symbols": re.compile(r"::x4pro::"),
+    "progressive JPEG symbols": re.compile(r"ProgressiveJpeg::|ProgressiveJpegImageConverter"),
 }
 
 FORBIDDEN_GROUP_NAMES = {
@@ -35,6 +36,7 @@ FORBIDDEN_GROUP_NAMES = {
         "swipe gesture symbols",
         "Bluetooth symbols",
         "X4ProVariant placeholder",
+        "progressive JPEG symbols",
     ),
     "x4pro": (
         "PaperMono board symbols",

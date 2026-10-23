@@ -19,25 +19,21 @@ EPUB HTML → ChapterHtmlSlimParser → ImageConverter → BMP Cache → GfxRend
 
 ## Supported Formats
 
-- **JPEG** (`.jpg`, `.jpeg`) — Baseline only (see below)
+- **JPEG** (`.jpg`, `.jpeg`) — Baseline on all devices; progressive on X4 Pro and X4 v2 Classic
 - **PNG** (`.png`) — Transparency shown as opaque
 - **BMP** (`.bmp`) — Direct display. No conversion is necessary.
 
-Format detection is case-insensitive.
+The converter detects the format from the file contents.
 
 ### JPEG Encoding Support
 
-The picojpeg decoder supports:
-- **Baseline DCT** (SOF0) — Standard one-pass JPEG
-- **Extended sequential DCT** (SOF1) — Extended baseline
+All devices support baseline DCT (SOF0) and extended sequential DCT (SOF1).
 
-**Not supported** (shown as a placeholder):
-- **Progressive DCT** (SOF2) — Multi-pass progressive JPEG
-- **Arithmetic coding** (SOF9, SOF10) — Not used frequently
+X4 Pro and X4 v2 Classic also support progressive DCT (SOF2). Progressive images must use 8-bit grayscale or YCbCr samples. The compressed file must not exceed 512 KiB. Conversion requires sufficient PSRAM.
 
-The firmware finds progressive JPEGs. It scans for SOF markers before decode. If it finds one, it skips the image and shows a placeholder.
+X3 and original X4 show a placeholder for progressive JPEGs. All devices reject arithmetic-coded JPEGs. Unsupported or damaged images show a placeholder.
 
-To convert progressive JPEGs to baseline, use tools such as ImageMagick:
+To convert a progressive JPEG to baseline for X3 or original X4, use ImageMagick:
 ```bash
 convert progressive.jpg -interlace none baseline.jpg
 ```
@@ -82,7 +78,7 @@ Images are shown when all these conditions are true:
 - **`showImages` disabled** — User preference
 - **Empty/malformed source** — Invalid HTML
 - **Data URI source** — Memory protection (see below)
-- **Progressive/arithmetic JPEG** — picojpeg limitation
+- **Unsupported JPEG encoding** — Progressive on X3 or original X4; arithmetic coding on all devices
 - **File not found** — Missing from the EPUB archive
 - **Conversion failure** — Damaged file or I/O error
 - **Insufficient memory** — Less than 8KB free heap

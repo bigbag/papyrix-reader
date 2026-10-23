@@ -217,7 +217,12 @@ git submodule update --init --recursive
 
 ### Building
 
+Run host tests before you build firmware. Host tests require CMake 3.16 or later, Make, C and C++17 compilers, and the Expat development library. CMake downloads pngle 1.0.2 and checks its archive hash on the first configuration. The download requires network access. CMake keeps the source in `test/build/_deps` for later builds. Host tests do not require PlatformIO packages.
+
 ```sh
+# Build and run host tests
+make test
+
 # Build development firmware for X3/X4
 make build
 

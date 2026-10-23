@@ -175,7 +175,7 @@ void pngInitCallback(pngle_t* pngle, uint32_t w, uint32_t h) {
 
   // Allocate buffers
   ctx->bytesPerRow = ctx->oneBit ? (ctx->outWidth + 31) / 32 * 4 : (ctx->outWidth * 2 + 31) / 32 * 4;
-  const size_t scalingBytes = ctx->needsScaling ? static_cast<size_t>(ctx->outWidth) * 7 : 0;
+  const size_t scalingBytes = ctx->needsScaling ? static_cast<size_t>(ctx->outWidth) * 9 : 0;
   const size_t ditherBytes = static_cast<size_t>(ctx->outWidth + 4) * sizeof(int16_t) * 3;
   const size_t requiredBytes =
       static_cast<size_t>(w) + static_cast<size_t>(ctx->bytesPerRow) + scalingBytes + ditherBytes;

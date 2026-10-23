@@ -136,6 +136,11 @@ def main():
         listing = write_listing(tmp, "good_x4c.txt", GOOD_X4C)
         failed |= not expect_pass("Classic permits shared S3 panel drivers", listing, "x4c")
 
+        for symbol in ("ProgressiveJpeg::decode(FsFile&)", "vtable for ProgressiveJpegImageConverter"):
+            listing = write_listing(tmp, "progressive.txt", f"1000abcd T {symbol}\n")
+            failed |= not expect_forbidden("C3 rejects progressive decoding", listing, "default", "progressive JPEG symbols")
+            failed |= not expect_pass("Pro permits progressive decoding", listing, "x4pro")
+            failed |= not expect_pass("Classic permits progressive decoding", listing, "x4c")
 
         for target, bad in (
             ("default", BAD_DEFAULT),

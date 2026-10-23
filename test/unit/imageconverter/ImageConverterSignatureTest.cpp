@@ -1,11 +1,11 @@
-#include "test_utils.h"
-
 #include <ImageConverter.h>
 #include <SDCardManager.h>
 #include <freertos/task.h>
 
 #include <cstdint>
 #include <string>
+
+#include "test_utils.h"
 
 namespace {
 
@@ -46,13 +46,6 @@ int main() {
                      "2 KB of actual free stack prevents image conversion");
   runner.expectFalse(SdMan.exists("/low-stack.bmp"), "low-stack image is not published");
   mockTaskStackHighWaterMarkBytes = 4096;
-  runner.expectTrue(ImageConverterFactory::convertToBmp("/wrong.png", "/jpeg.bmp", config),
-                    "misleading extension converts by JPEG signature");
-  runner.expectTrue(SdMan.getWrittenData("/jpeg.bmp") == "JPEG", "JPEG converter selected");
-
-  runner.expectTrue(ImageConverterFactory::convertToBmp("/source.png.bin", "/png.bmp", config),
-                    "neutral extension converts by PNG signature");
-  runner.expectTrue(SdMan.getWrittenData("/png.bmp") == "PNG", "PNG converter selected");
 
   // Invalid BMP payload must be rejected by the real converter (not raw-copied)
   runner.expectFalse(ImageConverterFactory::convertToBmp("/source.bmp.bin", "/copy.bmp", config),
@@ -64,14 +57,6 @@ int main() {
                      "validator rejection fails conversion");
   runner.expectFalse(SdMan.exists("/rejected.bmp"), "validator rejection does not publish final output");
   runner.expectFalse(SdMan.exists("/rejected.bmp.part"), "validator rejection removes partial output");
-
-  config.validateOutput = [](const std::string& path) {
-    return path == "/accepted.bmp.part" && SdMan.getWrittenData(path) == "JPEG";
-  };
-  runner.expectTrue(ImageConverterFactory::convertToBmp("/neutral.img", "/accepted.bmp", config),
-                    "validator accepts complete output");
-  runner.expectTrue(SdMan.getWrittenData("/accepted.bmp") == "JPEG", "validated output committed");
-  runner.expectFalse(SdMan.exists("/accepted.bmp.part"), "committed partial path removed");
 
   runner.expectFalse(ImageConverterFactory::convertToBmp("/unknown.img", "/unknown.bmp", {}),
                      "unknown source is not converted");

@@ -61,6 +61,7 @@ inline constexpr bool kTargetHasVerifiedPanelDriver = true;
 // These macros control which backend source files enter each artifact.
 // The C3 values combine X3 and X4 because the artifact selects the board at runtime.
 #if PAPYRIX_TARGET_XTEINK_C3
+#define PAPYRIX_CAP_PROGRESSIVE_JPEG 0
 #define PAPYRIX_CAP_TOUCH 0
 #define PAPYRIX_CAP_FRONTLIGHT 0
 #define PAPYRIX_CAP_RTC 1
@@ -70,6 +71,7 @@ inline constexpr bool kTargetHasVerifiedPanelDriver = true;
 #define PAPYRIX_CAP_BATTERY_BQ27220 1
 #define PAPYRIX_CAP_BATTERY_CW2017 0
 #elif PAPYRIX_TARGET_X4PRO
+#define PAPYRIX_CAP_PROGRESSIVE_JPEG 1
 #define PAPYRIX_CAP_TOUCH 1
 #define PAPYRIX_CAP_FRONTLIGHT 1
 #define PAPYRIX_CAP_RTC 1
@@ -79,6 +81,7 @@ inline constexpr bool kTargetHasVerifiedPanelDriver = true;
 #define PAPYRIX_CAP_BATTERY_BQ27220 0
 #define PAPYRIX_CAP_BATTERY_CW2017 1
 #elif PAPYRIX_TARGET_X4CLASSIC
+#define PAPYRIX_CAP_PROGRESSIVE_JPEG 1
 #define PAPYRIX_CAP_TOUCH 0
 #define PAPYRIX_CAP_FRONTLIGHT 0
 #define PAPYRIX_CAP_RTC 1

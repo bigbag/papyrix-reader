@@ -66,6 +66,42 @@ file(GLOB_RECURSE TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp)
 foreach(TEST_SRC ${TEST_SOURCES})
   get_filename_component(TEST_NAME ${TEST_SRC} NAME_WE)
 
+  if(TEST_NAME STREQUAL "ProgressiveJpegFactoryTest")
+    include(FetchContent)
+    if(POLICY CMP0135)
+      cmake_policy(SET CMP0135 NEW)
+    endif()
+    # Match the firmware's pngle 1.0.2 dependency.
+    FetchContent_Declare(pngle
+      URL https://codeload.github.com/kikuchan/pngle/tar.gz/745944757fc3f7c75cc65bdd197ef20aa30ad72a
+      URL_HASH SHA256=3c0e6c5a4b70b6e207e7aa2a953caeb4d1360179ed6dbab2a295dca6af8e1b37)
+    FetchContent_MakeAvailable(pngle)
+    set(PNGLE_DIR "${pngle_SOURCE_DIR}/src")
+    foreach(IMAGE_TARGET X4PRO X4CLASSIC XTEINK_C3)
+      set(IMAGE_TEST ProgressiveJpegFactory${IMAGE_TARGET}Test)
+      add_executable(${IMAGE_TEST} ${TEST_SRC}
+        ${PROJECT_ROOT}/lib/ImageConverter/src/ImageConverter.cpp
+        ${PROJECT_ROOT}/lib/ImageConverter/src/ProgressiveJpegImageConverter.cpp
+        ${PROJECT_ROOT}/lib/ProgressiveJpeg/src/ProgressiveJpeg.cpp
+        ${PROJECT_ROOT}/lib/JpegToBmpConverter/src/JpegToBmpConverter.cpp
+        ${PROJECT_ROOT}/lib/PngToBmpConverter/src/PngToBmpConverter.cpp
+        ${PROJECT_ROOT}/lib/picojpeg/src/picojpeg.c
+        ${PNGLE_DIR}/pngle.c ${PNGLE_DIR}/miniz.c
+        ${PROJECT_ROOT}/lib/GfxRenderer/src/Bitmap.cpp
+        ${PROJECT_ROOT}/lib/GfxRenderer/src/BitmapHelpers.cpp
+        ${PROJECT_ROOT}/lib/GfxRenderer/src/PackedCoverReducer.cpp
+        ${PROJECT_ROOT}/lib/FsHelpers/src/FsHelpers.cpp
+        ${TEST_HELPERS})
+      target_include_directories(${IMAGE_TEST} BEFORE PRIVATE
+        ${PROJECT_ROOT}/lib/ImageConverter/src ${PROJECT_ROOT}/lib/ProgressiveJpeg/src
+        ${PROJECT_ROOT}/lib/JpegToBmpConverter/src ${PROJECT_ROOT}/lib/PngToBmpConverter/src
+        ${PROJECT_ROOT}/lib/picojpeg/src ${PNGLE_DIR})
+      target_compile_definitions(${IMAGE_TEST} PRIVATE PAPYRIX_TARGET_${IMAGE_TARGET}=1
+        PROGRESSIVE_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/progressive-jpeg")
+      set_target_properties(${IMAGE_TEST} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+    endforeach()
+    continue()
+  endif()
   if(TEST_NAME STREQUAL "DigitalInputTest")
     foreach(INPUT_TARGET X4PRO X4CLASSIC)
       set(INPUT_TEST DigitalInput${INPUT_TARGET}Test)
@@ -107,7 +143,27 @@ foreach(TEST_SRC ${TEST_SOURCES})
   endif()
 
   # Special handling for tests that need additional source files
-  if(TEST_NAME STREQUAL "X4ClassicPanelPolicyTest")
+  if(TEST_NAME STREQUAL "ProgressiveJpegConverterTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/ProgressiveJpeg/src/ProgressiveJpeg.cpp
+      ${PROJECT_ROOT}/lib/ImageConverter/src/ProgressiveJpegImageConverter.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/BitmapHelpers.cpp
+      ${TEST_HELPERS})
+    target_include_directories(${TEST_NAME} BEFORE PRIVATE
+      ${PROJECT_ROOT}/lib/ImageConverter/src ${PROJECT_ROOT}/lib/ProgressiveJpeg/src)
+    target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_X4PRO=1
+      PROGRESSIVE_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/progressive-jpeg")
+    set_target_properties(${TEST_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+    continue()
+  endif()
+  if(TEST_NAME STREQUAL "ProgressiveJpegTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/ProgressiveJpeg/src/ProgressiveJpeg.cpp
+      ${CMAKE_CURRENT_SOURCE_DIR}/common/test_utils.cpp)
+    target_include_directories(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/ProgressiveJpeg/src)
+    target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_X4PRO=1
+      PROGRESSIVE_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/progressive-jpeg")
+  elseif(TEST_NAME STREQUAL "X4ClassicPanelPolicyTest")
     add_executable(${TEST_NAME} ${TEST_SRC}
       ${PROJECT_ROOT}/lib/BoardSupport/src/X4ClassicPanelPolicy.cpp)
   elseif(TEST_NAME STREQUAL "X4ClassicDisplayProbeTest")
@@ -1443,6 +1499,9 @@ foreach(TEST_SRC ${TEST_SOURCES})
   endif()
   if(TEST_NAME STREQUAL "StreamingEpdFontS3Test" OR TEST_NAME STREQUAL "ParserScratchTest")
     target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_X4PRO=1)
+  endif()
+  if(TEST_NAME MATCHES "^(ContentHandleThumbnailTest|EpubIndexAnchorsTest|EpubTocRecoveryTest|ChapterHtmlImageSuspensionTest|ChapterAnchorPlacementTest|PngOneBitTest|JpegThumbnailCancellationTest|BmpConversionTest|ImageConverterSignatureTest|ImageFileViewTest)$")
+    target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_XTEINK_C3=1)
   endif()
 
   target_include_directories(${TEST_NAME} PRIVATE
