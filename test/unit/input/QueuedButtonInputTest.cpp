@@ -16,6 +16,7 @@ InputManager inputManager;
 MappedInputManager mappedInputManager(inputManager);
 
 namespace {
+constexpr papyrix::Button kTestButton = PAPYRIX_TARGET_STICKY ? papyrix::Button::Up : papyrix::Button::Back;
 std::atomic<bool> backHeld{false};
 std::mutex sampleMutex;
 std::condition_variable sampled;
@@ -130,11 +131,11 @@ unsigned long runTapPhase(papyrix::hal::Input& input, papyrix::EventQueue& queue
   papyrix::Event event{};
   while (queue.pop(event)) events.push_back(event);
   const bool pressThenRelease = events.size() == 2 && events[0].type == papyrix::EventType::ButtonPress &&
-                                events[0].button == papyrix::Button::Back &&
+                                events[0].button == kTestButton &&
                                 events[1].type == papyrix::EventType::ButtonRelease &&
-                                events[1].button == papyrix::Button::Back;
+                                events[1].button == kTestButton;
   const bool silence = events.empty();
-  ok = (expectTap ? pressThenRelease : silence) && !input.isPressed(papyrix::Button::Back);
+  ok = (expectTap ? pressThenRelease : silence) && !input.isPressed(kTestButton);
   return nowMs;
 }
 }  // namespace
@@ -143,12 +144,12 @@ int main() {
   using namespace papyrix;
   TestUtils::TestRunner runner("Buttons during blocked rendering");
   testSetDigitalReadHook([](int pin) {
-    if (pin == 3) {
+    if (pin == (PAPYRIX_TARGET_STICKY ? 4 : 3)) {
       std::lock_guard<std::mutex> lock(sampleMutex);
       ++samples;
       sampled.notify_all();
     }
-    return pin == 9 && backHeldNow() ? LOW : HIGH;
+    return pin == (PAPYRIX_TARGET_STICKY ? 5 : 9) && backHeldNow() ? LOW : HIGH;
   });
   testSetAnalogReadHook([](int pin) { return pin == 1 && backHeldNow() ? 3512 : 4095; });
   testSetVTaskDelayHook(sweepDelayHook);
@@ -162,7 +163,7 @@ int main() {
     inputManager.update();
     input.poll();
     Event event{};
-    runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonPress && event.button == Button::Back,
+    runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonPress && event.button == kTestButton,
                       "first Back press starts the screen transition");
   }
   const bool captured = firstPress && holdBack(false) && holdBack(true) && holdBack(false);
@@ -173,12 +174,12 @@ int main() {
       inputManager.update();
       input.poll();
       Event event{};
-      runner.expectTrue(queue.pop(event) && event.type == type && event.button == Button::Back,
+      runner.expectTrue(queue.pop(event) && event.type == type && event.button == kTestButton,
                         "two Back taps retain both press and release edges in order");
     }
     Event event{};
     runner.expectFalse(queue.pop(event), "short taps do not become a long press or repeat");
-    runner.expectFalse(input.isPressed(Button::Back), "Back is released after replay");
+    runner.expectFalse(input.isPressed(kTestButton), "sampled button is released after replay");
 
     bool overflowCaptured = true;
     for (int i = 0; i < 20 && overflowCaptured; ++i) {
@@ -193,7 +194,7 @@ int main() {
         onlyEdges &= event.type == EventType::ButtonPress || event.type == EventType::ButtonRelease;
       }
     }
-    runner.expectTrue(onlyEdges && !input.isPressed(Button::Back),
+    runner.expectTrue(onlyEdges && !input.isPressed(kTestButton),
                       "overflow retains the final release without a false hold action");
   }
 
@@ -211,7 +212,7 @@ int main() {
   input.poll();
   Event restarted{};
   runner.expectTrue(
-      queue.pop(restarted) && restarted.type == EventType::ButtonPress && restarted.button == Button::Back,
+      queue.pop(restarted) && restarted.type == EventType::ButtonPress && restarted.button == kTestButton,
       "restart does not replay stale transitions");
   runner.expectTrue(holdBack(false), "restart hold clears through the sampler");
   {
@@ -223,7 +224,7 @@ int main() {
       }
     }
   }
-  runner.expectFalse(input.isPressed(Button::Back), "restart hold is released before the tap test");
+  runner.expectFalse(input.isPressed(kTestButton), "restart hold is released before the tap test");
   runner.expectTrue(holdBack(true), "sampler observes the tap press");
   runner.expectTrue(holdBack(false), "sampler observes the tap release");
   {
@@ -237,8 +238,8 @@ int main() {
       while (queue.pop(event)) tap.push_back(event);
     }
     const bool pressThenRelease = tap.size() == 2 && tap[0].type == EventType::ButtonPress &&
-                                  tap[0].button == Button::Back && tap[1].type == EventType::ButtonRelease &&
-                                  tap[1].button == Button::Back;
+                                  tap[0].button == kTestButton && tap[1].type == EventType::ButtonRelease &&
+                                  tap[1].button == kTestButton;
     runner.expectTrue(pressThenRelease, "idle-rate sampling keeps a normal tap press and release in order");
   }
 

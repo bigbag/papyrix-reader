@@ -36,12 +36,21 @@ The reader records the resume target after a successful page render. If the sett
 
 `lib/BoardSupport` owns board profiles and hardware selection.
 The C3 image selects X3 or X4.
-Each S3 image uses one fixed profile: X4 Pro or X4 Classic.
+Each S3 image uses one fixed profile: X4 Pro, X4 Classic, or Sticky.
 Display probing selects the controller independently of board selection.
 Classic first reads the factory panel identity, then probes when needed.
 An unresolved Classic identity blocks display initialization but permits headless SD recovery.
 Rendering checks panel grayscale support before it writes grayscale planes.
 Classic preserves the factory battery calibration.
+Sticky supports SSD1677 and SSD2677 panels.
+Its probe uses FreeInk identity reads and BUSY polarity.
+It rejects unstable observations.
+An unresolved Sticky panel does not receive display commands.
+Sticky uses SPI SD.
+Touch uses one I2C controller.
+The gauge and RTC share the other I2C controller.
+Its gauge preserves factory configuration.
+Sticky support is implemented, not device-tested.
 
 Hardware backends provide battery, RTC, power, front-light, and touch services.
 Unsupported services remain unavailable to the UI.
@@ -58,7 +67,7 @@ A fixed queue stores up to 32 state changes with their timestamps.
 On overflow, the queue discards the oldest change and retains the newest state.
 The main loop consumes one change per update and remains the sole producer of button events.
 Pending changes suppress hold events until input processing reaches the current state.
-ADC button reads share a mutex with battery reads.
+ADC button, battery, and USB-supply reads share one mutex.
 Startup checks sample directly before the task starts.
 Shutdown stops the task before GPIO configuration changes.
 Touch input remains on the main loop.
@@ -132,8 +141,14 @@ Do not hold a mutex during file I/O or other blocking work.
 Wi-Fi starts on demand.
 The web server provides file management and upload functions.
 Calibre provides wireless book transfer.
-KOReaderSync provides reading-progress synchronization.
 RTC and NTP services maintain system time where available.
+
+Firmware updates validate one matching board tag before flash erase.
+The combined X3/X4 image is one compatibility class.
+Pro, Classic, and Sticky each require their own tag.
+Untagged images require unlocked serial installation.
+This check prevents accidental wrong-board updates.
+It does not authenticate firmware.
 
 `lib/Ipp` is the IPP print server core.
 It parses the IPP wire protocol (RFC 8010/8011).

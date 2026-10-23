@@ -14,11 +14,11 @@ int main() {
     assert(testGpioEvents[i].pin != 2);
 #endif
   }
-  testSetDigitalReadHook([](int pin) { return pin == (PAPYRIX_TARGET_X4CLASSIC ? 0 : 7) ? LOW : HIGH; });
+  testSetDigitalReadHook([](int pin) { return pin == (PAPYRIX_TARGET_STICKY ? 6 : PAPYRIX_TARGET_X4CLASSIC ? 0 : 7) ? LOW : HIGH; });
   assert(input.getState() == (1 << InputManager::BTN_DOWN));
-  testSetDigitalReadHook([](int pin) { return pin == (PAPYRIX_TARGET_X4CLASSIC ? 7 : 0) ? LOW : HIGH; });
+  testSetDigitalReadHook([](int pin) { return pin == (PAPYRIX_TARGET_STICKY ? 5 : PAPYRIX_TARGET_X4CLASSIC ? 7 : 0) ? LOW : HIGH; });
   assert(input.getState() == (1 << InputManager::BTN_UP));
-  testSetDigitalReadHook([](int pin) { return pin == 3 ? LOW : HIGH; });
+  testSetDigitalReadHook([](int pin) { return pin == (PAPYRIX_TARGET_STICKY ? 4 : 3) ? LOW : HIGH; });
   assert(input.getState() == (1 << InputManager::BTN_POWER));
 #if PAPYRIX_TARGET_X4CLASSIC
   testSetDigitalReadHook([](int pin) { return pin == 9 ? LOW : HIGH; });

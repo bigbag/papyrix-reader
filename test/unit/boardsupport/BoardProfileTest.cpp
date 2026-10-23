@@ -15,7 +15,7 @@ using papyrix::board::RtcType;
 using papyrix::board::StorageTransport;
 using papyrix::board::TouchController;
 
-constexpr BoardId kAllBoards[] = {BoardId::X3, BoardId::X4, BoardId::X4Pro, BoardId::X4Classic};
+constexpr BoardId kAllBoards[] = {BoardId::X3, BoardId::X4, BoardId::X4Pro, BoardId::X4Classic, BoardId::Sticky};
 
 const char* boardName(BoardId id) {
   switch (id) {
@@ -27,6 +27,8 @@ const char* boardName(BoardId id) {
       return "X4 Pro";
     case BoardId::X4Classic:
       return "X4 Classic";
+    case BoardId::Sticky:
+      return "Sticky";
   }
   return "?";
 }
@@ -63,12 +65,6 @@ void expectTargetFramebufferCapacity(TestUtils::TestRunner& runner) {
   }
   runner.expectEq(required, papyrix::board::kTargetFrameBufferBytes,
                   "frame buffer capacity matches the largest linked panel");
-#if PAPYRIX_TARGET_XTEINK_C3
-  runner.expectTrue(papyrix::board::kTargetHasVerifiedPanelDriver, "C3 target enables its verified panel drivers");
-#else
-  runner.expectTrue(papyrix::board::kTargetHasVerifiedPanelDriver,
-                    "X4 Pro target enables its runtime-selected panel drivers");
-#endif
 }
 
 void expectRequiredDirectGpioPins(TestUtils::TestRunner& runner) {

@@ -600,7 +600,7 @@ void setup() {
   // Let USB Serial/JTAG and the host enumerate before recovery checks.
   delay(kSerialEnumerationDelayMs);
   Serial.begin(kSerialBaudRate);
-#ifdef ENABLE_SERIAL_LOG
+#if defined(ENABLE_SERIAL_LOG) && ARDUINO_USB_CDC_ON_BOOT
   logSerial.setTxTimeoutMs(kSerialTxTimeoutMs);
 #endif
 
@@ -640,11 +640,11 @@ void loop() {
   const unsigned long loopStartTime = millis();
   static unsigned long lastMemPrint = 0;
 
-  static papyrix::hal::usb_policy::StateTracker x4UsbState;
-  if (papyrix::board::HardwareIdentity::instance().board() == papyrix::board::BoardId::X4) {
+  static papyrix::hal::usb_policy::StateTracker usbSupplyState;
+  if (papyrix::board::HardwareIdentity::instance().profile().usb.detectPin != papyrix::board::kPinUnused) {
     const bool usbConnected = papyrix::core.usb.isConnected();
-    if (x4UsbState.update(usbConnected)) {
-      LOG_INF(TAG, "X4 USB state changed: %s", usbConnected ? "connected" : "disconnected");
+    if (usbSupplyState.update(usbConnected)) {
+      LOG_INF(TAG, "USB supply state changed: %s", usbConnected ? "connected" : "disconnected");
       if (stateMachine.isInState(papyrix::StateId::Home)) {
         homeState.onUsbStateChanged(papyrix::core);
       }

@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstring>
 
+#include "FirmwareBoardTag.h"
 #include "OtaBootSwitch.h"
 
 namespace papyrix {
@@ -88,6 +89,7 @@ FirmwareUpdateError FirmwareUpdater::validate() {
   mbedtls_sha256_update(&shaCtx, header, HEADER_SIZE);
 
   uint8_t xorAccum = CHECKSUM_SEED;
+  firmware_board::Scanner boardScanner;
   size_t pos = HEADER_SIZE;
 
   for (uint8_t i = 0; i < segCount; i++) {
@@ -123,11 +125,13 @@ FirmwareUpdateError FirmwareUpdater::validate() {
         return FirmwareUpdateError::FileReadError;
       }
       mbedtls_sha256_update(&shaCtx, buf, want);
+      boardScanner.feed(buf, want);
       uint8_t acc = xorAccum;
       for (size_t j = 0; j < want; j++) acc ^= buf[j];
       xorAccum = acc;
       remaining -= want;
     }
+    boardScanner.endSegment();
     pos += dataLen;
   }
 
@@ -178,7 +182,7 @@ FirmwareUpdateError FirmwareUpdater::validate() {
 
   mbedtls_sha256_free(&shaCtx);
   f.close();
-  return FirmwareUpdateError::None;
+  return boardScanner.compatible() ? FirmwareUpdateError::None : FirmwareUpdateError::BadBoard;
 }
 
 bool FirmwareUpdater::beginUpdate() {

@@ -110,9 +110,14 @@ int main() {
   runner.expectTrue(frame.up && frame.tap, "stationary long hold produces one tap on release");
   classifier = {};
   classifier.update(contact(10, 10), 100, true, false, 0);
-  classifier.update(contact(10 + TapClassifier::MOVEMENT_LIMIT + 1, 10), 120, true, false, 0);
+  classifier.update(contact(35, 10), 120, true, false, 0);
   frame = classifier.update(idle(), 140, true, false, 0);
   runner.expectTrue(frame.up && !frame.tap, "movement beyond the limit cancels Tap");
+  classifier = {};
+  classifier.update(contact(10, 10), 100, true, false, 0);
+  classifier.update(contact(34, 10), 120, true, false, 0);
+  frame = classifier.update(idle(), 140, true, false, 0);
+  runner.expectTrue(frame.up && frame.tap, "24-pixel movement remains a tap");
 
   classifier = {};
   classifier.update(contact(20, 20), 100, true, false, 0);

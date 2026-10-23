@@ -18,6 +18,10 @@ int main() {
   runner.expectTrue(spiPlan.controlsPowerPin && spiPlan.activeLevel && !spiPlan.inactiveLevel,
                     "X3 SPI storage controls its active-high rail");
 
+#elif PAPYRIX_TARGET_STICKY
+  const auto plan = makeStorageMountPlan(papyrix::board::bootProfile().storage);
+  runner.expectTrue(plan.transport == StorageTransport::Spi && plan.controlsPowerPin &&
+                        plan.activeLevel && !plan.inactiveLevel, "Sticky uses powered SPI storage");
 #else
   const auto* x4pro = &papyrix::board::bootProfile();
   const auto x4proPlan = makeStorageMountPlan(x4pro->storage);

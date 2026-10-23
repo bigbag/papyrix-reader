@@ -1,7 +1,7 @@
 #pragma once
 
 #include <SDCardManager.h>
-#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY
 #include <TargetConfig.h>
 #endif
 
@@ -105,7 +105,7 @@ class StreamingEpdFont {
 
  private:
   static constexpr int FALLBACK_CACHE_SIZE = 192;
-#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY
   static constexpr int CACHE_SIZE = 256;
   static constexpr size_t SLAB_SIZE = papyrix::board::kTargetGlyphBitmapSlabBytes;
 #else

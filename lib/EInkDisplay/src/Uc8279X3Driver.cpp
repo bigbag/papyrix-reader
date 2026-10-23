@@ -1,5 +1,7 @@
 #include "Uc8279X3Driver.h"
 
+#if !PAPYRIX_TARGET_STICKY
+
 // This driver contains synchronous code from FreeInk SDK commit df4a1b7.
 // The license is in ../FREEINK_LICENSE.
 
@@ -313,3 +315,5 @@ Uc8279X3Driver& uc8279X3Driver() {
 }
 
 }  // namespace papyrix::eink
+
+#endif

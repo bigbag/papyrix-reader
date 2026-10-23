@@ -22,6 +22,7 @@ struct RawTouchSample {
   bool homeDown = false;
 };
 
+void enableTouch(const TouchConfig& touch);
 bool decodeGt911Frame(const TouchConfig& config, uint8_t status, const uint8_t* pointData, size_t pointLength,
                       RawTouchSample& sample);
 void suppressTouchUntilIdle();

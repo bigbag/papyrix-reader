@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Exercise HomeState USB-edge repaint with host substitutes.
+"""Exercise USB supply edges through the real polling block and Home handlers.
 
-Extracts the real HomeState::updateBattery() and
-HomeState::onUsbStateChanged() bodies and calls the edge handler with
-unchanged battery values. The repaint flag must flip false to true.
+Keep the battery full and unchanged while USB connects and disconnects.
+Check that Home repaints on edges, but not on stable input or another screen.
 """
 
 import subprocess
@@ -26,59 +25,76 @@ def block(source, marker):
 
 HARNESS = r'''
 #include <cstdio>
+#include <HardwareIdentity.h>
+#include <hal/UsbPolicy.h>
+#include <Logging.h>
+constexpr char TAG[] = "USB_TEST";
 
 namespace papyrix {
-
+enum class StateId { Home, Reader };
 struct StubBattery {
   struct Status {
     bool percentageKnown = true;
-    unsigned percentage = 50;
+    unsigned percentage = 100;
   };
   Status readStatus() const { return {}; }
 };
-
 struct StubUsb {
   bool connected = false;
   bool isConnected() const { return connected; }
 };
-
 struct Core {
   StubBattery battery;
   StubUsb usb;
 };
-
+Core core;
 class HomeState {
  public:
-  struct SpyView {
+  struct View {
     bool needsRender = false;
-    int batteryCalls = 0;
-    int chargingCalls = 0;
-    void setBattery(int) { ++batteryCalls; }
-    void setBatteryCharging(bool) { ++chargingCalls; }
+    void setBattery(int) {}
+    void setBatteryCharging(bool) {}
   };
-  SpyView view_;
+  View view_;
   void updateBattery(Core& core);
   void onUsbStateChanged(Core& core);
 };
-
 @UPDATE_BATTERY@
 @ON_USB_CHANGED@
 }  // namespace papyrix
 
+struct {
+  bool home = true;
+  bool isInState(papyrix::StateId state) const { return home && state == papyrix::StateId::Home; }
+} stateMachine;
+papyrix::HomeState homeState;
+void pollUsb() {
+@POLL_USB@
+}
 int main() {
-  papyrix::Core core;
-  papyrix::HomeState state;
-  state.view_.needsRender = false;
-  state.onUsbStateChanged(core);
-  if (state.view_.batteryCalls != 1 || state.view_.chargingCalls != 1) {
-    printf("FAIL: USB edge skipped the battery update\n");
+  pollUsb();
+  if (homeState.view_.needsRender) return 1;
+  papyrix::core.usb.connected = true;
+  pollUsb();
+  if (!homeState.view_.needsRender) {
+    printf("FAIL: full-battery USB connection does not repaint Home\n");
     return 1;
   }
-  if (!state.view_.needsRender) {
-    printf("FAIL: USB edge did not request a full Home repaint\n");
+  homeState.view_.needsRender = false;
+  pollUsb();
+  if (homeState.view_.needsRender) return 1;
+  papyrix::core.usb.connected = false;
+  pollUsb();
+  if (!homeState.view_.needsRender) {
+    printf("FAIL: USB disconnection does not repaint Home\n");
     return 1;
   }
-  printf("PASS: USB edge requests a full Home repaint with unchanged battery\n");
+  homeState.view_.needsRender = false;
+  stateMachine.home = false;
+  papyrix::core.usb.connected = true;
+  pollUsb();
+  if (homeState.view_.needsRender) return 1;
+  printf("PASS: USB edges repaint Home with a full battery; stable input and other screens do not\n");
   return 0;
 }
 '''
@@ -86,24 +102,31 @@ int main() {
 
 def main():
     home = (ROOT / "src/states/HomeState.cpp").read_text()
+    loop = block((ROOT / "src/main.cpp").read_text(), "void loop()")
+    start = loop.index("static papyrix::hal::usb_policy::StateTracker")
+    declaration_end = loop.index(";", start) + 1
+    polling = loop[start:declaration_end] + "\n" + block(loop[declaration_end:], "if (")
     harness = HARNESS.replace("@UPDATE_BATTERY@", block(home, "void HomeState::updateBattery("))
     harness = harness.replace("@ON_USB_CHANGED@", block(home, "void HomeState::onUsbStateChanged("))
+    harness = harness.replace("@POLL_USB@", polling)
     with tempfile.TemporaryDirectory(prefix="papyrix-home-usb-") as directory:
         path = Path(directory)
         source = path / "home_usb.cpp"
         source.write_text(harness)
-        binary = path / "home_usb"
-        subprocess.run(
-            ["c++", "-std=c++17", "-Wall", "-Wextra", "-Werror", str(source), "-o", str(binary)],
-            check=True,
-        )
-        result = subprocess.run([str(binary)], capture_output=True, text=True)
-        print(result.stdout, end="")
-        print(result.stderr, end="")
-        if result.returncode:
-            print("FAIL: Home USB repaint", flush=True)
-            raise SystemExit(1)
-        print("PASS: Home USB repaint", flush=True)
+        for target in ("XTEINK_C3", "STICKY"):
+            binary = path / target
+            command = ["c++", "-std=c++17", "-Wall", "-Wextra", "-Werror", "-DTEST_BUILD",
+                       f"-DPAPYRIX_TARGET_{target}=1"]
+            for include in ("test/mocks", "lib/BoardSupport/include", "lib/EInkDisplay/include", "src"):
+                command.append("-I" + str(ROOT / include))
+            command.extend([str(source), str(ROOT / "lib/BoardSupport/src/HardwareIdentity.cpp"),
+                            str(ROOT / "lib/BoardSupport/src/BoardProfiles.cpp"),
+                            str(ROOT / "test/mocks/platform_stubs.cpp"), "-o", str(binary)])
+            subprocess.run(command, check=True)
+            result = subprocess.run([str(binary)], capture_output=True, text=True)
+            print(target, result.stdout, result.stderr, end="")
+            if result.returncode:
+                raise SystemExit(result.returncode)
 
 
 if __name__ == "__main__":

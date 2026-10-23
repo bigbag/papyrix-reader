@@ -15,6 +15,8 @@ class BatteryMonitor {
     uint32_t freq = 400000;
     // Cell capacity loaded into the gauge once; 0 leaves the gauge alone.
     uint16_t designCapacityMah = 0;
+    uint8_t busIndex = 0;
+    bool releaseBusAfterRead = true;
   };
   explicit BatteryMonitor(const Bq27220Config& cfg);
 

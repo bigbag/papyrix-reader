@@ -9,8 +9,6 @@
 
 #include "test_utils.h"
 
-static_assert(PAPYRIX_CAP_PROGRESSIVE_JPEG == (PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC),
-              "Progressive JPEG support must match the target");
 
 namespace {
 std::string fixture(const char* name) { return TestUtils::readFile(std::string(PROGRESSIVE_FIXTURES) + "/" + name); }

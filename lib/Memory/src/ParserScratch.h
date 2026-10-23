@@ -1,7 +1,7 @@
 #pragma once
 
 #include <esp_heap_caps.h>
-#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY
 #include <TargetConfig.h>
 #endif
 
@@ -12,7 +12,7 @@
 class ParserScratch {
  public:
   ParserScratch(uint8_t* borrowed, size_t capacity) : borrowed_(borrowed), data_(borrowed), capacity_(capacity) {
-#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY
     const size_t requested = std::max(capacity, size_t{papyrix::board::kTargetParserScratchBytes});
     const uint32_t caps = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
     if (requested <= heap_caps_get_largest_free_block(caps) * 80 / 100) {
@@ -24,7 +24,7 @@ class ParserScratch {
 #endif
   }
   ~ParserScratch() {
-#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY
     if (data_ != borrowed_) heap_caps_free(data_);
 #endif
   }

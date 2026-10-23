@@ -5,7 +5,7 @@
 #include <driver/gpio.h>
 
 #include "TargetConfig.h"
-#include "X4ProBoard.h"
+#include "TouchBackend.h"
 
 namespace papyrix::board {
 
@@ -14,6 +14,22 @@ void earlyInit(const BoardProfile& profile) {
   gpio_hold_dis(static_cast<gpio_num_t>(profile.power.latchPin));
   pinMode(profile.power.latchPin, OUTPUT);
   digitalWrite(profile.power.latchPin, profile.power.latchActiveHigh ? HIGH : LOW);
+  if (profile.power.latchPin2 != kPinUnused) {
+    gpio_hold_dis(static_cast<gpio_num_t>(profile.power.latchPin2));
+    pinMode(profile.power.latchPin2, OUTPUT);
+    digitalWrite(profile.power.latchPin2, profile.power.latchActiveHigh ? HIGH : LOW);
+  }
+  if (profile.power.chargeEnablePin != kPinUnused) {
+    gpio_hold_dis(static_cast<gpio_num_t>(profile.power.chargeEnablePin));
+    pinMode(profile.power.chargeEnablePin, OUTPUT);
+    digitalWrite(profile.power.chargeEnablePin, profile.power.chargeEnableActiveHigh ? HIGH : LOW);
+    gpio_hold_en(static_cast<gpio_num_t>(profile.power.chargeEnablePin));
+  }
+  if (profile.power.microphonePowerPin != kPinUnused) {
+    gpio_hold_dis(static_cast<gpio_num_t>(profile.power.microphonePowerPin));
+    pinMode(profile.power.microphonePowerPin, OUTPUT);
+    digitalWrite(profile.power.microphonePowerPin, LOW);
+  }
   if (profile.family != McuFamily::Esp32S3) return;
   gpio_hold_dis(static_cast<gpio_num_t>(profile.storage.powerPin));
   pinMode(profile.storage.powerPin, OUTPUT);
@@ -23,14 +39,14 @@ void earlyInit(const BoardProfile& profile) {
                            profile.input.up, profile.input.down, profile.input.power}) {
     if (pin != kPinUnused) pinMode(pin, profile.input.activeHigh ? INPUT : INPUT_PULLUP);
   }
-#if PAPYRIX_TARGET_X4PRO
-  x4pro::enableTouch(profile.touch);
+#if PAPYRIX_CAP_TOUCH
+  enableTouch(profile.touch);
 #endif
 }
 
 void preparePanelProbe(const BoardProfile& profile) {
   if (profile.storage.transport != StorageTransport::Spi || profile.storage.powerPin == kPinUnused) return;
-  papyrix::sd::prepareSdForDisplayProbe(profile.storage.powerPin);
+  papyrix::sd::prepareSdForDisplayProbe(profile.storage.powerPin, profile.storage.spiCs);
 }
 
 }  // namespace papyrix::board

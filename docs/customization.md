@@ -401,6 +401,11 @@ Built-in fonts are always available:
 Copy the correct release artifact to the SD card root as `firmware.bin`.
 Open **Settings > Firmware Update** and press **Run**.
 
+The on-device validator checks one matching board tag before flash erase.
+Older untagged images require unlocked serial installation.
+See [update compatibility](device-support-matrix.md#firmware-update-compatibility) for the limits.
+For Sticky first installation, use the [complete install bundle](sticky-specifications.md#installation).
+
 The device:
 
 1. Reads the firmware binary from the SD card.

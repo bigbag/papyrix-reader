@@ -27,7 +27,7 @@ Valid cached covers and thumbnails remain available. A temporary cover read, wri
 
 ## Supported Formats
 
-- **JPEG** (`.jpg`, `.jpeg`) — Baseline on all devices; progressive on X4 Pro and X4 v2 Classic
+- **JPEG** (`.jpg`, `.jpeg`) — Baseline on all devices; progressive on X4 Pro, X4 v2 Classic, and Sticky
 - **PNG** (`.png`) — Transparency shown as opaque
 - **BMP** (`.bmp`) — Direct display. No conversion is necessary.
 
@@ -37,7 +37,10 @@ The converter detects the format from the file contents.
 
 All devices support baseline DCT (SOF0) and extended sequential DCT (SOF1).
 
-X4 Pro and X4 v2 Classic also support progressive DCT (SOF2). Progressive images must use 8-bit grayscale or YCbCr samples. The compressed file must not exceed 512 KiB. Conversion requires sufficient PSRAM.
+X4 Pro, X4 v2 Classic, and Sticky also support progressive DCT (SOF2).
+Progressive images must use 8-bit grayscale or YCbCr samples.
+The compressed file must not exceed 512 KiB.
+Conversion requires sufficient PSRAM.
 
 X3 and original X4 show a placeholder for progressive JPEGs. All devices reject arithmetic-coded JPEGs. Unsupported or damaged images show a placeholder.
 

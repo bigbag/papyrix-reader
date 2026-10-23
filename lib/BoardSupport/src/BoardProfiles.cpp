@@ -93,6 +93,26 @@ constexpr BoardProfile kX4ClassicProfile = {
 };
 #endif
 
+#if PAPYRIX_TARGET_STICKY
+constexpr BoardProfile kStickyProfile = {
+    BoardId::Sticky,
+    McuFamily::Esp32S3,
+    "seeed_sticky",
+    "/.papyrix/cache/sticky",
+    "sticky",
+    {800, 480, 13, 14, 15, 16, 17, 18, 47, 10000000, false},
+    {InputStyle::DigitalButtons, kPinUnused, kPinUnused, kPinUnused, kPinUnused, kPinUnused, kPinUnused, 5, 6, 4,
+     false},
+    {TouchController::Gt911, 3, 2, 21, 41, 0x5D, 42, true, true, true, true, false, 0, 799, 0, 479, 100000, 0x14, true},
+    {StorageTransport::Spi, 8, 12, kPinUnused, kPinUnused, kPinUnused, 10, true},
+    {BatteryBackend::Bq27220, kPinUnused, 1, 0, 0x55, kPinUnused, false, 400000, nullptr, 0, 1},
+    {RtcType::Pcf8563, 1, 0, 400000, 0x51, 1},
+    {kPinUnused, kPinUnused, 0, 0, false},
+    {9, false, false, 2000},
+    {45, true, 46, 39, false, 38},
+};
+#endif
+
 }  // namespace
 
 const BoardProfile* findProfile(BoardId id) {
@@ -111,8 +131,13 @@ const BoardProfile* findProfile(BoardId id) {
     case BoardId::X4Classic:
       return &kX4ClassicProfile;
 #endif
+#if PAPYRIX_TARGET_STICKY
+    case BoardId::Sticky:
+      return &kStickyProfile;
+#endif
+    default:
+      return nullptr;
   }
-  return nullptr;
 }
 
 const BoardProfile& bootProfile() { return *findProfile(kBootBoardId); }

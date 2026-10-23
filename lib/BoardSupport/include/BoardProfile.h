@@ -7,14 +7,14 @@ namespace papyrix::board {
 // Set a pin to this value when the MCU does not control it.
 inline constexpr int8_t kPinUnused = -1;
 
-enum class BoardId : uint8_t { X3, X4, X4Pro, X4Classic };
+enum class BoardId : uint8_t { X3, X4, X4Pro, X4Classic, Sticky };
 enum class McuFamily : uint8_t { Esp32C3, Esp32S3 };
 enum class StorageTransport : uint8_t { Spi, Sdmmc1Bit };
 enum class TouchController : uint8_t { None, Gt911 };
 enum class BatteryBackend : uint8_t { None, Adc, Bq27220, Cw2017 };
 enum class InputStyle : uint8_t { AdcLadder, DigitalButtons };
 
-enum class RtcType : uint8_t { None, Ds3231, Bm8563 };
+enum class RtcType : uint8_t { None, Ds3231, Bm8563, Pcf8563 };
 
 struct DisplayConfig {
   uint16_t width;
@@ -89,6 +89,7 @@ struct BatteryConfig {
   const uint8_t* gaugeProfile = nullptr;
   // BQ27220: cell capacity loaded into the gauge; 0 leaves the gauge alone.
   uint16_t designCapacityMah = 0;
+  uint8_t busIndex = 0;
 };
 
 struct RtcConfig {
@@ -97,6 +98,7 @@ struct RtcConfig {
   int8_t scl;
   uint32_t i2cHz;
   uint8_t i2cAddress;
+  uint8_t busIndex = 0;
 };
 
 struct FrontLightConfig {
@@ -111,11 +113,16 @@ struct UsbConfig {
   int8_t detectPin;
   bool viaBatteryStatus;
   bool nativeSerialJtag;
+  uint16_t detectThresholdMv = 0;
 };
 
 struct PowerConfig {
   int8_t latchPin;
   bool latchActiveHigh;
+  int8_t latchPin2 = kPinUnused;
+  int8_t chargeEnablePin = kPinUnused;
+  bool chargeEnableActiveHigh = false;
+  int8_t microphonePowerPin = kPinUnused;
 };
 
 struct BoardProfile {

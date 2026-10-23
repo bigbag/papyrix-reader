@@ -17,12 +17,12 @@ all: help
 build: ## Build firmware (default environment)
 	pio run
 
-build-release: ## Build all release firmware environments
-	pio run -e release_xteink_c3 -e release_x4pro -e release_x4c
+build-release: ## Build release firmware for X3/X4, Pro, Classic, and Sticky
+	pio run -e release_xteink_c3 -e release_x4pro -e release_x4c -e release_sticky
 
 release: build-release ## Alias for build-release
 
-package: ## Build, check, and package all release firmware
+package: ## Build and package all apps plus the Sticky first-install bundle
 	python3 scripts/package_firmware.py
 	python3 test/scripts/test_sdmmc_mount.py
 
@@ -94,12 +94,14 @@ ifndef VERSION
 endif
 ifdef NOTES
 	gh release create v$(VERSION) dist/papyrix-xteink-c3.bin dist/papyrix-x4pro.bin dist/papyrix-x4c.bin \
+		dist/papyrix-sticky.bin dist/papyrix-sticky-install.zip \
 		dist/manifest.json \
 		--repo bigbag/papyrix-reader \
 		--title "PapyriX v$(VERSION)" \
 		--notes "$(NOTES)"
 else
 	gh release create v$(VERSION) dist/papyrix-xteink-c3.bin dist/papyrix-x4pro.bin dist/papyrix-x4c.bin \
+		dist/papyrix-sticky.bin dist/papyrix-sticky-install.zip \
 		dist/manifest.json \
 		--repo bigbag/papyrix-reader \
 		--title "PapyriX v$(VERSION)" \

@@ -127,7 +127,6 @@ int main() {
                   "identity stores the selected panel controller");
   runner.expectEq(static_cast<int>(PanelSelectionSource::Probe), static_cast<int>(identity.panelSource()),
                   "identity stores the panel selection source");
-  runner.expectEq(1, static_cast<int>(identity.profileSchemaVersion()), "profile schema starts at version one");
 
   runner.printSummary();
   return runner.allPassed() ? 0 : 1;

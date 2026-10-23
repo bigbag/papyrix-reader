@@ -5,12 +5,15 @@ Use the firmware file for the device:
 - X3 or original X4: `papyrix-xteink-c3.bin`
 - X4 Pro: `papyrix-x4pro.bin`
 - X4 v2 Classic: `papyrix-x4c.bin`
+- Sticky: `papyrix-sticky.bin` for app updates
 
-Pro and Classic images are not interchangeable.
+Pro, Classic, and Sticky images are not interchangeable.
 A wrong-target image can drive incorrect GPIOs and damage hardware.
 Use the [firmware recovery procedure](#firmware-recovery) to install the correct image.
 Do not erase the chip or factory NVS.
 Classic uses factory NVS data for panel selection.
+For Sticky first installation, use the [complete install bundle](sticky-specifications.md#installation).
+Sticky support is implemented, not device-tested.
 
 ## Serial Log Capture
 
@@ -62,9 +65,12 @@ See the [Classic support matrix](device-support-matrix.md#x4-classic) and
 Use **Settings → Firmware Update** for a device that can open the UI. Copy the
 correct artifact to the SD root as `/firmware.bin`.
 
-PapyriX rejects an image for a different MCU before it erases flash. This check
-does not distinguish X4 Pro from X4 v2 Classic because both use ESP32-S3. Always
-select the correct artifact for the device.
+Current firmware checks MCU, image integrity, slot size, and one matching board tag before flash erase.
+It rejects an image for another S3 board.
+It also rejects missing, malformed, and duplicate tags.
+Older untagged images require unlocked serial installation.
+Old installed updaters and direct serial flashing do not enforce this board check.
+See [update compatibility](device-support-matrix.md#firmware-update-compatibility).
 
 If the UI cannot start, copy the artifact as `/force_update.bin`. The boot path
 applies it before UI initialization. It shows **Firmware update in progress**
@@ -82,7 +88,8 @@ second attempt fails, it closes the SD transport, disables display power, then
 disables storage power. The power button remains active. The
 firmware waits without rebooting.
 
-Press the power button to restore storage power and retry display initialization.
+Press the Power button to restore storage power and retry display initialization.
+SPI targets restore the profile pins before the SD card remounts.
 
 ## Repeated Sleep at Startup
 

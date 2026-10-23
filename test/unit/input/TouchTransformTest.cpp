@@ -55,7 +55,21 @@ int main() {
                        "post-swap X outside calibration is rejected");
   }
 
+  auto sticky = config;
+  sticky.flipX = true;
+  struct Corner { uint16_t rawX, rawY; int16_t x, y; };
+  for (const Corner corner : {Corner{0, 0, 799, 479}, Corner{479, 0, 799, 0},
+                              Corner{0, 799, 0, 479}, Corner{479, 799, 0, 0}}) {
+    PanelPoint panel{};
+    runner.expectTrue(papyrix::board::rawToPanel(sticky, corner.rawX, corner.rawY, 800, 480, panel),
+                      "Sticky digitizer corner is accepted");
+    runner.expectTrue(panel.x == corner.x && panel.y == corner.y, "Sticky corner matches both inverted axes");
+  }
+
   PanelPoint logical{};
+  runner.expectTrue(papyrix::board::rawToLogical(sticky, 0, 0, 800, 480, DisplayOrientation::Portrait, logical),
+                    "Sticky corner maps to portrait");
+  runner.expectTrue(logical.x == 0 && logical.y == 799, "Sticky corner reaches the correct portrait edge");
   runner.expectTrue(papyrix::board::rawToLogical(config, 0, 0, 800, 480, DisplayOrientation::Portrait, logical),
                     "X4 Pro corner maps into portrait coordinates");
   runner.expectEq(int16_t{0}, logical.x, "portrait inverse maps panel bottom to logical left");

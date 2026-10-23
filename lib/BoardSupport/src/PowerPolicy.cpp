@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <SDPowerControl.h>
+#include <SPI.h>
 #include <driver/gpio.h>
 
 #include "TargetConfig.h"
@@ -21,19 +22,30 @@ void prepareDeepSleepPins(const BoardProfile& profile, bool externalPower) {
     };
     holdOutput(profile.touch.rst, false);
     holdOutput(profile.touch.powerPin, !profile.touch.powerActiveHigh);
-    for (const int8_t pin : {profile.storage.sdmmcClk, profile.storage.sdmmcCmd, profile.storage.sdmmcDat0}) {
-      gpio_hold_dis(static_cast<gpio_num_t>(pin));
-      pinMode(pin, INPUT);
+    if (profile.storage.transport == StorageTransport::Spi) {
+      papyrix::sd::disableSdPower(profile.storage.powerPin, profile.storage.spiCs, profile.display.sclk,
+                                  profile.storage.spiMiso, profile.display.mosi);
+    } else {
+      for (const int8_t pin : {profile.storage.sdmmcClk, profile.storage.sdmmcCmd, profile.storage.sdmmcDat0}) {
+        if (pin == kPinUnused) continue;
+        gpio_hold_dis(static_cast<gpio_num_t>(pin));
+        pinMode(pin, INPUT);
+      }
     }
     holdOutput(profile.storage.powerPin, !profile.storage.powerActiveHigh);
     holdOutput(profile.display.rst, true);
     holdOutput(profile.power.latchPin, profile.power.latchActiveHigh);
+    holdOutput(profile.power.latchPin2, profile.power.latchActiveHigh);
+    holdOutput(profile.power.chargeEnablePin, profile.power.chargeEnableActiveHigh);
+    holdOutput(profile.power.microphonePowerPin, false);
+    holdOutput(profile.display.power, false);
     holdOutput(profile.frontLight.gpio, !profile.frontLight.activeHigh);
     holdOutput(profile.frontLight.warmGpio, !profile.frontLight.activeHigh);
     return;
   }
   if (profile.storage.transport == StorageTransport::Spi && profile.storage.powerPin != kPinUnused) {
-    papyrix::sd::disableSdPower(profile.storage.powerPin);
+    papyrix::sd::disableSdPower(profile.storage.powerPin, profile.storage.spiCs, profile.display.sclk,
+                                profile.storage.spiMiso, profile.display.mosi);
     gpio_hold_en(static_cast<gpio_num_t>(profile.storage.powerPin));
   }
   if (profile.power.latchPin != kPinUnused) {
@@ -58,7 +70,8 @@ void shutdownRecoveryRails(const BoardProfile& profile) {
     digitalWrite(profile.display.power, LOW);
   }
   if (profile.storage.transport == StorageTransport::Spi && profile.storage.powerPin != kPinUnused) {
-    papyrix::sd::disableSdPower(profile.storage.powerPin);
+    papyrix::sd::disableSdPower(profile.storage.powerPin, profile.storage.spiCs, profile.display.sclk,
+                                profile.storage.spiMiso, profile.display.mosi);
   } else if (profile.storage.powerPin != kPinUnused) {
     for (const int pin : {profile.storage.sdmmcClk, profile.storage.sdmmcCmd, profile.storage.sdmmcDat0}) {
       pinMode(pin, INPUT);
@@ -69,8 +82,9 @@ void shutdownRecoveryRails(const BoardProfile& profile) {
 }
 
 void restoreRecoveryStorage(const BoardProfile& profile) {
-  if (profile.storage.transport == StorageTransport::Spi && profile.storage.powerPin != kPinUnused) {
-    papyrix::sd::prepareSdForDisplayProbe(profile.storage.powerPin);
+  if (profile.storage.transport == StorageTransport::Spi) {
+    papyrix::sd::prepareSdForDisplayProbe(profile.storage.powerPin, profile.storage.spiCs);
+    SPI.begin(profile.display.sclk, profile.storage.spiMiso, profile.display.mosi, profile.storage.spiCs);
   } else if (profile.storage.powerPin != kPinUnused) {
     pinMode(profile.storage.powerPin, OUTPUT);
     digitalWrite(profile.storage.powerPin, profile.storage.powerActiveHigh ? HIGH : LOW);

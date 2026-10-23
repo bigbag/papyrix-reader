@@ -10,10 +10,14 @@ Use the firmware file for the device:
 - X3/X4: `papyrix-xteink-c3.bin`
 - X4 Pro: `papyrix-x4pro.bin`
 - X4 v2 Classic: `papyrix-x4c.bin`
+- Sticky: `papyrix-sticky.bin` for app updates
 
-X3, the original X4, and X4 v2 Classic use physical buttons.
-Only X4 Pro has touch input and a front light.
-Pro and Classic firmware images are not interchangeable.
+X3, the original X4, and X4 v2 Classic have no touch input.
+X4 Pro and Sticky have touch input.
+Only X4 Pro has a front light.
+Pro, Classic, and Sticky firmware images are not interchangeable.
+Sticky support is implemented, not device-tested.
+Use the [complete Sticky install bundle](sticky-specifications.md#installation) for first installation.
 
 ### Button and Touch Layout
 
@@ -21,9 +25,12 @@ X3/X4 bottom buttons are Back, Confirm, Left, and Right. The side controls are
 Power, Up, and Down.
 X4 v2 Classic has the same seven button actions.
 X4 Pro has three physical buttons: Up (GPIO0), Down (GPIO7), and Power (GPIO3).
-It has no physical Back, Confirm, Left, or Right buttons.
-GT911 touch supplies the other controls.
-The capacitive Home key sends Back when released.
+X4 Pro has no physical Back, Confirm, Left, or Right buttons.
+Its capacitive Home key sends Back when released.
+Sticky has Up (GPIO5), Down (GPIO6), and Power/AI (GPIO4) buttons.
+It has no capacitive Home key.
+GT911 touch supplies the other controls on both devices.
+The Sticky Power/AI button uses the existing Power-button preferences.
 
 On touch devices, reader taps use these zones:
 
@@ -219,7 +226,7 @@ Text and reading settings, in menu order:
   - Long titles and file names are shortened to fit the status bar.
   - The page indicator marks estimated totals with `~`. See [Status Bar](#status-bar).
 
-- **Touch page turns** (X4 Pro only, default: ON)
+- **Touch page turns** (X4 Pro and Sticky, default: ON)
   - Enable or disable taps in the previous-page and next-page zones.
   - Center menu taps and overlay controls stay active.
   - X3, X4, and X4 v2 Classic hide this setting.
@@ -251,7 +258,7 @@ Display settings, in menu order:
 
 - **Warmth** (X4 Pro only)
   - Adjust the cool/warm light mix from 0 to 100 percent in steps of 5.
-  - X3, X4, and X4 v2 Classic hide both front-light settings.
+  - X3, X4, X4 v2 Classic, and Sticky hide both front-light settings.
 
 - **Reading Orientation** (default: Portrait)
   - Options: Portrait, Landscape CW, Inverted, Landscape CCW
@@ -337,7 +344,12 @@ Maintenance actions for the device:
 
 #### Firmware Update
 
-Install firmware updates from an SD card:
+Use an SD card for normal app updates.
+
+Use the app image for the correct board.
+The validator rejects missing, malformed, duplicate, and incompatible board tags before flash erase.
+Older untagged images require unlocked serial installation.
+See [update compatibility](device-support-matrix.md#firmware-update-compatibility) for the limits.
 
 - Copy the firmware binary as `/firmware.bin` to the root of your SD card
 - Select **Firmware Update** from the Settings menu and press **Run**

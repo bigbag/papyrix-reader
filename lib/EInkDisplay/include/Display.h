@@ -108,6 +108,7 @@ class Display {
   uint16_t displayHeight = DISPLAY_HEIGHT;
   uint16_t displayWidthBytes = DISPLAY_WIDTH_BYTES;
   uint32_t bufferSize = BUFFER_SIZE;
+  bool initialized_ = false;
 
   // X3 state machine
   bool _x3Mode = false;

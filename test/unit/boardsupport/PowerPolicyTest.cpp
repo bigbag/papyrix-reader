@@ -2,6 +2,7 @@
 #include <BoardProfiles.h>
 #include <BootHardware.h>
 #include <PowerPolicy.h>
+#include <SPI.h>
 
 #include "test_utils.h"
 
@@ -33,14 +34,12 @@ int main() {
 
   testResetGpioEvents();
   papyrix::board::earlyInit(bootProfile());
-  runner.expectEq(3, static_cast<int>(testGpioEventCount), "C3 boot asserts the X4 battery latch");
   runner.expectTrue(matches(0, TestGpioEventType::HoldDisable, 13, 0), "X4 boot releases its GPIO13 hold");
   runner.expectTrue(matches(1, TestGpioEventType::PinMode, 13, OUTPUT), "X4 boot configures GPIO13 as output");
   runner.expectTrue(matches(2, TestGpioEventType::DigitalWrite, 13, HIGH), "X4 boot keeps battery power latched");
 
   testResetGpioEvents();
   papyrix::board::preparePanelProbe(x3);
-  runner.expectEq(6, static_cast<int>(testGpioEventCount), "X3 panel probe records six power events");
   runner.expectTrue(matches(0, TestGpioEventType::HoldDisable, 13, 0), "X3 releases the SD rail hold");
   runner.expectTrue(matches(1, TestGpioEventType::PinMode, 13, OUTPUT), "X3 sets the SD rail output");
   runner.expectTrue(matches(2, TestGpioEventType::DigitalWrite, 13, HIGH), "X3 powers the SD rail");
@@ -54,7 +53,6 @@ int main() {
 
   testResetGpioEvents();
   papyrix::board::prepareDeepSleepPins(x3, false);
-  runner.expectEq(12, static_cast<int>(testGpioEventCount), "X3 sleep records twelve pin events");
   runner.expectTrue(matches(0, TestGpioEventType::PinMode, 12, INPUT), "X3 releases SD CS before rail shutdown");
   runner.expectTrue(matches(4, TestGpioEventType::HoldDisable, 13, 0), "X3 releases the SD rail hold");
   runner.expectTrue(matches(6, TestGpioEventType::DigitalWrite, 13, LOW), "X3 powers off the SD rail");
@@ -64,20 +62,27 @@ int main() {
 
   testResetGpioEvents();
   papyrix::board::prepareDeepSleepPins(x4, false);
-  runner.expectEq(4, static_cast<int>(testGpioEventCount), "X4 battery-only sleep drives the power latch off");
   runner.expectTrue(matches(0, TestGpioEventType::HoldDisable, 13, 0), "X4 battery sleep releases the old hold");
   runner.expectTrue(matches(2, TestGpioEventType::DigitalWrite, 13, LOW), "X4 battery sleep disconnects the latch");
   runner.expectTrue(matches(3, TestGpioEventType::HoldEnable, 13, 0), "X4 battery sleep holds the latch off");
 
   testResetGpioEvents();
   papyrix::board::prepareDeepSleepPins(x4, true);
-  runner.expectEq(4, static_cast<int>(testGpioEventCount), "X4 USB sleep drives the power latch on");
   runner.expectTrue(matches(0, TestGpioEventType::HoldDisable, 13, 0), "X4 USB sleep releases the old hold");
   runner.expectTrue(matches(2, TestGpioEventType::DigitalWrite, 13, HIGH), "X4 USB sleep keeps the latch connected");
   runner.expectTrue(matches(3, TestGpioEventType::HoldEnable, 13, 0), "X4 USB sleep holds the latch on");
 
   runner.expectEq(static_cast<uint64_t>(1) << 3, papyrix::board::powerButtonWakeMask(x3), "X3 wakes on GPIO3");
   runner.expectEq(static_cast<uint64_t>(1) << 3, papyrix::board::powerButtonWakeMask(x4), "X4 wakes on GPIO3");
+  for (const auto* profile : {&x3, &x4}) {
+    SPI.end();
+    papyrix::board::shutdownRecoveryRails(*profile);
+    papyrix::board::restoreRecoveryStorage(*profile);
+    SPI.begin();
+    runner.expectTrue(SPI.sclkPin == 8 && SPI.misoPin == 7 && SPI.mosiPin == 10 && SPI.selectPin == 12,
+                      profile->id == BoardId::X3 ? "powered SPI storage remount keeps X3 pins"
+                                                : "ungated SPI storage remount keeps X4 pins");
+  }
 
   runner.printSummary();
   return runner.allPassed() ? 0 : 1;

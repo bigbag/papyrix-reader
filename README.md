@@ -18,8 +18,9 @@
 
 <img alt="PapyriX" src="./images/logo-light.jpg" width="160">
 
-PapyriX is firmware for Xteink X3, X4, X4 Pro, and X4 v2 Classic e-paper readers.
-X3/X4 use one ESP32-C3 image. Pro and Classic use separate ESP32-S3 images.
+PapyriX is firmware for Xteink X3, X4, X4 Pro, X4 v2 Classic, and Seeed reTerminal Sticky e-paper readers.
+X3/X4 use one ESP32-C3 image.
+Pro, Classic, and Sticky use separate ESP32-S3 images.
 
 > **Warning:** Some Xteink units (for example, units from AliExpress) lock USB flash.
 > If USB flash is locked, you cannot update or recover through USB.
@@ -46,11 +47,17 @@ It is a community project.
   - Release file: `papyrix-x4c.bin`
   - Panel: 800×480 SSD1677, UC8179, or UC8279
 
+- **[Seeed reTerminal Sticky](docs/sticky-specifications.md)**
+  - Status: implemented, not device-tested
+  - App update: `papyrix-sticky.bin`
+  - First installation: `papyrix-sticky-install.zip`
+  - Panel: 800×480 SSD1677 or SSD2677
+
 See the [device support matrix](docs/device-support-matrix.md) for build targets and hardware services.
 Using the wrong binary can drive incorrect pins and can damage hardware.
 
-Page caches use profile-specific folders. Moving an SD card between supported
-devices does not reuse incompatible rendered pages.
+Page caches use profile-specific folders.
+Moving an SD card between supported devices does not reuse incompatible rendered pages.
 
 ## Devices tested on hardware
 
@@ -76,7 +83,7 @@ devices does not reuse incompatible rendered pages.
 - [x] Bookmarks (maximum 20 for each book, saved on the SD card)
 - [x] Book cover display (JPG/JPEG/PNG/BMP, case-insensitive)
 - [x] Table of contents navigation
-- [x] Images in EPUB (JPEG/PNG/BMP, baseline JPEG only, maximum 2048×3072)
+- [x] Images in EPUB (JPEG/PNG/BMP; see [supported formats and limits](docs/images.md#supported-formats))
 
 ### Text & Display
 - [x] Font sizes that you can set (XSmall/Small/Normal/Large)
@@ -94,6 +101,8 @@ devices does not reuse incompatible rendered pages.
 - [x] Sunlight fading fix (powers down the display after refresh to prevent UV fade)
 - [x] Turbo LUTs with LUT cache for faster X3 page turns
 - [x] 4 screen orientations
+- [x] Touch controls on X4 Pro and Sticky
+- [x] Front-light brightness and warmth on X4 Pro
 
 ### Customization
 - [x] Custom themes from the SD card (`/config/themes/`)
@@ -101,6 +110,11 @@ devices does not reuse incompatible rendered pages.
 - [x] Custom sleep screens (Dark/Light/Custom/Cover/Keep Page modes)
 - [x] Button remapping (side buttons and front buttons)
 - [x] Power button actions (page turn, bookmark, or sleep on a short press)
+
+### Applications
+- [x] Image Viewer and slideshow
+- [x] Clock with multiple faces
+- [x] Pomodoro timer
 
 ### Network & Connectivity
 - [x] WiFi file transfer (web server)
@@ -130,18 +144,26 @@ Example theme files and font files are in [`docs/examples/`](docs/examples/).
 
 > Do you need to recover a device that does not start? [Go to emergency recovery](#emergency-recovery).
 
-Download the binary that matches the device:
+Use the image listed for your device under [Supported devices](#supported-devices).
 
-- X3 or X4: `papyrix-xteink-c3.bin`
-- X4 Pro: `papyrix-x4pro.bin`
-- X4 v2 Classic: `papyrix-x4c.bin`
+For Sticky first installation, follow the [complete install procedure](docs/sticky-specifications.md#installation).
+It replaces stock firmware and can erase device data.
+Save full-flash and SD backups first.
+Stock restoration remains unverified.
 
-Pro and Classic images are not interchangeable.
+Pro, Classic, and Sticky images are not interchangeable.
 Do not erase the chip or install a full-flash image from another device.
 For Classic partition and OTA-slot requirements, see the
 [Classic specifications](docs/x4-classic-specifications.md#installation).
 
-The usual installation method is
+New firmware requires one matching board tag for SD, web-uploaded, and emergency updates.
+It rejects older untagged images, even when the MCU matches.
+An untagged downgrade requires unlocked serial flashing.
+USB-locked units can be unable to downgrade.
+Old installed updaters and serial flashing do not enforce the new board check.
+See [update compatibility](docs/device-support-matrix.md#firmware-update-compatibility) for the shared validation rules.
+
+For X3 and the original X4, the usual installation tool is
 **[papyrix-flasher](https://github.com/bigbag/papyrix-flasher)**:
 
 ```bash
@@ -150,21 +172,27 @@ papyrix-flasher flash papyrix-xteink-c3.bin
 
 Do not flash an S3 image to a C3 device or a C3 image to an S3 device.
 
-**From SD card:** You can also install or update with an SD card:
+**SD app updates:** This procedure requires an existing PapyriX installation.
+It does not install PapyriX over Sticky stock firmware.
 
 1. Copy the firmware file as `/firmware.bin` to the root of your SD card.
 2. Put the SD card into the device.
 3. Go to **Settings > Firmware Update** and press **Run**.
 
-The device flashes the firmware from the SD card and restarts.
+The updater validates the image before flash erase.
+A successful update restarts the device.
 
 #### Emergency Recovery
 
-If the device does not start, copy the firmware as `/force_update.bin` to the SD card.
-On the next start, the device flashes the file before it starts the UI.
-You do not need to operate the device.
+If PapyriX cannot open the UI, copy the correct app image as `/force_update.bin` to the SD card.
+PapyriX validates and applies it before UI initialization.
+The update can run without a working display.
+The boot path removes the file after the attempt.
+Copy it again before a retry.
 
-See the [customization guide](docs/customization.md) for more data.
+This path requires PapyriX to reach its boot code and mount the SD card.
+It cannot repair a damaged bootloader or restore stock firmware.
+See [firmware recovery](docs/troubleshooting.md#firmware-recovery) for the procedure and limits.
 
 ## Development
 
@@ -174,7 +202,7 @@ See the [customization guide](docs/customization.md) for more data.
 * Python 3.12+ with [uv](https://docs.astral.sh/uv/) (for font conversion)
 * Node.js 18+ (for sleep screen scripts and logo scripts)
 * USB-C data cable
-* Xteink X3, X4, X4 Pro, or X4 v2 Classic with unlocked USB flashing
+* A supported device with unlocked flashing, for upload and hardware checks
 
 Install Node.js dependencies (for sleep screen scripts and logo scripts):
 ```bash
@@ -209,7 +237,7 @@ nix-channel --update
 PapyriX uses PlatformIO to build and flash the firmware. Clone the repository:
 
 ```
-git clone --recursive https://github.com/pliashkou/papyrix
+git clone --recursive https://github.com/bigbag/papyrix-reader
 
 # Or, if you've already cloned without --recursive:
 git submodule update --init --recursive
@@ -232,7 +260,10 @@ pio run -e x4pro
 # Build development firmware for X4 v2 Classic
 pio run -e x4c
 
-# Build all three release environments
+# Build development firmware for Sticky
+pio run -e sticky
+
+# Build all four release environments
 make release
 
 # Build, verify, and package deterministic release files in dist/
@@ -240,6 +271,10 @@ make package
 ```
 
 ### Flashing your device
+
+For Sticky, use the [complete first-install bundle](docs/sticky-specifications.md#installation).
+Sticky uses the CH343P UART0 serial port, not native USB-Serial/JTAG.
+The commands below apply to Xteink devices.
 
 Connect the device through unlocked USB.
 Build and flash the release firmware for the device:
@@ -367,7 +402,7 @@ The device simulator listens for Calibre broadcasts and can receive books (saved
 
 #### Serial monitor
 
-A standalone Go binary reads device logs with no PlatformIO. Pre-built binaries are on the [releases page](https://github.com/pliashkou/papyrix/releases). You can also build from source:
+A standalone Go binary reads device logs with no PlatformIO. Pre-built binaries are on the [releases page](https://github.com/bigbag/papyrix-reader/releases). You can also build from source:
 
 ```bash
 cd tools/monitor && go build -o monitor .
@@ -421,59 +456,18 @@ This makes a changelog grouped by version tags, with commit messages and author 
 
 ## Internals
 
-PapyriX is made for the ESP32-C3 limit of approximately 380KB RAM. See [docs/architecture.md](docs/architecture.md) for the architecture.
+PapyriX retains the low-memory ESP32-C3 path.
+ESP32-S3 targets also use PSRAM for selected reader buffers.
+See the [architecture](docs/architecture.md) and [S3 reader platform](docs/s3-platform.md).
 
 ### Data caching
 
 The device caches book data on the SD card.
 Each model uses a [device-specific cache directory](docs/device-specifications.md#storage).
-Each device-specific directory contains the book folders shown below.
 
-
-```
-<device-cache>/
-├── epub_12471232/       # Each EPUB is cached to a subdirectory named `epub_<hash>`
-│   ├── progress.bin     # Stores reading progress (chapter, page, etc.)
-│   ├── bookmarks.bin    # Saved bookmarks (up to 20 per book)
-│   ├── bookmarks.txt    # Human-readable bookmark list (companion to bookmarks.bin)
-│   ├── cover.bmp        # Book cover image (once generated)
-│   ├── book.bin         # Book metadata (title, author, spine, table of contents, etc.)
-│   ├── sections/        # All chapter data is stored in the sections subdirectory
-│   │   ├── 0.bin        # Chapter data (screen count, all text layout info, etc.)
-│   │   ├── 1.bin        #     files are named by their index in the spine
-│   │   └── ...
-│   └── images/          # Cached inline images (converted to 2-bit BMP)
-│       ├── 123456.bmp   # Images named by hash of source path
-│       └── ...
-│
-├── fb2_55667788/        # Each FB2 file is cached to a subdirectory named `fb2_<hash>`
-│   ├── meta.bin         # Cached metadata (title, author, TOC) for faster reloads
-│   ├── progress.bin     # Stores reading progress
-│   ├── cover.bmp        # Cover image (converted from adjacent image file)
-│   ├── sections/        # Cached chapter pages (same format as EPUB sections)
-│   │   ├── 0.bin
-│   │   └── ...
-│
-│
-├── txt_98765432/        # Each TXT file is cached to a subdirectory named `txt_<hash>`
-│   ├── progress.bin     # Stores current page number (4-byte uint32)
-│   ├── index.bin        # Page index (byte offsets for each page start)
-│   └── cover.bmp        # Cover image (converted from book.jpg/png/bmp or cover.jpg/png/bmp)
-│
-├── md_12345678/         # Each Markdown file is cached to a subdirectory named `md_<hash>`
-│   ├── progress.bin     # Stores current page number (2-byte uint16)
-│   ├── section.bin      # Parsed pages (same format as EPUB sections)
-│   └── cover.bmp        # Cover image (converted from README.jpg/png/bmp or cover.jpg/png/bmp)
-│
-├── html_12345678/       # Each HTML file is cached to a subdirectory named `html_<hash>`
-│   ├── progress.bin     # Stores current page number (4-byte, same as TXT/Markdown)
-│   ├── pages_<fontId>.bin  # Parsed pages (same format as Markdown/FB2 sections)
-│   └── cover.bmp        # Cover image (converted from adjacent image file)
-│
-└── epub_189013891/
-```
-
-To clear cached data, use **Settings > Cleanup** (see [User Guide](docs/user_guide.md)). You can also delete the `.papyrix` directory.
+To clear cached data, use **Settings > Cleanup** (see [User Guide](docs/user_guide.md)).
+Clearing the book cache also removes reading progress.
+Deleting the entire `.papyrix` directory also removes reading history.
 
 The cache does not clear automatically when you delete a book. If you move a book file, the device uses a new cache directory. This resets the reading progress.
 

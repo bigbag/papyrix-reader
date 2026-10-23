@@ -1,5 +1,6 @@
 #include <InputManager.h>
 #include <MappedInputManager.h>
+#include <TargetConfig.h>
 #include <freertos/task.h>
 
 #include <atomic>
@@ -15,6 +16,7 @@ int main() {
   using namespace papyrix;
   TestUtils::TestRunner runner("HAL button release during refresh");
   static int pressedPin = -1;
+  constexpr int kPowerPin = PAPYRIX_TARGET_STICKY ? 4 : 3;
   testSetDigitalReadHook([](int pin) { return pin == pressedPin ? LOW : HIGH; });
   testSetManualMillis(100);
   inputManager.begin();
@@ -35,7 +37,7 @@ int main() {
   };
   Event event{};
   sample(100);
-  pressedPin = 7;
+  pressedPin = PAPYRIX_TARGET_STICKY ? 5 : 7;
   sample(110);
   runner.expectFalse(queue.pop(event), "press still requires debounce");
   sample(140);
@@ -51,7 +53,7 @@ int main() {
   runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonRelease && event.button == Button::Up,
                     "release completes after debounce");
 
-  pressedPin = 0;
+  pressedPin = PAPYRIX_TARGET_STICKY ? 6 : 0;
   sample(1270);
   sample(1295);
   runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonPress && event.button == Button::Down,
@@ -61,7 +63,7 @@ int main() {
   sample(1345);
   queue.pop(event);
 
-  pressedPin = 3;
+  pressedPin = kPowerPin;
   sample(1370);
   sample(1395);
   runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonPress && event.button == Button::Power,
@@ -72,7 +74,7 @@ int main() {
   sample(3355);
   runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonRelease && event.button == Button::Power,
                     "power release remains debounced");
-  pressedPin = 3;
+  pressedPin = kPowerPin;
   sample(3400);
   sample(3430);
   queue.pop(event);
@@ -86,7 +88,7 @@ int main() {
 
   // Suppression models setup: the button is debounce-stable held before the
   // latch arms, and the hold past 700 ms must not emit a long press.
-  pressedPin = 3;
+  pressedPin = kPowerPin;
   sample(5485);
   sample(5515);
   runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonPress && event.button == Button::Power,
@@ -102,7 +104,7 @@ int main() {
   runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonRelease && event.button == Button::Power,
                     "suppressed hold releases normally");
   runner.expectFalse(input.powerSuppressed(), "release clears suppression");
-  pressedPin = 3;
+  pressedPin = kPowerPin;
   sample(6400);
   sample(6430);
   queue.pop(event);  // press
@@ -116,13 +118,13 @@ int main() {
 
   // A release before the first poll must clear the latch without an edge.
   input.suppressPowerUntilRelease();
-  pressedPin = 3;
+  pressedPin = kPowerPin;
   // No polls while the button is down.
   pressedPin = -1;
   sample(7300);
   runner.expectFalse(input.powerSuppressed(), "release before first poll clears suppression");
   runner.expectFalse(queue.pop(event), "no events from an unobserved press");
-  pressedPin = 3;
+  pressedPin = kPowerPin;
   sample(7400);
   sample(7430);
   runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonPress && event.button == Button::Power,

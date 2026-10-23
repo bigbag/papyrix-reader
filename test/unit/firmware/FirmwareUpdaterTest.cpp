@@ -1,6 +1,9 @@
+#include <FirmwareBoardTag.h>
 #include <TargetConfig.h>
 
+#include <algorithm>
 #include <cstring>
+#include <string>
 #include <vector>
 
 #include "SDCardManager.h"
@@ -24,7 +27,8 @@ constexpr uint16_t FOREIGN_CHIP_ID =
     board::kTargetMcuFamily == board::McuFamily::Esp32C3 ? CHIP_ID_ESP32_S3 : CHIP_ID_ESP32_C3;
 
 static std::vector<uint8_t> buildValidFirmware(size_t segDataSize, bool hashAppended = true,
-                                               uint16_t chipId = TARGET_CHIP_ID) {
+                                               uint16_t chipId = TARGET_CHIP_ID,
+                                               const std::string& tags = firmware_board::kTag) {
   constexpr uint8_t MAGIC = 0xE9;
   constexpr uint8_t CHECKSUM_SEED = 0xEF;
   constexpr size_t HEADER_SIZE = 24;
@@ -48,10 +52,12 @@ static std::vector<uint8_t> buildValidFirmware(size_t segDataSize, bool hashAppe
   for (size_t i = 0; i < segDataSize; i++) {
     img.push_back(static_cast<uint8_t>(i & 0xFF));
   }
+  const size_t dataStart = HEADER_SIZE + SEG_HDR_SIZE;
+  const size_t tagOffset = segDataSize > 4096 ? 4090 : 0;
+  std::copy(tags.begin(), tags.end(), img.begin() + dataStart + tagOffset);
 
   // XOR checksum over segment data
   uint8_t xorAccum = CHECKSUM_SEED;
-  size_t dataStart = HEADER_SIZE + SEG_HDR_SIZE;
   for (size_t i = dataStart; i < dataStart + segDataSize; i++) {
     xorAccum ^= img[i];
   }
@@ -212,6 +218,71 @@ int main() {
                     "beginUpdate: invalid chip id → BadChip");
     runner.expectEq(0, ESP_PARTITION.eraseCount_, "beginUpdate: invalid chip id triggers no erase");
     runner.expectEq(0, ESP_PARTITION.writeCount_, "beginUpdate: invalid chip id triggers no write or boot switch");
+  }
+
+  const std::string matching = firmware_board::kTag;
+#if PAPYRIX_TARGET_X4PRO
+  const std::string wrong = "PAPYRIX-BOARD-V1:sticky;";
+#else
+  const std::string wrong = "PAPYRIX-BOARD-V1:x4pro;";
+#endif
+  for (const auto& tags : {std::string{}, wrong, matching + matching, matching + wrong,
+                           std::string("PAPYRIX-BOARD-V1:") + std::string(80, 'x') + ";",
+                           matching.substr(0, matching.size() - 1)}) {
+    SdMan.reset();
+    FW_UPDATER.reset();
+    ESP_PARTITION.reset();
+    const auto bootSelection = ESP_PARTITION.otadataData_;
+    auto data = buildValidFirmware(64 * 1024, true, TARGET_CHIP_ID, tags);
+    SdMan.setFileData("/wrong_board.bin", data);
+    FW_UPDATER.findFirmwareFile("/wrong_board.bin");
+    runner.expectFalse(FW_UPDATER.beginUpdate(), "incompatible identity cannot start an update");
+    runner.expectTrue(FW_UPDATER.progress().error == FirmwareUpdateError::BadBoard,
+                      "incompatible identity reports wrong board");
+    while (FW_UPDATER.pump()) {
+    }
+    runner.expectEq(0, ESP_PARTITION.eraseCount_, "incompatible identity triggers no erase");
+    runner.expectEq(0, ESP_PARTITION.writeCount_, "incompatible identity triggers no write");
+    runner.expectTrue(ESP_PARTITION.otadataData_ == bootSelection, "incompatible identity preserves boot selection");
+  }
+
+  {
+    SdMan.reset();
+    FW_UPDATER.reset();
+    ESP_PARTITION.reset();
+    auto data = buildMinSizeFirmware(false);
+    const uint8_t checksum = data.back();
+    const uint32_t firstLength = 4097;
+    const uint32_t secondLength = 64 * 1024 - firstLength;
+    uint8_t segmentHeader[8] = {};
+    memcpy(segmentHeader + 4, &secondLength, 4);
+    data[1] = 2;
+    memcpy(data.data() + 28, &firstLength, 4);
+    data.insert(data.begin() + 32 + firstLength, segmentHeader, segmentHeader + 8);
+    data.resize((24 + 16 + 64 * 1024 + 16) & ~size_t{15});
+    data.back() = checksum;
+    SdMan.setFileData("/split_segments.bin", data);
+    FW_UPDATER.findFirmwareFile("/split_segments.bin");
+    runner.expectFalse(FW_UPDATER.beginUpdate(), "segment boundaries cannot join a board identity");
+    runner.expectTrue(FW_UPDATER.progress().error == FirmwareUpdateError::BadBoard,
+                      "split-segment identity reports wrong board");
+    while (FW_UPDATER.pump()) {
+    }
+    runner.expectEq(0, ESP_PARTITION.eraseCount_, "split-segment identity triggers no erase");
+    runner.expectEq(0, ESP_PARTITION.writeCount_, "split-segment identity triggers no write or boot switch");
+  }
+
+  {
+    SdMan.reset();
+    FW_UPDATER.reset();
+    ESP_PARTITION.reset();
+    auto data = buildValidFirmware(64 * 1024, false, TARGET_CHIP_ID, {});
+    data[32] ^= 1;
+    SdMan.setFileData("/untagged_corrupt.bin", data);
+    FW_UPDATER.findFirmwareFile("/untagged_corrupt.bin");
+    runner.expectFalse(FW_UPDATER.beginUpdate(), "untagged corrupt image is rejected");
+    runner.expectTrue(FW_UPDATER.progress().error == FirmwareUpdateError::BadChecksum,
+                      "checksum errors retain precedence over missing identity");
   }
 
   // ============================================================

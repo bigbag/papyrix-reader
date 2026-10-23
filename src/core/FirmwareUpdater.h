@@ -27,6 +27,7 @@ enum class FirmwareUpdateError : uint8_t {
   BadSize,
   NoPartition,
   OtadataFail,
+  BadBoard,
 };
 
 enum class FirmwareUpdatePhase : uint8_t {

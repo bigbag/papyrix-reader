@@ -1,6 +1,7 @@
 #include <RtcBackend.h>
 #include <HardwareIdentity.h>
 #include <Wire.h>
+#include <I2cBus.h>
 
 #include "test_utils.h"
 
@@ -13,20 +14,21 @@ int main() {
   runner.expectEq(uint8_t{23}, papyrix::board::bcdToDecimal(0x23), "BCD hour decode");
   runner.expectEq(uint8_t{0x59}, papyrix::board::decimalToBcd(59), "BCD minute encode");
   using namespace papyrix::board;
-  Wire.reset();
+  auto& wire = i2cBus(bootProfile().rtc.busIndex);
+  wire.reset();
 #if PAPYRIX_CAP_RTC && !PAPYRIX_TARGET_XTEINK_C3
-  Wire.setPresent(0x51, true);
+  wire.setPresent(0x51, true);
   HardwareIdentity::instance().applyBoardSelection({papyrix::board::kBootBoardId, BoardSelectionSource::Fixed}, {});
 #else
-  Wire.setPresent(0x68, true);
+  wire.setPresent(0x68, true);
   HardwareIdentity::instance().applyBoardSelection({BoardId::X3, BoardSelectionSource::Override}, {});
 #endif
   RtcBackend rtc;
   runner.expectTrue(rtc.begin(), "RTC is available");
 #if !PAPYRIX_TARGET_XTEINK_C3
-  Wire.setRegister(0x51, 0x02, 0x80);
+  wire.setRegister(0x51, 0x02, 0x80);
 #else
-  Wire.setRegister(0x68, 0x0F, 0x83);
+  wire.setRegister(0x68, 0x0F, 0x83);
 #endif
   DateTime value{};
   value.year = 2026;
@@ -43,7 +45,7 @@ int main() {
   runner.expectEq(value.day, result.day, "day uses the controller-specific register order");
   runner.expectEq(value.weekday, result.weekday, "Sunday round-trips across controller-specific encodings");
 #if PAPYRIX_TARGET_XTEINK_C3
-  runner.expectEq(uint8_t{0x03}, Wire.getRegister(0x68, 0x0F), "time synchronization preserves alarm flags");
+  runner.expectEq(uint8_t{0x03}, wire.getRegister(0x68, 0x0F), "time synchronization preserves alarm flags");
 #endif
   return runner.allPassed() ? 0 : 1;
 }

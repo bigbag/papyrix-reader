@@ -8,7 +8,11 @@
 #include "HardwareSerial.h"
 
 CaptureState captureState;
+#if TEST_UART_LOG
+HardwareSerial Serial;
+#else
 HWCDC Serial;
+#endif
 
 static unsigned long millisValue = 0;
 unsigned long millis() { return millisValue; }

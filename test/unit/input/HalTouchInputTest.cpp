@@ -30,8 +30,12 @@ int main() {
   poll(0);
   runner.expectFalse(queue.pop(event), "held Home does not emit an early Back or Tap");
   poll(0x80);
+#if PAPYRIX_TARGET_STICKY
+  runner.expectFalse(queue.pop(event), "Sticky has no capacitive Home key");
+#else
   runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonPress && event.button == Button::Back,
                     "first Home release after an unchanged idle poll emits Back");
+#endif
   poll(0);
   runner.expectFalse(queue.pop(event), "acknowledged Home release does not repeat");
 

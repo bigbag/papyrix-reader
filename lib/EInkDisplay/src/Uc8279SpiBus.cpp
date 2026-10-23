@@ -8,8 +8,9 @@
 
 namespace papyrix::eink {
 
-Uc8279SpiBus::Uc8279SpiBus(int8_t cs, int8_t dc, int8_t reset, int8_t busy, const SPISettings& settings)
-    : cs_(cs), dc_(dc), reset_(reset), busy_(busy), settings_(settings) {}
+Uc8279SpiBus::Uc8279SpiBus(int8_t cs, int8_t dc, int8_t reset, int8_t busy, const SPISettings& settings,
+                           uint16_t resetLowMs)
+    : cs_(cs), dc_(dc), reset_(reset), busy_(busy), settings_(settings), resetLowMs_(resetLowMs) {}
 
 void Uc8279SpiBus::reset(uint16_t extraSettleMs) {
   gpio_hold_dis(static_cast<gpio_num_t>(reset_));
@@ -17,7 +18,7 @@ void Uc8279SpiBus::reset(uint16_t extraSettleMs) {
   digitalWrite(reset_, HIGH);
   delay(10);
   digitalWrite(reset_, LOW);
-  delay(10);
+  delay(resetLowMs_);
   digitalWrite(reset_, HIGH);
   delay(10);
   if (extraSettleMs > 0) delay(extraSettleMs);

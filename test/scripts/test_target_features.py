@@ -38,6 +38,14 @@ GOOD_X4C = """\
 0805c100 D kX4ClassicProfile
 """
 
+GOOD_STICKY = """\
+0805a1b0 T papyrix::eink::Ssd2677Driver::display()
+0805c001 T papyrix::board::TouchBackend::poll()
+0805c100 T BatteryMonitor::readBq27220Mv_()
+0805c200 T papyrix::board::RtcBackend::read()
+0805c300 T ProgressiveJpeg::decode(FsFile&)
+"""
+
 
 BAD_DEFAULT = {
     "X4 Pro board symbols": "1000aaaa T papyrix::board::x4pro::enableTouch(papyrix::board::TouchConfig const&)",
@@ -60,6 +68,15 @@ BAD_X4C = {
     "GT911 touch symbols": "1000cccc T Gt911Touch::init()",
     "frontlight symbols": "1000abcd T papyrix::board::FrontLightBackend::write()",
     "Pro touch board symbols": "1000aaaa T papyrix::board::x4pro::enableTouch()",
+}
+BAD_STICKY = {
+    **BAD_X4PRO,
+    "X4 Pro board symbols": "1000aaaa T papyrix::board::x4pro::enableTouch()",
+    "frontlight symbols": "1000aabb T papyrix::board::FrontLightBackend::write()",
+    "C3 panel symbols": "1000ccdd T papyrix::eink::Uc8279X3Driver::begin()",
+    "CW2017 symbols": "1000ddee T BatteryMonitor::readCw2017Soc_()",
+    "SDMMC symbols": "1000eeff T papyrix::Sdmmc1Bit::mount()",
+    "foreign board profiles": "1000ff00 D kX4ClassicProfile",
 }
 
 
@@ -135,6 +152,12 @@ def main():
         failed |= not expect_pass("good x4pro listing passes", listing, "x4pro")
         listing = write_listing(tmp, "good_x4c.txt", GOOD_X4C)
         failed |= not expect_pass("Classic permits shared S3 panel drivers", listing, "x4c")
+        listing = write_listing(tmp, "good_sticky.txt", GOOD_STICKY)
+        failed |= not expect_pass("Sticky permits its display, input, gauge, RTC, and image paths", listing, "sticky")
+        for target in ("default", "x4pro", "x4c"):
+            listing = write_listing(tmp, "sticky_driver.txt", "1000abcd T papyrix::eink::Ssd2677Driver::display()\n")
+            failed |= not expect_forbidden("current targets reject Sticky drivers", listing, target,
+                                           "Sticky panel symbols")
 
         for symbol in ("ProgressiveJpeg::decode(FsFile&)", "vtable for ProgressiveJpegImageConverter"):
             listing = write_listing(tmp, "progressive.txt", f"1000abcd T {symbol}\n")
@@ -146,6 +169,7 @@ def main():
             ("default", BAD_DEFAULT),
             ("x4pro", BAD_X4PRO),
             ("x4c", BAD_X4C),
+            ("sticky", BAD_STICKY),
         ):
             for index, (group, line) in enumerate(bad.items()):
                 listing = write_listing(tmp, f"bad_{target}_{index}.txt", line + "\n")

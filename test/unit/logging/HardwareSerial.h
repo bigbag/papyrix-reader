@@ -29,7 +29,7 @@ struct CaptureState {
 
 extern CaptureState captureState;
 
-class HWCDC : public Print {
+class CapturingSerial : public Print {
  public:
   void begin(unsigned long) {}
   operator bool() const { return captureState.enabled; }
@@ -47,4 +47,11 @@ class HWCDC : public Print {
   void flush() override {}
 };
 
+class HWCDC : public CapturingSerial {};
+class HardwareSerial : public CapturingSerial {};
+
+#if TEST_UART_LOG
+extern HardwareSerial Serial;
+#else
 extern HWCDC Serial;
+#endif

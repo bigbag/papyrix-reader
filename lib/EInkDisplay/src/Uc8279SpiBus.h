@@ -10,7 +10,7 @@ namespace papyrix::eink {
 
 class Uc8279SpiBus : public Uc8279Bus {
  public:
-  Uc8279SpiBus(int8_t cs, int8_t dc, int8_t reset, int8_t busy, const SPISettings& settings);
+  Uc8279SpiBus(int8_t cs, int8_t dc, int8_t reset, int8_t busy, const SPISettings& settings, uint16_t resetLowMs = 10);
 
   void reset(uint16_t extraSettleMs) override;
   void command(uint8_t command) override;
@@ -29,6 +29,7 @@ class Uc8279SpiBus : public Uc8279Bus {
   int8_t reset_;
   int8_t busy_;
   SPISettings settings_;
+  uint16_t resetLowMs_;
 };
 
 }  // namespace papyrix::eink

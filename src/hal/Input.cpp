@@ -213,7 +213,7 @@ void Input::pollTouch() {
   if (static_cast<int32_t>(now - nextTouchPollMs_) < 0) return;
   nextTouchPollMs_ = now + TOUCH_POLL_INTERVAL_MS;
   const auto raw = touchBackend_.poll();
-  if (raw.controllerOk) {
+  if (raw.controllerOk && profile.touch.hasHomeKey) {
     if (homeReady_ && homeDown_ && !raw.homeDown) {
       queue_->push(Event::buttonPress(Button::Back));
       lastActivityMs_ = now;

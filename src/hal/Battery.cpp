@@ -36,13 +36,17 @@ void Battery::init() {
   if (config.chargeStatusPin != board::kPinUnused) {
     pinMode(config.chargeStatusPin, config.chargeStatusActiveHigh ? INPUT : INPUT_PULLUP);
   }
-#if PAPYRIX_CAP_BATTERY_ADC || PAPYRIX_CAP_BATTERY_BQ27220
+#if PAPYRIX_CAP_BATTERY_ADC
   if (config.backend == board::BatteryBackend::Adc) {
     monitor_.emplace(static_cast<uint8_t>(config.adcPin));
     adcBackend_ = true;
     if (esp_reset_reason() == ESP_RST_POWERON) retainedX4Estimate = {};
-  } else if (config.backend == board::BatteryBackend::Bq27220) {
-    monitor_.emplace(BatteryMonitor::Bq27220Config{config.sda, config.scl, config.i2cHz, config.designCapacityMah});
+  }
+#endif
+#if PAPYRIX_CAP_BATTERY_BQ27220
+  if (config.backend == board::BatteryBackend::Bq27220) {
+    monitor_.emplace(BatteryMonitor::Bq27220Config{config.sda, config.scl, config.i2cHz, config.designCapacityMah,
+                                                   config.busIndex, config.busIndex == 0});
   }
 #elif PAPYRIX_CAP_BATTERY_CW2017
   if (config.backend == board::BatteryBackend::Cw2017) {

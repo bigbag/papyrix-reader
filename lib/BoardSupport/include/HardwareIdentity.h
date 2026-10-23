@@ -10,7 +10,7 @@
 namespace papyrix::board {
 
 enum class PanelSelectionSource : uint8_t { Fixed, X4Default, Override, Cache, Probe, Fallback, Factory, Unresolved };
-inline constexpr uint8_t kProfileSchemaVersion = 1;
+inline constexpr uint8_t kProfileSchemaVersion = 2;
 
 class HardwareIdentity {
  public:
@@ -40,10 +40,11 @@ class HardwareIdentity {
   BoardSelectionSource boardSource_;
   BoardProbeReport lastProbe_{};
   eink::DisplayController panel_ = kBootPanelController;
-  PanelSelectionSource panelSource_ =
-      PAPYRIX_TARGET_X4CLASSIC ? PanelSelectionSource::Unresolved : PanelSelectionSource::Fixed;
+  PanelSelectionSource panelSource_ = (PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY)
+                                          ? PanelSelectionSource::Unresolved
+                                          : PanelSelectionSource::Fixed;
   uint8_t panelVariant_ = 0;
-  bool panelResolved_ = !PAPYRIX_TARGET_X4CLASSIC;
+  bool panelResolved_ = !(PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY);
 };
 
 const char* panelSelectionSourceName(PanelSelectionSource source);

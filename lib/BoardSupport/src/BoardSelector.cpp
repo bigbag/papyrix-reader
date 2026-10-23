@@ -13,6 +13,9 @@
 #include <X4ClassicDisplayProbe.h>
 #include <X4ClassicPanelPolicy.h>
 #endif
+#if PAPYRIX_TARGET_STICKY
+#include <StickyDisplayProbe.h>
+#endif
 
 #include <cstdio>
 
@@ -362,6 +365,18 @@ void selectPanel(HardwareIdentity& identity) {
             panelSelectionSourceName(identity.panelSource()), identity.panelVariant());
   } else {
     LOG_ERR("BOARD", "Classic panel unresolved; display remains disabled");
+  }
+#elif PAPYRIX_TARGET_STICKY
+  identity.clearPanelSelection();
+  const auto probe = eink::probeStickyDisplayController(identity.profile());
+  LOG_INF("BOARD", "Sticky panel: revision=%02X BUSY=%s stable=%d", probe.revision, probe.busyHigh ? "high" : "low",
+          probe.stable);
+  if (probe.stable) {
+    identity.setPanel(
+        probe.revision == 0x07 || probe.busyHigh ? eink::DisplayController::SSD2677 : eink::DisplayController::SSD1677,
+        probe.revision == 0x07 ? PanelSelectionSource::Probe : PanelSelectionSource::Fallback);
+  } else {
+    LOG_ERR("BOARD", "Sticky panel unresolved; display remains disabled");
   }
 #else
   identity.setPanel(fixedPanelFor(identity.board()), PanelSelectionSource::Fixed);

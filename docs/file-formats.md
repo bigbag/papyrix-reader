@@ -6,7 +6,7 @@ PapyriX stores EPUB, TXT, Markdown, FB2, and HTML page caches in binary files.
 [Device Specifications](device-specifications.md#storage).
 
 Cover conversion keeps the aspect ratio. It reduces covers to 528×792 on X3
-or 480×800 on X4, X4 Pro, and X4 v2 Classic.
+or 480×800 on X4, X4 Pro, X4 v2 Classic, and Sticky.
 It does not enlarge smaller covers.
 
 ## Reading History
@@ -17,18 +17,32 @@ If a history file is missing, PapyriX starts an empty history. A read, data, or 
 
 The stores check temporary-file writes and synchronization before replacement. Replacement is not power-loss atomic.
 
+## Reading Progress
+
+`ProgressManager` saves `progress.bin` for all supported content types.
+Current records use 14 bytes with little-endian integers.
+
+| Offset | Size | Field |
+|---|---|---|
+| `0x00` | 4 bytes | Magic `0x47525050` (`PPRG`) |
+| `0x04` | 1 byte | Version `1` |
+| `0x05` | 1 byte | `ContentType` value |
+| `0x06` | 4 bytes | Signed spine or section index |
+| `0x0A` | 4 bytes | Unsigned page number |
+
+EPUB and FB2 use the index and a page within that section.
+XTC uses a flat page number.
+TXT, Markdown, and HTML use the page number without the index.
+The loader also accepts legacy 4-byte records.
+New saves use the current format.
+
 ## TXT Cache Files
 
 TXT files use a simple cache format in `<device-cache>/txt_<hash>/`.
 
 ### `progress.bin`
 
-Stores the current reading position as one 4-byte little-endian unsigned integer (page number).
-
-```
-Offset  Size  Description
-0x00    4     Current page number (uint32_t, little-endian)
-```
+Uses the shared [reading progress format](#reading-progress).
 
 ### `index.bin`
 
@@ -59,12 +73,7 @@ Markdown files (`.md`, `.markdown`) use a cache format in `<device-cache>/md_<ha
 
 ### `progress.bin`
 
-Stores the current reading position as a 2-byte little-endian unsigned integer (page number).
-
-```
-Offset  Size  Description
-0x00    2     Current page number (uint16_t, little-endian)
-```
+Uses the shared [reading progress format](#reading-progress).
 
 ### `section.bin`
 
@@ -140,7 +149,7 @@ Offset  Size        Description
 
 ### `progress.bin`
 
-Stores the current reading position (same format as EPUB).
+Uses the shared [reading progress format](#reading-progress).
 
 ### `sections/`
 
@@ -183,7 +192,7 @@ HTML files (`.html`, `.htm`) use a cache format in `<device-cache>/html_<hash>/`
 
 ### `progress.bin`
 
-Stores the current reading position (same format as TXT/Markdown — 4-byte little-endian, section page in the lower 2 bytes).
+Uses the shared [reading progress format](#reading-progress).
 
 ### `pages_<fontId>.bin`
 

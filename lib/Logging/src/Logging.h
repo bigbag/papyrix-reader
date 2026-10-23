@@ -25,7 +25,7 @@ won't trigger deprecation warnings.
 #define LOG_LEVEL 0
 #endif
 
-static HWCDC& logSerial = Serial;
+static auto& logSerial = Serial;
 
 void logPrintf(const char* level, const char* origin, const char* format, ...);
 

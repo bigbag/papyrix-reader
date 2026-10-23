@@ -7,7 +7,7 @@
 #include <new>
 #include <utility>
 
-#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY
 struct BitmapTurnCache::Entry {
   std::string path;
   FsFile file;

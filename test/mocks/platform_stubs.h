@@ -96,13 +96,27 @@ struct MockSPI {
   size_t transferCount = 0;
   size_t writeSizes[RECORD_CAPACITY]{};
   size_t writeCount = 0;
+  int sclkPin = -1, misoPin = -1, mosiPin = -1, selectPin = -1;
+  bool active = false;
 
   void begin(int sclk = -1, int miso = -1, int mosi = -1, int ssel = -1) {
-    (void)sclk;
-    (void)miso;
-    (void)mosi;
-    (void)ssel;
+    if (active) return;
+    if (sclk == -1 && miso == -1 && mosi == -1 && ssel == -1) {
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY
+      sclk = 12; miso = 13; mosi = 11; ssel = 10;
+#else
+      sclk = 4; miso = 5; mosi = 6; ssel = 7;
+#endif
+    }
+    sclkPin = sclk;
+    misoPin = miso;
+    mosiPin = mosi;
+    selectPin = ssel;
+    active = true;
   }
+  void end() { active = false; }
+  void* bus() const { return active ? const_cast<MockSPI*>(this) : nullptr; }
+  int pinSS() const { return selectPin; }
   void beginTransaction(const SPISettings&) { beginTransactionCount++; }
   void endTransaction() { endTransactionCount++; }
   void transfer(uint8_t value) {
@@ -225,6 +239,7 @@ inline int analogRead(int pin) {
 }
 inline constexpr int ADC_11db = 3;
 inline void analogSetAttenuation(int) {}
+inline void analogSetPinAttenuation(uint8_t, int) {}
 #ifndef F_CPU
 #define F_CPU 160000000L
 #endif
@@ -248,6 +263,9 @@ inline bool setCpuFrequencyMhz(uint32_t freq) {
 #endif
 #ifndef INPUT_PULLUP
 #define INPUT_PULLUP 2
+#endif
+#ifndef INPUT_PULLDOWN
+#define INPUT_PULLDOWN 3
 #endif
 #ifndef HIGH
 #define HIGH 1

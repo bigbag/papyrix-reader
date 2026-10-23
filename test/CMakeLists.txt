@@ -78,7 +78,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
   get_filename_component(TEST_NAME ${TEST_SRC} NAME_WE)
 
   if(TEST_NAME STREQUAL "ProgressiveJpegFactoryTest")
-    foreach(IMAGE_TARGET X4PRO X4CLASSIC XTEINK_C3)
+    foreach(IMAGE_TARGET X4PRO X4CLASSIC XTEINK_C3 STICKY)
       set(IMAGE_TEST ProgressiveJpegFactory${IMAGE_TARGET}Test)
       add_executable(${IMAGE_TEST} ${TEST_SRC}
         ${PROJECT_ROOT}/lib/ImageConverter/src/ImageConverter.cpp
@@ -104,7 +104,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
     continue()
   endif()
   if(TEST_NAME STREQUAL "DigitalInputTest")
-    foreach(INPUT_TARGET X4PRO X4CLASSIC)
+    foreach(INPUT_TARGET X4PRO X4CLASSIC STICKY)
       set(INPUT_TEST DigitalInput${INPUT_TARGET}Test)
       add_executable(${INPUT_TEST} ${TEST_SRC}
       ${PROJECT_ROOT}/lib/InputManager/src/InputManager.cpp
@@ -130,10 +130,14 @@ foreach(TEST_SRC ${TEST_SOURCES})
     add_executable(BoardProfileX4ClassicTest ${TEST_SRC}
       ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
       ${CMAKE_CURRENT_SOURCE_DIR}/common/test_utils.cpp)
+    add_executable(BoardProfileStickyTest ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
+      ${CMAKE_CURRENT_SOURCE_DIR}/common/test_utils.cpp)
+    target_compile_definitions(BoardProfileStickyTest PRIVATE PAPYRIX_TARGET_STICKY=1)
     target_compile_definitions(BoardProfileX4ClassicTest PRIVATE PAPYRIX_TARGET_X4CLASSIC=1)
     target_compile_definitions(BoardProfileC3Test PRIVATE PAPYRIX_TARGET_XTEINK_C3=1)
     target_compile_definitions(BoardProfileX4ProTest PRIVATE PAPYRIX_TARGET_X4PRO=1)
-    foreach(BOARD_PROFILE_EXE BoardProfileC3Test BoardProfileX4ProTest BoardProfileX4ClassicTest)
+    foreach(BOARD_PROFILE_EXE BoardProfileC3Test BoardProfileX4ProTest BoardProfileX4ClassicTest BoardProfileStickyTest)
       target_include_directories(${BOARD_PROFILE_EXE} PRIVATE
         ${PROJECT_ROOT}/lib/BoardSupport/include
       )
@@ -164,6 +168,15 @@ foreach(TEST_SRC ${TEST_SOURCES})
     target_include_directories(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/ProgressiveJpeg/src)
     target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_X4PRO=1
       PROGRESSIVE_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/progressive-jpeg")
+  elseif(TEST_NAME STREQUAL "StickyDisplayProbeTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/EInkDisplay/src/StickyDisplayProbe.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/BoardSelector.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareRecovery.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
+      ${TEST_HELPERS})
+    target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_STICKY=1 ARDUINO=10819)
   elseif(TEST_NAME STREQUAL "X4ClassicPanelPolicyTest")
     add_executable(${TEST_NAME} ${TEST_SRC}
       ${PROJECT_ROOT}/lib/BoardSupport/src/X4ClassicPanelPolicy.cpp)
@@ -197,7 +210,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${TEST_HELPERS})
     target_compile_definitions(${TEST_NAME} PRIVATE RTC_DATA_ATTR=)
   elseif(TEST_NAME STREQUAL "QueuedButtonInputTest")
-    foreach(INPUT_TARGET XTEINK_C3 X4CLASSIC)
+    foreach(INPUT_TARGET XTEINK_C3 X4CLASSIC STICKY)
       set(INPUT_TEST QueuedButton${INPUT_TARGET}Test)
       add_executable(${INPUT_TEST} ${TEST_SRC}
         ${PROJECT_ROOT}/src/hal/Input.cpp
@@ -215,35 +228,62 @@ foreach(TEST_SRC ${TEST_SOURCES})
     endforeach()
     continue()
   elseif(TEST_NAME STREQUAL "HalTouchInputTest" OR TEST_NAME STREQUAL "HalButtonInputTest")
+    set(HAL_INPUT_TESTS ${TEST_NAME})
+    if(TEST_NAME STREQUAL "HalTouchInputTest")
+      list(APPEND HAL_INPUT_TESTS HalTouchStickyTest)
+    else()
+      list(APPEND HAL_INPUT_TESTS HalButtonStickyTest)
+    endif()
+    foreach(HAL_INPUT_TEST ${HAL_INPUT_TESTS})
+      add_executable(${HAL_INPUT_TEST} ${TEST_SRC}
+        ${PROJECT_ROOT}/src/hal/Input.cpp
+        ${PROJECT_ROOT}/src/MappedInputManager.cpp
+        ${PROJECT_ROOT}/lib/InputManager/src/InputManager.cpp
+        ${PROJECT_ROOT}/lib/AsyncTask/src/BackgroundTask.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/TouchBackend.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/X4ProBoard.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
+        ${TEST_HELPERS})
+      target_include_directories(${HAL_INPUT_TEST} PRIVATE ${PROJECT_ROOT}/lib/InputManager/include)
+      if(HAL_INPUT_TEST STREQUAL "HalButtonInputTest")
+        target_compile_definitions(${HAL_INPUT_TEST} PRIVATE PAPYRIX_TARGET_X4CLASSIC=1)
+      elseif(HAL_INPUT_TEST STREQUAL "HalTouchStickyTest" OR HAL_INPUT_TEST STREQUAL "HalButtonStickyTest")
+        target_compile_definitions(${HAL_INPUT_TEST} PRIVATE PAPYRIX_TARGET_STICKY=1)
+      else()
+        target_compile_definitions(${HAL_INPUT_TEST} PRIVATE PAPYRIX_TARGET_X4PRO=1)
+      endif()
+      set_target_properties(${HAL_INPUT_TEST} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+    endforeach()
+    continue()
+  elseif(TEST_NAME STREQUAL "StickySsd1677Test")
     add_executable(${TEST_NAME} ${TEST_SRC}
-      ${PROJECT_ROOT}/src/hal/Input.cpp
-      ${PROJECT_ROOT}/src/MappedInputManager.cpp
-      ${PROJECT_ROOT}/lib/InputManager/src/InputManager.cpp
-      ${PROJECT_ROOT}/lib/AsyncTask/src/BackgroundTask.cpp
-      ${PROJECT_ROOT}/lib/BoardSupport/src/TouchBackend.cpp
-      ${PROJECT_ROOT}/lib/BoardSupport/src/X4ProBoard.cpp
+      ${PROJECT_ROOT}/lib/EInkDisplay/src/Display.cpp
+      ${PROJECT_ROOT}/lib/EInkDisplay/src/Uc8279X3Driver.cpp
+      ${PROJECT_ROOT}/lib/EInkDisplay/src/Ssd2677Driver.cpp
+      ${PROJECT_ROOT}/lib/EInkDisplay/src/Uc8279SpiBus.cpp
       ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
       ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
       ${TEST_HELPERS})
-    target_include_directories(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/InputManager/include)
-    if(TEST_NAME STREQUAL "HalButtonInputTest")
-      target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_X4CLASSIC=1)
-    else()
-      target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_X4PRO=1)
-    endif()
+    target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_STICKY=1 EINK_DISPLAY_SINGLE_BUFFER_MODE=1)
+    target_include_directories(${TEST_NAME} BEFORE PRIVATE ${PROJECT_ROOT}/lib/EInkDisplay/include)
   elseif(TEST_NAME STREQUAL "PanelDispatchTest")
-    foreach(PANEL_TARGET X4PRO X4CLASSIC)
+    foreach(PANEL_TARGET X4PRO X4CLASSIC STICKY)
       set(PANEL_TEST PanelDispatch${PANEL_TARGET}Test)
       add_executable(${PANEL_TEST} ${TEST_SRC}
       ${PROJECT_ROOT}/lib/EInkDisplay/src/Display.cpp
       ${PROJECT_ROOT}/lib/EInkDisplay/src/Uc8279X3Driver.cpp
+      ${PROJECT_ROOT}/lib/EInkDisplay/src/Ssd2677Driver.cpp
       ${PROJECT_ROOT}/lib/EInkDisplay/src/Uc8179X4ProDriver.cpp
       ${PROJECT_ROOT}/lib/EInkDisplay/src/Uc8279X4ProDriver.cpp
       ${PROJECT_ROOT}/lib/EInkDisplay/src/Uc8279SpiBus.cpp
       ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
       ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/PowerPolicy.cpp
+      ${PROJECT_ROOT}/lib/SDCardManager/src/SDPowerControl.cpp
       ${TEST_HELPERS})
       target_include_directories(${PANEL_TEST} BEFORE PRIVATE ${PROJECT_ROOT}/lib/EInkDisplay/include)
+      target_include_directories(${PANEL_TEST} PRIVATE ${PROJECT_ROOT}/lib/SDCardManager/include)
       target_compile_definitions(${PANEL_TEST} PRIVATE PAPYRIX_TARGET_${PANEL_TARGET}=1 EINK_DISPLAY_SINGLE_BUFFER_MODE=1)
       set_target_properties(${PANEL_TEST} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
     endforeach()
@@ -271,6 +311,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/BoardSupport/src/FrontLightBackend.cpp
       ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
       ${PROJECT_ROOT}/lib/BoardSupport/src/BootHardware.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/TouchBackend.cpp
       ${PROJECT_ROOT}/lib/BoardSupport/src/PowerPolicy.cpp
       ${PROJECT_ROOT}/lib/SDCardManager/src/SDPowerControl.cpp
       ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
@@ -285,10 +326,11 @@ foreach(TEST_SRC ${TEST_SOURCES})
     else()
       target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_X4PRO=1)
     endif()
-  elseif(TEST_NAME STREQUAL "PowerPolicyTest")
+  elseif(TEST_NAME STREQUAL "PowerPolicyTest" OR TEST_NAME STREQUAL "StickyBoardTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
       ${PROJECT_ROOT}/lib/BoardSupport/src/BootHardware.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/TouchBackend.cpp
       ${PROJECT_ROOT}/lib/BoardSupport/src/PowerPolicy.cpp
       ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
       ${PROJECT_ROOT}/lib/SDCardManager/src/SDPowerControl.cpp
@@ -298,7 +340,11 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/BoardSupport/include
       ${PROJECT_ROOT}/lib/SDCardManager/include
     )
-    target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_XTEINK_C3=1)
+    if(TEST_NAME STREQUAL "StickyBoardTest")
+      target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_STICKY=1)
+    else()
+      target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_XTEINK_C3=1)
+    endif()
   elseif(TEST_NAME STREQUAL "TouchTransformTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
@@ -825,15 +871,19 @@ foreach(TEST_SRC ${TEST_SOURCES})
     # Self-contained test with its own HardwareSerial.h mock (no TEST_HELPERS —
     # platform_stubs.h conflicts with the real Logging.h's logSerial/LOG_* defs).
     # BEFORE ensures our local mock and real Logging.h are found before test/mocks/.
-    add_executable(${TEST_NAME}
-      ${TEST_SRC}
-      ${PROJECT_ROOT}/lib/Logging/src/Logging.cpp
-    )
-    target_include_directories(${TEST_NAME} BEFORE PRIVATE
-      ${CMAKE_CURRENT_SOURCE_DIR}/unit/logging   # Local HWCDC mock (before test/mocks/)
-      ${PROJECT_ROOT}/lib/Logging/src             # Real Logging.h
-    )
-    target_compile_definitions(${TEST_NAME} PRIVATE ENABLE_SERIAL_LOG LOG_LEVEL=2)
+    foreach(LOGGING_TEST ${TEST_NAME} LoggingUartTest)
+      add_executable(${LOGGING_TEST}
+        ${TEST_SRC}
+        ${PROJECT_ROOT}/lib/Logging/src/Logging.cpp
+      )
+      target_include_directories(${LOGGING_TEST} BEFORE PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/unit/logging
+        ${PROJECT_ROOT}/lib/Logging/src
+      )
+      target_compile_definitions(${LOGGING_TEST} PRIVATE ENABLE_SERIAL_LOG LOG_LEVEL=2)
+      set_target_properties(${LOGGING_TEST} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+    endforeach()
+    target_compile_definitions(LoggingUartTest PRIVATE TEST_UART_LOG=1)
   elseif(TEST_NAME STREQUAL "InflateReaderTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
@@ -1269,16 +1319,27 @@ foreach(TEST_SRC ${TEST_SOURCES})
     target_include_directories(${TEST_NAME} PRIVATE
       ${PROJECT_ROOT}/lib/Html5/src
     )
+  elseif(TEST_NAME STREQUAL "FirmwareBoardTagTest")
+    foreach(FIRMWARE_TARGET XTEINK_C3 X4PRO X4CLASSIC STICKY)
+      set(FIRMWARE_TEST FirmwareBoardTag${FIRMWARE_TARGET}Test)
+      add_executable(${FIRMWARE_TEST} ${TEST_SRC} ${PROJECT_ROOT}/src/core/FirmwareBoardTag.cpp ${TEST_HELPERS})
+      target_compile_definitions(${FIRMWARE_TEST} PRIVATE PAPYRIX_TARGET_${FIRMWARE_TARGET}=1)
+      set_target_properties(${FIRMWARE_TEST} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+    endforeach()
+    continue()
   elseif(TEST_NAME STREQUAL "FirmwareUpdaterTest")
-    foreach(FIRMWARE_TARGET XTEINK_C3 X4PRO)
+    foreach(FIRMWARE_TARGET XTEINK_C3 X4PRO X4CLASSIC STICKY)
       if(FIRMWARE_TARGET STREQUAL "XTEINK_C3")
         set(FIRMWARE_TEST FirmwareUpdaterTest)
-      else()
+      elseif(FIRMWARE_TARGET STREQUAL "X4PRO")
         set(FIRMWARE_TEST FirmwareUpdaterS3Test)
+      else()
+        set(FIRMWARE_TEST FirmwareUpdater${FIRMWARE_TARGET}Test)
       endif()
       add_executable(${FIRMWARE_TEST}
         ${TEST_SRC}
         ${PROJECT_ROOT}/src/core/FirmwareUpdater.cpp
+        ${PROJECT_ROOT}/src/core/FirmwareBoardTag.cpp
         ${PROJECT_ROOT}/src/core/OtaBootSwitch.cpp
         ${TEST_HELPERS}
       )
@@ -1353,6 +1414,11 @@ foreach(TEST_SRC ${TEST_SOURCES})
     target_include_directories(${TEST_NAME} PRIVATE
       ${PROJECT_ROOT}/lib/EInkDisplay/src
     )
+  elseif(TEST_NAME STREQUAL "Ssd2677DriverTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/EInkDisplay/src/Ssd2677Driver.cpp ${TEST_HELPERS})
+    target_include_directories(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/EInkDisplay/src)
+    target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_STICKY=1)
   elseif(TEST_NAME STREQUAL "Uc8279X4ProDriverTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
@@ -1400,8 +1466,27 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/src/hal
       ${PROJECT_ROOT}/lib/BoardSupport/include
     )
+  elseif(TEST_NAME STREQUAL "StickyUsbTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/src/hal/Usb.cpp
+      ${PROJECT_ROOT}/src/hal/Battery.cpp
+      ${PROJECT_ROOT}/lib/BatteryMonitor/src/BatteryMonitor.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
+      ${TEST_HELPERS})
+    target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_STICKY=1)
+  elseif(TEST_NAME STREQUAL "StickyPeripheralTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/src/hal/Battery.cpp
+      ${PROJECT_ROOT}/lib/BatteryMonitor/src/BatteryMonitor.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/RtcBackend.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/TouchBackend.cpp
+      ${TEST_HELPERS})
+    target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_STICKY=1)
   elseif(TEST_NAME STREQUAL "RtcBackendTest")
-    foreach(RTC_TEST ${TEST_NAME} RtcBm8563Test RtcClassicTest)
+    foreach(RTC_TEST ${TEST_NAME} RtcBm8563Test RtcClassicTest RtcStickyTest)
       add_executable(${RTC_TEST} ${TEST_SRC}
         ${PROJECT_ROOT}/lib/BoardSupport/src/RtcBackend.cpp
         ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
@@ -1412,6 +1497,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
     target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_XTEINK_C3=1)
     target_compile_definitions(RtcBm8563Test PRIVATE PAPYRIX_TARGET_X4PRO=1)
     target_compile_definitions(RtcClassicTest PRIVATE PAPYRIX_TARGET_X4CLASSIC=1)
+    target_compile_definitions(RtcStickyTest PRIVATE PAPYRIX_TARGET_STICKY=1)
     continue()
   elseif(TEST_NAME STREQUAL "Cw2017PolicyTest")
     foreach(GAUGE_TARGET X4PRO X4CLASSIC)
@@ -1427,7 +1513,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
     endforeach()
     continue()
   elseif(TEST_NAME STREQUAL "StorageTransportTest")
-    foreach(STORAGE_TARGET C3 X4Pro X4Classic)
+    foreach(STORAGE_TARGET C3 X4Pro X4Classic Sticky)
       add_executable(StorageTransport${STORAGE_TARGET}Test ${TEST_SRC}
         ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
         ${TEST_HELPERS})
@@ -1440,6 +1526,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
     target_compile_definitions(StorageTransportC3Test PRIVATE PAPYRIX_TARGET_XTEINK_C3=1)
     target_compile_definitions(StorageTransportX4ProTest PRIVATE PAPYRIX_TARGET_X4PRO=1)
     target_compile_definitions(StorageTransportX4ClassicTest PRIVATE PAPYRIX_TARGET_X4CLASSIC=1)
+    target_compile_definitions(StorageTransportStickyTest PRIVATE PAPYRIX_TARGET_STICKY=1)
     continue()
   elseif(TEST_NAME STREQUAL "SDPowerControlTest")
     add_executable(${TEST_NAME}
@@ -1521,6 +1608,17 @@ foreach(TEST_SRC ${TEST_SOURCES})
   )
   set_target_properties(${TEST_NAME} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build/bin)
+  if(TEST_NAME MATCHES "^(ParserScratch|StreamingEpdFontS3|BitmapTurnCache)Test$")
+    string(REPLACE "S3Test" "Test" MEMORY_TEST ${TEST_NAME})
+    string(REGEX REPLACE "Test$" "StickyTest" STICKY_TEST ${MEMORY_TEST})
+    get_target_property(MEMORY_SOURCES ${TEST_NAME} SOURCES)
+    add_executable(${STICKY_TEST} ${MEMORY_SOURCES})
+    target_compile_definitions(${STICKY_TEST} PRIVATE PAPYRIX_TARGET_STICKY=1)
+    target_include_directories(${STICKY_TEST} BEFORE PRIVATE $<TARGET_PROPERTY:${TEST_NAME},INCLUDE_DIRECTORIES>)
+    target_compile_options(${STICKY_TEST} PRIVATE $<TARGET_PROPERTY:${TEST_NAME},COMPILE_OPTIONS>)
+    target_link_options(${STICKY_TEST} PRIVATE $<TARGET_PROPERTY:${TEST_NAME},LINK_OPTIONS>)
+    set_target_properties(${STICKY_TEST} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build/bin)
+  endif()
 endforeach()
 
 message(STATUS "Configured ${TEST_SOURCES} tests")

@@ -103,6 +103,13 @@ int main() {
   runner.expectTrue(matches(7, TestGpioEventType::Delay, -1, 10), "reset settles 10 ms");
   runner.expectTrue(matches(8, TestGpioEventType::Delay, -1, 50), "reset adds the extra settle");
 
+  papyrix::eink::Uc8279SpiBus sticky(15, 16, 17, 18, SPISettings(10000000, MSBFIRST, SPI_MODE0), 20);
+  testResetGpioEvents();
+  sticky.reset(0);
+  runner.expectTrue(matches(4, TestGpioEventType::DigitalWrite, 17, LOW) &&
+                        matches(5, TestGpioEventType::Delay, -1, 20) &&
+                        matches(6, TestGpioEventType::DigitalWrite, 17, HIGH),
+                    "SSD2677 receives a 20 ms reset-low pulse");
   runner.printSummary();
   return runner.allPassed() ? 0 : 1;
 }

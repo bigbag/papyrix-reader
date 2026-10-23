@@ -20,11 +20,16 @@ GROUPS = {
     "GT911 touch symbols": re.compile(r"GT911", re.IGNORECASE),
     "FT6336 touch symbols": re.compile(r"FT6336", re.IGNORECASE),
     "swipe gesture symbols": re.compile(r"[Ss]wipe"),
-    "Bluetooth symbols": re.compile(r"Bluetooth"),
+    "Bluetooth symbols": re.compile(r"Bluetooth|BLEDevice::|NimBLE", re.IGNORECASE),
     "X4ProVariant placeholder": re.compile(r"X4ProVariant"),
     "frontlight symbols": re.compile(r"FrontLightBackend::"),
     "Pro touch board symbols": re.compile(r"::x4pro::"),
     "progressive JPEG symbols": re.compile(r"ProgressiveJpeg::|ProgressiveJpegImageConverter"),
+    "Sticky panel symbols": re.compile(r"Ssd2677Driver|ssd2677Driver|probeStickyDisplayController|kStickySsd1677"),
+    "C3 panel symbols": re.compile(r"Uc8253|Uc8279X3|X3ControllerPolicy"),
+    "CW2017 symbols": re.compile(r"Cw2017", re.IGNORECASE),
+    "SDMMC symbols": re.compile(r"Sdmmc1Bit|sdmmc_host_|sdmmc_card_init", re.IGNORECASE),
+    "foreign board profiles": re.compile(r"kX3Profile|kX4Profile|kX4ClassicProfile"),
 }
 
 FORBIDDEN_GROUP_NAMES = {
@@ -37,6 +42,7 @@ FORBIDDEN_GROUP_NAMES = {
         "Bluetooth symbols",
         "X4ProVariant placeholder",
         "progressive JPEG symbols",
+        "Sticky panel symbols",
     ),
     "x4pro": (
         "PaperMono board symbols",
@@ -44,6 +50,7 @@ FORBIDDEN_GROUP_NAMES = {
         "swipe gesture symbols",
         "Bluetooth symbols",
         "X4ProVariant placeholder",
+        "Sticky panel symbols",
     ),
     "x4c": (
         "PaperMono board symbols",
@@ -54,6 +61,20 @@ FORBIDDEN_GROUP_NAMES = {
         "X4ProVariant placeholder",
         "frontlight symbols",
         "Pro touch board symbols",
+        "Sticky panel symbols",
+    ),
+    "sticky": (
+        "X4 Pro board symbols",
+        "PaperMono board symbols",
+        "FT6336 touch symbols",
+        "swipe gesture symbols",
+        "Bluetooth symbols",
+        "X4ProVariant placeholder",
+        "frontlight symbols",
+        "C3 panel symbols",
+        "CW2017 symbols",
+        "SDMMC symbols",
+        "foreign board profiles",
     ),
 }
 

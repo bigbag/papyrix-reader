@@ -1,10 +1,12 @@
 #include "TouchBackend.h"
 
-#if defined(PAPYRIX_TARGET_X4PRO) && PAPYRIX_TARGET_X4PRO
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_STICKY
+#include <TargetConfig.h>
+#endif
+#if PAPYRIX_CAP_TOUCH
 #include <Arduino.h>
 #include <Wire.h>
-
-#include "X4ProBoard.h"
+#include <driver/gpio.h>
 #endif
 
 namespace papyrix::board {
@@ -21,6 +23,33 @@ void suppressTouchUntilIdle() {
 }
 
 uint32_t touchSuppressionRevision() { return gTouchSuppressionRevision; }
+
+void enableTouch(const TouchConfig& touch) {
+#if PAPYRIX_CAP_TOUCH
+  if (touch.powerPin != kPinUnused) {
+    gpio_hold_dis(static_cast<gpio_num_t>(touch.powerPin));
+    pinMode(touch.powerPin, OUTPUT);
+    digitalWrite(touch.powerPin, touch.powerActiveHigh ? HIGH : LOW);
+  }
+  delay(50);
+  if (touch.irq == kPinUnused || touch.rst == kPinUnused) return;
+  gpio_hold_dis(static_cast<gpio_num_t>(touch.rst));
+  gpio_hold_dis(static_cast<gpio_num_t>(touch.irq));
+  pinMode(touch.irq, OUTPUT);
+  pinMode(touch.rst, OUTPUT);
+  digitalWrite(touch.rst, LOW);
+  digitalWrite(touch.irq, LOW);
+  delay(10);
+  digitalWrite(touch.rst, HIGH);
+  delay(10);
+  digitalWrite(touch.irq, LOW);
+  delay(50);
+  pinMode(touch.irq, INPUT);
+  delay(50);
+#else
+  (void)touch;
+#endif
+}
 
 bool decodeGt911Frame(const TouchConfig& config, uint8_t status, const uint8_t* pointData, size_t pointLength,
                       RawTouchSample& sample) {
@@ -133,11 +162,11 @@ bool TouchBackend::begin(const BoardProfile& profile) {
   config_ = profile.touch;
   address_ = 0;
   available_ = false;
-#if defined(PAPYRIX_TARGET_X4PRO) && PAPYRIX_TARGET_X4PRO
+#if PAPYRIX_CAP_TOUCH
   contactCount_ = 0;
   homeDown_ = false;
   if (config_.controller == TouchController::Gt911) {
-    x4pro::enableTouch(config_);
+    enableTouch(config_);
     available_ = beginGt911();
     if (!available_) shutdown();
   }
@@ -147,7 +176,7 @@ bool TouchBackend::begin(const BoardProfile& profile) {
 
 RawTouchSample TouchBackend::poll() {
   if (!available_) return {};
-#if defined(PAPYRIX_TARGET_X4PRO) && PAPYRIX_TARGET_X4PRO
+#if PAPYRIX_CAP_TOUCH
   return pollGt911();
 #else
   return {};
@@ -155,7 +184,7 @@ RawTouchSample TouchBackend::poll() {
 }
 
 void TouchBackend::shutdown() {
-#if defined(PAPYRIX_TARGET_X4PRO) && PAPYRIX_TARGET_X4PRO
+#if PAPYRIX_CAP_TOUCH
   if (config_.rst != kPinUnused) {
     pinMode(config_.rst, OUTPUT);
     digitalWrite(config_.rst, LOW);
@@ -170,7 +199,7 @@ void TouchBackend::shutdown() {
 }
 
 bool TouchBackend::beginGt911() {
-#if defined(PAPYRIX_TARGET_X4PRO) && PAPYRIX_TARGET_X4PRO
+#if PAPYRIX_CAP_TOUCH
   const auto probe = [this]() {
     for (const uint8_t candidate : {config_.i2cAddress, config_.i2cAddressAlt}) {
       if (candidate == 0) continue;
@@ -208,7 +237,7 @@ bool TouchBackend::beginGt911() {
 }
 
 RawTouchSample TouchBackend::pollGt911() {
-#if defined(PAPYRIX_TARGET_X4PRO) && PAPYRIX_TARGET_X4PRO
+#if PAPYRIX_CAP_TOUCH
   uint8_t status = 0;
   if (!readGt911(0x814E, &status, 1)) return {false, false, 0, 0, 0};
   uint8_t point[8]{};
@@ -232,7 +261,7 @@ RawTouchSample TouchBackend::pollGt911() {
 }
 
 bool TouchBackend::readGt911(uint16_t reg, uint8_t* data, uint8_t length) {
-#if defined(PAPYRIX_TARGET_X4PRO) && PAPYRIX_TARGET_X4PRO
+#if PAPYRIX_CAP_TOUCH
   Wire.beginTransmission(address_);
   Wire.write(static_cast<uint8_t>(reg >> 8));
   Wire.write(static_cast<uint8_t>(reg));
@@ -252,7 +281,7 @@ bool TouchBackend::readGt911(uint16_t reg, uint8_t* data, uint8_t length) {
 }
 
 bool TouchBackend::clearGt911Status() {
-#if defined(PAPYRIX_TARGET_X4PRO) && PAPYRIX_TARGET_X4PRO
+#if PAPYRIX_CAP_TOUCH
   Wire.beginTransmission(address_);
   Wire.write(0x81);
   Wire.write(0x4E);

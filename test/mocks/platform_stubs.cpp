@@ -14,6 +14,7 @@ MockSPI SPI;
 MockESP ESP;
 MockLittleFS LittleFS;
 TwoWire Wire;
+TwoWire Wire1;
 TestGpioEvent testGpioEvents[TEST_GPIO_EVENT_CAPACITY]{};
 size_t testGpioEventCount = 0;
 bool testManualMillisEnabled = false;

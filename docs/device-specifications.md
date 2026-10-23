@@ -23,6 +23,13 @@
   - Storage: 1-bit SDMMC
   - Touch: None
 
+- **[reTerminal Sticky](sticky-specifications.md)**
+  - MCU: ESP32-S3, 8 MB octal PSRAM
+  - Display: 800 × 480, SSD1677 or SSD2677
+  - Storage: SPI SD
+  - Touch: GT911
+  - Status: implemented, not device-tested
+
 See the [device support matrix](device-support-matrix.md) for build targets and hardware services.
 Classic uses a separate board profile from the original X4 and X4 Pro.
 
@@ -31,7 +38,13 @@ Classic uses a separate board profile from the original X4 and X4 Pro.
 - `papyrix-xteink-c3.bin` selects X3 or X4 at startup.
 - `papyrix-x4pro.bin` uses the fixed X4 Pro board profile.
 - `papyrix-x4c.bin` uses the fixed X4 v2 Classic board profile.
-- All three artifacts use 16 MB flash and application offset `0x10000` in the standard partition table.
+- `papyrix-sticky.bin` uses the fixed Sticky board profile.
+
+The standard partition table starts app0 at `0x10000`.
+The partition layout uses 16 MB.
+Sticky has 32 MB of physical flash.
+The Xteink targets have 16 MB of physical flash.
+Sticky first installation requires the [complete install bundle](sticky-specifications.md#installation).
 
 Do not install an artifact for a different MCU or board.
 An incorrect image can drive the wrong GPIOs and damage hardware.
@@ -56,11 +69,16 @@ A missing or invalid identity starts a bounded display probe.
 An unknown response leaves the display disabled.
 Headless SD recovery remains available.
 
+Sticky uses a fixed board profile and probes its display controller.
+An unresolved Sticky panel blocks display initialization.
+See the [Sticky specifications](sticky-specifications.md#display-behavior) for the probe limits.
+
 ## Power
 
 The CPU policy uses 10 MHz at idle.
 Active work uses 160 MHz on ESP32-C3 and 240 MHz on ESP32-S3.
-GPIO3 receives the Power button input on all supported devices.
+Xteink devices use GPIO3 for the Power button.
+Sticky uses GPIO4.
 
 The firmware powers the SD rail before storage access.
 It completes the display power-off sequence before deep sleep.
@@ -76,6 +94,7 @@ Page caches use device-specific folders:
 /.papyrix/cache/x3/       X3
 /.papyrix/cache/x4pro/    X4 Pro
 /.papyrix/cache/x4c/      X4 v2 Classic
+/.papyrix/cache/sticky/   reTerminal Sticky
 ```
 
 Moving an SD card between devices does not reuse incompatible page layouts.

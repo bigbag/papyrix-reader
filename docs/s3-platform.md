@@ -11,8 +11,9 @@ Each build selects exactly one `PAPYRIX_TARGET_*` macro.
 - `PAPYRIX_TARGET_XTEINK_C3`: X3 and original X4, with ESP32-C3 and no PSRAM.
 - `PAPYRIX_TARGET_X4PRO`: X4 Pro, with ESP32-S3 and 8 MB PSRAM.
 - `PAPYRIX_TARGET_X4CLASSIC`: X4 v2 Classic, with ESP32-S3 and 8 MB PSRAM.
+- `PAPYRIX_TARGET_STICKY`: reTerminal Sticky, with ESP32-S3 and 8 MB PSRAM.
 
-The two S3 targets use separate firmware images and board profiles.
+The three S3 targets use separate firmware images and board profiles.
 Do not interchange their images or pins.
 C3 uses a separate bitmap object for each render pass.
 Its glyph cache holds up to 192 entries.
@@ -21,6 +22,8 @@ Its optional PSRAM limits are zero.
 
 All targets use one framebuffer.
 `kTargetFrameBufferBytes` sets its size to 48,000 bytes on S3.
+SSD2677 also retains a 48,000-byte monochrome baseline.
+It allocates a 48,000-byte gray staging plane when needed.
 
 ## Memory allocation
 
@@ -88,7 +91,7 @@ Parser API signatures do not depend on the target.
 ## USB behavior
 
 The firmware does not support USB mass storage.
-The S3 builds set `ARDUINO_USB_MODE=1`.
-Normal firmware uses USB-Serial/JTAG for the serial console.
+C3, Pro, and Classic use USB-Serial/JTAG for the serial console.
+Sticky sets `ARDUINO_USB_CDC_ON_BOOT=0` and uses UART0 through CH343P.
 The firmware does not expose the SD card over USB.
 The [web server](webserver.md), [LocalSend](localsend.md), and [Calibre](calibre.md) use Wi-Fi for file transfer.

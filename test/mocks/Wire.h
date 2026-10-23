@@ -16,7 +16,7 @@ class TwoWire {
     frequency_ = frequency;
     return true;
   }
-  void end() { invalidState_ = false; }
+  void end() { ++endCount_; invalidState_ = false; }
   void setTimeOut(uint16_t timeout) { timeout_ = timeout; }
 
   void beginTransmission(uint8_t address) {
@@ -100,6 +100,7 @@ class TwoWire {
     frequency_ = 0;
     timeout_ = 0;
     beginCount_ = 0;
+    endCount_ = 0;
     writeHook_ = nullptr;
     readHook_ = nullptr;
   }
@@ -148,6 +149,7 @@ class TwoWire {
   int sclPin() const { return scl_; }
   uint32_t frequency() const { return frequency_; }
   size_t beginCount() const { return beginCount_; }
+  size_t endCount() const { return endCount_; }
   size_t registerWriteCount(uint8_t address, uint16_t reg) const {
     const auto it = registerWrites_.find((static_cast<uint32_t>(address) << 16) | reg);
     return it == registerWrites_.end() ? 0 : it->second;
@@ -176,6 +178,7 @@ class TwoWire {
   Write16Event write16_[kWrite16Capacity]{};
   size_t write16Count_ = 0;
   size_t beginCount_ = 0;
+  size_t endCount_ = 0;
   int sda_ = -1;
   int scl_ = -1;
   uint32_t frequency_ = 0;
@@ -190,3 +193,4 @@ class TwoWire {
 };
 
 extern TwoWire Wire;
+extern TwoWire Wire1;
