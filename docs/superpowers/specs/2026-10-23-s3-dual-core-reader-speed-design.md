@@ -21,7 +21,7 @@ The work order is fixed:
 - Reduce next-page wait after the current page is ready.
 - Reduce chapter jump wait for likely targets.
 - Make layout change progressive and cancellable.
-- Prove gain on X4 Pro, X4 v2 Classic, and Sticky.
+- Prove gain on X4 Pro, X4 v2 Classic, Sticky, and Murphy M4.
 - Keep ESP32-C3 behavior unchanged.
 
 ## Non-goals
@@ -113,13 +113,13 @@ Record these values before and after each phase:
 - Worker core trace.
 - Current draw when test gear is available.
 
-Run the fixture on X4 Pro, X4 v2 Classic, and Sticky.
-Treat Sticky display results as unverified until hardware checks pass.
+Run the fixture on X4 Pro, X4 v2 Classic, Sticky, and Murphy M4.
+Treat Sticky and M4 display results as unverified until hardware checks pass.
 
 A phase passes its speed gate only when its target metric improves by at least 20 percent in the median on Pro and Classic.
 No S3 target may regress by more than 5 percent in any measured reader metric.
-Collect Sticky timing data in each phase.
-Report Sticky results separately until its display path is hardware-verified.
+Collect Sticky and M4 timing data in each phase.
+Report Sticky and M4 results separately until their display paths are hardware-verified.
 Use the primary metric for each phase: first readable page time for Phase 1, next-page time for Phase 2, near and far chapter jump time for Phase 3, and time to first usable page for Phase 4.
 If a phase misses the gate, stop its speed work and revisit the design before the next phase.
 
@@ -271,4 +271,4 @@ Device checks:
 - Layout change uses a second parser and a staging cache path.
 - The producer task is created pinned before float work runs.
 - Phase speed gates use 20 percent median improvement on Pro and Classic and a 5 percent regression limit on all S3 targets.
-- Sticky results stay separate until its display path is hardware-verified.
+- Sticky and M4 results stay separate until their display paths are hardware-verified.
