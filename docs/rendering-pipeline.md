@@ -99,6 +99,8 @@ The user can cancel with Back.
 XTC and XTCH do not require text layout.
 
 Foreground caching handles a requested page that is not yet available.
+Backward navigation uses a compatible complete chapter cache without an indexing screen.
+The reader uses the stored page count to select the last page.
 Background caching extends the cache while the user reads.
 Cancellation uses `AbortCallback`.
 The background task deletes itself after it stops.

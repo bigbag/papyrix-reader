@@ -1509,8 +1509,9 @@ void ReaderState::renderCachedPage(Core& core) {
     // Try to load existing cache silently first
     loadCacheFromDisk(core);
 
-    bool pageIsCached =
-        pageCache_ && currentSectionPage_ >= 0 && currentSectionPage_ < static_cast<int>(pageCache_->pageCount());
+    const bool pageIsCached =
+        pageCache_ && (!pageCache_->isPartial() ||
+                       (currentSectionPage_ >= 0 && currentSectionPage_ < static_cast<int>(pageCache_->pageCount())));
 
     if (!pageIsCached) {
       // Current page not cached - show "Indexing..." and create/extend

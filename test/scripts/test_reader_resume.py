@@ -67,7 +67,8 @@ struct Page {
 struct Cache {
   bool readable = true;
   unsigned count = 1;
-  bool isPartial() { return false; }
+  bool partial = false;
+  bool isPartial() { return partial; }
   unsigned pageCount() { return count; }
   void clear() {}
   std::unique_ptr<Page> loadPage(uint32_t) { return readable ? std::make_unique<Page>() : nullptr; }
@@ -178,6 +179,8 @@ struct ReaderState {
   int currentSpineIndex_ = 0, currentSectionPage_ = 0, lastRenderedSpineIndex_ = 0, lastRenderedSectionPage_ = 0;
   int textStartIndex_ = 0, parserSpineIndex_ = -1;
   uint32_t currentPage_ = 0, lastRenderedPage_ = 0;
+  int storedChapterPages = -1, completedChapterPages = -1;
+  bool storedChapterPartial = false;
   std::unique_ptr<Cache> pageCache_ = std::make_unique<Cache>();
   std::unique_ptr<Parser> parser_;
   std::unique_ptr<Cache> indexingCache_;
@@ -202,8 +205,17 @@ struct ReaderState {
   bool stopBackgroundCaching(bool = false) { return canStop; }
   void startBackgroundCaching(Core&) {}
   bool renderCoverPage(Core&) { return coverSucceeds; }
-  void loadCacheFromDisk(Core&) {}
-  void createOrExtendCache(Core&) {}
+  void loadCacheFromDisk(Core&) {
+    if (storedChapterPages < 0) return;
+    pageCache_ = std::make_unique<Cache>();
+    pageCache_->count = static_cast<unsigned>(storedChapterPages);
+    pageCache_->partial = storedChapterPartial;
+  }
+  void createOrExtendCache(Core&) {
+    if (completedChapterPages < 0) return;
+    pageCache_ = std::make_unique<Cache>();
+    pageCache_->count = static_cast<unsigned>(completedChapterPages);
+  }
   bool ensurePageCached(Core&, uint32_t page) { return pageCache_ && page < pageCache_->count; }
   void renderPageContents(Core&, Page&, int, int, int, int) {}
   void renderStatusBar(Core&, int, int, int) {}
@@ -230,6 +242,32 @@ void check(bool condition, const char* message) {
 }  // namespace papyrix
 int main() {
   using namespace papyrix;
+  reset();
+  for (auto type : {ContentType::Epub, ContentType::Fb2}) {
+    core.content.meta.type = type;
+    for (int pages : {1, 17}) {
+      ReaderState cached;
+      cached.pageCache_.reset();
+      cached.currentSectionPage_ = INT16_MAX;
+      cached.storedChapterPages = pages;
+      cached.render(core);
+      check(cached.renderer_.displays == 1, "cached backward chapter jump must not show an indexing screen");
+      check(cached.hasRenderedPage_ && cached.lastRenderedSectionPage_ == pages - 1,
+            "cached backward chapter jump renders the final page");
+    }
+    for (bool hasPartialCache : {false, true}) {
+      ReaderState uncached;
+      uncached.pageCache_.reset();
+      uncached.currentSectionPage_ = INT16_MAX;
+      uncached.storedChapterPages = hasPartialCache ? 5 : -1;
+      uncached.storedChapterPartial = hasPartialCache;
+      uncached.completedChapterPages = 17;
+      uncached.render(core);
+      check(uncached.hasRenderedPage_ && uncached.lastRenderedSectionPage_ == 16,
+            "uncached backward chapter jump completes the chapter before selecting its final page");
+    }
+  }
+  puts("PASS: backward chapter transitions use complete caches and finish partial or missing caches");
   reset();
   saveTransition(BootMode::READER, "/new.epub", ReturnTo::RECENT);
   check(strcmp(disk.lastBookPath, "/good.epub") == 0, "pending open must retain known-good book");
