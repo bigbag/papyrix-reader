@@ -6,14 +6,19 @@ Use the firmware file for the device:
 - X4 Pro: `papyrix-x4pro.bin`
 - X4 v2 Classic: `papyrix-x4c.bin`
 - Sticky: `papyrix-sticky.bin` for app updates
+- Murphy M4: `papyrix-murphy-m4.bin` for app updates
 
-Pro, Classic, and Sticky images are not interchangeable.
+Pro, Classic, Sticky, and M4 images are not interchangeable.
 A wrong-target image can drive incorrect GPIOs and damage hardware.
 Use the [firmware recovery procedure](#firmware-recovery) to install the correct image.
 Do not erase the chip or factory NVS.
 Classic uses factory NVS data for panel selection.
 For Sticky first installation, use the [complete install bundle](sticky-specifications.md#installation).
 Sticky support is implemented, not device-tested.
+For M4 first installation, use the [M4 guide](murphy-m4-specifications.md#installation).
+M4 support is **Implemented, not device-tested**.
+Do not erase or write before model/batch, flash/layout, security checks, and private verified flash/SD backups.
+No physical operation or stock-restoration procedure is verified for M4.
 
 ## Serial Log Capture
 
@@ -80,6 +85,8 @@ visible during a headless recovery. Wait for the device to restart. The boot
 path removes the file after the attempt. Copy it again before a retry.
 
 There is no boot-button recovery mode.
+Emergency SD recovery requires bootable PapyriX and working SD access.
+It cannot restore an erased bootloader or damaged partition table.
 
 ## Display Initialization Recovery
 
@@ -90,6 +97,17 @@ firmware waits without rebooting.
 
 Press the Power button to restore storage power and retry display initialization.
 SPI targets restore the profile pins before the SD card remounts.
+
+## Murphy M4 faults
+
+Do not treat a firmware build or host test as proof of correct wiring.
+Confirm the hardware batch before changing Settings > Device > Hardware batch.
+A successful change restarts before touch and display use the new configuration.
+The USB status reports native host connection, not wall-adapter presence.
+GPIO43 supplies the separate charging signal.
+Touch and display share reset GPIO7.
+Do not add an independent touch reset or replace the four-bit SD pins with a one-bit example.
+Record logs and compare the [M4 specifications](murphy-m4-specifications.md) before another hardware write.
 
 ## Repeated Sleep at Startup
 

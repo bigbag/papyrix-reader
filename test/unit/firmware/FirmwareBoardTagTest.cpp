@@ -14,6 +14,8 @@ const std::string expected = "PAPYRIX-BOARD-V1:xteink_c3;";
 const std::string expected = "PAPYRIX-BOARD-V1:x4pro;";
 #elif PAPYRIX_TARGET_X4CLASSIC
 const std::string expected = "PAPYRIX-BOARD-V1:x4c;";
+#elif PAPYRIX_TARGET_MURPHY_M4
+const std::string expected = "PAPYRIX-BOARD-V1:murphy_m4;";
 #else
 const std::string expected = "PAPYRIX-BOARD-V1:sticky;";
 #endif

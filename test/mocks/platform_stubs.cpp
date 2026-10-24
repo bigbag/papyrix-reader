@@ -17,8 +17,8 @@ TwoWire Wire;
 TwoWire Wire1;
 TestGpioEvent testGpioEvents[TEST_GPIO_EVENT_CAPACITY]{};
 size_t testGpioEventCount = 0;
-bool testManualMillisEnabled = false;
-unsigned long testManualMillisValue = 0;
+std::atomic<bool> testManualMillisEnabled{false};
+std::atomic<unsigned long> testManualMillisValue{0};
 
 void testRecordGpioEvent(TestGpioEventType type, int pin, int value) {
   if (testGpioEventCount >= TEST_GPIO_EVENT_CAPACITY) return;

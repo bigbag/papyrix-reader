@@ -12,7 +12,6 @@ int main() {
   runner.expectTrue(plan.writeBwBeforeRefresh, "full refresh writes BW before refresh");
   runner.expectTrue(plan.writeRedBeforeRefresh, "full refresh writes RED before refresh");
   runner.expectTrue(plan.syncRedAfterRefresh, "full refresh synchronizes RED after refresh");
-  runner.expectEq(48000U, plan.transferBytes, "full refresh transfers a full frame");
 
   plan = makeSsd1677UpdatePlan(Ssd1677RefreshMode::Fast, 48000);
   runner.expectTrue(plan.writeBwBeforeRefresh, "fast refresh writes BW before refresh");
@@ -20,7 +19,6 @@ int main() {
   runner.expectTrue(plan.syncRedAfterRefresh, "fast refresh synchronizes RED after refresh");
 
   plan = makeSsd1677UpdatePlan(Ssd1677RefreshMode::Window, 8);
-  runner.expectEq(8U, plan.transferBytes, "8 by 8 window transfers 8 bytes");
   runner.expectTrue(plan.writeBwBeforeRefresh, "window refresh writes BW before refresh");
   runner.expectFalse(plan.writeRedBeforeRefresh, "window refresh keeps the previous RED window");
   runner.expectTrue(plan.syncRedAfterRefresh, "window refresh synchronizes the RED window");

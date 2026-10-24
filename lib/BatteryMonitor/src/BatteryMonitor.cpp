@@ -4,13 +4,14 @@
 #include <Arduino.h>
 #include <I2cBus.h>
 #include <Wire.h>
-#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_MURPHY_M4
 #include <TargetConfig.h>
 #endif
 
 inline float min(const float a, const float b) { return a < b ? a : b; }
 inline float max(const float a, const float b) { return a > b ? a : b; }
 
+#if !PAPYRIX_TARGET_MURPHY_M4
 namespace {
 constexpr uint8_t I2C_ADDR_BQ27220 = 0x55;
 constexpr uint8_t BQ27220_SOC_REG = 0x2C;   // 16-bit LE, percentage
@@ -75,9 +76,12 @@ bool bqSession(const BatteryMonitor::Bq27220Config& i2c, Op&& op) {
 }
 }  // namespace
 
+#endif
+
 BatteryMonitor::BatteryMonitor(uint8_t adcPin, float dividerMultiplier)
     : _mode(Mode::Adc), _adcPin(adcPin), _dividerMultiplier(dividerMultiplier) {}
 
+#if !PAPYRIX_TARGET_MURPHY_M4
 BatteryMonitor::BatteryMonitor(const Bq27220Config& cfg) : _mode(Mode::Bq27220), _i2c(cfg) {}
 
 uint16_t BatteryMonitor::readBq27220Soc_() const {
@@ -121,12 +125,16 @@ uint16_t BatteryMonitor::readBq27220Mv_() const {
   return mv;
 }
 
+#endif
+
 uint16_t BatteryMonitor::readPercentage() const {
 #if PAPYRIX_CAP_BATTERY_CW2017
   uint16_t percentage = 0;
   return readCw2017Soc_(&percentage) ? percentage : 0;
 #else
+#if !PAPYRIX_TARGET_MURPHY_M4
   if (_mode == Mode::Bq27220) return readBq27220Soc_();
+#endif
   return percentageFromMillivolts(readMillivolts());
 #endif
 }
@@ -136,7 +144,9 @@ uint16_t BatteryMonitor::readMillivolts() const {
   uint16_t millivolts = 0;
   return readCw2017Mv_(&millivolts) ? millivolts : 0;
 #else
+#if !PAPYRIX_TARGET_MURPHY_M4
   if (_mode == Mode::Bq27220) return readBq27220Mv_();
+#endif
   return static_cast<uint16_t>(readRawMillivolts() * _dividerMultiplier);
 #endif
 }
@@ -145,7 +155,9 @@ uint16_t BatteryMonitor::readRawMillivolts() const {
 #if PAPYRIX_CAP_BATTERY_CW2017
   return readMillivolts();
 #else
+#if !PAPYRIX_TARGET_MURPHY_M4
   if (_mode == Mode::Bq27220) return readBq27220Mv_();
+#endif
   std::lock_guard<std::mutex> adcLock(papyrix::board::adcMutex);
   return analogReadMilliVolts(_adcPin);
 #endif
@@ -153,6 +165,7 @@ uint16_t BatteryMonitor::readRawMillivolts() const {
 
 double BatteryMonitor::readVolts() const { return static_cast<double>(readMillivolts()) / 1000.0; }
 
+#if !PAPYRIX_TARGET_MURPHY_M4
 bool BatteryMonitor::readBq27220Current_(int16_t* outMa) const {
   const unsigned long now = millis();
   if (_haveBqCurrent && _lastCurrentPollMs != 0 && (now - _lastCurrentPollMs) < kBqPollIntervalMs) {
@@ -177,6 +190,8 @@ bool BatteryMonitor::readBq27220Current_(int16_t* outMa) const {
   return true;
 }
 
+#endif
+
 BatteryMonitor::Status BatteryMonitor::readStatus() const {
   Status status;
 #if !PAPYRIX_CAP_BATTERY_CW2017
@@ -198,16 +213,19 @@ BatteryMonitor::Status BatteryMonitor::readStatus() const {
   status.millivolts = readMillivolts();
   status.percentageKnown = true;
   status.millivoltsKnown = true;
+#if !PAPYRIX_TARGET_MURPHY_M4
   if (_mode == Mode::Bq27220) {
     int16_t current = 0;
     status.chargingKnown = readBq27220Current_(&current);
     status.charging = status.chargingKnown && current > 0;
   }
 #endif
+#endif
   return status;
 }
 
 bool BatteryMonitor::isCharging() const {
+#if !PAPYRIX_TARGET_MURPHY_M4
   if (_mode != Mode::Bq27220) {
     return false;
   }
@@ -220,6 +238,7 @@ bool BatteryMonitor::isCharging() const {
     }
     delay(2);
   }
+#endif
   return false;
 }
 
@@ -238,11 +257,18 @@ uint16_t BatteryMonitor::percentageFromMillivolts(uint16_t millivolts) {
 uint16_t BatteryMonitor::millivoltsFromRawAdc(uint16_t adc_raw) { return adc_raw; }
 
 bool BatteryMonitor::serviceDesignCapacity() {
+#if PAPYRIX_TARGET_MURPHY_M4
+  return false;
+#else
   if (_mode != Mode::Bq27220 || _i2c.designCapacityMah == 0) return false;
   return bq27220LoadStep_(millis());
+#endif
 }
 
 bool BatteryMonitor::finishDesignCapacity() {
+#if PAPYRIX_TARGET_MURPHY_M4
+  return true;
+#else
   if (_mode != Mode::Bq27220 || _i2c.designCapacityMah == 0) return true;
   Bq27220Load& s = _bqLoad;
   // Decide from the gauge, not from the step flags: the service machine clears
@@ -291,8 +317,10 @@ bool BatteryMonitor::finishDesignCapacity() {
   // so the next call retries from the actual gauge state.
   if (ok) s.step = 9;
   return ok;
+#endif
 }
 
+#if !PAPYRIX_TARGET_MURPHY_M4
 // Replaces TI's default Design Capacity, or a Learned Full Charge Capacity that
 // is too high, in one big-endian word, adjusting the block checksum by the
 // bytes that change.
@@ -410,3 +438,4 @@ bool BatteryMonitor::bq27220LoadStep_(const unsigned long now) {
   }
   return close();
 }
+#endif

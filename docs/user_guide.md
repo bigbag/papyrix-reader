@@ -11,13 +11,15 @@ Use the firmware file for the device:
 - X4 Pro: `papyrix-x4pro.bin`
 - X4 v2 Classic: `papyrix-x4c.bin`
 - Sticky: `papyrix-sticky.bin` for app updates
+- Murphy M4: `papyrix-murphy-m4.bin` for app updates
 
 X3, the original X4, and X4 v2 Classic have no touch input.
-X4 Pro and Sticky have touch input.
-Only X4 Pro has a front light.
-Pro, Classic, and Sticky firmware images are not interchangeable.
-Sticky support is implemented, not device-tested.
+X4 Pro, Sticky, and Murphy M4 have touch input.
+X4 Pro and M4 have a front light.
+Pro, Classic, Sticky, and M4 firmware images are not interchangeable.
+Sticky and M4 support is implemented, not device-tested.
 Use the [complete Sticky install bundle](sticky-specifications.md#installation) for first installation.
+Use the [complete M4 install bundle](murphy-m4-specifications.md#installation) for M4 first installation.
 
 ### Button and Touch Layout
 
@@ -29,8 +31,11 @@ X4 Pro has no physical Back, Confirm, Left, or Right buttons.
 Its capacitive Home key sends Back when released.
 Sticky has Up (GPIO5), Down (GPIO6), and Power/AI (GPIO4) buttons.
 It has no capacitive Home key.
-GT911 touch supplies the other controls on both devices.
+GT911 touch supplies the other controls on Pro and Sticky.
 The Sticky Power/AI button uses the existing Power-button preferences.
+M4 has Up1, Down2, and Power0 buttons with no physical Confirm or Home key.
+Its FT6336U-compatible touch controller supplies menu and keyboard actions.
+The M4 Power button also uses the existing Power-button preferences.
 
 On touch devices, reader taps use these zones:
 
@@ -226,7 +231,7 @@ Text and reading settings, in menu order:
   - Long titles and file names are shortened to fit the status bar.
   - The page indicator marks estimated totals with `~`. See [Status Bar](#status-bar).
 
-- **Touch page turns** (X4 Pro and Sticky, default: ON)
+- **Touch page turns** (X4 Pro, Sticky, and M4, default: ON)
   - Enable or disable taps in the previous-page and next-page zones.
   - Center menu taps and overlay controls stay active.
   - X3, X4, and X4 v2 Classic hide this setting.
@@ -252,11 +257,11 @@ Display settings, in menu order:
   - Themes control colors, layout, and fonts
   - See [Customization Guide](customization.md) to make custom themes
 
-- **Brightness** (X4 Pro only)
+- **Brightness** (X4 Pro and M4)
   - Adjust front-light brightness from 0 to 100 percent in steps of 5.
   - Zero turns the front light off.
 
-- **Warmth** (X4 Pro only)
+- **Warmth** (X4 Pro and M4)
   - Adjust the cool/warm light mix from 0 to 100 percent in steps of 5.
   - X3, X4, X4 v2 Classic, and Sticky hide both front-light settings.
 
@@ -331,6 +336,14 @@ Controls and device behavior, in menu order:
   - **ON:** If you delete a file from the Files screen, the device moves it to `/trash`. You can restore it or delete it permanently.
   - **OFF:** If you delete a file from the Files screen, the device removes it permanently. Recovery is not available.
   - Folders are always deleted permanently with all their contents, for all values of this setting.
+
+- **Hardware batch** (M4 only, default: Batch 2)
+  - Select the batch that matches the device.
+  - The same choice controls touch calibration and the display temperature preset.
+  - Confirm saves pending PapyriX settings, saves the batch, and restarts.
+  - Cancel keeps the current batch and other pending settings.
+  - If either save fails, an error appears and the device does not restart or apply the batch.
+  - See the [M4 batch contract](murphy-m4-specifications.md#hardware-batches).
 
 #### Cleanup
 

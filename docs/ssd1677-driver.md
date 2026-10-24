@@ -4,6 +4,10 @@ The SSD1677 controls the GDEQ0426T82 800 × 480 panel on Xteink X4.
 This reference uses the GxEPD2_426_GDEQ0426T82 driver implementation.
 X3 uses different controllers.
 See [X3 LUT Waveforms](x3-lut-waveforms.md) and the [UC8279d reference](x3-uc8279-driver-reference.md).
+The pin and command examples below describe the original X4 path.
+Do not apply them unchanged to Sticky or M4.
+M4 uses 20 MHz SPI, batch-specific HALF temperature, shared-reset ownership, and its own booster/border/gray/power policy.
+See the [M4 display contract](murphy-m4-specifications.md#display-and-input-behavior).
 
 ---
 

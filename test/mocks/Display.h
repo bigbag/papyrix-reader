@@ -43,7 +43,8 @@ class Display {
   bool backgroundHint() const { return darkBackground_; }
   bool supportsGrayscale() const { return supportsGrayscale_; }
   void setSupportsGrayscale(bool supported) { supportsGrayscale_ = supported; }
-  void displayBuffer(RefreshMode, bool) {}
+  inline static void (*onFlush)(const Display&) = nullptr;
+  void displayBuffer(RefreshMode, bool) { if (onFlush) onFlush(*this); }
   void displayBufferDriveAll(bool = false) {}
   void displayWindow(int, int, int, int, bool) {}
   void drawImage(const uint8_t*, int, int, int, int) {}

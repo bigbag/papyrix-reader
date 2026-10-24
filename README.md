@@ -18,9 +18,9 @@
 
 <img alt="PapyriX" src="./images/logo-light.jpg" width="160">
 
-PapyriX is firmware for Xteink X3, X4, X4 Pro, X4 v2 Classic, and Seeed reTerminal Sticky e-paper readers.
+PapyriX is firmware for Xteink X3, X4, X4 Pro, X4 v2 Classic, Seeed reTerminal Sticky, and Murphy M4 e-paper readers.
 X3/X4 use one ESP32-C3 image.
-Pro, Classic, and Sticky use separate ESP32-S3 images.
+Pro, Classic, Sticky, and Murphy M4 use separate ESP32-S3 images.
 
 > **Warning:** Some Xteink units (for example, units from AliExpress) lock USB flash.
 > If USB flash is locked, you cannot update or recover through USB.
@@ -52,6 +52,13 @@ It is a community project.
   - App update: `papyrix-sticky.bin`
   - First installation: `papyrix-sticky-install.zip`
   - Panel: 800×480 SSD1677 or SSD2677
+
+- **[Murphy M4](docs/murphy-m4-specifications.md)**
+  - Status: **Implemented, not device-tested**
+  - App update: `papyrix-murphy-m4.bin`
+  - First installation: `papyrix-murphy-m4-install.zip`
+  - Panel: 800×480 SSD1677
+  - Physical operation and stock restoration remain unverified.
 
 See the [device support matrix](docs/device-support-matrix.md) for build targets and hardware services.
 Using the wrong binary can drive incorrect pins and can damage hardware.
@@ -101,8 +108,8 @@ Moving an SD card between supported devices does not reuse incompatible rendered
 - [x] Sunlight fading fix (powers down the display after refresh to prevent UV fade)
 - [x] Turbo LUTs with LUT cache for faster X3 page turns
 - [x] 4 screen orientations
-- [x] Touch controls on X4 Pro and Sticky
-- [x] Front-light brightness and warmth on X4 Pro
+- [x] Touch controls on X4 Pro, Sticky, and Murphy M4
+- [x] Front-light brightness and warmth on X4 Pro and Murphy M4
 
 ### Customization
 - [x] Custom themes from the SD card (`/config/themes/`)
@@ -146,12 +153,16 @@ Example theme files and font files are in [`docs/examples/`](docs/examples/).
 
 Use the image listed for your device under [Supported devices](#supported-devices).
 
-For Sticky first installation, follow the [complete install procedure](docs/sticky-specifications.md#installation).
+For first installation, follow the [Sticky procedure](docs/sticky-specifications.md#installation) or
+the [Murphy M4 procedure](docs/murphy-m4-specifications.md#installation).
 It replaces stock firmware and can erase device data.
 Save full-flash and SD backups first.
 Stock restoration remains unverified.
+For M4, confirm the model, hardware batch, flash/layout, and security state before any write.
+Keep a private, verified 16 MiB flash backup and a separate SD backup.
+No M4 device is available for physical checks.
 
-Pro, Classic, and Sticky images are not interchangeable.
+Pro, Classic, Sticky, and Murphy M4 images are not interchangeable.
 Do not erase the chip or install a full-flash image from another device.
 For Classic partition and OTA-slot requirements, see the
 [Classic specifications](docs/x4-classic-specifications.md#installation).
@@ -173,7 +184,7 @@ papyrix-flasher flash papyrix-xteink-c3.bin
 Do not flash an S3 image to a C3 device or a C3 image to an S3 device.
 
 **SD app updates:** This procedure requires an existing PapyriX installation.
-It does not install PapyriX over Sticky stock firmware.
+It does not install PapyriX over Sticky or Murphy M4 stock firmware.
 
 1. Copy the firmware file as `/firmware.bin` to the root of your SD card.
 2. Put the SD card into the device.
@@ -183,6 +194,9 @@ The updater validates the image before flash erase.
 A successful update restarts the device.
 
 #### Emergency Recovery
+
+Emergency recovery requires bootable PapyriX and working SD access.
+It cannot restore an erased bootloader or damaged partition table.
 
 If PapyriX cannot open the UI, copy the correct app image as `/force_update.bin` to the SD card.
 PapyriX validates and applies it before UI initialization.
@@ -263,7 +277,10 @@ pio run -e x4c
 # Build development firmware for Sticky
 pio run -e sticky
 
-# Build all four release environments
+# Build development and release firmware for Murphy M4
+pio run -e murphy_m4 -e release_murphy_m4
+
+# Build all five release environments
 make release
 
 # Build, verify, and package deterministic release files in dist/
@@ -274,6 +291,8 @@ make package
 
 For Sticky, use the [complete first-install bundle](docs/sticky-specifications.md#installation).
 Sticky uses the CH343P UART0 serial port, not native USB-Serial/JTAG.
+For M4, use its [first-install guide](docs/murphy-m4-specifications.md#installation).
+M4 uses native USB-Serial/JTAG, not the Sticky UART bridge.
 The commands below apply to Xteink devices.
 
 Connect the device through unlocked USB.

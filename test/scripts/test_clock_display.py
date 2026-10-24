@@ -222,6 +222,14 @@ struct {
   void loadFromFile() {}
   int getCount() const { return count; }
   const Credential* getCredentials() const { return creds; }
+  bool promoteCredential(const char* ssid) {
+    for (int i = 0; i < count; ++i) {
+      if (std::strcmp(creds[i].ssid, ssid) != 0) continue;
+      std::rotate(creds, creds + i, creds + i + 1);
+      return true;
+    }
+    return false;
+  }
 } credentials;
 #define WIFI_STORE credentials
 void loadSettings(Core&) {}
@@ -259,6 +267,15 @@ bool update(Core&) { return false; }
 void onButton(Core&, Button) {}
 bool render(Core& core) { return renderApp(core); }
 void exit(Core&) {}
+}
+namespace pomodoro_app {
+void enter(Core&) {}
+bool update(Core&) { return false; }
+void onButton(Core&, Button) {}
+bool render(Core& core) { return renderApp(core); }
+void exit(Core&) {}
+void renderMenu(Core& core) { paint(core); }
+void onMenuButton(Core&, Button) {}
 }
 @REGISTRY@
 

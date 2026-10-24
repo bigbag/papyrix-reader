@@ -54,7 +54,7 @@ bool StreamingEpdFont::load(const char* path) {
     return false;
   }
 
-#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY || PAPYRIX_TARGET_MURPHY_M4
   if (SLAB_SIZE <= heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) * 80 / 100) {
     _slab = static_cast<uint8_t*>(heap_caps_malloc(SLAB_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
     if (_slab) _capacity = CACHE_SIZE;
@@ -222,7 +222,7 @@ bool StreamingEpdFont::loadGlyphBitmap(uint32_t glyphIndex, CachedBitmap& entry)
     return false;
   }
 
-#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY || PAPYRIX_TARGET_MURPHY_M4
   if (_slab) {
     if (entry.bitmap) {
       _totalCacheAllocation -= entry.bitmapSize;
@@ -300,7 +300,7 @@ const uint8_t* StreamingEpdFont::getGlyphBitmap(const EpdGlyph* glyph) {
   if (_cache[slot].glyphIndex != INVALID_CODEPOINT) evictSlot(slot);
 
   if (!loadGlyphBitmap(glyphIndex, _cache[slot])) {
-#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY || PAPYRIX_TARGET_MURPHY_M4
     if (_slab && _cache[slot].bitmap) {
       _totalCacheAllocation -= _cache[slot].bitmapSize;
       _slabUsed -= _cache[slot].bitmapSize;
@@ -354,7 +354,7 @@ void StreamingEpdFont::evictSlot(int slot) {
     }
   }
   _cache[slot].glyphIndex = INVALID_CODEPOINT;
-#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY || PAPYRIX_TARGET_MURPHY_M4
   if (_slab) {
     _totalCacheAllocation -= _cache[slot].bitmapSize;
     _cache[slot].bitmap = nullptr;
@@ -365,7 +365,7 @@ void StreamingEpdFont::evictSlot(int slot) {
 }
 
 void StreamingEpdFont::compactSlab() {
-#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY || PAPYRIX_TARGET_MURPHY_M4
   std::array<uint16_t, CACHE_SIZE> order{};
   int count = 0;
   for (int i = 0; i < _capacity; ++i) {
@@ -449,7 +449,7 @@ size_t StreamingEpdFont::getMemoryUsage() const {
   size_t usage = sizeof(StreamingEpdFont);
   usage += _glyphsSize;
   usage += _intervalsSize;
-#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY || PAPYRIX_TARGET_MURPHY_M4
   usage += _slab ? SLAB_SIZE : _totalCacheAllocation;
 #else
   usage += _totalCacheAllocation;

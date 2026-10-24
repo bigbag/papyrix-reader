@@ -20,6 +20,8 @@ struct RawTouchSample {
   uint16_t rawX = 0;
   uint16_t rawY = 0;
   bool homeDown = false;
+  uint32_t sampledAtMs = 0;
+  bool timestamped = false;
 };
 
 void enableTouch(const TouchConfig& touch);
@@ -27,6 +29,11 @@ bool decodeGt911Frame(const TouchConfig& config, uint8_t status, const uint8_t* 
                       RawTouchSample& sample);
 void suppressTouchUntilIdle();
 uint32_t touchSuppressionRevision();
+void discardPendingTouch();
+uint32_t touchInvalidationRevision();
+bool pauseTouchForDisplayReset();
+bool resumeTouchAfterDisplayReset();
+bool stopTouchAcquisition();
 
 struct TouchSample {
   bool fresh = false;
@@ -71,7 +78,7 @@ class TouchBackend {
   bool begin(const BoardProfile& profile);
   RawTouchSample poll();
   void shutdown();
-  bool available() const { return available_; }
+  bool available() const;
   const TouchConfig& config() const { return config_; }
 
  private:

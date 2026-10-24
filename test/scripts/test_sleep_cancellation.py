@@ -106,6 +106,7 @@ def main():
         subprocess.run([
             os.environ.get("CXX", "c++"), "-std=c++17", "-DPAPYRIX_TARGET_X4CLASSIC=1", "-DF_CPU=240000000",
             f"-I{path}", f"-I{ROOT / 'src'}",
+            f"-I{ROOT / 'lib/BoardSupport/include'}", f"-I{ROOT / 'lib/EInkDisplay/include'}",
             str(path / "sleep.cpp"), str(ROOT / "src/core/StateMachine.cpp"),
             str(ROOT / "src/hal/Cpu.cpp"),
             "-o", str(path / "sleep"),

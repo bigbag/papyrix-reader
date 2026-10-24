@@ -30,6 +30,9 @@ GROUPS = {
     "CW2017 symbols": re.compile(r"Cw2017", re.IGNORECASE),
     "SDMMC symbols": re.compile(r"Sdmmc1Bit|sdmmc_host_|sdmmc_card_init", re.IGNORECASE),
     "foreign board profiles": re.compile(r"kX3Profile|kX4Profile|kX4ClassicProfile"),
+    "Pro panel symbols": re.compile(r"Uc8179X4ProDriver|Uc8279X4ProDriver|uc8179X4ProDriver|uc8279X4ProDriver"),
+    "fuel gauge symbols": re.compile(r"Bq27220|Cw2017", re.IGNORECASE),
+    "non-M4 board profiles": re.compile(r"kX3Profile|kX4Profile|kX4ProProfile|kX4ClassicProfile|kStickyProfile"),
 }
 
 FORBIDDEN_GROUP_NAMES = {
@@ -75,6 +78,18 @@ FORBIDDEN_GROUP_NAMES = {
         "CW2017 symbols",
         "SDMMC symbols",
         "foreign board profiles",
+    ),
+    "murphy_m4": (
+        "PaperMono board symbols",
+        "GT911 touch symbols",
+        "swipe gesture symbols",
+        "Bluetooth symbols",
+        "X4ProVariant placeholder",
+        "Sticky panel symbols",
+        "C3 panel symbols",
+        "Pro panel symbols",
+        "fuel gauge symbols",
+        "non-M4 board profiles",
     ),
 }
 

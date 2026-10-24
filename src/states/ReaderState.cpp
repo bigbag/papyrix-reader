@@ -1,7 +1,7 @@
 #include "ReaderState.h"
 
 #include <Arduino.h>
-#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY || PAPYRIX_TARGET_MURPHY_M4
 #include <BitmapTurnCache.h>
 #endif
 #include <ContentParser.h>
@@ -52,7 +52,8 @@
 namespace papyrix {
 
 static constexpr int kCacheTaskStackSize =
-    (PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY) ? 20480 : 12288;
+    (PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY || PAPYRIX_TARGET_MURPHY_M4) ? 20480
+                                                                                                            : 12288;
 static constexpr int kCacheTaskStopTimeoutMs = 10000;  // 10s - generous for slow SD operations
 
 namespace {
@@ -1616,7 +1617,7 @@ void ReaderState::renderCachedPage(Core& core) {
   const int fontId = core.settings.getReaderFontId(theme);
 
   page->warmGlyphs(renderer_, fontId);
-#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY || PAPYRIX_TARGET_MURPHY_M4
   BitmapTurnCache bitmapCache(renderer_);
 #endif
 

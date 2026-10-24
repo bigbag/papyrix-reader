@@ -15,6 +15,8 @@ namespace papyrix::firmware_board {
 [[gnu::used]] constexpr char kTag[] = "PAPYRIX-BOARD-V1:x4c;";
 #elif PAPYRIX_TARGET_STICKY
 [[gnu::used]] constexpr char kTag[] = "PAPYRIX-BOARD-V1:sticky;";
+#elif PAPYRIX_TARGET_MURPHY_M4
+[[gnu::used]] constexpr char kTag[] = "PAPYRIX-BOARD-V1:murphy_m4;";
 #endif
 
 namespace {

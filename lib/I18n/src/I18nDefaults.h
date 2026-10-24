@@ -286,6 +286,11 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "Already saved",                   // SSID_ALREADY_SAVED
     "Filename",                        // FILENAME_VAL
     "SD card full. Free space.",       // LOW_SPACE_WARNING
+    "Hardware batch",                  // HARDWARE_BATCH
+    "Batch 1",                         // BATCH_1
+    "Batch 2",                         // BATCH_2
+    "Change hardware batch?",          // CHANGE_BATCH_Q
+    "Save and restart to apply.",      // CHANGE_BATCH_RESTART
 };
 // clang-format on
 

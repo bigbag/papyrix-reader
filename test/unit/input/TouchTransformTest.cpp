@@ -1,5 +1,8 @@
 #include <BoardProfile.h>
 #include <TouchTransform.h>
+#if PAPYRIX_TARGET_MURPHY_M4
+#include <MurphyM4Batch.h>
+#endif
 
 #include "test_utils.h"
 
@@ -121,6 +124,42 @@ int main() {
   runner.expectEq(unchangedRevision, papyrix::board::displayOrientationRevision(),
                   "setting the same orientation keeps the revision stable");
   papyrix::board::setDisplayOrientation(DisplayOrientation::Portrait);
+
+#if PAPYRIX_TARGET_MURPHY_M4
+  auto m4 = config;
+  m4.controller = papyrix::board::TouchController::Ft6336u;
+  for (auto batch : {papyrix::board::MurphyM4Batch::First, papyrix::board::MurphyM4Batch::Second}) {
+    papyrix::board::saveMurphyM4Batch(batch);
+    papyrix::board::loadMurphyM4Batch();
+    const int16_t origin = batch == papyrix::board::MurphyM4Batch::First ? 41 : 40;
+    struct Expected {
+      DisplayOrientation orientation;
+      int16_t x, y;
+    };
+    for (const auto expected :
+         {Expected{DisplayOrientation::Portrait, origin, 0},
+          Expected{DisplayOrientation::PortraitInverted, static_cast<int16_t>(479 - origin), 799},
+          Expected{DisplayOrientation::LandscapeClockwise, 799, origin},
+          Expected{DisplayOrientation::LandscapeCounterClockwise, 0, static_cast<int16_t>(479 - origin)}}) {
+      runner.expectTrue(papyrix::board::rawToLogical(m4, 0, 0, 800, 480, expected.orientation, logical) &&
+                            logical.x == expected.x && logical.y == expected.y,
+                        "M4 origin uses the active batch in every orientation");
+      for (auto x : {uint16_t{0}, uint16_t{479}}) {
+        for (auto y : {uint16_t{0}, uint16_t{799}}) {
+          int16_t w, h;
+          papyrix::board::logicalSize(expected.orientation, 800, 480, w, h);
+          runner.expectTrue(papyrix::board::rawToLogical(m4, x, y, 800, 480, expected.orientation, logical) &&
+                                logical.x >= 0 && logical.x < w && logical.y >= 0 && logical.y < h,
+                            "M4 calibrated corner stays inside the active viewport");
+        }
+      }
+    }
+    runner.expectFalse(papyrix::board::rawToLogical(m4, 480, 0, 800, 480, DisplayOrientation::Portrait, logical),
+                       "M4 rejects invalid raw X before calibration");
+    runner.expectFalse(papyrix::board::rawToLogical(m4, 0, 800, 800, 480, DisplayOrientation::Portrait, logical),
+                       "M4 rejects invalid raw Y before calibration");
+  }
+#endif
 
   return runner.allPassed() ? 0 : 1;
 }

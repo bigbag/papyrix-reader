@@ -78,7 +78,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
   get_filename_component(TEST_NAME ${TEST_SRC} NAME_WE)
 
   if(TEST_NAME STREQUAL "ProgressiveJpegFactoryTest")
-    foreach(IMAGE_TARGET X4PRO X4CLASSIC XTEINK_C3 STICKY)
+    foreach(IMAGE_TARGET X4PRO X4CLASSIC XTEINK_C3 STICKY MURPHY_M4)
       set(IMAGE_TEST ProgressiveJpegFactory${IMAGE_TARGET}Test)
       add_executable(${IMAGE_TEST} ${TEST_SRC}
         ${PROJECT_ROOT}/lib/ImageConverter/src/ImageConverter.cpp
@@ -99,12 +99,15 @@ foreach(TEST_SRC ${TEST_SOURCES})
         ${PROJECT_ROOT}/lib/picojpeg/src ${PNGLE_DIR})
       target_compile_definitions(${IMAGE_TEST} PRIVATE PAPYRIX_TARGET_${IMAGE_TARGET}=1
         PROGRESSIVE_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/progressive-jpeg")
+      if(IMAGE_TARGET STREQUAL "MURPHY_M4")
+        target_sources(${IMAGE_TEST} PRIVATE ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4Batch.cpp)
+      endif()
       set_target_properties(${IMAGE_TEST} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
     endforeach()
     continue()
   endif()
   if(TEST_NAME STREQUAL "DigitalInputTest")
-    foreach(INPUT_TARGET X4PRO X4CLASSIC STICKY)
+    foreach(INPUT_TARGET X4PRO X4CLASSIC STICKY MURPHY_M4)
       set(INPUT_TEST DigitalInput${INPUT_TARGET}Test)
       add_executable(${INPUT_TEST} ${TEST_SRC}
       ${PROJECT_ROOT}/lib/InputManager/src/InputManager.cpp
@@ -120,6 +123,13 @@ foreach(TEST_SRC ${TEST_SOURCES})
   endif()
   # CMake builds BoardProfileTest once for each target.
   # Each executable checks one profile set.
+  if(TEST_NAME STREQUAL "MurphyM4BatchTest")
+    add_executable(${TEST_NAME} ${TEST_SRC} ${CMAKE_CURRENT_SOURCE_DIR}/common/test_utils.cpp)
+    target_sources(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4Batch.cpp)
+    target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_MURPHY_M4=1)
+    set_target_properties(${TEST_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+    continue()
+  endif()
   if(TEST_NAME STREQUAL "BoardProfileTest")
     add_executable(BoardProfileC3Test ${TEST_SRC}
       ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
@@ -134,10 +144,15 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
       ${CMAKE_CURRENT_SOURCE_DIR}/common/test_utils.cpp)
     target_compile_definitions(BoardProfileStickyTest PRIVATE PAPYRIX_TARGET_STICKY=1)
+    add_executable(BoardProfileMurphyM4Test ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
+      ${CMAKE_CURRENT_SOURCE_DIR}/common/test_utils.cpp)
+    target_compile_definitions(BoardProfileMurphyM4Test PRIVATE PAPYRIX_TARGET_MURPHY_M4=1)
     target_compile_definitions(BoardProfileX4ClassicTest PRIVATE PAPYRIX_TARGET_X4CLASSIC=1)
     target_compile_definitions(BoardProfileC3Test PRIVATE PAPYRIX_TARGET_XTEINK_C3=1)
     target_compile_definitions(BoardProfileX4ProTest PRIVATE PAPYRIX_TARGET_X4PRO=1)
-    foreach(BOARD_PROFILE_EXE BoardProfileC3Test BoardProfileX4ProTest BoardProfileX4ClassicTest BoardProfileStickyTest)
+    foreach(BOARD_PROFILE_EXE BoardProfileC3Test BoardProfileX4ProTest BoardProfileX4ClassicTest BoardProfileStickyTest BoardProfileMurphyM4Test)
       target_include_directories(${BOARD_PROFILE_EXE} PRIVATE
         ${PROJECT_ROOT}/lib/BoardSupport/include
       )
@@ -230,9 +245,9 @@ foreach(TEST_SRC ${TEST_SOURCES})
   elseif(TEST_NAME STREQUAL "HalTouchInputTest" OR TEST_NAME STREQUAL "HalButtonInputTest")
     set(HAL_INPUT_TESTS ${TEST_NAME})
     if(TEST_NAME STREQUAL "HalTouchInputTest")
-      list(APPEND HAL_INPUT_TESTS HalTouchStickyTest)
+      list(APPEND HAL_INPUT_TESTS HalTouchStickyTest HalTouchMurphyM4Test)
     else()
-      list(APPEND HAL_INPUT_TESTS HalButtonStickyTest)
+      list(APPEND HAL_INPUT_TESTS HalButtonStickyTest HalButtonMurphyM4Test)
     endif()
     foreach(HAL_INPUT_TEST ${HAL_INPUT_TESTS})
       add_executable(${HAL_INPUT_TEST} ${TEST_SRC}
@@ -248,6 +263,12 @@ foreach(TEST_SRC ${TEST_SOURCES})
       target_include_directories(${HAL_INPUT_TEST} PRIVATE ${PROJECT_ROOT}/lib/InputManager/include)
       if(HAL_INPUT_TEST STREQUAL "HalButtonInputTest")
         target_compile_definitions(${HAL_INPUT_TEST} PRIVATE PAPYRIX_TARGET_X4CLASSIC=1)
+      elseif(HAL_INPUT_TEST STREQUAL "HalTouchMurphyM4Test" OR HAL_INPUT_TEST STREQUAL "HalButtonMurphyM4Test")
+        target_compile_definitions(${HAL_INPUT_TEST} PRIVATE PAPYRIX_TARGET_MURPHY_M4=1)
+        target_sources(${HAL_INPUT_TEST} PRIVATE
+          ${PROJECT_ROOT}/lib/BoardSupport/src/Ft6336uBackend.cpp
+          ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4I2c.cpp
+          ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4Batch.cpp)
       elseif(HAL_INPUT_TEST STREQUAL "HalTouchStickyTest" OR HAL_INPUT_TEST STREQUAL "HalButtonStickyTest")
         target_compile_definitions(${HAL_INPUT_TEST} PRIVATE PAPYRIX_TARGET_STICKY=1)
       else()
@@ -255,6 +276,65 @@ foreach(TEST_SRC ${TEST_SOURCES})
       endif()
       set_target_properties(${HAL_INPUT_TEST} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
     endforeach()
+    continue()
+  elseif(TEST_NAME STREQUAL "MurphyM4TouchTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/src/hal/Input.cpp
+      ${PROJECT_ROOT}/src/MappedInputManager.cpp
+      ${PROJECT_ROOT}/lib/InputManager/src/InputManager.cpp
+      ${PROJECT_ROOT}/lib/AsyncTask/src/BackgroundTask.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/TouchBackend.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/Ft6336uBackend.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4I2c.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4Batch.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/X4ProBoard.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/RtcBackend.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
+      ${PROJECT_ROOT}/lib/EInkDisplay/src/Display.cpp
+      ${PROJECT_ROOT}/lib/EInkDisplay/src/Uc8279X3Driver.cpp
+      ${PROJECT_ROOT}/lib/EInkDisplay/src/Ssd2677Driver.cpp
+      ${PROJECT_ROOT}/lib/EInkDisplay/src/Uc8279SpiBus.cpp
+      ${TEST_HELPERS})
+    target_include_directories(${TEST_NAME} BEFORE PRIVATE ${PROJECT_ROOT}/lib/EInkDisplay/include)
+    target_include_directories(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/InputManager/include)
+    target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_MURPHY_M4=1 EINK_DISPLAY_SINGLE_BUFFER_MODE=1)
+  elseif(TEST_NAME STREQUAL "TouchTransformTest")
+    foreach(TRANSFORM_TEST TouchTransformTest TouchTransformMurphyM4Test)
+      add_executable(${TRANSFORM_TEST} ${TEST_SRC} ${TEST_HELPERS})
+      if(TRANSFORM_TEST STREQUAL "TouchTransformMurphyM4Test")
+        target_sources(${TRANSFORM_TEST} PRIVATE ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4Batch.cpp)
+        target_compile_definitions(${TRANSFORM_TEST} PRIVATE PAPYRIX_TARGET_MURPHY_M4=1)
+      endif()
+      set_target_properties(${TRANSFORM_TEST} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+    endforeach()
+    continue()
+  elseif(TEST_NAME STREQUAL "MurphyM4Ssd1677Test")
+    foreach(M4_DISPLAY_TEST MurphyM4Ssd1677Test MurphyM4Ssd1677Batch1Test)
+      add_executable(${M4_DISPLAY_TEST} ${TEST_SRC}
+        ${PROJECT_ROOT}/lib/EInkDisplay/src/Display.cpp
+        ${PROJECT_ROOT}/lib/EInkDisplay/src/Uc8279X3Driver.cpp
+        ${PROJECT_ROOT}/lib/EInkDisplay/src/Uc8279SpiBus.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/TouchBackend.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/Ft6336uBackend.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4I2c.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4Batch.cpp
+        ${PROJECT_ROOT}/lib/AsyncTask/src/BackgroundTask.cpp
+        ${PROJECT_ROOT}/lib/GfxRenderer/src/GfxRenderer.cpp
+        ${PROJECT_ROOT}/lib/GfxRenderer/src/Bitmap.cpp
+        ${PROJECT_ROOT}/lib/GfxRenderer/src/BitmapHelpers.cpp
+        ${TEST_HELPERS})
+      target_include_directories(${M4_DISPLAY_TEST} BEFORE PRIVATE
+        ${PROJECT_ROOT}/lib/EInkDisplay/include ${PROJECT_ROOT}/lib/GfxRenderer/src
+        ${PROJECT_ROOT}/lib/ExternalFont/src ${PROJECT_ROOT}/lib/ThaiShaper/src)
+      target_compile_definitions(${M4_DISPLAY_TEST} PRIVATE PAPYRIX_TARGET_MURPHY_M4=1 EINK_DISPLAY_SINGLE_BUFFER_MODE=1)
+      target_compile_options(${M4_DISPLAY_TEST} PRIVATE -ffunction-sections -fdata-sections)
+      target_link_options(${M4_DISPLAY_TEST} PRIVATE -Wl,--gc-sections)
+      set_target_properties(${M4_DISPLAY_TEST} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+    endforeach()
+    target_compile_definitions(MurphyM4Ssd1677Batch1Test PRIVATE TEST_M4_BATCH_FIRST=1)
     continue()
   elseif(TEST_NAME STREQUAL "StickySsd1677Test")
     add_executable(${TEST_NAME} ${TEST_SRC}
@@ -268,7 +348,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
     target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_STICKY=1 EINK_DISPLAY_SINGLE_BUFFER_MODE=1)
     target_include_directories(${TEST_NAME} BEFORE PRIVATE ${PROJECT_ROOT}/lib/EInkDisplay/include)
   elseif(TEST_NAME STREQUAL "PanelDispatchTest")
-    foreach(PANEL_TARGET X4PRO X4CLASSIC STICKY)
+    foreach(PANEL_TARGET X4PRO X4CLASSIC STICKY MURPHY_M4)
       set(PANEL_TEST PanelDispatch${PANEL_TARGET}Test)
       add_executable(${PANEL_TEST} ${TEST_SRC}
       ${PROJECT_ROOT}/lib/EInkDisplay/src/Display.cpp
@@ -285,6 +365,14 @@ foreach(TEST_SRC ${TEST_SOURCES})
       target_include_directories(${PANEL_TEST} BEFORE PRIVATE ${PROJECT_ROOT}/lib/EInkDisplay/include)
       target_include_directories(${PANEL_TEST} PRIVATE ${PROJECT_ROOT}/lib/SDCardManager/include)
       target_compile_definitions(${PANEL_TEST} PRIVATE PAPYRIX_TARGET_${PANEL_TARGET}=1 EINK_DISPLAY_SINGLE_BUFFER_MODE=1)
+      if(PANEL_TARGET STREQUAL "MURPHY_M4")
+        target_sources(${PANEL_TEST} PRIVATE
+          ${PROJECT_ROOT}/lib/BoardSupport/src/TouchBackend.cpp
+          ${PROJECT_ROOT}/lib/BoardSupport/src/Ft6336uBackend.cpp
+          ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4I2c.cpp
+          ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4Batch.cpp
+          ${PROJECT_ROOT}/lib/AsyncTask/src/BackgroundTask.cpp)
+      endif()
       set_target_properties(${PANEL_TEST} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
     endforeach()
     continue()
@@ -326,7 +414,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
     else()
       target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_X4PRO=1)
     endif()
-  elseif(TEST_NAME STREQUAL "PowerPolicyTest" OR TEST_NAME STREQUAL "StickyBoardTest")
+  elseif(TEST_NAME STREQUAL "PowerPolicyTest" OR TEST_NAME STREQUAL "StickyBoardTest" OR TEST_NAME STREQUAL "MurphyM4BoardTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
       ${PROJECT_ROOT}/lib/BoardSupport/src/BootHardware.cpp
@@ -342,17 +430,16 @@ foreach(TEST_SRC ${TEST_SOURCES})
     )
     if(TEST_NAME STREQUAL "StickyBoardTest")
       target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_STICKY=1)
+    elseif(TEST_NAME STREQUAL "MurphyM4BoardTest")
+      target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_MURPHY_M4=1)
+      target_sources(${TEST_NAME} PRIVATE
+        ${PROJECT_ROOT}/lib/BoardSupport/src/Ft6336uBackend.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4I2c.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4Batch.cpp
+        ${PROJECT_ROOT}/lib/AsyncTask/src/BackgroundTask.cpp)
     else()
       target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_XTEINK_C3=1)
     endif()
-  elseif(TEST_NAME STREQUAL "TouchTransformTest")
-    add_executable(${TEST_NAME}
-      ${TEST_SRC}
-      ${TEST_HELPERS}
-    )
-    target_include_directories(${TEST_NAME} PRIVATE
-      ${PROJECT_ROOT}/lib/BoardSupport/include
-    )
   elseif(TEST_NAME STREQUAL "TapClassifierTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
@@ -1156,7 +1243,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/Utf8/src/Utf8Nfc.cpp
       ${TEST_HELPERS}
     )
-  elseif(TEST_NAME STREQUAL "CpuDriverTest" OR TEST_NAME STREQUAL "WifiSessionTest")
+  elseif(TEST_NAME STREQUAL "CpuDriverTest" OR TEST_NAME STREQUAL "WifiSessionTest" OR TEST_NAME STREQUAL "MurphyM4CpuTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
       ${PROJECT_ROOT}/src/hal/Cpu.cpp
@@ -1164,6 +1251,12 @@ foreach(TEST_SRC ${TEST_SOURCES})
     )
     if(TEST_NAME STREQUAL "CpuDriverTest")
       target_compile_definitions(${TEST_NAME} PRIVATE F_CPU=240000000L)
+    endif()
+    if(TEST_NAME STREQUAL "MurphyM4CpuTest")
+      target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_MURPHY_M4=1 F_CPU=240000000L)
+      target_sources(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4Batch.cpp)
+    else()
+      target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_XTEINK_C3=1)
     endif()
     target_include_directories(${TEST_NAME} PRIVATE
       ${PROJECT_ROOT}/src
@@ -1320,19 +1413,24 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/Html5/src
     )
   elseif(TEST_NAME STREQUAL "FirmwareBoardTagTest")
-    foreach(FIRMWARE_TARGET XTEINK_C3 X4PRO X4CLASSIC STICKY)
+    foreach(FIRMWARE_TARGET XTEINK_C3 X4PRO X4CLASSIC STICKY MURPHY_M4)
       set(FIRMWARE_TEST FirmwareBoardTag${FIRMWARE_TARGET}Test)
       add_executable(${FIRMWARE_TEST} ${TEST_SRC} ${PROJECT_ROOT}/src/core/FirmwareBoardTag.cpp ${TEST_HELPERS})
       target_compile_definitions(${FIRMWARE_TEST} PRIVATE PAPYRIX_TARGET_${FIRMWARE_TARGET}=1)
+      if(FIRMWARE_TARGET STREQUAL "MURPHY_M4")
+        target_sources(${FIRMWARE_TEST} PRIVATE ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4Batch.cpp)
+      endif()
       set_target_properties(${FIRMWARE_TEST} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
     endforeach()
     continue()
   elseif(TEST_NAME STREQUAL "FirmwareUpdaterTest")
-    foreach(FIRMWARE_TARGET XTEINK_C3 X4PRO X4CLASSIC STICKY)
+    foreach(FIRMWARE_TARGET XTEINK_C3 X4PRO X4CLASSIC STICKY MURPHY_M4)
       if(FIRMWARE_TARGET STREQUAL "XTEINK_C3")
         set(FIRMWARE_TEST FirmwareUpdaterTest)
       elseif(FIRMWARE_TARGET STREQUAL "X4PRO")
         set(FIRMWARE_TEST FirmwareUpdaterS3Test)
+      elseif(FIRMWARE_TARGET STREQUAL "MURPHY_M4")
+        set(FIRMWARE_TEST FirmwareUpdaterMurphyM4Test)
       else()
         set(FIRMWARE_TEST FirmwareUpdater${FIRMWARE_TARGET}Test)
       endif()
@@ -1344,6 +1442,9 @@ foreach(TEST_SRC ${TEST_SOURCES})
         ${TEST_HELPERS}
       )
       target_compile_definitions(${FIRMWARE_TEST} PRIVATE PAPYRIX_TARGET_${FIRMWARE_TARGET}=1)
+      if(FIRMWARE_TARGET STREQUAL "MURPHY_M4")
+        target_sources(${FIRMWARE_TEST} PRIVATE ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4Batch.cpp)
+      endif()
       set_target_properties(${FIRMWARE_TEST} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
     endforeach()
     continue()
@@ -1475,6 +1576,18 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
       ${TEST_HELPERS})
     target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_STICKY=1)
+  elseif(TEST_NAME STREQUAL "MurphyM4PeripheralTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/src/hal/Battery.cpp
+      ${PROJECT_ROOT}/src/hal/Usb.cpp
+      ${PROJECT_ROOT}/src/hal/FrontLight.cpp
+      ${PROJECT_ROOT}/lib/BatteryMonitor/src/BatteryMonitor.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/FrontLightBackend.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4Batch.cpp
+      ${TEST_HELPERS})
+    target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_MURPHY_M4=1)
   elseif(TEST_NAME STREQUAL "StickyPeripheralTest")
     add_executable(${TEST_NAME} ${TEST_SRC}
       ${PROJECT_ROOT}/src/hal/Battery.cpp
@@ -1485,6 +1598,15 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/BoardSupport/src/TouchBackend.cpp
       ${TEST_HELPERS})
     target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_STICKY=1)
+  elseif(TEST_NAME STREQUAL "MurphyM4RtcTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4I2c.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/RtcBackend.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
+      ${TEST_HELPERS})
+    target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_MURPHY_M4=1)
+    target_sources(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4Batch.cpp)
   elseif(TEST_NAME STREQUAL "RtcBackendTest")
     foreach(RTC_TEST ${TEST_NAME} RtcBm8563Test RtcClassicTest RtcStickyTest)
       add_executable(${RTC_TEST} ${TEST_SRC}
@@ -1586,6 +1708,55 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${TEST_HELPERS}
     )
     target_include_directories(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/SDCardManager/include)
+  elseif(TEST_NAME STREQUAL "MurphyM4BatchSettingsTest")
+    foreach(BATCH_UI_TARGET MurphyM4BatchSettingsTest MurphyM4BatchSettingsNonM4Test)
+      add_executable(${BATCH_UI_TARGET} ${TEST_SRC}
+        ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4Batch.cpp
+        ${PROJECT_ROOT}/src/states/SettingsState.cpp
+        ${PROJECT_ROOT}/src/core/PapyrixSettings.cpp
+        ${PROJECT_ROOT}/src/core/SettingsSerialization.cpp
+        ${PROJECT_ROOT}/src/hal/Storage.cpp
+        ${PROJECT_ROOT}/src/ui/views/SettingsViews.cpp
+        ${PROJECT_ROOT}/src/ui/Elements.cpp
+        ${PROJECT_ROOT}/src/ui/WrappedText.cpp
+        ${PROJECT_ROOT}/src/ui/TouchLayout.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/TouchBackend.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/X4ProBoard.cpp
+        ${PROJECT_ROOT}/lib/I18n/src/I18n.cpp
+        ${PROJECT_ROOT}/lib/GfxRenderer/src/GfxRenderer.cpp
+        ${PROJECT_ROOT}/lib/GfxRenderer/src/Bitmap.cpp
+        ${PROJECT_ROOT}/lib/GfxRenderer/src/BitmapHelpers.cpp
+        ${PROJECT_ROOT}/lib/EpdFont/src/EpdFont.cpp
+        ${PROJECT_ROOT}/lib/EpdFont/src/EpdFontFamily.cpp
+        ${PROJECT_ROOT}/lib/EpdFont/src/StreamingEpdFont.cpp
+        ${PROJECT_ROOT}/lib/ExternalFont/src/ExternalFont.cpp
+        ${PROJECT_ROOT}/lib/ScriptDetector/src/ScriptDetector.cpp
+        ${PROJECT_ROOT}/lib/Utf8/src/Utf8.cpp
+        ${PROJECT_ROOT}/lib/ThaiShaper/src/ThaiClusterBuilder.cpp
+        ${PROJECT_ROOT}/lib/ThaiShaper/src/ThaiCharacter.cpp
+        ${PROJECT_ROOT}/lib/ArabicShaper/src/ArabicShaper.cpp
+        ${PROJECT_ROOT}/lib/ArabicShaper/src/ArabicCharacter.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
+        ${TEST_HELPERS})
+      target_compile_definitions(${BATCH_UI_TARGET} PRIVATE PAPYRIX_VERSION="host-test")
+      target_include_directories(${BATCH_UI_TARGET} BEFORE PRIVATE
+        ${PROJECT_ROOT}/lib/GfxRenderer/src ${PROJECT_ROOT}/lib/EpdFont/src
+        ${PROJECT_ROOT}/lib/ExternalFont/src ${PROJECT_ROOT}/lib/ThaiShaper/src)
+      target_include_directories(${BATCH_UI_TARGET} PRIVATE
+        $<TARGET_PROPERTY:ContentHandleThumbnailTest,INCLUDE_DIRECTORIES>
+        ${PROJECT_ROOT}/lib/InputManager/include ${PROJECT_ROOT}/lib/I18n/src)
+      target_compile_options(${BATCH_UI_TARGET} PRIVATE -ffunction-sections -fdata-sections)
+      target_link_options(${BATCH_UI_TARGET} PRIVATE -Wl,--gc-sections)
+      set_target_properties(${BATCH_UI_TARGET} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+    endforeach()
+    target_compile_definitions(MurphyM4BatchSettingsTest PRIVATE PAPYRIX_TARGET_MURPHY_M4=1)
+    target_sources(MurphyM4BatchSettingsTest PRIVATE
+      ${PROJECT_ROOT}/lib/BoardSupport/src/Ft6336uBackend.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4I2c.cpp
+      ${PROJECT_ROOT}/lib/AsyncTask/src/BackgroundTask.cpp)
+    target_compile_definitions(MurphyM4BatchSettingsNonM4Test PRIVATE PAPYRIX_TARGET_XTEINK_C3=1)
+    continue()
   elseif(TEST_NAME STREQUAL "SdFreeSpaceTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
@@ -1618,6 +1789,14 @@ foreach(TEST_SRC ${TEST_SOURCES})
     target_compile_options(${STICKY_TEST} PRIVATE $<TARGET_PROPERTY:${TEST_NAME},COMPILE_OPTIONS>)
     target_link_options(${STICKY_TEST} PRIVATE $<TARGET_PROPERTY:${TEST_NAME},LINK_OPTIONS>)
     set_target_properties(${STICKY_TEST} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build/bin)
+    string(REGEX REPLACE "Test$" "MurphyM4Test" M4_MEMORY_TEST ${MEMORY_TEST})
+    add_executable(${M4_MEMORY_TEST} ${MEMORY_SOURCES}
+      ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4Batch.cpp)
+    target_compile_definitions(${M4_MEMORY_TEST} PRIVATE PAPYRIX_TARGET_MURPHY_M4=1)
+    target_include_directories(${M4_MEMORY_TEST} BEFORE PRIVATE $<TARGET_PROPERTY:${TEST_NAME},INCLUDE_DIRECTORIES>)
+    target_compile_options(${M4_MEMORY_TEST} PRIVATE $<TARGET_PROPERTY:${TEST_NAME},COMPILE_OPTIONS>)
+    target_link_options(${M4_MEMORY_TEST} PRIVATE $<TARGET_PROPERTY:${TEST_NAME},LINK_OPTIONS>)
+    set_target_properties(${M4_MEMORY_TEST} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build/bin)
   endif()
 endforeach()
 

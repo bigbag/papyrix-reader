@@ -10,7 +10,7 @@
 namespace papyrix::board {
 
 enum class PanelSelectionSource : uint8_t { Fixed, X4Default, Override, Cache, Probe, Fallback, Factory, Unresolved };
-inline constexpr uint8_t kProfileSchemaVersion = 2;
+inline constexpr uint8_t kProfileSchemaVersion = 3;
 
 class HardwareIdentity {
  public:

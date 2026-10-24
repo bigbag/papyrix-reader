@@ -10,9 +10,13 @@ ROOT = Path(__file__).resolve().parents[2]
 
 HARNESS = r'''
 #include <FsLib/FsVolume.h>
+#include <FsLib/FsFile.h>
+#include <FatLib/FatFormatter.h>
+#include <ExFatLib/ExFatLib.h>
 #include <array>
 #include <cassert>
 #include <cstring>
+#include <unordered_map>
 #define PAPYRIX_CAP_SDMMC 1
 #define LOG_INF(...)
 #define LOG_ERR(...)
@@ -28,6 +32,9 @@ class Disk : public FsBlockDeviceInterface {
   std::array<uint8_t, 512> boot{};
   bool partitioned = false;
   bool formatted = true;
+  bool generated = false;
+  size_t writes = 0;
+  std::unordered_map<Sector_t, std::array<uint8_t, 512>> image;
   Disk() {
     boot[0] = 0xEB; boot[1] = 0x3C; boot[2] = 0x90;
     std::memcpy(boot.data() + 3, "MSDOS5.0", 8);
@@ -45,10 +52,15 @@ class Disk : public FsBlockDeviceInterface {
   bool begin(int) { return true; }
   bool isBusy() override { return false; }
   bool syncDevice() override { return true; }
-  Sector_t sectorCount() override { return 16385; }
+  Sector_t sectorCount() override { return generated ? 0x800000 : 16385; }
   bool readSector(Sector_t sector, uint8_t* dst) override {
     if (sector >= sectorCount()) return false;
     std::memset(dst, 0, 512);
+    if (generated) {
+      const auto found = image.find(sector);
+      if (found != image.end()) std::memcpy(dst, found->second.data(), 512);
+      return true;
+    }
     if (!formatted) return true;
     const Sector_t start = partitioned ? 1 : 0;
     if (sector == start) {
@@ -72,8 +84,18 @@ class Disk : public FsBlockDeviceInterface {
     }
     return true;
   }
-  bool writeSector(Sector_t, const uint8_t*) override { return false; }
-  bool writeSectors(Sector_t, const uint8_t*, size_t) override { return false; }
+  bool writeSector(Sector_t sector, const uint8_t* src) override {
+    ++writes;
+    if (!generated || sector >= sectorCount()) return false;
+    assert(image.size() < 65536);
+    std::memcpy(image[sector].data(), src, 512);
+    return true;
+  }
+  bool writeSectors(Sector_t sector, const uint8_t* src, size_t count) override {
+    for (size_t i = 0; i < count; ++i)
+      if (!writeSector(sector + i, src + i * 512)) return false;
+    return true;
+  }
 };
 Disk sdmmc;
 class SDCardManager {
@@ -92,7 +114,31 @@ int main() {
   assert(manager.begin());
   manager.end();
   sdmmc.formatted = false;
+  const auto writes = sdmmc.writes;
   assert(!manager.begin());
+  assert(sdmmc.writes == writes);
+  for (bool exfat : {false, true}) {
+    sdmmc.generated = true;
+    sdmmc.image.clear();
+    std::array<uint8_t, 512> scratch{};
+    if (exfat) assert(ExFatFormatter{}.format(&sdmmc, scratch.data()));
+    else assert(FatFormatter{}.format(&sdmmc, scratch.data()));
+    assert(manager.begin());
+    assert(manager.sd.fatType() == (exfat ? 64 : 32));
+    std::array<uint8_t, 6000> written{}, readback{};
+    for (size_t i = 0; i < written.size(); ++i) written[i] = uint8_t(i * 37 + i / 512);
+    FsFile file;
+    assert(file.open(&manager.sd, "round-trip.txt", O_CREAT | O_RDWR | O_TRUNC));
+    assert(file.write(written.data(), written.size()) == written.size());
+    assert(file.close());
+    manager.end();
+    assert(manager.begin());
+    assert(file.open(&manager.sd, "round-trip.txt", O_RDONLY));
+    assert(file.read(readback.data(), readback.size()) == int(readback.size()));
+    assert(readback == written && file.read() == -1);
+    assert(file.close());
+    manager.end();
+  }
 }
 '''
 
@@ -100,8 +146,8 @@ int main() {
 def main():
     sdfat = ROOT / "lib/SdFat/src"
     sources = {
-        "FatLib": "FatFile FatFileLFN FatFilePrint FatFileSFN FatName FatPartition FatVolume",
-        "ExFatLib": "ExFatFile ExFatFilePrint ExFatFileWrite ExFatName ExFatPartition ExFatVolume",
+        "FatLib": "FatFile FatFileLFN FatFilePrint FatFileSFN FatName FatPartition FatVolume FatFormatter",
+        "ExFatLib": "ExFatFile ExFatFilePrint ExFatFileWrite ExFatName ExFatPartition ExFatVolume ExFatFormatter",
         "FsLib": "FsFile FsNew FsVolume",
         "common": "FmtNumber FsCache FsDateTime FsName FsStructs FsUtf PrintBasic upcase",
     }
@@ -124,7 +170,7 @@ def main():
         command += ["-Wl,--gc-sections", "-o", str(path / "mount")]
         subprocess.run(command, check=True)
         subprocess.run([str(path / "mount")], check=True)
-    print("PASS: SDMMC mounts whole-device and partitioned FAT16; rejects an invalid volume")
+    print("PASS: SDMMC mounts FAT16 and generated FAT32/exFAT; file data survives remount; invalid volumes stay unchanged")
 
 
 if __name__ == "__main__":

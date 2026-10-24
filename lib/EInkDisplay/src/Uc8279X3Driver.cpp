@@ -1,6 +1,6 @@
 #include "Uc8279X3Driver.h"
 
-#if !PAPYRIX_TARGET_STICKY
+#if !PAPYRIX_TARGET_STICKY && !PAPYRIX_TARGET_MURPHY_M4
 
 // This driver contains synchronous code from FreeInk SDK commit df4a1b7.
 // The license is in ../FREEINK_LICENSE.

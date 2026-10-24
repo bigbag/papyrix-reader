@@ -92,6 +92,14 @@ struct WifiCredentialStore {
   bool loadFromFile() { return true; }
   const WifiCredential* getCredentials() const { return creds; }
   int getCount() const { return count_; }
+  bool promoteCredential(const char* ssid) {
+    for (int i = 0; i < count_; ++i) {
+      if (std::strcmp(creds[i].ssid, ssid) != 0) continue;
+      std::rotate(creds, creds + i, creds + i + 1);
+      return true;
+    }
+    return false;
+  }
 };
 WifiCredentialStore wifiStore;
 #define WIFI_STORE wifiStore
@@ -260,6 +268,7 @@ struct AppMenuView { static constexpr int EXTRA_COUNT = 2; };
 struct SettingsListHit { static constexpr int LIST_START_Y = 60; };
 }
 constexpr int APP_CLOCK = 0;
+constexpr int APP_POMODORO = 1;
 namespace clock_faces {
 enum class Face : uint8_t {
   Big = 0,
@@ -342,7 +351,7 @@ class AppLauncherState {
  public:
   enum class Mode { Menu, App, Overlay };
   Mode mode_ = Mode::Overlay;
-  int activeApp_ = 0;
+  int activeApp_ = APP_CLOCK;
   bool needsRender_ = false, goNetwork_ = false, launched = false;
   struct MenuView {
     int selected = ui::AppMenuView::EXTRA_COUNT, appCount = 0, itemCount = 0;

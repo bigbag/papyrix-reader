@@ -7,14 +7,14 @@ namespace papyrix::board {
 // Set a pin to this value when the MCU does not control it.
 inline constexpr int8_t kPinUnused = -1;
 
-enum class BoardId : uint8_t { X3, X4, X4Pro, X4Classic, Sticky };
+enum class BoardId : uint8_t { X3, X4, X4Pro, X4Classic, Sticky, MurphyM4 };
 enum class McuFamily : uint8_t { Esp32C3, Esp32S3 };
-enum class StorageTransport : uint8_t { Spi, Sdmmc1Bit };
-enum class TouchController : uint8_t { None, Gt911 };
+enum class StorageTransport : uint8_t { Spi, Sdmmc1Bit, Sdmmc4Bit };
+enum class TouchController : uint8_t { None, Gt911, Ft6336u };
 enum class BatteryBackend : uint8_t { None, Adc, Bq27220, Cw2017 };
 enum class InputStyle : uint8_t { AdcLadder, DigitalButtons };
 
-enum class RtcType : uint8_t { None, Ds3231, Bm8563, Pcf8563 };
+enum class RtcType : uint8_t { None, Ds3231, Bm8563, Pcf8563, Rx8010 };
 
 struct DisplayConfig {
   uint16_t width;
@@ -75,6 +75,9 @@ struct StorageConfig {
   int8_t sdmmcDat0;
   int8_t powerPin;
   bool powerActiveHigh;
+  int8_t sdmmcDat1 = kPinUnused;
+  int8_t sdmmcDat2 = kPinUnused;
+  int8_t sdmmcDat3 = kPinUnused;
 };
 
 struct BatteryConfig {

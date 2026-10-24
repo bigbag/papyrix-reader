@@ -17,9 +17,7 @@ enum esp_sleep_wakeup_cause_t {
   ESP_SLEEP_WAKEUP_EXT1, ESP_SLEEP_WAKEUP_TIMER
 };
 esp_sleep_wakeup_cause_t cause;
-esp_reset_reason_t reason;
 auto esp_sleep_get_wakeup_cause() { return cause; }
-auto esp_reset_reason() { return reason; }
 namespace papyrix {
 struct Usb { bool connected; bool isConnected() const { return connected; } };
 struct Core { Usb usb; } core;
@@ -29,7 +27,7 @@ struct Core { Usb usb; } core;
 CASES = r'''
 int main() {
   papyrix::core.usb.connected = true;
-  reason = ESP_RST_DEEPSLEEP;
+  testResetReason = ESP_RST_DEEPSLEEP;
   cause = ESP_SLEEP_WAKEUP_EXT1;
   assert(getWakeupInfo().isPowerButton);
   assert(!getWakeupInfo().usbColdBoot);
@@ -48,13 +46,13 @@ int main() {
   cause = ESP_SLEEP_WAKEUP_TIMER;
   assert(!getWakeupInfo().isPowerButton);
   cause = ESP_SLEEP_WAKEUP_UNDEFINED;
-  reason = ESP_RST_POWERON;
+  testResetReason = ESP_RST_POWERON;
   assert(!getWakeupInfo().isPowerButton);
   assert(getWakeupInfo().usbColdBoot);
   papyrix::core.usb.connected = false;
   assert(getWakeupInfo().isPowerButton);
   assert(!getWakeupInfo().usbColdBoot);
-  reason = ESP_RST_SW;
+  testResetReason = ESP_RST_SW;
   assert(!getWakeupInfo().isPowerButton);
   assert(!getWakeupInfo().usbColdBoot);
 }

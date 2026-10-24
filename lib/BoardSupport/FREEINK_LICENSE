@@ -21,3 +21,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 The GT911 polling sequence and profile transforms are selective ports from FreeInk.
+
+The Murphy M4 touch protocol, native I2C setup, RTC protocol, and batch
+calibration are selective ports from the CrossMux FreeInk SDK.
+Source: https://github.com/0x1abin/freeink-sdk/tree/9aa7e95e02c6374a23a562c883eb302552ff24f1

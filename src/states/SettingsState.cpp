@@ -7,6 +7,9 @@
 #include <LittleFS.h>  // Must be before SdFat includes to avoid FILE_READ/FILE_WRITE redefinition
 #include <Logging.h>
 #include <SDCardManager.h>
+#if PAPYRIX_TARGET_MURPHY_M4
+#include <MurphyM4Batch.h>
+#endif
 
 #include <algorithm>
 
@@ -265,11 +268,7 @@ StateTransition SettingsState::update(Core& core) {
               core.settings.save(core.storage);
               goHome_ = true;
             } else if (currentScreen_ == SettingsScreen::ConfirmDialog) {
-              // Cancel confirmation dialog
-              pendingAction_ = ACTION_NONE;
-              currentScreen_ = SettingsScreen::Cleanup;
-              cleanupView_.needsRender = true;
-              needsRender_ = true;
+              goBack(core);
             } else if (currentScreen_ == SettingsScreen::FirmwareUpdate) {
               if (firmwareView_.state == ui::FirmwareUpdateView::State::Flashing ||
                   firmwareView_.state == ui::FirmwareUpdateView::State::Validating) {
@@ -509,9 +508,19 @@ void SettingsState::goBack(Core& core) {
       menuView_.needsRender = true;
       break;
     case SettingsScreen::ConfirmDialog:
+#if PAPYRIX_TARGET_MURPHY_M4
+      if (pendingAction_ == ACTION_M4_BATCH) {
+        deviceView_.values[ui::DeviceSettingsView::BATCH_SETTING] =
+            board::murphyM4Batch() == board::MurphyM4Batch::First ? 0 : 1;
+        currentScreen_ = SettingsScreen::Device;
+        deviceView_.needsRender = true;
+      } else
+#endif
+      {
+        currentScreen_ = SettingsScreen::Cleanup;
+        cleanupView_.needsRender = true;
+      }
       pendingAction_ = ACTION_NONE;
-      currentScreen_ = SettingsScreen::Cleanup;
-      cleanupView_.needsRender = true;
       break;
     case SettingsScreen::FirmwareUpdate:
       FW_UPDATER.abort();
@@ -538,6 +547,19 @@ void SettingsState::handleConfirm(Core& core) {
       break;
 
     case SettingsScreen::Device:
+#if PAPYRIX_TARGET_MURPHY_M4
+      if (deviceView_.settingIndex(deviceView_.selected) == ui::DeviceSettingsView::BATCH_SETTING) {
+        const auto batch =
+            static_cast<board::MurphyM4Batch>(deviceView_.values[ui::DeviceSettingsView::BATCH_SETTING] + 1);
+        if (batch == board::murphyM4Batch()) break;
+        confirmView_.setup(tr(CHANGE_BATCH_Q), deviceView_.getCurrentValueStr(ui::DeviceSettingsView::BATCH_SETTING),
+                           tr(CHANGE_BATCH_RESTART));
+        pendingAction_ = ACTION_M4_BATCH;
+        currentScreen_ = SettingsScreen::ConfirmDialog;
+        needsRender_ = true;
+        break;
+      }
+#endif
       if (deviceView_.selected == 0) {
         returnScreen_ = SettingsScreen::Device;
         goBack(core);
@@ -560,6 +582,33 @@ void SettingsState::handleConfirm(Core& core) {
       break;
 
     case SettingsScreen::ConfirmDialog:
+#if PAPYRIX_TARGET_MURPHY_M4
+      if (pendingAction_ == ACTION_M4_BATCH) {
+        if (confirmView_.isYesSelected()) {
+          const auto batch =
+              static_cast<board::MurphyM4Batch>(deviceView_.values[ui::DeviceSettingsView::BATCH_SETTING] + 1);
+          saveDeviceSettings();
+          const auto activeFrontLayout = core.settings.frontButtonLayout;
+          const auto activeSideLayout = core.settings.sideButtonLayout;
+          core.settings.frontButtonLayout = std::min(deviceView_.values[0], uint8_t(Settings::FrontLRBC));
+          core.settings.sideButtonLayout = std::min(deviceView_.values[1], uint8_t(Settings::NextPrev));
+          const bool settingsSaved = core.settings.save(core.storage).ok();
+          core.settings.frontButtonLayout = activeFrontLayout;
+          core.settings.sideButtonLayout = activeSideLayout;
+          const auto result = settingsSaved ? board::saveMurphyM4Batch(batch) : board::MurphyM4BatchSaveResult::Failed;
+          if (result == board::MurphyM4BatchSaveResult::Saved) {
+            ESP.restart();
+            return;
+          }
+          if (result == board::MurphyM4BatchSaveResult::Failed) {
+            ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(SAVE_FAILED));
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+          }
+        }
+        goBack(core);
+        break;
+      }
+#endif
       if (confirmView_.isYesSelected()) {
         if (pendingAction_ == ACTION_CLEAR_BOOK_CACHE) {
           ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(CLEARING_CACHE));
@@ -631,11 +680,7 @@ void SettingsState::handleConfirm(Core& core) {
           ESP.restart();
         }
       } else {
-        // No - cancel
-        pendingAction_ = ACTION_NONE;
-        currentScreen_ = SettingsScreen::Cleanup;
-        cleanupView_.needsRender = true;
-        needsRender_ = true;
+        goBack(core);
       }
       break;
 
@@ -693,6 +738,12 @@ void SettingsState::handleLeftRight(int delta) {
     needsRender_ = true;
   } else if (currentScreen_ == SettingsScreen::Device) {
     deviceView_.cycleValue(delta);
+#if PAPYRIX_TARGET_MURPHY_M4
+    if (deviceView_.settingIndex(deviceView_.selected) == ui::DeviceSettingsView::BATCH_SETTING) {
+      handleConfirm(*core_);
+      return;
+    }
+#endif
     saveDeviceSettings();
     needsRender_ = true;
   }
@@ -776,6 +827,12 @@ void SettingsState::loadDeviceSettings() {
   deviceView_.values[4] = settings.showRecents;
   deviceView_.values[5] = settings.autoSleepMinutes;
   deviceView_.values[6] = settings.recycleBinEnabled;
+  deviceView_.visibleCount = ui::DeviceSettingsView::SETTING_COUNT;
+#if PAPYRIX_TARGET_MURPHY_M4
+  ++deviceView_.visibleCount;
+  deviceView_.values[ui::DeviceSettingsView::BATCH_SETTING] =
+      board::murphyM4Batch() == board::MurphyM4Batch::First ? 0 : 1;
+#endif
 }
 
 void SettingsState::saveDeviceSettings() {

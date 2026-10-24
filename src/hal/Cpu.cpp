@@ -1,6 +1,7 @@
 #include "Cpu.h"
 
 #include <Arduino.h>
+#include <TargetConfig.h>
 
 #include <cassert>
 
@@ -16,16 +17,19 @@ Cpu::PerformanceLock::PerformanceLock(Cpu& cpu) : cpu_(cpu) { cpu_.acquirePerfor
 Cpu::PerformanceLock::~PerformanceLock() { cpu_.releasePerformanceLock(); }
 
 void Cpu::acquirePerformanceLock() {
+  if constexpr (PAPYRIX_TARGET_MURPHY_M4) return;
   performanceLockCount_.fetch_add(1, std::memory_order_acq_rel);
   unthrottle();
 }
 
 void Cpu::releasePerformanceLock() {
+  if constexpr (PAPYRIX_TARGET_MURPHY_M4) return;
   const uint32_t previous = performanceLockCount_.fetch_sub(1, std::memory_order_acq_rel);
   assert(previous > 0);
 }
 
 void Cpu::throttle() {
+  if constexpr (PAPYRIX_TARGET_MURPHY_M4) return;
   std::lock_guard<std::mutex> lock(mutex_);
   if (performanceLockCount_.load(std::memory_order_acquire) != 0) {
     unthrottleLocked();
@@ -44,6 +48,7 @@ void Cpu::throttle() {
 }
 
 void Cpu::unthrottle() {
+  if constexpr (PAPYRIX_TARGET_MURPHY_M4) return;
   std::lock_guard<std::mutex> lock(mutex_);
   unthrottleLocked();
 }
@@ -54,7 +59,7 @@ void Cpu::unthrottleLocked() {
   }
 }
 
-bool Cpu::isThrottled() const { return throttled_.load(std::memory_order_acquire); }
+bool Cpu::isThrottled() const { return !PAPYRIX_TARGET_MURPHY_M4 && throttled_.load(std::memory_order_acquire); }
 
 uint8_t Cpu::loopDelayMs() const { return isThrottled() ? kIdleLoopDelayMs : kActiveLoopDelayMs; }
 

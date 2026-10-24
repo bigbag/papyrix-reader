@@ -5,6 +5,9 @@
 #include <InputManager.h>
 #include <MappedInputManager.h>
 #include <TargetConfig.h>
+#if PAPYRIX_TARGET_MURPHY_M4
+#include <Logging.h>
+#endif
 
 // Global input managers (defined in main.cpp)
 extern InputManager inputManager;
@@ -37,6 +40,13 @@ Result<void> Input::init(EventQueue& eventQueue) {
 
 void Input::shutdown() {
   inputManager.stopSampling();
+#if PAPYRIX_TARGET_MURPHY_M4
+  if (!board::stopTouchAcquisition()) {
+    LOG_ERR("INPUT", "Touch task does not stop; restart without hardware shutdown");
+    ESP.restart();
+    return;
+  }
+#endif
   touchBackend_.shutdown();
   queue_ = nullptr;
   initialized_ = false;
@@ -191,6 +201,9 @@ void Input::resyncState() {
   if (isPressed(Button::Back)) currButtonState_ |= (1 << 5);
   if (isPressed(Button::Power)) currButtonState_ |= (1 << 6);
   prevButtonState_ = currButtonState_;
+#if PAPYRIX_TARGET_MURPHY_M4
+  board::discardPendingTouch();
+#endif
   tapClassifier_.resetAfterWake();
   homeDown_ = false;
   homeReady_ = false;
@@ -208,43 +221,53 @@ void Input::pollTouch() {
   if (displayRevision != orientationRevision_) {
     orientation_ = board::currentDisplayOrientation();
     orientationRevision_ = displayRevision;
+#if PAPYRIX_TARGET_MURPHY_M4
+    tapClassifier_.resetAfterWake();
+#endif
   }
   const uint32_t now = millis();
+#if !PAPYRIX_TARGET_MURPHY_M4
   if (static_cast<int32_t>(now - nextTouchPollMs_) < 0) return;
   nextTouchPollMs_ = now + TOUCH_POLL_INTERVAL_MS;
-  const auto raw = touchBackend_.poll();
-  if (raw.controllerOk && profile.touch.hasHomeKey) {
-    if (homeReady_ && homeDown_ && !raw.homeDown) {
-      queue_->push(Event::buttonPress(Button::Back));
+#endif
+  const uint8_t sampleLimit = PAPYRIX_TARGET_MURPHY_M4 ? 9 : 1;
+  for (uint8_t i = 0; i < sampleLimit; ++i) {
+    const auto raw = touchBackend_.poll();
+    if (raw.controllerOk && profile.touch.hasHomeKey) {
+      if (homeReady_ && homeDown_ && !raw.homeDown) {
+        queue_->push(Event::buttonPress(Button::Back));
+        lastActivityMs_ = now;
+      }
+      if (raw.homeDown || homeDown_) {
+        tapClassifier_.resetAfterWake();
+        lastActivityMs_ = now;
+      }
+      homeDown_ = raw.homeDown;
+      if (!homeDown_) homeReady_ = true;
+    }
+    board::TouchSample sample;
+    sample.fresh = raw.fresh;
+    sample.controllerOk = raw.controllerOk;
+    sample.contactCount = raw.contactCount;
+
+    if (raw.fresh && raw.contactCount == 1) {
+      board::PanelPoint logical{};
+      if (board::rawToLogical(touchBackend_.config(), raw.rawX, raw.rawY, profile.display.width, profile.display.height,
+                              orientation_, logical)) {
+        sample.position = {logical.x, logical.y};
+      } else {
+        sample.contactCount = 2;
+      }
+    }
+
+    const auto frame = tapClassifier_.update(sample, raw.timestamped ? raw.sampledAtMs : now, board::hasTouch(profile),
+                                             false, orientationRevision_);
+    if (frame.tap) {
+      const TouchPoint point{frame.position.x, frame.position.y};
+      queue_->push(Event::tap(point));
       lastActivityMs_ = now;
     }
-    if (raw.homeDown || homeDown_) {
-      tapClassifier_.resetAfterWake();
-      lastActivityMs_ = now;
-    }
-    homeDown_ = raw.homeDown;
-    if (!homeDown_) homeReady_ = true;
-  }
-  board::TouchSample sample;
-  sample.fresh = raw.fresh;
-  sample.controllerOk = raw.controllerOk;
-  sample.contactCount = raw.contactCount;
-
-  if (raw.fresh && raw.contactCount == 1) {
-    board::PanelPoint logical{};
-    if (board::rawToLogical(touchBackend_.config(), raw.rawX, raw.rawY, profile.display.width, profile.display.height,
-                            orientation_, logical)) {
-      sample.position = {logical.x, logical.y};
-    } else {
-      sample.contactCount = 2;
-    }
-  }
-
-  const auto frame = tapClassifier_.update(sample, now, board::hasTouch(profile), false, orientationRevision_);
-  if (frame.tap) {
-    const TouchPoint point{frame.position.x, frame.position.y};
-    queue_->push(Event::tap(point));
-    lastActivityMs_ = now;
+    if (!raw.fresh) break;
   }
 }
 

@@ -30,6 +30,15 @@
   - Touch: GT911
   - Status: implemented, not device-tested
 
+- **[Murphy M4](murphy-m4-specifications.md)**
+  - MCU: ESP32-S3, 16 MiB flash, 8 MiB OPI PSRAM
+  - Display: 800 × 480, SSD1677
+  - Storage: four-bit SDMMC
+  - Touch: FT6336U-compatible
+  - RTC: RX8010
+  - Front light: cool/warm PWM
+  - Status: **Implemented, not device-tested**
+
 See the [device support matrix](device-support-matrix.md) for build targets and hardware services.
 Classic uses a separate board profile from the original X4 and X4 Pro.
 
@@ -39,12 +48,15 @@ Classic uses a separate board profile from the original X4 and X4 Pro.
 - `papyrix-x4pro.bin` uses the fixed X4 Pro board profile.
 - `papyrix-x4c.bin` uses the fixed X4 v2 Classic board profile.
 - `papyrix-sticky.bin` uses the fixed Sticky board profile.
+- `papyrix-murphy-m4.bin` uses the fixed M4 profile.
 
 The standard partition table starts app0 at `0x10000`.
 The partition layout uses 16 MB.
 Sticky has 32 MB of physical flash.
 The Xteink targets have 16 MB of physical flash.
 Sticky first installation requires the [complete install bundle](sticky-specifications.md#installation).
+M4 first installation requires its [complete install bundle](murphy-m4-specifications.md#installation).
+Its app-only image does not migrate stock partitions.
 
 Do not install an artifact for a different MCU or board.
 An incorrect image can drive the wrong GPIOs and damage hardware.
@@ -73,12 +85,18 @@ Sticky uses a fixed board profile and probes its display controller.
 An unresolved Sticky panel blocks display initialization.
 See the [Sticky specifications](sticky-specifications.md#display-behavior) for the probe limits.
 
+M4 selects SSD1677 directly.
+One saved hardware batch selects both touch calibration and the HALF-refresh temperature.
+See the [M4 batch contract](murphy-m4-specifications.md#hardware-batches).
+
 ## Power
 
-The CPU policy uses 10 MHz at idle.
+Except on M4, the CPU policy uses 10 MHz at idle.
 Active work uses 160 MHz on ESP32-C3 and 240 MHz on ESP32-S3.
+M4 keeps the 240 MHz boot clock.
 Xteink devices use GPIO3 for the Power button.
 Sticky uses GPIO4.
+M4 uses GPIO0 and has no assigned power latch.
 
 The firmware powers the SD rail before storage access.
 It completes the display power-off sequence before deep sleep.
@@ -95,6 +113,7 @@ Page caches use device-specific folders:
 /.papyrix/cache/x4pro/    X4 Pro
 /.papyrix/cache/x4c/      X4 v2 Classic
 /.papyrix/cache/sticky/   reTerminal Sticky
+/.papyrix/cache/murphy_m4/ Murphy M4
 ```
 
 Moving an SD card between devices does not reuse incompatible page layouts.

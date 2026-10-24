@@ -10,10 +10,11 @@
 namespace papyrix::board {
 
 void earlyInit(const BoardProfile& profile) {
-  if (profile.power.latchPin == kPinUnused) return;
-  gpio_hold_dis(static_cast<gpio_num_t>(profile.power.latchPin));
-  pinMode(profile.power.latchPin, OUTPUT);
-  digitalWrite(profile.power.latchPin, profile.power.latchActiveHigh ? HIGH : LOW);
+  if (profile.power.latchPin != kPinUnused) {
+    gpio_hold_dis(static_cast<gpio_num_t>(profile.power.latchPin));
+    pinMode(profile.power.latchPin, OUTPUT);
+    digitalWrite(profile.power.latchPin, profile.power.latchActiveHigh ? HIGH : LOW);
+  }
   if (profile.power.latchPin2 != kPinUnused) {
     gpio_hold_dis(static_cast<gpio_num_t>(profile.power.latchPin2));
     pinMode(profile.power.latchPin2, OUTPUT);

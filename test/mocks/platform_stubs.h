@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdarg>
@@ -75,8 +76,9 @@ inline void* memcpy_P(void* destination, const void* source, size_t size) {
 
 // Minimal SPISettings stub
 struct SPISettings {
+  uint32_t clockHz = 0;
   SPISettings() {}
-  SPISettings(uint32_t, int, int) {}
+  SPISettings(uint32_t hz, int, int) : clockHz(hz) {}
 };
 
 using TestSpiWriteHook = void (*)(const uint8_t*, size_t);
@@ -92,6 +94,7 @@ struct MockSPI {
 
   size_t beginTransactionCount = 0;
   size_t endTransactionCount = 0;
+  uint32_t lastClockHz = 0;
   uint8_t transferValues[RECORD_CAPACITY]{};
   size_t transferCount = 0;
   size_t writeSizes[RECORD_CAPACITY]{};
@@ -117,7 +120,10 @@ struct MockSPI {
   void end() { active = false; }
   void* bus() const { return active ? const_cast<MockSPI*>(this) : nullptr; }
   int pinSS() const { return selectPin; }
-  void beginTransaction(const SPISettings&) { beginTransactionCount++; }
+  void beginTransaction(const SPISettings& settings) {
+    beginTransactionCount++;
+    lastClockHz = settings.clockHz;
+  }
   void endTransaction() { endTransactionCount++; }
   void transfer(uint8_t value) {
     if (transferCount < RECORD_CAPACITY) transferValues[transferCount] = value;
@@ -134,6 +140,7 @@ struct MockSPI {
     endTransactionCount = 0;
     transferCount = 0;
     writeCount = 0;
+    lastClockHz = 0;
   }
 };
 
@@ -191,8 +198,8 @@ inline TestDigitalReadHook& testDigitalReadHook() {
 }
 inline void testSetDigitalReadHook(TestDigitalReadHook hook) { testDigitalReadHook() = hook; }
 inline int digitalRead(int pin) { return testDigitalReadHook() ? testDigitalReadHook()(pin) : 0; }
-extern bool testManualMillisEnabled;
-extern unsigned long testManualMillisValue;
+extern std::atomic<bool> testManualMillisEnabled;
+extern std::atomic<unsigned long> testManualMillisValue;
 inline void testSetManualMillis(unsigned long value) {
   testManualMillisEnabled = true;
   testManualMillisValue = value;
@@ -245,10 +252,34 @@ inline void analogSetPinAttenuation(uint8_t, int) {}
 #endif
 inline bool g_mockCpuFreqAccepted = true;
 inline uint32_t g_mockCpuFreqMhz = 160;
-inline bool ledcAttach(uint8_t, uint32_t, uint8_t) { return true; }
-inline bool ledcDetach(uint8_t) { return true; }
-inline bool ledcWrite(uint8_t, uint32_t) { return true; }
+inline std::atomic<unsigned> g_mockCpuFreqCalls{0};
+struct TestLedcPin {
+  bool attached = false;
+  uint32_t hz = 0;
+  uint8_t bits = 0;
+  uint32_t duty = 0;
+};
+inline TestLedcPin testLedcPins[64]{};
+inline int testLedcFailAttachPin = -1;
+inline bool ledcAttach(uint8_t pin, uint32_t hz, uint8_t bits) {
+  if (pin >= 64 || pin == testLedcFailAttachPin) return false;
+  testLedcPins[pin].attached = true;
+  testLedcPins[pin].hz = hz;
+  testLedcPins[pin].bits = bits;
+  return true;
+}
+inline bool ledcDetach(uint8_t pin) {
+  if (pin >= 64) return false;
+  testLedcPins[pin].attached = false;
+  return true;
+}
+inline bool ledcWrite(uint8_t pin, uint32_t duty) {
+  if (pin >= 64 || !testLedcPins[pin].attached) return false;
+  testLedcPins[pin].duty = duty;
+  return true;
+}
 inline bool setCpuFrequencyMhz(uint32_t freq) {
+  ++g_mockCpuFreqCalls;
   if (!g_mockCpuFreqAccepted) return false;
   g_mockCpuFreqMhz = freq;
   return true;
@@ -274,7 +305,6 @@ inline bool setCpuFrequencyMhz(uint32_t freq) {
 #define LOW 0
 #endif
 
-
 // Mock Serial for test output
 struct MockSerial : public Print {
   void printf(const char*, ...);
@@ -299,6 +329,11 @@ struct MockESP {
   uint32_t getFreeHeap() { return 100000; }
   uint32_t getHeapSize() { return 320000; }
   uint32_t getMinFreeHeap() { return 80000; }
+  unsigned restartCount = 0;
+  void (*beforeRestart)() = nullptr;
+  void restart() { if (beforeRestart) beforeRestart(); ++restartCount; }
+  const char* getChipModel() { return "ESP32-S3"; }
+  unsigned getCpuFreqMHz() { return 240; }
 };
 
 extern MockESP ESP;

@@ -16,6 +16,9 @@
 #if PAPYRIX_TARGET_STICKY
 #include <StickyDisplayProbe.h>
 #endif
+#if PAPYRIX_TARGET_MURPHY_M4
+#include <MurphyM4Batch.h>
+#endif
 
 #include <cstdio>
 
@@ -288,6 +291,9 @@ void selectBoard(HardwareIdentity& identity) {
   selection.board = bootProfile().id;
   selection.source = BoardSelectionSource::Fixed;
   identity.applyBoardSelection(selection, {});
+#if PAPYRIX_TARGET_MURPHY_M4
+  loadMurphyM4Batch();
+#endif
 #endif
 }
 

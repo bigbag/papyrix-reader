@@ -46,6 +46,17 @@ GOOD_STICKY = """\
 0805c300 T ProgressiveJpeg::decode(FsFile&)
 """
 
+GOOD_M4 = """\
+0805a1b0 T papyrix::board::Ft6336uBackend::poll()
+0805a1c0 T papyrix::board::x4pro::enableTouch(papyrix::board::TouchConfig const&)
+0805c001 T papyrix::board::FrontLightBackend::write()
+0805c100 T papyrix::SdmmcBlockDevice::readSectors()
+0805c200 T sdmmc_host_init()
+0805c300 T papyrix::board::RtcBackend::read()
+0805c400 T ProgressiveJpeg::decode(FsFile&)
+0805c500 D kMurphyM4Profile
+"""
+
 
 BAD_DEFAULT = {
     "X4 Pro board symbols": "1000aaaa T papyrix::board::x4pro::enableTouch(papyrix::board::TouchConfig const&)",
@@ -77,6 +88,15 @@ BAD_STICKY = {
     "CW2017 symbols": "1000ddee T BatteryMonitor::readCw2017Soc_()",
     "SDMMC symbols": "1000eeff T papyrix::Sdmmc1Bit::mount()",
     "foreign board profiles": "1000ff00 D kX4ClassicProfile",
+}
+BAD_M4 = {
+    **{group: line for group, line in BAD_X4PRO.items() if group != "FT6336 touch symbols"},
+    "GT911 touch symbols": "1000aaaa T Gt911Touch::init()",
+    "Sticky panel symbols": "1000bbbb T papyrix::eink::Ssd2677Driver::display()",
+    "C3 panel symbols": "1000cccc T papyrix::eink::Uc8279X3Driver::begin()",
+    "Pro panel symbols": "1000dddd T papyrix::eink::Uc8279X4ProDriver::begin()",
+    "fuel gauge symbols": "1000eeee T BatteryMonitor::readBq27220Mv_()",
+    "non-M4 board profiles": "1000ffff D kStickyProfile",
 }
 
 
@@ -154,6 +174,20 @@ def main():
         failed |= not expect_pass("Classic permits shared S3 panel drivers", listing, "x4c")
         listing = write_listing(tmp, "good_sticky.txt", GOOD_STICKY)
         failed |= not expect_pass("Sticky permits its display, input, gauge, RTC, and image paths", listing, "sticky")
+        listing = write_listing(tmp, "good_m4.txt", GOOD_M4)
+        failed |= not expect_pass("M4 permits its touch, shared power helpers, light, SDMMC, RTC, and images",
+                                  listing, "murphy_m4")
+        for target in ("default", "x4pro", "x4c", "sticky"):
+            listing = write_listing(tmp, "native_ft.txt", "1000abcd T papyrix::board::Ft6336uBackend::poll()\n")
+            failed |= not expect_forbidden("other targets reject native FT6336U", listing, target,
+                                           "FT6336 touch symbols")
+        for profile in ("kX3Profile", "kX4Profile", "kX4ProProfile", "kX4ClassicProfile", "kStickyProfile"):
+            listing = write_listing(tmp, "foreign_profile.txt", f"1000abcd D {profile}\n")
+            failed |= not expect_forbidden("M4 rejects " + profile, listing, "murphy_m4", "non-M4 board profiles")
+        for symbol, group in (("Cw2017Backend::read()", "fuel gauge symbols"),
+                              ("Uc8179X4ProDriver::begin()", "Pro panel symbols")):
+            listing = write_listing(tmp, "m4_forbidden.txt", f"1000abcd T {symbol}\n")
+            failed |= not expect_forbidden("M4 rejects " + symbol, listing, "murphy_m4", group)
         for target in ("default", "x4pro", "x4c"):
             listing = write_listing(tmp, "sticky_driver.txt", "1000abcd T papyrix::eink::Ssd2677Driver::display()\n")
             failed |= not expect_forbidden("current targets reject Sticky drivers", listing, target,
@@ -170,6 +204,7 @@ def main():
             ("x4pro", BAD_X4PRO),
             ("x4c", BAD_X4C),
             ("sticky", BAD_STICKY),
+            ("murphy_m4", BAD_M4),
         ):
             for index, (group, line) in enumerate(bad.items()):
                 listing = write_listing(tmp, f"bad_{target}_{index}.txt", line + "\n")

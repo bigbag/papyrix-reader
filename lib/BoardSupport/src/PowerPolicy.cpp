@@ -20,13 +20,14 @@ void prepareDeepSleepPins(const BoardProfile& profile, bool externalPower) {
       digitalWrite(pin, high ? HIGH : LOW);
       gpio_hold_en(static_cast<gpio_num_t>(pin));
     };
-    holdOutput(profile.touch.rst, false);
+    if (profile.touch.rst != profile.display.rst) holdOutput(profile.touch.rst, false);
     holdOutput(profile.touch.powerPin, !profile.touch.powerActiveHigh);
     if (profile.storage.transport == StorageTransport::Spi) {
       papyrix::sd::disableSdPower(profile.storage.powerPin, profile.storage.spiCs, profile.display.sclk,
                                   profile.storage.spiMiso, profile.display.mosi);
     } else {
-      for (const int8_t pin : {profile.storage.sdmmcClk, profile.storage.sdmmcCmd, profile.storage.sdmmcDat0}) {
+      for (const int8_t pin : {profile.storage.sdmmcClk, profile.storage.sdmmcCmd, profile.storage.sdmmcDat0,
+                               profile.storage.sdmmcDat1, profile.storage.sdmmcDat2, profile.storage.sdmmcDat3}) {
         if (pin == kPinUnused) continue;
         gpio_hold_dis(static_cast<gpio_num_t>(pin));
         pinMode(pin, INPUT);
@@ -73,7 +74,9 @@ void shutdownRecoveryRails(const BoardProfile& profile) {
     papyrix::sd::disableSdPower(profile.storage.powerPin, profile.storage.spiCs, profile.display.sclk,
                                 profile.storage.spiMiso, profile.display.mosi);
   } else if (profile.storage.powerPin != kPinUnused) {
-    for (const int pin : {profile.storage.sdmmcClk, profile.storage.sdmmcCmd, profile.storage.sdmmcDat0}) {
+    for (const int pin : {profile.storage.sdmmcClk, profile.storage.sdmmcCmd, profile.storage.sdmmcDat0,
+                          profile.storage.sdmmcDat1, profile.storage.sdmmcDat2, profile.storage.sdmmcDat3}) {
+      if (pin == kPinUnused) continue;
       pinMode(pin, INPUT);
     }
     pinMode(profile.storage.powerPin, OUTPUT);

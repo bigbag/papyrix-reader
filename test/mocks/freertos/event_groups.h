@@ -16,6 +16,7 @@ struct MockEventGroup {
   std::condition_variable cv;
   std::atomic<EventBits_t> bits{0};
 };
+inline std::atomic<bool> testEventWaitFailure{false};
 
 // Global event group registry
 inline std::vector<MockEventGroup*>& getEventGroupRegistry() {
@@ -156,6 +157,7 @@ inline EventBits_t xEventGroupWaitBits(EventGroupHandle_t xEventGroup, const Eve
                                        TickType_t xTicksToWait) {
   MockEventGroup* eg = static_cast<MockEventGroup*>(xEventGroup);
   if (!eg) return 0;
+  if (testEventWaitFailure.load()) return 0;
 
   getEventWaitCallCount()++;
   (void)xWaitForAllBits;  // Simplified: always OR behavior

@@ -160,6 +160,8 @@ int main() {
     runner.expectFalse(ok, "beginUpdate: too small returns false");
     runner.expectEq(static_cast<int>(FirmwareUpdateError::TooSmall), static_cast<int>(FW_UPDATER.progress().error),
                     "beginUpdate: TooSmall error");
+    runner.expectTrue(ESP_PARTITION.eraseCount_ == 0 && ESP_PARTITION.writeCount_ == 0,
+                      "undersized image leaves flash unchanged");
   }
 
   // ============================================================
@@ -178,6 +180,8 @@ int main() {
     runner.expectFalse(ok, "beginUpdate: bad magic returns false");
     runner.expectEq(static_cast<int>(FirmwareUpdateError::BadMagic), static_cast<int>(FW_UPDATER.progress().error),
                     "beginUpdate: BadMagic error");
+    runner.expectTrue(ESP_PARTITION.eraseCount_ == 0 && ESP_PARTITION.writeCount_ == 0,
+                      "invalid magic leaves flash unchanged");
   }
 
   // ============================================================
@@ -283,6 +287,8 @@ int main() {
     runner.expectFalse(FW_UPDATER.beginUpdate(), "untagged corrupt image is rejected");
     runner.expectTrue(FW_UPDATER.progress().error == FirmwareUpdateError::BadChecksum,
                       "checksum errors retain precedence over missing identity");
+    runner.expectTrue(ESP_PARTITION.eraseCount_ == 0 && ESP_PARTITION.writeCount_ == 0,
+                      "untagged corrupt image leaves flash unchanged");
   }
 
   // ============================================================
@@ -302,6 +308,8 @@ int main() {
     runner.expectFalse(ok, "beginUpdate: bad checksum returns false");
     runner.expectEq(static_cast<int>(FirmwareUpdateError::BadChecksum), static_cast<int>(FW_UPDATER.progress().error),
                     "beginUpdate: BadChecksum error");
+    runner.expectTrue(ESP_PARTITION.eraseCount_ == 0 && ESP_PARTITION.writeCount_ == 0,
+                      "checksum failure leaves flash unchanged");
   }
 
   // ============================================================
@@ -321,6 +329,8 @@ int main() {
     runner.expectFalse(ok, "beginUpdate: bad SHA returns false");
     runner.expectEq(static_cast<int>(FirmwareUpdateError::BadSha), static_cast<int>(FW_UPDATER.progress().error),
                     "beginUpdate: BadSha error");
+    runner.expectTrue(ESP_PARTITION.eraseCount_ == 0 && ESP_PARTITION.writeCount_ == 0,
+                      "SHA failure leaves flash unchanged");
   }
 
   // ============================================================
@@ -339,6 +349,8 @@ int main() {
     runner.expectFalse(ok, "beginUpdate: no partition returns false");
     runner.expectEq(static_cast<int>(FirmwareUpdateError::NoPartition), static_cast<int>(FW_UPDATER.progress().error),
                     "beginUpdate: NoPartition error");
+    runner.expectTrue(ESP_PARTITION.eraseCount_ == 0 && ESP_PARTITION.writeCount_ == 0,
+                      "missing destination leaves flash unchanged");
   }
 
   // ============================================================
@@ -521,6 +533,30 @@ int main() {
     FW_UPDATER.findFirmwareFile("/second.bin");
     runner.expectTrue(FW_UPDATER.isFirmwareAvailable(), "replace path: second found");
   }
+
+  for (bool overflow : {false, true}) {
+    SdMan.reset();
+    FW_UPDATER.reset();
+    ESP_PARTITION.reset();
+    const auto bootSelection = ESP_PARTITION.otadataData_;
+    auto data = buildMinSizeFirmware();
+    esp_partition_t destination = *ESP_PARTITION.nextUpdatePartition_;
+    if (overflow) {
+      destination.size = static_cast<uint32_t>(data.size() - 1);
+      ESP_PARTITION.nextUpdatePartition_ = &destination;
+    } else {
+      data.resize(data.size() - 8);
+    }
+    SdMan.setFileData(PAPYRIX_EMERGENCY_FW_FILE, data);
+    FW_UPDATER.findFirmwareFile(PAPYRIX_EMERGENCY_FW_FILE);
+    runner.expectFalse(FW_UPDATER.beginUpdate(), overflow ? "slot overflow is rejected" : "truncated image is rejected");
+    while (FW_UPDATER.pump()) {
+    }
+    runner.expectTrue(ESP_PARTITION.eraseCount_ == 0 && ESP_PARTITION.writeCount_ == 0 &&
+                          ESP_PARTITION.otadataData_ == bootSelection,
+                      "rejected emergency-path image preserves flash and boot selection");
+  }
+  ESP_PARTITION.reset();
 
   runner.printSummary();
   return runner.allPassed() ? 0 : 1;

@@ -87,6 +87,7 @@ inline void releaseTaskCreateFailureGate() {
 }
 
 inline thread_local MockTask* currentMockTask = nullptr;
+inline std::string testTaskCreateFailureName;
 
 // xTaskCreatePinnedToCore mock
 inline BaseType_t xTaskCreatePinnedToCore(TaskFunction_t pvTaskCode, const char* const pcName,
@@ -95,6 +96,10 @@ inline BaseType_t xTaskCreatePinnedToCore(TaskFunction_t pvTaskCode, const char*
   (void)usStackDepth;
   (void)uxPriority;
   (void)xCoreID;
+  if (pcName && testTaskCreateFailureName == pcName) {
+    *pxCreatedTask = nullptr;
+    return pdFAIL;
+  }
 
   auto& createGate = getTaskCreateFailureGate();
   {
@@ -163,6 +168,15 @@ inline void testSetVTaskDelayHook(TestVTaskDelayHook hook) { testVTaskDelayHook(
 inline void vTaskDelay(const TickType_t xTicksToDelay) {
   if (testVTaskDelayHook()) return testVTaskDelayHook()(xTicksToDelay);
   std::this_thread::sleep_for(std::chrono::milliseconds(xTicksToDelay));
+}
+
+unsigned long millis();
+inline TickType_t xTaskGetTickCount() { return static_cast<TickType_t>(millis()); }
+inline void vTaskDelayUntil(TickType_t* previous, TickType_t increment) {
+  const TickType_t target = *previous + increment;
+  const int32_t remaining = static_cast<int32_t>(target - xTaskGetTickCount());
+  *previous = target;
+  vTaskDelay(remaining > 0 ? static_cast<TickType_t>(remaining) : 0);
 }
 
 inline void taskYIELD() { std::this_thread::yield(); }

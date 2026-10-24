@@ -10,12 +10,22 @@
 #include <esp_sleep.h>
 #include <esp_system.h>
 
+#if PAPYRIX_TARGET_MURPHY_M4
+#include <Logging.h>
+#include <TouchBackend.h>
+#endif
 extern InputManager inputManager;
 
 namespace papyrix::hal {
 
 [[noreturn]] void enterDeepSleepWithHardwareShutdown(bool externalPower) {
   inputManager.stopSampling();
+#if PAPYRIX_TARGET_MURPHY_M4
+  if (!board::stopTouchAcquisition()) {
+    LOG_ERR("POWER", "Touch task does not stop; restart without hardware shutdown");
+    esp_restart();
+  }
+#endif
   if (SdMan.ready()) SdMan.end();
   SPI.end();
   disableGpioPullsForSleep();

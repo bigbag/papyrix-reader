@@ -23,3 +23,41 @@ SOFTWARE.
 The X3 UC8279 driver and LUTs, the X3 half-refresh LUTs in Display.cpp,
 the X4 Pro UC8179 and UC8279 display paths, and the Sticky SSD1677
 configuration and SSD2677 driver and LUTs are selective ports from FreeInk.
+
+The Murphy M4 SSD1677 configuration and power sequences are selective ports
+from the CrossMux FreeInk SDK. This target uses the generic SSD1677 LUT.
+Source: https://github.com/0x1abin/freeink-sdk/tree/9aa7e95e02c6374a23a562c883eb302552ff24f1
+
+Third-party attribution from the FreeInk NOTICE:
+
+This project is based in part on, and contains code derived from, the OpenX4
+E-Paper Community SDK (https://github.com/open-x4-epaper/community-sdk) and its
+community device ports (M5Stack PaperColor, Murphy M3, and the
+community-sdk-de-link ESP32-S3 port). In particular, the SSD1677 and UC8253
+panel initialization sequences and waveform LUTs are derived from that work.
+Original e-paper driver authorship is credited to CidVonHighwind.
+
+The upstream is provided under the MIT License, reproduced here as required by
+its terms:
+
+    MIT License
+
+    Copyright (c) 2025 Open X4 E-Paper Contributors
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.

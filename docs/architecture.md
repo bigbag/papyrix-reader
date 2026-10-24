@@ -36,7 +36,7 @@ The reader records the resume target after a successful page render. If the sett
 
 `lib/BoardSupport` owns board profiles and hardware selection.
 The C3 image selects X3 or X4.
-Each S3 image uses one fixed profile: X4 Pro, X4 Classic, or Sticky.
+Each S3 image uses one fixed profile: X4 Pro, X4 Classic, Sticky, or Murphy M4.
 Display probing selects the controller independently of board selection.
 Classic first reads the factory panel identity, then probes when needed.
 An unresolved Classic identity blocks display initialization but permits headless SD recovery.
@@ -51,6 +51,15 @@ Touch uses one I2C controller.
 The gauge and RTC share the other I2C controller.
 Its gauge preserves factory configuration.
 Sticky support is implemented, not device-tested.
+
+M4 selects SSD1677 without a display probe.
+Its four-bit SDMMC transport uses all six data/clock/command pins.
+FT6336U-compatible touch and RX8010 share one persistent native I2C1 bus.
+Each device uses its own clock rate.
+The display stops touch acquisition before it changes shared reset GPIO7.
+Both subsystems load one hardware-batch selection at boot.
+M4 support is implemented, not device-tested.
+See the [M4 specifications](murphy-m4-specifications.md).
 
 Hardware backends provide battery, RTC, power, front-light, and touch services.
 Unsupported services remain unavailable to the UI.
@@ -70,7 +79,9 @@ Pending changes suppress hold events until input processing reaches the current 
 ADC button, battery, and USB-supply reads share one mutex.
 Startup checks sample directly before the task starts.
 Shutdown stops the task before GPIO configuration changes.
-Touch input remains on the main loop.
+GT911 touch input remains on the main loop.
+M4 touch acquisition uses a separate `BackgroundTask`.
+The main loop classifies its bounded, timestamped samples and remains the event producer.
 
 ## Content
 
@@ -145,7 +156,7 @@ RTC and NTP services maintain system time where available.
 
 Firmware updates validate one matching board tag before flash erase.
 The combined X3/X4 image is one compatibility class.
-Pro, Classic, and Sticky each require their own tag.
+Pro, Classic, Sticky, and M4 each require their own tag.
 Untagged images require unlocked serial installation.
 This check prevents accidental wrong-board updates.
 It does not authenticate firmware.

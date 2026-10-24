@@ -1,5 +1,10 @@
 #include "TouchTransform.h"
 
+#include <atomic>
+#if PAPYRIX_TARGET_MURPHY_M4
+#include "MurphyM4Batch.h"
+#endif
+
 namespace papyrix::board {
 namespace {
 
@@ -7,8 +12,8 @@ bool validPanelPoint(int16_t x, int16_t y, int16_t width, int16_t height) {
   return width > 0 && height > 0 && x >= 0 && y >= 0 && x < width && y < height;
 }
 
-DisplayOrientation gDisplayOrientation = DisplayOrientation::Portrait;
-uint8_t gDisplayOrientationRevision = 0;
+std::atomic<DisplayOrientation> gDisplayOrientation{DisplayOrientation::Portrait};
+std::atomic<uint8_t> gDisplayOrientationRevision{0};
 
 int16_t scaleAxis(uint16_t value, uint16_t minimum, uint16_t maximum, int16_t outputSize) {
   return static_cast<int16_t>(static_cast<uint32_t>(value - minimum) * static_cast<uint32_t>(outputSize - 1) /
@@ -94,6 +99,10 @@ bool rawToPanel(const TouchConfig& config, uint16_t rawX, uint16_t rawY, int16_t
 
   panel.x = scaleAxis(sourceX, config.rawMinX, config.rawMaxX, panelWidth);
   panel.y = scaleAxis(sourceY, config.rawMinY, config.rawMaxY, panelHeight);
+#if PAPYRIX_TARGET_MURPHY_M4
+  if (config.controller == TouchController::Ft6336u)
+    panel.y = static_cast<int16_t>(mapMurphyM4ShortAxis(sourceY, murphyM4Batch(), panelHeight - 1));
+#endif
   if (config.flipX) panel.x = static_cast<int16_t>(panelWidth - 1 - panel.x);
   if (config.flipY) panel.y = static_cast<int16_t>(panelHeight - 1 - panel.y);
   return true;

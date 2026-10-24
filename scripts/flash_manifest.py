@@ -16,7 +16,7 @@ def write_flash_manifest(source, target, env):
             for offset, path in images
         ],
     }
-    output = Path(env.subst("$BUILD_DIR")) / "sticky-flash-inputs.json"
+    output = Path(env.subst("$BUILD_DIR")) / "flash-inputs.json"
     output.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 

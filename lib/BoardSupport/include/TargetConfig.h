@@ -14,6 +14,9 @@
 #ifndef PAPYRIX_TARGET_STICKY
 #define PAPYRIX_TARGET_STICKY 0
 #endif
+#ifndef PAPYRIX_TARGET_MURPHY_M4
+#define PAPYRIX_TARGET_MURPHY_M4 0
+#endif
 
 #ifndef PAPYRIX_X4PRO_CHARACTERIZE
 #define PAPYRIX_X4PRO_CHARACTERIZE 0
@@ -23,15 +26,17 @@
 #error "PAPYRIX_X4PRO_CHARACTERIZE requires PAPYRIX_TARGET_X4PRO"
 #endif
 
-#if (PAPYRIX_TARGET_XTEINK_C3 + PAPYRIX_TARGET_X4PRO + PAPYRIX_TARGET_X4CLASSIC + PAPYRIX_TARGET_STICKY) != 1
-#error "Set exactly one PAPYRIX_TARGET_* to 1: XTEINK_C3, X4PRO, X4CLASSIC, or STICKY"
+#if (PAPYRIX_TARGET_XTEINK_C3 + PAPYRIX_TARGET_X4PRO + PAPYRIX_TARGET_X4CLASSIC + PAPYRIX_TARGET_STICKY + \
+     PAPYRIX_TARGET_MURPHY_M4) != 1
+#error "Set exactly one PAPYRIX_TARGET_* to 1: XTEINK_C3, X4PRO, X4CLASSIC, STICKY, or MURPHY_M4"
 #endif
 
 // Host tests do not define the ESP-IDF target macros.
 #if PAPYRIX_TARGET_XTEINK_C3 && defined(CONFIG_IDF_TARGET_ESP32S3)
 #error "PAPYRIX_TARGET_XTEINK_C3 requires the ESP32-C3 toolchain"
 #endif
-#if (PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY) && defined(CONFIG_IDF_TARGET_ESP32C3)
+#if (PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY || PAPYRIX_TARGET_MURPHY_M4) && \
+    defined(CONFIG_IDF_TARGET_ESP32C3)
 #error "The selected S3 board requires the ESP32-S3 toolchain"
 #endif
 
@@ -48,6 +53,7 @@ inline constexpr McuFamily kTargetMcuFamily = PAPYRIX_TARGET_XTEINK_C3 ? McuFami
 inline constexpr BoardId kBootBoardId = PAPYRIX_TARGET_XTEINK_C3   ? BoardId::X4
                                         : PAPYRIX_TARGET_X4CLASSIC ? BoardId::X4Classic
                                         : PAPYRIX_TARGET_STICKY    ? BoardId::Sticky
+                                        : PAPYRIX_TARGET_MURPHY_M4 ? BoardId::MurphyM4
                                                                    : BoardId::X4Pro;
 inline constexpr eink::DisplayController kBootPanelController = eink::DisplayController::SSD1677;
 
@@ -58,7 +64,7 @@ inline constexpr uint32_t kTargetFrameBufferBytes =
 inline constexpr uint32_t kTargetBitmapTurnCacheBytes = PAPYRIX_TARGET_XTEINK_C3 ? 0 : 256 * 1024;
 inline constexpr uint32_t kTargetGlyphBitmapSlabBytes = PAPYRIX_TARGET_XTEINK_C3 ? 0 : 96 * 1024;
 inline constexpr uint32_t kTargetParserScratchBytes = PAPYRIX_TARGET_XTEINK_C3 ? 0 : 64 * 1024;
-inline constexpr bool kTargetHasVerifiedPanelDriver = !PAPYRIX_TARGET_STICKY;
+inline constexpr bool kTargetHasVerifiedPanelDriver = !(PAPYRIX_TARGET_STICKY || PAPYRIX_TARGET_MURPHY_M4);
 
 }  // namespace papyrix::board
 
@@ -103,5 +109,15 @@ inline constexpr bool kTargetHasVerifiedPanelDriver = !PAPYRIX_TARGET_STICKY;
 #define PAPYRIX_CAP_SDMMC 0
 #define PAPYRIX_CAP_BATTERY_ADC 0
 #define PAPYRIX_CAP_BATTERY_BQ27220 1
+#define PAPYRIX_CAP_BATTERY_CW2017 0
+#elif PAPYRIX_TARGET_MURPHY_M4
+#define PAPYRIX_CAP_PROGRESSIVE_JPEG 1
+#define PAPYRIX_CAP_TOUCH 1
+#define PAPYRIX_CAP_FRONTLIGHT 1
+#define PAPYRIX_CAP_RTC 1
+#define PAPYRIX_CAP_USB_DETECT 1
+#define PAPYRIX_CAP_SDMMC 1
+#define PAPYRIX_CAP_BATTERY_ADC 1
+#define PAPYRIX_CAP_BATTERY_BQ27220 0
 #define PAPYRIX_CAP_BATTERY_CW2017 0
 #endif

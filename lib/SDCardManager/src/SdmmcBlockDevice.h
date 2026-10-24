@@ -24,6 +24,8 @@ class SdmmcBlockDevice : public FsBlockDeviceInterface {
   bool syncDevice() override { return true; }
 
  private:
+  void releasePins() const;
+
   static constexpr size_t kSectorSize = 512;
   static constexpr size_t kMaxTransferSectors = 8;
 

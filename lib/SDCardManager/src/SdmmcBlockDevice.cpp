@@ -15,7 +15,11 @@
 namespace papyrix::sd {
 
 bool SdmmcBlockDevice::begin(const board::StorageConfig& config) {
-  if (config.transport != board::StorageTransport::Sdmmc1Bit) return false;
+  const bool fourBit = config.transport == board::StorageTransport::Sdmmc4Bit;
+  if (!fourBit && config.transport != board::StorageTransport::Sdmmc1Bit) return false;
+  if (config.powerPin < 0 || config.sdmmcClk < 0 || config.sdmmcCmd < 0 || config.sdmmcDat0 < 0 ||
+      (fourBit && (config.sdmmcDat1 < 0 || config.sdmmcDat2 < 0 || config.sdmmcDat3 < 0)))
+    return false;
   if (hostReady_) return true;
 
   const auto plan = makeStorageMountPlan(config);
@@ -25,21 +29,22 @@ bool SdmmcBlockDevice::begin(const board::StorageConfig& config) {
   host.max_freq_khz = SDMMC_FREQ_DEFAULT;
 
   sdmmc_slot_config_t slot = SDMMC_SLOT_CONFIG_DEFAULT();
-  slot.width = 1;
+  slot.width = fourBit ? 4 : 1;
   slot.clk = static_cast<gpio_num_t>(config.sdmmcClk);
   slot.cmd = static_cast<gpio_num_t>(config.sdmmcCmd);
   slot.d0 = static_cast<gpio_num_t>(config.sdmmcDat0);
-  slot.d1 = GPIO_NUM_NC;
-  slot.d2 = GPIO_NUM_NC;
-  slot.d3 = GPIO_NUM_NC;
+  slot.d1 = fourBit ? static_cast<gpio_num_t>(config.sdmmcDat1) : GPIO_NUM_NC;
+  slot.d2 = fourBit ? static_cast<gpio_num_t>(config.sdmmcDat2) : GPIO_NUM_NC;
+  slot.d3 = fourBit ? static_cast<gpio_num_t>(config.sdmmcDat3) : GPIO_NUM_NC;
   slot.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
 
   gpio_hold_dis(static_cast<gpio_num_t>(config.powerPin));
   digitalWrite(config.powerPin, plan.activeLevel ? HIGH : LOW);
   pinMode(config.powerPin, OUTPUT);
 
-  dmaBuffer_ =
-      static_cast<uint8_t*>(heap_caps_malloc(kSectorSize * kMaxTransferSectors, MALLOC_CAP_DMA | MALLOC_CAP_8BIT));
+  constexpr size_t transferBytes = kSectorSize * kMaxTransferSectors;
+  if (heap_caps_get_largest_free_block(MALLOC_CAP_DMA | MALLOC_CAP_8BIT) >= transferBytes)
+    dmaBuffer_ = static_cast<uint8_t*>(heap_caps_malloc(transferBytes, MALLOC_CAP_DMA | MALLOC_CAP_8BIT));
   if (!dmaBuffer_) {
     end();
     return false;
@@ -50,10 +55,7 @@ bool SdmmcBlockDevice::begin(const board::StorageConfig& config) {
       sdmmc_host_deinit();
       hostReady_ = false;
     }
-    for (const int pin : {config.sdmmcClk, config.sdmmcCmd, config.sdmmcDat0}) {
-      gpio_reset_pin(static_cast<gpio_num_t>(pin));
-      gpio_set_pull_mode(static_cast<gpio_num_t>(pin), GPIO_FLOATING);
-    }
+    releasePins();
     digitalWrite(config.powerPin, plan.inactiveLevel ? HIGH : LOW);
     delay(80);
     digitalWrite(config.powerPin, plan.activeLevel ? HIGH : LOW);
@@ -77,6 +79,15 @@ bool SdmmcBlockDevice::begin(const board::StorageConfig& config) {
   return false;
 }
 
+void SdmmcBlockDevice::releasePins() const {
+  for (const int pin : {config_.sdmmcClk, config_.sdmmcCmd, config_.sdmmcDat0, config_.sdmmcDat1, config_.sdmmcDat2,
+                        config_.sdmmcDat3}) {
+    if (pin == board::kPinUnused) continue;
+    gpio_reset_pin(static_cast<gpio_num_t>(pin));
+    gpio_set_pull_mode(static_cast<gpio_num_t>(pin), GPIO_FLOATING);
+  }
+}
+
 void SdmmcBlockDevice::end() {
   if (dmaBuffer_) {
     heap_caps_free(dmaBuffer_);
@@ -86,11 +97,9 @@ void SdmmcBlockDevice::end() {
     sdmmc_host_deinit();
     hostReady_ = false;
   }
-  if (config_.transport == board::StorageTransport::Sdmmc1Bit) {
-    for (const int pin : {config_.sdmmcClk, config_.sdmmcCmd, config_.sdmmcDat0}) {
-      gpio_reset_pin(static_cast<gpio_num_t>(pin));
-      gpio_set_pull_mode(static_cast<gpio_num_t>(pin), GPIO_FLOATING);
-    }
+  if (config_.transport == board::StorageTransport::Sdmmc1Bit ||
+      config_.transport == board::StorageTransport::Sdmmc4Bit) {
+    releasePins();
     digitalWrite(config_.powerPin, config_.powerActiveHigh ? LOW : HIGH);
     config_ = {};
   }

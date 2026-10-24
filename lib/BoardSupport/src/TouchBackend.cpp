@@ -1,19 +1,27 @@
 #include "TouchBackend.h"
 
-#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_STICKY
+#include <atomic>
+
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_STICKY || PAPYRIX_TARGET_MURPHY_M4
 #include <TargetConfig.h>
 #endif
 #if PAPYRIX_CAP_TOUCH
 #include <Arduino.h>
+#if !PAPYRIX_TARGET_MURPHY_M4
 #include <Wire.h>
+#endif
 #include <driver/gpio.h>
+#endif
+#if PAPYRIX_TARGET_MURPHY_M4
+#include "Ft6336uBackend.h"
 #endif
 
 namespace papyrix::board {
 namespace {
 
 int16_t absolute(int16_t value) { return value < 0 ? static_cast<int16_t>(-value) : value; }
-uint32_t gTouchSuppressionRevision = 0;
+std::atomic<uint32_t> gTouchSuppressionRevision{0};
+std::atomic<uint32_t> gTouchInvalidationRevision{0};
 
 }  // namespace
 
@@ -24,6 +32,37 @@ void suppressTouchUntilIdle() {
 
 uint32_t touchSuppressionRevision() { return gTouchSuppressionRevision; }
 
+void discardPendingTouch() {
+  ++gTouchInvalidationRevision;
+  suppressTouchUntilIdle();
+}
+
+uint32_t touchInvalidationRevision() { return gTouchInvalidationRevision; }
+
+bool pauseTouchForDisplayReset() {
+#if PAPYRIX_TARGET_MURPHY_M4
+  return ft6336uBackend().pauseForDisplayReset();
+#else
+  return true;
+#endif
+}
+
+bool resumeTouchAfterDisplayReset() {
+#if PAPYRIX_TARGET_MURPHY_M4
+  return ft6336uBackend().resumeAfterDisplayReset();
+#else
+  return true;
+#endif
+}
+
+bool stopTouchAcquisition() {
+#if PAPYRIX_TARGET_MURPHY_M4
+  return ft6336uBackend().shutdown();
+#else
+  return true;
+#endif
+}
+
 void enableTouch(const TouchConfig& touch) {
 #if PAPYRIX_CAP_TOUCH
   if (touch.powerPin != kPinUnused) {
@@ -31,6 +70,10 @@ void enableTouch(const TouchConfig& touch) {
     pinMode(touch.powerPin, OUTPUT);
     digitalWrite(touch.powerPin, touch.powerActiveHigh ? HIGH : LOW);
   }
+#if PAPYRIX_TARGET_MURPHY_M4
+  delay(500);
+  return;
+#endif
   delay(50);
   if (touch.irq == kPinUnused || touch.rst == kPinUnused) return;
   gpio_hold_dis(static_cast<gpio_num_t>(touch.rst));
@@ -165,18 +208,31 @@ bool TouchBackend::begin(const BoardProfile& profile) {
 #if PAPYRIX_CAP_TOUCH
   contactCount_ = 0;
   homeDown_ = false;
+#if PAPYRIX_TARGET_MURPHY_M4
+  if (config_.controller == TouchController::Ft6336u) available_ = ft6336uBackend().begin(profile);
+#else
   if (config_.controller == TouchController::Gt911) {
     enableTouch(config_);
     available_ = beginGt911();
     if (!available_) shutdown();
   }
 #endif
+#endif
+  return available_;
+}
+
+bool TouchBackend::available() const {
+#if PAPYRIX_TARGET_MURPHY_M4
+  if (config_.controller == TouchController::Ft6336u) return ft6336uBackend().available();
+#endif
   return available_;
 }
 
 RawTouchSample TouchBackend::poll() {
-  if (!available_) return {};
-#if PAPYRIX_CAP_TOUCH
+  if (!available()) return {};
+#if PAPYRIX_TARGET_MURPHY_M4
+  return ft6336uBackend().poll();
+#elif PAPYRIX_CAP_TOUCH
   return pollGt911();
 #else
   return {};
@@ -185,10 +241,15 @@ RawTouchSample TouchBackend::poll() {
 
 void TouchBackend::shutdown() {
 #if PAPYRIX_CAP_TOUCH
+  if (config_.controller == TouchController::None) return;
+#if PAPYRIX_TARGET_MURPHY_M4
+  if (!stopTouchAcquisition()) return;
+#else
   if (config_.rst != kPinUnused) {
     pinMode(config_.rst, OUTPUT);
     digitalWrite(config_.rst, LOW);
   }
+#endif
   if (config_.powerPin != kPinUnused) {
     pinMode(config_.powerPin, OUTPUT);
     digitalWrite(config_.powerPin, config_.powerActiveHigh ? LOW : HIGH);
@@ -196,10 +257,11 @@ void TouchBackend::shutdown() {
 #endif
   address_ = 0;
   available_ = false;
+  config_.controller = TouchController::None;
 }
 
 bool TouchBackend::beginGt911() {
-#if PAPYRIX_CAP_TOUCH
+#if PAPYRIX_CAP_TOUCH && !PAPYRIX_TARGET_MURPHY_M4
   const auto probe = [this]() {
     for (const uint8_t candidate : {config_.i2cAddress, config_.i2cAddressAlt}) {
       if (candidate == 0) continue;
@@ -237,7 +299,7 @@ bool TouchBackend::beginGt911() {
 }
 
 RawTouchSample TouchBackend::pollGt911() {
-#if PAPYRIX_CAP_TOUCH
+#if PAPYRIX_CAP_TOUCH && !PAPYRIX_TARGET_MURPHY_M4
   uint8_t status = 0;
   if (!readGt911(0x814E, &status, 1)) return {false, false, 0, 0, 0};
   uint8_t point[8]{};
@@ -261,7 +323,7 @@ RawTouchSample TouchBackend::pollGt911() {
 }
 
 bool TouchBackend::readGt911(uint16_t reg, uint8_t* data, uint8_t length) {
-#if PAPYRIX_CAP_TOUCH
+#if PAPYRIX_CAP_TOUCH && !PAPYRIX_TARGET_MURPHY_M4
   Wire.beginTransmission(address_);
   Wire.write(static_cast<uint8_t>(reg >> 8));
   Wire.write(static_cast<uint8_t>(reg));
@@ -281,7 +343,7 @@ bool TouchBackend::readGt911(uint16_t reg, uint8_t* data, uint8_t length) {
 }
 
 bool TouchBackend::clearGt911Status() {
-#if PAPYRIX_CAP_TOUCH
+#if PAPYRIX_CAP_TOUCH && !PAPYRIX_TARGET_MURPHY_M4
   Wire.beginTransmission(address_);
   Wire.write(0x81);
   Wire.write(0x4E);

@@ -113,6 +113,27 @@ constexpr BoardProfile kStickyProfile = {
 };
 #endif
 
+#if PAPYRIX_TARGET_MURPHY_M4
+constexpr BoardProfile kMurphyM4Profile = {
+    BoardId::MurphyM4,
+    McuFamily::Esp32S3,
+    "murphy_m4",
+    "/.papyrix/cache/murphy_m4",
+    "murphy_m4",
+    {800, 480, 4, 3, 5, 6, 7, 8, kPinUnused, 20000000, false},
+    {InputStyle::DigitalButtons, kPinUnused, kPinUnused, kPinUnused, kPinUnused, kPinUnused, kPinUnused, 1, 2, 0,
+     false},
+    {TouchController::Ft6336u, 13, 12, kPinUnused, 7, 0x2E, 45, false, true, false, true, false, 0, 799, 0, 479,
+     100000},
+    {StorageTransport::Sdmmc4Bit, kPinUnused, kPinUnused, 16, 15, 17, 10, false, 18, 11, 14},
+    {BatteryBackend::Adc, 9, kPinUnused, kPinUnused, 0, 43, false},
+    {RtcType::Rx8010, 13, 12, 400000, 0x32, 1},
+    {47, 48, 25000, 10, true},
+    {kPinUnused, false, true},
+    {kPinUnused, false},
+};
+#endif
+
 }  // namespace
 
 const BoardProfile* findProfile(BoardId id) {
@@ -134,6 +155,10 @@ const BoardProfile* findProfile(BoardId id) {
 #if PAPYRIX_TARGET_STICKY
     case BoardId::Sticky:
       return &kStickyProfile;
+#endif
+#if PAPYRIX_TARGET_MURPHY_M4
+    case BoardId::MurphyM4:
+      return &kMurphyM4Profile;
 #endif
     default:
       return nullptr;

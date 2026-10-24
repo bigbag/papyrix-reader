@@ -166,7 +166,7 @@ The browser does not flash or validate it.
 The emergency `/force_update.bin` path uses the same on-device validator.
 Validation checks MCU, structure, checksum/hash, partition size, and exactly one matching board tag before erase.
 
-Compatibility classes are `xteink_c3`, `x4pro`, `x4c`, and `sticky`.
+Compatibility classes are `xteink_c3`, `x4pro`, `x4c`, `sticky`, and `murphy_m4`.
 The Sticky tag is `PAPYRIX-BOARD-V1:sticky;`.
 A matching MCU is not enough for another board's image.
 Missing, malformed, duplicated, and incompatible tags are rejected.
@@ -184,19 +184,11 @@ They also cover shared SPI pins, touch/buttons, I2C bus separation, RTC, and pow
 Other tests cover full-battery USB detection, memory pressure, update rejection, and install packaging.
 Recovery coverage includes SD teardown, rail restoration, SD remount, and a display refresh on both controllers.
 The actual desktop reader tool passes HTML/EPUB block boundaries, FB2 batched resume, and CSS emphasis scenarios.
-All four development and all four release environments build.
-The real package command passes all four target-isolation checks.
+All five release environments build.
+The real package command passes all five target-isolation checks.
 The generated Sticky parts, hashes, board tag, chip ID, partition table, and archive contents match their build inputs.
-`make test` passes all 251 host suites.
+`make test` and `make test-tools` pass.
 
-`make test-tools` has two unrelated baseline fixture failures:
-
-- `test_clock_app.py` lacks the current Wi-Fi priority method and Pomodoro app identifier.
-- `test_clock_display.py` lacks Pomodoro app stubs.
-
-The affected simulator fixtures and production inputs are unchanged from the branch base.
-These two simulations do not provide evidence for this port.
-The remaining host-tool checks run separately.
 The shared Clock application remains in the compiled registry.
 
 Physical checks remain unavailable for both panel variants and touch calibration.
@@ -215,8 +207,8 @@ The port does not advertise a front light, native USB storage, BLE, or swipe nav
 | Playground registry | [`ee3d931e46bbb0c94d8a39e9937edc685a39391b`](https://github.com/Seeed-Projects/reterminal-sticky-playground-registry/tree/ee3d931e46bbb0c94d8a39e9937edc685a39391b) |
 
 The supplied checkouts use different SDK revisions.
-The CrossMux SDK gitlink is `9aa7e95e02c6374a23a562c883eb302552ff24f1`; its local submodule is empty.
-It is not inspected driver evidence.
+The CrossMux SDK gitlink is `9aa7e95e02c6374a23a562c883eb302552ff24f1`.
+The M4 port uses that later revision. The Sticky references above keep their own pinned revisions.
 Applicable FreeInk and CrossMux MIT notices remain with the adapted code.
 
 ## References

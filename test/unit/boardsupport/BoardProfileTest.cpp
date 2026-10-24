@@ -3,6 +3,9 @@
 
 #include "BoardProfiles.h"
 #include "test_utils.h"
+#if PAPYRIX_TARGET_MURPHY_M4
+#include <HardwareIdentity.h>
+#endif
 
 namespace {
 
@@ -15,7 +18,8 @@ using papyrix::board::RtcType;
 using papyrix::board::StorageTransport;
 using papyrix::board::TouchController;
 
-constexpr BoardId kAllBoards[] = {BoardId::X3, BoardId::X4, BoardId::X4Pro, BoardId::X4Classic, BoardId::Sticky};
+constexpr BoardId kAllBoards[] = {BoardId::X3, BoardId::X4, BoardId::X4Pro, BoardId::X4Classic, BoardId::Sticky,
+                                  BoardId::MurphyM4};
 
 const char* boardName(BoardId id) {
   switch (id) {
@@ -29,6 +33,8 @@ const char* boardName(BoardId id) {
       return "X4 Classic";
     case BoardId::Sticky:
       return "Sticky";
+    case BoardId::MurphyM4:
+      return "Murphy M4";
   }
   return "?";
 }
@@ -85,6 +91,12 @@ void expectRequiredDirectGpioPins(TestUtils::TestRunner& runner) {
             p.storage.sdmmcClk != kPinUnused && p.storage.sdmmcCmd != kPinUnused && p.storage.sdmmcDat0 != kPinUnused,
             label(name, "1-bit SDMMC wires CLK, CMD, and DAT0"));
         break;
+      case StorageTransport::Sdmmc4Bit:
+        runner.expectTrue(p.storage.sdmmcClk != kPinUnused && p.storage.sdmmcCmd != kPinUnused &&
+                              p.storage.sdmmcDat0 != kPinUnused && p.storage.sdmmcDat1 != kPinUnused &&
+                              p.storage.sdmmcDat2 != kPinUnused && p.storage.sdmmcDat3 != kPinUnused,
+                          label(name, "4-bit SDMMC wires all six signals"));
+        break;
     }
   }
 }
@@ -95,9 +107,9 @@ void expectConfiguredBackends(TestUtils::TestRunner& runner) {
     const BoardProfile& p = *papyrix::board::findProfile(id);
     const char* name = boardName(id);
     if (papyrix::board::hasTouch(p)) {
-      runner.expectTrue(p.touch.sda != kPinUnused && p.touch.scl != kPinUnused && p.touch.irq != kPinUnused &&
-                            p.touch.i2cAddress != 0,
-                        label(name, "touch backend wires its I2C bus, IRQ, and address"));
+      runner.expectTrue(p.touch.sda != kPinUnused && p.touch.scl != kPinUnused && p.touch.i2cAddress != 0 &&
+                            (p.touch.controller == TouchController::Ft6336u || p.touch.irq != kPinUnused),
+                        label(name, "touch backend wires its required bus and acquisition signals"));
     } else {
       runner.expectTrue(p.touch.controller == TouchController::None, label(name, "touch is not half-advertised"));
     }
@@ -179,7 +191,7 @@ void expectCapabilityMacrosMatchProfileSet(TestUtils::TestRunner& runner) {
     anyFrontLight = anyFrontLight || papyrix::board::hasFrontLight(p);
     anyRtc = anyRtc || papyrix::board::hasRtc(p);
     anyUsb = anyUsb || papyrix::board::hasUsbDetect(p);
-    anySdmmc = anySdmmc || p.storage.transport == StorageTransport::Sdmmc1Bit;
+    anySdmmc = anySdmmc || p.storage.transport != StorageTransport::Spi;
     anyAdcBattery = anyAdcBattery || (p.battery.backend == BatteryBackend::Adc && papyrix::board::hasBattery(p));
     anyBq27220 = anyBq27220 || (p.battery.backend == BatteryBackend::Bq27220 && papyrix::board::hasBattery(p));
     anyCw2017 = anyCw2017 || (p.battery.backend == BatteryBackend::Cw2017 && papyrix::board::hasBattery(p));
@@ -199,6 +211,9 @@ void expectCapabilityMacrosMatchProfileSet(TestUtils::TestRunner& runner) {
 }
 
 void expectArtifactShape(TestUtils::TestRunner& runner) {
+#if !PAPYRIX_TARGET_MURPHY_M4
+  runner.expectFalse(papyrix::board::targetSupports(BoardId::MurphyM4), "other artifacts reject M4 pins");
+#endif
 #if PAPYRIX_TARGET_XTEINK_C3
   runner.expectTrue(papyrix::board::targetSupports(BoardId::X3), "C3 artifact supports X3");
   runner.expectTrue(papyrix::board::targetSupports(BoardId::X4), "C3 artifact supports X4");
@@ -330,6 +345,26 @@ void expectArtifactShape(TestUtils::TestRunner& runner) {
       runner.expectTrue(buttons[i] != output, "Classic button does not share an output pin");
     }
   }
+#elif PAPYRIX_TARGET_MURPHY_M4
+  const auto* m4 = papyrix::board::findProfile(BoardId::MurphyM4);
+  runner.expectTrue(m4 != nullptr && papyrix::board::targetSupports(BoardId::MurphyM4),
+                    "M4 selects its own profile");
+  for (BoardId id : kAllBoards) {
+    if (id != BoardId::MurphyM4)
+      runner.expectTrue(papyrix::board::findProfile(id) == nullptr, "M4 cannot select foreign output pins");
+  }
+  runner.expectTrue(papyrix::board::bootProfile().id == BoardId::MurphyM4, "M4 boots its fixed profile");
+  runner.expectTrue(m4 && papyrix::board::hasTouch(*m4) && papyrix::board::hasRtc(*m4) &&
+                        papyrix::board::hasFrontLight(*m4),
+                    "M4 exposes touch, retained time, and frontlight");
+  papyrix::board::HardwareIdentity identity;
+  runner.expectTrue(identity.boardSelected() && identity.panelResolved() &&
+                        identity.panel() == papyrix::eink::DisplayController::SSD1677,
+                    "M4 identity is usable without a foreign panel probe");
+  runner.expectFalse(identity.applyBoardSelection({BoardId::Sticky, papyrix::board::BoardSelectionSource::Fixed}, {}),
+                     "foreign profile cannot replace M4 identity");
+  runner.expectTrue(std::strcmp(identity.cacheDir(), "/.papyrix/cache/murphy_m4") == 0,
+                    "rejected selection retains M4 cache ownership");
 #endif
 }
 

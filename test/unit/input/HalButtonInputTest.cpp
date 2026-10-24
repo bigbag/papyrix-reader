@@ -8,6 +8,9 @@
 
 #include "hal/Input.h"
 #include "test_utils.h"
+#if PAPYRIX_TARGET_MURPHY_M4
+#include "MurphyM4TouchFixture.h"
+#endif
 
 InputManager inputManager;
 MappedInputManager mappedInputManager(inputManager);
@@ -15,8 +18,11 @@ MappedInputManager mappedInputManager(inputManager);
 int main() {
   using namespace papyrix;
   TestUtils::TestRunner runner("HAL button release during refresh");
+#if PAPYRIX_TARGET_MURPHY_M4
+  MurphyM4TouchFixture fixture(false);
+#endif
   static int pressedPin = -1;
-  constexpr int kPowerPin = PAPYRIX_TARGET_STICKY ? 4 : 3;
+  constexpr int kPowerPin = PAPYRIX_TARGET_MURPHY_M4 ? 0 : PAPYRIX_TARGET_STICKY ? 4 : 3;
   testSetDigitalReadHook([](int pin) { return pin == pressedPin ? LOW : HIGH; });
   testSetManualMillis(100);
   inputManager.begin();
@@ -28,6 +34,9 @@ int main() {
   waitForTaskCreateBlocked();
   releaseTaskCreateFailureGate();
   initThread.join();
+#if PAPYRIX_TARGET_MURPHY_M4
+  fixture.waitPaused();
+#endif
   runner.expectTrue(initialized.load(), "input initializes when sampler task creation fails");
   inputManager.stopSampling();
   const auto sample = [&](unsigned long time) {
@@ -37,7 +46,7 @@ int main() {
   };
   Event event{};
   sample(100);
-  pressedPin = PAPYRIX_TARGET_STICKY ? 5 : 7;
+  pressedPin = PAPYRIX_TARGET_MURPHY_M4 ? 1 : PAPYRIX_TARGET_STICKY ? 5 : 7;
   sample(110);
   runner.expectFalse(queue.pop(event), "press still requires debounce");
   sample(140);
@@ -53,7 +62,7 @@ int main() {
   runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonRelease && event.button == Button::Up,
                     "release completes after debounce");
 
-  pressedPin = PAPYRIX_TARGET_STICKY ? 6 : 0;
+  pressedPin = PAPYRIX_TARGET_MURPHY_M4 ? 2 : PAPYRIX_TARGET_STICKY ? 6 : 0;
   sample(1270);
   sample(1295);
   runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonPress && event.button == Button::Down,
@@ -132,6 +141,9 @@ int main() {
   sample(8150);
   runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonLongPress && event.button == Button::Power,
                     "hold after edgeless clear emits long press");
+#if PAPYRIX_TARGET_MURPHY_M4
+  fixture.releaseForStop();
+#endif
   input.shutdown();
   cleanupMockTasks();
   testSetDigitalReadHook(nullptr);

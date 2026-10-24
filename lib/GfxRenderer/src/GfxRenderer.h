@@ -52,7 +52,7 @@ class GfxRenderer {
   // Mutable: getStreamingFont may trigger lazy loading of bold variant via resolver
   mutable std::map<int, std::array<StreamingEpdFont*, EpdFontFamily::kExternalStyleCount>> _streamingFonts;
   ExternalFont* _externalFont = nullptr;
-#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY || PAPYRIX_TARGET_MURPHY_M4
   BitmapTurnCache* bitmapTurnCache_ = nullptr;
 #endif
 
@@ -140,7 +140,7 @@ class GfxRenderer {
 
   // Setup
   void begin();
-#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY || PAPYRIX_TARGET_MURPHY_M4
   void setBitmapTurnCache(BitmapTurnCache* cache) { bitmapTurnCache_ = cache; }
   BitmapTurnCache* bitmapTurnCache() const { return bitmapTurnCache_; }
 #endif

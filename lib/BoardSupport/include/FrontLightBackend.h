@@ -35,6 +35,8 @@ constexpr const char* frontLightBrightnessKey(BoardId board) {
       return "x4_b";
     case BoardId::X4Pro:
       return "x4pro_b";
+    case BoardId::MurphyM4:
+      return "m4_b";
   }
   return "unknown_b";
 }
@@ -47,6 +49,8 @@ constexpr const char* frontLightWarmthKey(BoardId board) {
       return "x4_w";
     case BoardId::X4Pro:
       return "x4pro_w";
+    case BoardId::MurphyM4:
+      return "m4_w";
   }
   return "unknown_w";
 }

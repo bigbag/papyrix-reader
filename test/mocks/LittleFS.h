@@ -64,6 +64,14 @@ class MockLittleFS {
   void registerFile(const std::string& path, const std::string& data) { files_[path] = data; }
 
   void clearFiles() { files_.clear(); }
+  size_t formatCalls = 0;
+  bool format() { ++formatCalls; clearFiles(); return true; }
+  size_t totalBytes() const { return 1024 * 1024; }
+  size_t usedBytes() const {
+    size_t bytes = 0;
+    for (const auto& file : files_) bytes += file.second.size();
+    return bytes;
+  }
 
   File open(const char* path, const char* mode = "r") {
     (void)mode;

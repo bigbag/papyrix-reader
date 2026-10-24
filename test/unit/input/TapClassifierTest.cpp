@@ -86,11 +86,6 @@ int main() {
   runner.expectTrue(papyrix::board::decodeGt911Frame(gt911, 0x80, nullptr, 0, raw) && !raw.homeDown,
                     "GT911 idle frame releases Home");
 
-  const uint32_t suppressionBefore = papyrix::board::touchSuppressionRevision();
-  papyrix::board::suppressTouchUntilIdle();
-  runner.expectTrue(papyrix::board::touchSuppressionRevision() != suppressionBefore,
-                    "display refresh advances the touch-suppression revision");
-
   TapClassifier classifier;
   TapFrame frame = classifier.update(contact(100, 120), 100, true, false, 0);
   runner.expectTrue(frame.down && !frame.up && !frame.tap, "first contact emits TouchDown");

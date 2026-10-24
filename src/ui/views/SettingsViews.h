@@ -272,14 +272,15 @@ struct DeviceSettingsView {
     uint8_t valueCount;
   };
 
-  static constexpr int SETTING_COUNT = 7;
+  static constexpr int BATCH_SETTING = 7;
+  static constexpr int SETTING_COUNT = 8;
   static SettingDef DEFS[SETTING_COUNT];
   static void initDefs();
 
   ButtonBar buttons{"", "", "<", ">"};
   uint8_t values[SETTING_COUNT] = {0};
   int8_t selected = 0;
-  int8_t visibleCount = SETTING_COUNT + 1;
+  int8_t visibleCount = SETTING_COUNT;
   bool needsRender = true;
   int settingIndex(int row) const { return row - 1; }
 

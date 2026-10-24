@@ -343,7 +343,7 @@ bool Bitmap::hasCompletePixelData() const {
 }
 
 bool Bitmap::preloadAllRows() const {
-#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY || PAPYRIX_TARGET_MURPHY_M4
   return preloadRows(true);
 #else
   return preloadRows(false);

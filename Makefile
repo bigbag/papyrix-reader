@@ -17,12 +17,12 @@ all: help
 build: ## Build firmware (default environment)
 	pio run
 
-build-release: ## Build release firmware for X3/X4, Pro, Classic, and Sticky
-	pio run -e release_xteink_c3 -e release_x4pro -e release_x4c -e release_sticky
+build-release: ## Build release firmware for X3/X4, Pro, Classic, Sticky, and Murphy M4
+	pio run -e release_xteink_c3 -e release_x4pro -e release_x4c -e release_sticky -e release_murphy_m4
 
 release: build-release ## Alias for build-release
 
-package: ## Build and package all apps plus the Sticky first-install bundle
+package: ## Build all apps and the Sticky and Murphy M4 first-install bundles
 	python3 scripts/package_firmware.py
 	python3 test/scripts/test_sdmmc_mount.py
 
@@ -95,6 +95,7 @@ endif
 ifdef NOTES
 	gh release create v$(VERSION) dist/papyrix-xteink-c3.bin dist/papyrix-x4pro.bin dist/papyrix-x4c.bin \
 		dist/papyrix-sticky.bin dist/papyrix-sticky-install.zip \
+		dist/papyrix-murphy-m4.bin dist/papyrix-murphy-m4-install.zip \
 		dist/manifest.json \
 		--repo bigbag/papyrix-reader \
 		--title "PapyriX v$(VERSION)" \
@@ -102,6 +103,7 @@ ifdef NOTES
 else
 	gh release create v$(VERSION) dist/papyrix-xteink-c3.bin dist/papyrix-x4pro.bin dist/papyrix-x4c.bin \
 		dist/papyrix-sticky.bin dist/papyrix-sticky-install.zip \
+		dist/papyrix-murphy-m4.bin dist/papyrix-murphy-m4-install.zip \
 		dist/manifest.json \
 		--repo bigbag/papyrix-reader \
 		--title "PapyriX v$(VERSION)" \

@@ -90,6 +90,7 @@ void DeviceSettingsView::initDefs() {
   static const char* toggleValues[2];
   static const char* frontButtonValues[2];
   static const char* sideButtonValues[2];
+  static const char* batchValues[2];
 
   sleepTimeoutValues[0] = tr(MIN_5);
   sleepTimeoutValues[1] = tr(MIN_10);
@@ -108,6 +109,8 @@ void DeviceSettingsView::initDefs() {
   frontButtonValues[1] = tr(FRONT_LRBC);
   sideButtonValues[0] = tr(PREV_NEXT);
   sideButtonValues[1] = tr(NEXT_PREV);
+  batchValues[0] = tr(BATCH_1);
+  batchValues[1] = tr(BATCH_2);
 
   DEFS[0] = {tr(FRONT_BUTTONS), frontButtonValues, 2};
   DEFS[1] = {tr(SIDE_BUTTONS), sideButtonValues, 2};
@@ -116,6 +119,7 @@ void DeviceSettingsView::initDefs() {
   DEFS[4] = {tr(SHOW_RECENTS), toggleValues, 2};
   DEFS[5] = {tr(AUTO_SLEEP_TIMEOUT), sleepTimeoutValues, 5};
   DEFS[6] = {tr(RECYCLE_BIN), toggleValues, 2};
+  DEFS[BATCH_SETTING] = {tr(HARDWARE_BATCH), batchValues, 2};
 }
 
 // Render functions

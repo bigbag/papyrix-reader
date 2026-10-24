@@ -40,6 +40,8 @@ int main() {
 #endif
 #if PAPYRIX_TARGET_STICKY
   const DisplayController panels[] = {DisplayController::SSD1677, DisplayController::SSD2677};
+#elif PAPYRIX_TARGET_MURPHY_M4
+  const DisplayController panels[] = {DisplayController::SSD1677};
 #else
   const DisplayController panels[] = {DisplayController::UC8179_X4PRO, DisplayController::UC8279_X4PRO};
 #endif

@@ -17,7 +17,7 @@ class Display {
  public:
   Display();
   ~Display() = default;
-  enum class InitResult : uint8_t { Ok, OutOfMemory = 2, UnsupportedPanel };
+  enum class InitResult : uint8_t { Ok, OutOfMemory = 2, UnsupportedPanel, HardwareError = 4 };
   // Refresh modes (guarded to avoid redefinition in test builds)
   enum RefreshMode {
     FULL_REFRESH,  // Full refresh with complete waveform
@@ -147,12 +147,15 @@ class Display {
   bool isScreenOn;
   bool ssd1677BaselineValid_ = false;
   bool ssd1677RefreshSucceeded_ = false;
+#if PAPYRIX_TARGET_MURPHY_M4
+  uint8_t ssd1677GrayPlanes_ = 0;
+#endif
   bool customLutActive;
   bool inGrayscaleMode;
   bool drawGrayscale;
 
   // Low-level display control
-  void resetDisplay();
+  bool resetDisplay();
   void IRAM_ATTR sendCommand(uint8_t command);
   void IRAM_ATTR sendData(uint8_t data);
   void IRAM_ATTR sendData(const uint8_t* data, uint16_t length);
@@ -160,7 +163,11 @@ class Display {
   void sendDataBatchEnd();
   void waitForRefresh(const char* comment = nullptr);
   bool waitWhileBusy(const char* comment = nullptr);
-  void initDisplayController();
+  bool initDisplayController();
+#if PAPYRIX_TARGET_MURPHY_M4
+  bool ensureSsd1677Ready();
+  bool powerOffSsd1677();
+#endif
 
   // Low-level display operations
   void IRAM_ATTR setRamArea(uint16_t x, uint16_t y, uint16_t w, uint16_t h);

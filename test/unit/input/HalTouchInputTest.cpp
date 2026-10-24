@@ -2,6 +2,9 @@
 #include <MappedInputManager.h>
 #include <Wire.h>
 
+#if PAPYRIX_TARGET_MURPHY_M4
+#include "MurphyM4TouchFixture.h"
+#endif
 #include "hal/Input.h"
 #include "test_utils.h"
 
@@ -11,6 +14,9 @@ MappedInputManager mappedInputManager(inputManager);
 int main() {
   TestUtils::TestRunner runner("GT911 HAL input");
   using namespace papyrix;
+#if PAPYRIX_TARGET_MURPHY_M4
+  MurphyM4TouchFixture fixture;
+#endif
   Wire.reset();
   Wire.setPresent(0x5D, true);
   Wire.setWideAddress(0x5D);
@@ -19,9 +25,18 @@ int main() {
   hal::Input input;
   runner.expectTrue(input.init(queue).ok(), "touch input initializes");
   inputManager.stopSampling();
+#if PAPYRIX_TARGET_MURPHY_M4
+  fixture.waitPaused();
+  auto frame = MurphyM4TouchFixture::frame(0);
+#endif
   const auto poll = [&](uint8_t status) {
+#if PAPYRIX_TARGET_MURPHY_M4
+    if (status != 0) frame = MurphyM4TouchFixture::frame(status & 0x0F ? 1 : 0);
+    fixture.step(static_cast<uint32_t>(millis()) + 50, frame);
+#else
     Wire.setRegister(0x5D, 0x814E, status);
     testManualMillisValue += 50;
+#endif
     input.poll();
   };
   Event event{};
@@ -30,8 +45,8 @@ int main() {
   poll(0);
   runner.expectFalse(queue.pop(event), "held Home does not emit an early Back or Tap");
   poll(0x80);
-#if PAPYRIX_TARGET_STICKY
-  runner.expectFalse(queue.pop(event), "Sticky has no capacitive Home key");
+#if PAPYRIX_TARGET_STICKY || PAPYRIX_TARGET_MURPHY_M4
+  runner.expectFalse(queue.pop(event), "board has no capacitive Home key");
 #else
   runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonPress && event.button == Button::Back,
                     "first Home release after an unchanged idle poll emits Back");
@@ -58,6 +73,9 @@ int main() {
   poll(0x81);
   poll(0x80);
   runner.expectFalse(queue.pop(event), "refresh during a held contact cannot create a tap");
+#if PAPYRIX_TARGET_MURPHY_M4
+  fixture.releaseForStop();
+#endif
   input.shutdown();
   cleanupMockTasks();
   testManualMillisEnabled = false;

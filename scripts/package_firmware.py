@@ -43,8 +43,27 @@ ARTIFACTS = (
         "mcu": "ESP32-S3",
         "boards": ["Sticky"],
         "panels": ["SSD1677", "SSD2677"],
+        "install": {"board_key": "sticky", "display_name": "PapyriX Sticky",
+                    "expected_tag": b"PAPYRIX-BOARD-V1:sticky;", "flash_bytes": 0x2000000, "flash_size": "32MB"},
+    },
+    {
+        "environment": "release_murphy_m4",
+        "checker_target": "murphy_m4",
+        "filename": "papyrix-murphy-m4.bin",
+        "mcu": "ESP32-S3",
+        "boards": ["MurphyM4"],
+        "panels": ["SSD1677"],
+        "install": {"board_key": "murphy-m4", "display_name": "PapyriX Murphy M4",
+                    "expected_tag": b"PAPYRIX-BOARD-V1:murphy_m4;", "flash_bytes": 0x1000000, "flash_size": "16MB"},
     },
 )
+
+INSTALL_LICENSES = {
+    "LICENSE": "LICENSE",
+    "FREEINK_LICENSE": "lib/EInkDisplay/FREEINK_LICENSE",
+    "CROSSMUX_LICENSE": "src/core/CROSSMUX_LICENSE",
+    "BOARDSUPPORT_FREEINK_LICENSE": "lib/BoardSupport/FREEINK_LICENSE",
+}
 
 
 def load_release_contract(root: Path):
@@ -88,93 +107,104 @@ def run_feature_checks(root: Path):
         )
 
 
-def write_sticky_install_package(root: Path, output: Path) -> Path:
-    build = root / ".pio/build/release_sticky"
-    inputs = json.loads((build / "sticky-flash-inputs.json").read_text(encoding="utf-8"))
-    if inputs.get("flash_size") != "32MB" or not inputs.get("flash_mode") or not inputs.get("flash_frequency"):
-        raise RuntimeError("Sticky flash parameters are missing or incompatible")
+def write_install_package(root: Path, output: Path, artifact: dict) -> Path:
+    config = artifact["install"]
+    filename = artifact["filename"]
+    build = root / ".pio/build" / artifact["environment"]
+    inputs = json.loads((build / "flash-inputs.json").read_text(encoding="utf-8"))
+    if inputs.get("flash_size") != config["flash_size"] or not inputs.get("flash_mode") or not inputs.get("flash_frequency"):
+        raise RuntimeError(f"{config['display_name']} flash parameters are missing or incompatible")
     parts = []
     payloads = {}
     for item in inputs["parts"]:
         source = Path(item["path"])
         offset = item["offset"]
         size = source.stat().st_size
-        if not source.is_absolute() or type(offset) is not int or offset < 0 or size <= 0 or offset + size > 0x2000000:
-            raise RuntimeError(f"invalid Sticky flash part: {source}")
-        name = "papyrix-sticky.bin" if source.name == "firmware.bin" else source.name
-        if (name in payloads or name in {"manifest.json", "FREEINK_LICENSE", "CROSSMUX_LICENSE"}
-                or (name == "papyrix-sticky.bin" and size > 0x640000)):
-            raise RuntimeError(f"reserved, duplicate, or oversized Sticky flash part: {name}")
+        if (not source.is_absolute() or type(offset) is not int or offset < 0 or size <= 0
+                or offset + size > config["flash_bytes"]):
+            raise RuntimeError(f"invalid {config['display_name']} flash part: {source}")
+        name = filename if source.name == "firmware.bin" else source.name
+        if (name in payloads or name == "manifest.json" or name in INSTALL_LICENSES
+                or (name == filename and size > 0x640000)):
+            raise RuntimeError(f"reserved, duplicate, or oversized {config['display_name']} flash part: {name}")
         data = source.read_bytes()
         payloads[name] = data
         parts.append({"path": name, "offset": offset, "size": size, "sha256": hashlib.sha256(data).hexdigest()})
     parts.sort(key=lambda part: part["offset"])
     by_name = {part["path"]: part for part in parts}
-    required = {"bootloader.bin", "partitions.bin", "boot_app0.bin", "papyrix-sticky.bin"}
+    required = {"bootloader.bin", "partitions.bin", "boot_app0.bin", filename}
     if not required.issubset(by_name):
-        raise RuntimeError("Sticky install requires bootloader, partitions, OTA data, and app")
+        raise RuntimeError(f"{config['display_name']} install requires bootloader, partitions, OTA data, and app")
     for first, second in zip(parts, parts[1:]):
         if first["offset"] + first["size"] > second["offset"]:
-            raise RuntimeError("Sticky flash parts overlap")
+            raise RuntimeError(f"{config['display_name']} flash parts overlap")
 
     table = payloads["partitions.bin"]
     partitions = {}
+    has_table_checksum = False
     for pos in range(0, len(table), 32):
         entry = table[pos:pos + 32]
         if len(entry) != 32:
-            raise RuntimeError("truncated Sticky partition table")
+            raise RuntimeError(f"truncated {config['display_name']} partition table")
         magic = struct.unpack_from("<H", entry)[0]
         if magic == 0xFFFF:
             break
         if magic == 0xEBEB:
-            if entry[16:] != hashlib.md5(table[:pos]).digest():
-                raise RuntimeError("Sticky partition table checksum mismatch")
+            if (entry[2:16] != b"\xFF" * 14 or entry[16:] != hashlib.md5(table[:pos]).digest()
+                    or any(byte != 0xFF for byte in table[pos + 32:])):
+                raise RuntimeError(f"{config['display_name']} partition table checksum mismatch")
+            has_table_checksum = True
             break
         if magic != 0x50AA:
-            raise RuntimeError("invalid Sticky partition table")
+            raise RuntimeError(f"invalid {config['display_name']} partition table")
         _, kind, subtype, offset, size, label, _ = struct.unpack("<HBBII16sI", entry)
         label = label.split(b"\0", 1)[0].decode("ascii")
         if label in partitions or size == 0 or offset < 0x9000 or offset + size > 0x1000000:
-            raise RuntimeError("invalid Sticky partition bounds")
+            raise RuntimeError(f"invalid {config['display_name']} partition bounds")
         partitions[label] = (kind, subtype, offset, size)
+    if not has_table_checksum:
+        raise RuntimeError("Install partition table requires its generated checksum")
     for label, expected in {
+        "nvs": (1, 2, 0x9000, 0x5000),
         "app0": (0, 0x10, 0x10000, 0x640000),
         "app1": (0, 0x11, 0x650000, 0x640000),
         "otadata": (1, 0, 0xE000, 0x2000),
+        "spiffs": (1, 0x82, 0xC90000, 0x360000),
+        "coredump": (1, 3, 0xFF0000, 0x10000),
     }.items():
         if partitions.get(label) != expected:
-            raise RuntimeError(f"Sticky partition layout disagrees with {label}")
+            raise RuntimeError(f"{config['display_name']} partition layout disagrees with {label}")
     ordered = sorted(partitions.values(), key=lambda part: part[2])
     for first, second in zip(ordered, ordered[1:]):
         if first[2] + first[3] > second[2]:
-            raise RuntimeError("Sticky partitions overlap")
+            raise RuntimeError(f"{config['display_name']} partitions overlap")
     if (by_name["bootloader.bin"]["offset"] != 0 or by_name["partitions.bin"]["offset"] != 0x8000
             or by_name["partitions.bin"]["offset"] + len(table) > ordered[0][2]
             or by_name["boot_app0.bin"]["offset"] != partitions["otadata"][2]
             or by_name["boot_app0.bin"]["size"] > partitions["otadata"][3]
-            or by_name["papyrix-sticky.bin"]["offset"] != partitions["app0"][2]):
-        raise RuntimeError("Sticky upload offsets disagree with generated partitions")
+            or by_name[filename]["offset"] != partitions["app0"][2]):
+        raise RuntimeError(f"{config['display_name']} upload offsets disagree with generated partitions")
 
-    app = payloads["papyrix-sticky.bin"]
+    app = payloads[filename]
     if len(app) < 24 or app[0] != 0xE9 or int.from_bytes(app[12:14], "little") != 9:
-        raise RuntimeError("Sticky app is not an ESP32-S3 image")
+        raise RuntimeError(f"{config['display_name']} app is not an ESP32-S3 image")
     pos = 24
     matches = 0
     checksum = 0xEF
     magic = b"PAPYRIX-BOARD-V1:"
-    tag = magic + b"sticky;"
+    tag = config["expected_tag"]
     for _ in range(app[1]):
         if pos + 8 > len(app):
-            raise RuntimeError("truncated Sticky app segment header")
+            raise RuntimeError(f"truncated {config['display_name']} app segment header")
         length = struct.unpack_from("<I", app, pos + 4)[0]
         pos += 8
         end = pos + length
         if end > len(app):
-            raise RuntimeError("truncated Sticky app segment")
+            raise RuntimeError(f"truncated {config['display_name']} app segment")
         found = app.find(magic, pos, end)
         while found != -1:
             if not app.startswith(tag, found) or app.find(b";", found + len(magic), end) != found + len(tag) - 1:
-                raise RuntimeError("Sticky app has a malformed or incompatible board tag")
+                raise RuntimeError(f"{config['display_name']} app has a malformed or incompatible board tag")
             matches += 1
             found = app.find(magic, found + len(magic), end)
         for byte in memoryview(app)[pos:end]:
@@ -183,15 +213,15 @@ def write_sticky_install_package(root: Path, output: Path) -> Path:
     pad_end = (pos + 16) & ~15
     has_hash = app[23] != 0
     if len(app) != pad_end + (32 if has_hash else 0) or app[pad_end - 1] != checksum:
-        raise RuntimeError("Sticky app size or checksum mismatch")
+        raise RuntimeError(f"{config['display_name']} app size or checksum mismatch")
     if has_hash and hashlib.sha256(memoryview(app)[:pad_end]).digest() != app[pad_end:]:
-        raise RuntimeError("Sticky app hash mismatch")
+        raise RuntimeError(f"{config['display_name']} app hash mismatch")
     if matches != 1:
-        raise RuntimeError("Sticky app requires exactly one matching board tag")
+        raise RuntimeError(f"{config['display_name']} app requires exactly one matching board tag")
 
     version, _, _ = load_release_contract(root)
     manifest = {
-        "name": "PapyriX Sticky",
+        "name": config["display_name"],
         "version": version,
         "flashSize": inputs["flash_size"],
         "flashMode": inputs["flash_mode"],
@@ -202,13 +232,13 @@ def write_sticky_install_package(root: Path, output: Path) -> Path:
         "builds": [{"chipFamily": "ESP32-S3", "parts": parts}],
     }
     payloads["manifest.json"] = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode()
-    payloads["FREEINK_LICENSE"] = (root / "lib/EInkDisplay/FREEINK_LICENSE").read_bytes()
-    payloads["CROSSMUX_LICENSE"] = (root / "src/core/CROSSMUX_LICENSE").read_bytes()
-    install = output / "sticky-install"
+    for name, relative in INSTALL_LICENSES.items():
+        payloads[name] = (root / relative).read_bytes()
+    install = output / f"{config['board_key']}-install"
     install.mkdir(parents=True, exist_ok=True)
     for name, data in payloads.items():
         (install / name).write_bytes(data)
-    with zipfile.ZipFile(output / "papyrix-sticky-install.zip", "w") as archive:
+    with zipfile.ZipFile(output / f"papyrix-{config['board_key']}-install.zip", "w") as archive:
         for name in sorted(payloads):
             info = zipfile.ZipInfo(name)
             info.compress_type = zipfile.ZIP_DEFLATED
@@ -254,7 +284,9 @@ def package(root: Path, output: Path, build: bool = True, check_features: bool =
         "artifacts": manifest_artifacts,
     }
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    write_sticky_install_package(root, output)
+    for artifact in ARTIFACTS:
+        if "install" in artifact:
+            write_install_package(root, output, artifact)
     return manifest
 
 
@@ -269,7 +301,7 @@ def main():
     output = args.output.resolve() if args.output else root / "dist"
     package(root, output, build=not args.no_build, check_features=not args.no_feature_check)
     print(f"packaged {len(ARTIFACTS)} artifacts in {output}")
-    print("WARNING: A complete Sticky install erases stock firmware and device data. Stock recovery is not guaranteed.")
+    print("WARNING: A complete device installation erases stock firmware and device data. Stock recovery is not guaranteed.")
 
 
 if __name__ == "__main__":
