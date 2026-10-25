@@ -22,12 +22,16 @@ def block(source, marker):
 
 HARNESS = r'''
 #include <algorithm>
+#include <cassert>
 #include <climits>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <memory>
 #include <string>
+#include "core/ReaderButtonDispatcher.h"
+#include "states/State.h"
+uint32_t millis() { return 1000; }
 template<class... T> void logMessage(T...) {}
 #define TAG "TEST"
 #define LOG_DBG(...) logMessage(__VA_ARGS__)
@@ -42,6 +46,7 @@ struct Renderer {
   enum { BW, GRAYSCALE_LSB, GRAYSCALE_MSB };
   enum class Orientation { Portrait };
   void setOrientation(Orientation) {}
+  int getScreenWidth() const { return 480; }
   int displays = 0;
   template<class... T> void clearScreen(T...) {}
   template<class... T> void drawCenteredText(T...) {}
@@ -77,13 +82,11 @@ struct Parser { bool canResume() { return false; } };
 struct Task { bool isRunning() { return false; } };
 namespace page_cache { template<class... T> bool backgroundWorkPending(T...) { return false; } }
 namespace papyrix {
-enum class ContentType { None, Epub, Xtc, Txt, Markdown, Fb2, Html };
 enum class BootMode { UI, READER };
 enum class ReturnTo { HOME, FILE_MANAGER, RECENT };
-enum class StateId { Home, FileList };
 enum class ExitToUiMode { Graceful, Emergency };
 struct ExitToUiPlan { ExitToUiMode mode = ExitToUiMode::Graceful; ReturnTo returnTo = ReturnTo::HOME; };
-struct Restart { void restart() {} } ESP;
+struct Restart { unsigned count = 0; void restart() { ++count; } } ESP;
 constexpr int portTICK_PERIOD_MS = 1;
 void vTaskDelay(int) {}
 void saveEmergencyUiTransition(ReturnTo) {}
@@ -97,9 +100,12 @@ struct ModeTransition {
   char bookPath[1024] = {};
   bool isValid() const { return magic == MAGIC; }
 };
-struct Result { bool ok_ = true; bool ok() const { return ok_; } };
+struct SaveResult { bool ok_ = true; bool ok() const { return ok_; } };
 struct Settings {
   enum { StartupLastDocument, StartupHome };
+  enum { PowerPageTurn, PowerBookmark, NextPrev };
+  int shortPwrBtn = PowerPageTurn, touchPageTurns = 0, sideButtonLayout = 0;
+  uint32_t getPowerButtonDuration() const { return 400; }
   char lastBookPath[1024] = {};
   char pendingBookPath[1024] = {};
   uint8_t pendingTransition = 0, transitionReturnTo = 0, startupBehavior = StartupLastDocument;
@@ -107,13 +113,13 @@ struct Settings {
   int getReaderFontId(Theme&) { return 0; }
   int getReaderFontId(const Theme&) { return 0; }
   bool saveToFile() const;
-  Result save(int&) const;
+  SaveResult save(int&) const;
 };
 Settings disk;
 unsigned saves = 0;
 bool saveAllowed = true;
 bool Settings::saveToFile() const { if (!saveAllowed) return false; disk = *this; ++saves; return true; }
-Result Settings::save(int&) const { Result r; r.ok_ = saveToFile(); return r; }
+SaveResult Settings::save(int&) const { SaveResult r; r.ok_ = saveToFile(); return r; }
 struct Metadata { ContentType type = ContentType::Epub; const char* title = "Book"; const char* author = "Author"; };
 struct Provider {
   Provider* getEpub() { return this; }
@@ -133,7 +139,18 @@ struct Content {
   const char* cacheDir() { return "/cache"; }
   void close() {}
 };
-struct Core { Settings settings; Content content; int storage = 0; } core;
+struct Input {
+  bool pageButtonsBlocked = false;
+  void setPageButtonsBlocked(bool blocked) { pageButtonsBlocked = blocked; }
+};
+struct Core {
+  Settings settings;
+  Content content;
+  Input input;
+  int storage = 0;
+  EventQueue events;
+  struct { char text[1] = {}; } buf;
+} core;
 struct ProgressManager {
   struct Progress { int spineIndex = 0, sectionPage = 0; uint32_t flatPage = 0; };
   static inline unsigned writes = 0;
@@ -176,6 +193,13 @@ struct ReaderState {
   bool indexingInProgress_ = false, bookStatsMode_ = false, menuMode_ = false, bookmarkMode_ = false, tocMode_ = false;
   bool forceDoubleRefresh_ = false, hasCover_ = false, coverSucceeds = false;
   bool thumbnailDone_ = true, coverDone_ = true, canStop = true;
+  bool cacheWaitActive_ = false;
+  bool loadFailed_ = false, indexingCancelled_ = false, indexingFailed_ = false, suppressRender_ = false;
+  bool cancelIndexingChunk = false;
+  uint32_t bookmarkNotifyMs_ = 0, indexingLastRenderMs_ = 0;
+  int bookmarkCount_ = 0;
+  ReaderButtonDispatcher readerButtons_;
+  struct TapGuard { bool suppressPageTap(uint32_t) { assert(false); return false; } } overlayTapGuard_;
   int currentSpineIndex_ = 0, currentSectionPage_ = 0, lastRenderedSpineIndex_ = 0, lastRenderedSectionPage_ = 0;
   int textStartIndex_ = 0, parserSpineIndex_ = -1;
   uint32_t currentPage_ = 0, lastRenderedPage_ = 0;
@@ -192,6 +216,7 @@ struct ReaderState {
   struct Viewport { int marginTop = 0, marginRight = 0, marginBottom = 0, marginLeft = 0; };
   Viewport getReaderViewport(bool) { return {}; }
   void render(Core&);
+  StateTransition update(Core&);
   void exit(Core&);
   void exitToUI(Core&);
   StateId sourceState_ = StateId::Home;
@@ -199,11 +224,27 @@ struct ReaderState {
   void invalidateGlobalPageMetrics() {}
   void saveBookmarks(Core&) {}
   void renderCurrentPage(Core&);
+  void endCacheWait(Core&);
   void renderCachedPage(Core&);
   void renderXtcPage(Core&);
   void onPageRendered(Core&);
   bool stopBackgroundCaching(bool = false) { return canStop; }
   void startBackgroundCaching(Core&) {}
+  void processIndexingChunk(Core&) {
+    indexingInProgress_ = false;
+    indexingCancelled_ = cancelIndexingChunk;
+  }
+  void handleBookStatsInput(Core&, const Event&) { assert(false); }
+  void handleMenuInput(Core&, const Event&) { assert(false); }
+  void handleBookmarkInput(Core&, const Event&) { assert(false); }
+  void handleTocInput(Core&, const Event&) { assert(false); }
+  void enterMenuMode(Core&) { assert(false); }
+  void navigateNext(Core&) { assert(false); }
+  void navigatePrev(Core&) { assert(false); }
+  void navigateNextChapter(Core&) { assert(false); }
+  void navigatePrevChapter(Core&) { assert(false); }
+  void addBookmark(Core&) { assert(false); }
+  void showBookmarkNotification(Core&) { assert(false); }
   bool renderCoverPage(Core&) { return coverSucceeds; }
   void loadCacheFromDisk(Core&) {
     if (storedChapterPages < 0) return;
@@ -235,6 +276,8 @@ void reset() {
   saves = 0;
   saveAllowed = true;
   RecentBooksStore::instance() = {};
+  ESP.count = 0;
+  ProgressManager::writes = 0;
 }
 void check(bool condition, const char* message) {
   if (!condition) { fprintf(stderr, "FAIL: %s\n", message); std::exit(1); }
@@ -242,6 +285,31 @@ void check(bool condition, const char* message) {
 }  // namespace papyrix
 int main() {
   using namespace papyrix;
+  for (bool duringChunk : {false, true}) {
+    reset();
+    saveTransition(BootMode::READER, "/new.epub", ReturnTo::RECENT);
+    coldBoot();
+    check(detectBootMode() == BootMode::READER, "indexing starts after the reader boot");
+    ReaderState indexing;
+    indexing.sourceState_ = StateId::FileList;
+    indexing.indexingInProgress_ = true;
+    indexing.cancelIndexingChunk = duringChunk;
+    if (!duringChunk) check(core.events.push(Event::buttonPress(Button::Back)), "Back enters the event queue");
+    const auto next = indexing.update(core);
+    check(next.next == StateId::Reader, "indexing cancellation cannot request an absent UI state");
+    check(ESP.count == 1, "indexing cancellation restarts the reader");
+    check(ProgressManager::writes == 0, "cancel before the first page preserves saved progress");
+    coldBoot();
+    check(detectBootMode() == BootMode::UI, "indexing cancellation boots into UI mode");
+    check(cachedTransition.returnTo == ReturnTo::RECENT, "indexing cancellation retains the return destination");
+    check(strcmp(disk.lastBookPath, "/good.epub") == 0, "indexing cancellation retains the previous resume target");
+  }
+  reset();
+  ReaderState indexed;
+  indexed.indexingInProgress_ = true;
+  check(indexed.update(core).next == StateId::Reader && ESP.count == 0,
+        "completed indexing stays in the reader without a restart");
+  puts("PASS: indexing cancellation reboots into UI without replacing saved reading progress");
   reset();
   for (auto type : {ContentType::Epub, ContentType::Fb2}) {
     core.content.meta.type = type;
@@ -420,7 +488,8 @@ def main():
                     "const ModeTransition& getTransition("]
     reader_methods = ["void ReaderState::render(", "void ReaderState::renderCurrentPage(",
                       "void ReaderState::renderCachedPage(", "void ReaderState::renderXtcPage(",
-                      "void ReaderState::exit(", "void ReaderState::exitToUI("]
+                      "void ReaderState::exit(", "void ReaderState::exitToUI(",
+                      "void ReaderState::endCacheWait(", "StateTransition ReaderState::update("]
     if "void ReaderState::onPageRendered(" in reader:
         reader_methods.append("void ReaderState::onPageRendered(")
     harness = HARNESS.replace("@BOOT@", "\n".join(block(boot, name) for name in boot_methods))
@@ -432,7 +501,9 @@ def main():
         source = path / "resume.cpp"
         source.write_text(harness)
         binary = path / "resume"
-        subprocess.run(["c++", "-std=c++17", "-Wall", "-Wextra", str(source), "-o", str(binary)], check=True)
+        subprocess.run(["c++", "-std=c++17", "-Wall", "-Wextra", "-I", str(ROOT / "src"),
+                        str(source), str(ROOT / "src/core/ReaderButtonDispatcher.cpp"),
+                        "-o", str(binary)], check=True)
         subprocess.run([str(binary)], check=True)
 
 

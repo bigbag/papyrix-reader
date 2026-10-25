@@ -96,15 +96,24 @@ It does not add XML wrappers or page breaks at byte boundaries.
 Metadata, page caches, page-count indexes, and anchor maps rebuild through version checks.
 See [file formats](file-formats.md) for record layouts.
 
+EPUB reader opens restore external stylesheets from the OPF after loading `book.bin`. Metadata-only opens do not load stylesheets. The same memory and file-size limits apply to fresh and cached opens.
+
 ## Cache Scheduling
 
 Full Book Process indexes the book before reading.
 The user can cancel with Back.
 XTC and XTCH do not require text layout.
 
+Full-book indexing creates a missing EPUB or FB2 chapter cache with exclusive access. This avoids read retries for a new cache. Existing caches keep the normal read retries. An empty file has no valid cache header, so indexing rebuilds it after an interruption.
+
+Full-book indexing keeps section counts in the existing page-metrics array. A complete run saves `metrics.bin` once and keeps the counts for the first page. This avoids another scan of all chapter caches. A skipped or failed section keeps the total estimated. If the array does not fit in memory, the reader defers the index rebuild. A complete chapter alone does not make an EPUB or FB2 book total exact.
+
 Foreground caching handles a requested page that is not yet available.
 Backward navigation uses a compatible complete chapter cache without an indexing screen.
 The reader uses the stored page count to select the last page.
+
+The reader shows `Indexing` before foreground cache creation or extension, including extension before the current cache ends. It keeps the message through all preparation chunks. It restores page-button input after the next page or overlay finishes its display refresh. Page-button presses during this wait do not turn pages afterward. A held page button needs a release and a new press before navigation resumes. Completed taps from before the wait remain available. Back and Power events remain queued, but synchronous preparation delays their handling. Normal display refreshes outside this wait keep short taps.
+
 Background caching extends the cache while the user reads.
 Cancellation uses `AbortCallback`.
 The background task deletes itself after it stops.
@@ -124,9 +133,7 @@ Do not force-delete the task or access its resources concurrently.
 
 ## Page Totals
 
-A partial cache contains an incomplete page count.
-The status bar adds `~` to an estimated total.
-The total becomes exact after indexing completes.
+A partial cache contains an incomplete page count. The status bar adds `~` to an estimated total. The total is exact only when every section cache is complete.
 See the [status bar reference](user_guide.md#status-bar).
 
 ## Source Files

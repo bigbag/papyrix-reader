@@ -56,13 +56,35 @@ void InputManager::stopSampling() {
   sampling_ = false;
   std::lock_guard<std::mutex> lock(samplingMutex_);
   readIndex_ = writeIndex_ = pendingCount_ = 0;
-  lastState = sampledState_ = currentState;
+  lastState = sampledState_ = queuedState_ = currentState;
+  suppressedButtons_ = releaseSuppressedButtons_ = pendingSuppression_ = suppressedEvents_ = 0;
   lastDebounceTime = millis();
 }
 
 bool InputManager::isDebouncePending() const {
   std::lock_guard<std::mutex> lock(samplingMutex_);
-  return pendingCount_ != 0 || lastState != currentState;
+  return pendingCount_ != 0 || pendingSuppression_ != 0 || lastState != sampledState_;
+}
+
+void InputManager::setSuppressedButtons(const uint8_t mask) {
+  const uint8_t physicalState = getState();
+  std::lock_guard<std::mutex> lock(samplingMutex_);
+  if (physicalState != lastState) {
+    lastState = physicalState;
+    lastDebounceTime = millis();
+  }
+  const uint8_t started = mask & ~suppressedButtons_;
+  if (started != 0) {
+    // Deliver cancellation after older taps, without taking a queue slot.
+    if (pendingCount_ != 0) {
+      pending_[(writeIndex_ + pending_.size() - 1) % pending_.size()].suppressAfter |= started;
+    } else {
+      pendingSuppression_ |= started;
+    }
+    queuedState_ &= ~started;
+  }
+  releaseSuppressedButtons_ |= (suppressedButtons_ & ~mask) & (physicalState | sampledState_);
+  suppressedButtons_ = mask;
 }
 
 void InputManager::begin() {
@@ -133,19 +155,24 @@ uint8_t InputManager::getState() {
 
 void InputManager::sampleButtons() {
   const uint8_t state = getState();
-  const unsigned long now = millis();
   std::lock_guard<std::mutex> lock(samplingMutex_);
+  const unsigned long now = millis();
   if (state != lastState) {
     lastDebounceTime = now;
     lastState = state;
   }
-  if (now - lastDebounceTime <= DEBOUNCE_DELAY || state == sampledState_) return;
+  if (now - lastDebounceTime <= DEBOUNCE_DELAY) return;
   sampledState_ = state;
+  releaseSuppressedButtons_ &= state;
+  const uint8_t visibleState = state & ~(suppressedButtons_ | releaseSuppressedButtons_);
+  if (visibleState == queuedState_) return;
   if (pendingCount_ == pending_.size()) {
+    pendingSuppression_ |= pending_[readIndex_].suppressAfter;
     readIndex_ = (readIndex_ + 1) % pending_.size();
     --pendingCount_;
   }
-  pending_[writeIndex_] = {now, state};
+  pending_[writeIndex_] = {now, visibleState, 0};
+  queuedState_ = visibleState;
   writeIndex_ = (writeIndex_ + 1) % pending_.size();
   ++pendingCount_;
 }
@@ -153,7 +180,13 @@ void InputManager::sampleButtons() {
 void InputManager::update() {
   if (!sampling_) sampleButtons();
   std::lock_guard<std::mutex> lock(samplingMutex_);
-  pressedEvents = releasedEvents = 0;
+  pressedEvents = releasedEvents = suppressedEvents_ = 0;
+  if (pendingSuppression_ != 0) {
+    suppressedEvents_ = pendingSuppression_;
+    pendingSuppression_ = 0;
+    currentState &= ~suppressedEvents_;
+    return;
+  }
   if (pendingCount_ == 0) return;
   const StateChange change = pending_[readIndex_];
   readIndex_ = (readIndex_ + 1) % pending_.size();
@@ -163,11 +196,14 @@ void InputManager::update() {
   if (pressedEvents != 0 && currentState == 0) buttonPressStart = change.time;
   if (releasedEvents != 0 && change.state == 0) buttonPressFinish = change.time;
   currentState = change.state;
+  pendingSuppression_ |= change.suppressAfter;
 }
 
 bool InputManager::isPressed(const uint8_t buttonIndex) const { return currentState & (1 << buttonIndex); }
 
 bool InputManager::wasPressed(const uint8_t buttonIndex) const { return pressedEvents & (1 << buttonIndex); }
+
+bool InputManager::wasSuppressed(const uint8_t buttonIndex) const { return suppressedEvents_ & (1u << buttonIndex); }
 
 bool InputManager::wasAnyPressed() const { return pressedEvents > 0; }
 

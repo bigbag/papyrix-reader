@@ -59,10 +59,10 @@ static constexpr int kCacheTaskStopTimeoutMs = 10000;  // 10s - generous for slo
 namespace {
 constexpr int horizontalPadding = 5;
 constexpr int statusBarMargin = 23;
-constexpr uint8_t kMetricsIndexVersion = 8;
+constexpr uint8_t kMetricsIndexVersion = 9;
 constexpr const char* kMetricsIndexFilename = "metrics.bin";
 constexpr uint32_t kAnchorMapMagic = 0x48434E41;  // "ANCH" in little-endian files
-constexpr uint8_t kAnchorMapVersion = 5;
+constexpr uint8_t kAnchorMapVersion = 6;
 constexpr size_t kColdMinFreeHeap = 28 * 1024;
 constexpr size_t kColdMinLargestBlock = 10 * 1024;
 constexpr size_t kHotMinFreeHeap = 15 * 1024;
@@ -77,14 +77,8 @@ inline std::string contentCachePath(const char* cacheDir, int fontId) {
   return std::string(cacheDir) + "/pages_" + std::to_string(fontId) + ".bin";
 }
 
-struct MetricsEntry {
-  uint32_t pages;
-  bool exact;
-  uint32_t byteSize;
-};
-
 bool readMetricsIndexFile(const std::string& sectionsDir, const RenderConfig& config, int spineCount,
-                          std::vector<MetricsEntry>& out) {
+                          std::vector<page_metrics::Section>& out) {
   const std::string path = sectionsDir + "/" + kMetricsIndexFilename;
   FsFile file;
   if (!SdMan.openFileForRead("MIDX", path, file)) return false;
@@ -118,7 +112,13 @@ bool readMetricsIndexFile(const std::string& sectionsDir, const RenderConfig& co
     return false;
   }
 
-  std::vector<MetricsEntry> decoded(static_cast<size_t>(spineCount));
+  // Keep the caller's previous counts if allocation or decoding fails.
+  if (spineCount <= 0 || heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) <
+                             sizeof(page_metrics::Section) * static_cast<size_t>(spineCount)) {
+    file.close();
+    return false;
+  }
+  std::vector<page_metrics::Section> decoded(static_cast<size_t>(spineCount));
   for (int i = 0; i < spineCount; ++i) {
     uint32_t pages;
     uint8_t flags;
@@ -128,7 +128,7 @@ bool readMetricsIndexFile(const std::string& sectionsDir, const RenderConfig& co
       file.close();
       return false;
     }
-    decoded[static_cast<size_t>(i)] = MetricsEntry{pages, (flags & 1) != 0, byteSize};
+    decoded[static_cast<size_t>(i)] = page_metrics::Section{pages, (flags & 1) != 0, byteSize};
   }
 
   file.close();
@@ -180,15 +180,7 @@ bool ReaderState::saveMetricsIndex(const std::string& sectionsDir, const RenderC
 }
 
 bool ReaderState::loadMetricsIndex(const std::string& sectionsDir, const RenderConfig& config, int spineCount) {
-  std::vector<MetricsEntry> entries;
-  if (!readMetricsIndexFile(sectionsDir, config, spineCount, entries)) return false;
-  globalSectionPageMetrics_.resize(static_cast<size_t>(spineCount));
-  for (int i = 0; i < spineCount; ++i) {
-    auto& m = globalSectionPageMetrics_[static_cast<size_t>(i)];
-    m.pages = entries[static_cast<size_t>(i)].pages;
-    m.exact = entries[static_cast<size_t>(i)].exact;
-    m.byteSize = entries[static_cast<size_t>(i)].byteSize;
-  }
+  if (!readMetricsIndexFile(sectionsDir, config, spineCount, globalSectionPageMetrics_)) return false;
   LOG_DBG(TAG, "Loaded metrics index: %d entries", spineCount);
   return true;
 }
@@ -350,8 +342,6 @@ void ReaderState::initializeGlobalPageMetrics(Core& core) {
   }
   if (spineCount <= 0) return;
 
-  globalSectionPageMetrics_.resize(static_cast<size_t>(spineCount));
-
   // Complete caches may legitimately have 0 pages (e.g. FB2 image-only sections
   // where Fb2Parser skips <image>). Those must still count as exact so Full Book
   // Process can clear the status-bar "~" (Issue #136 residual).
@@ -374,6 +364,10 @@ void ReaderState::initializeGlobalPageMetrics(Core& core) {
     }
     return;
   }
+
+  const size_t metricsBytes = (sizeof(SectionPageMetric) + sizeof(size_t)) * static_cast<size_t>(spineCount);
+  if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < metricsBytes) return;
+  globalSectionPageMetrics_.resize(static_cast<size_t>(spineCount));
 
   // Slow path: collect spine byte sizes for calibration/estimation
   std::vector<size_t> itemSizes(static_cast<size_t>(spineCount), 0);
@@ -520,7 +514,7 @@ ReaderState::GlobalPageMetrics ReaderState::resolveGlobalPageMetrics(Core& core)
       metrics.totalIsExact = false;
     } else {
       metrics.totalPages = pageCache_->pageCount();
-      metrics.totalIsExact = true;
+      metrics.totalIsExact = type != ContentType::Epub && type != ContentType::Fb2;
     }
   } else {
     metrics.currentPage = currentSectionPage_ + 1;
@@ -896,6 +890,7 @@ void ReaderState::enter(Core& core) {
 
 void ReaderState::exit(Core& core) {
   LOG_INF(TAG, "Exiting");
+  endCacheWait(core);
 
   // Stop background caching task first - BackgroundTask::stop() waits properly
   stopBackgroundCaching(true);
@@ -979,7 +974,8 @@ StateTransition ReaderState::update(Core& core) {
         indexingInProgress_ = false;
         indexingCache_.reset();
         indexingParser_.reset();
-        return StateTransition::to(sourceState_);
+        exitToUI(core);
+        return StateTransition::stay(StateId::Reader);
       }
     }
     const uint32_t kIndexingBatchMs = 3000;
@@ -1002,7 +998,8 @@ StateTransition ReaderState::update(Core& core) {
 
     if (indexingCancelled_) {
       indexingCancelled_ = false;
-      return StateTransition::to(sourceState_);
+      exitToUI(core);
+      return StateTransition::stay(StateId::Reader);
     }
     if (indexingFailed_) {
       indexingFailed_ = false;
@@ -1016,6 +1013,10 @@ StateTransition ReaderState::update(Core& core) {
 
   Event e;
   while (core.events.pop(e)) {
+    if (e.type == EventType::ButtonCancel) {
+      readerButtons_.processEvent(e, 0, {});
+      continue;
+    }
     if (bookStatsMode_) {
       handleBookStatsInput(core, e);
       continue;
@@ -1107,6 +1108,7 @@ void ReaderState::render(Core& core) {
   } else {
     renderCurrentPage(core);
   }
+  endCacheWait(core);
 
   needsRender_ = false;
 }
@@ -1402,7 +1404,10 @@ void ReaderState::renderCurrentPage(Core& core) {
 
   // Rendering and cache building share the framebuffer. Stop the background
   // owner before the first clear or draw.
-  if (!stopBackgroundCaching()) return;
+  if (!stopBackgroundCaching()) {
+    endCacheWait(core);
+    return;
+  }
 
   // Always clear screen first (prevents previous content from showing through)
   renderer_.clearScreen(theme.backgroundColor);
@@ -1414,6 +1419,7 @@ void ReaderState::renderCurrentPage(Core& core) {
         hasCover_ = true;
         readingSession_.updateProgress(0);
         onPageRendered(core);
+        endCacheWait(core);
         startBackgroundCaching(core);
         return;
       }
@@ -1457,6 +1463,7 @@ void ReaderState::renderCurrentPage(Core& core) {
     default:
       break;
   }
+  endCacheWait(core);
 
   const bool cacheLoaded = pageCache_ != nullptr;
   const bool cachePartial = cacheLoaded && pageCache_->isPartial();
@@ -1514,11 +1521,6 @@ void ReaderState::renderCachedPage(Core& core) {
                        (currentSectionPage_ >= 0 && currentSectionPage_ < static_cast<int>(pageCache_->pageCount())));
 
     if (!pageIsCached) {
-      // Current page not cached - show "Indexing..." and create/extend
-      renderer_.clearScreen(theme.backgroundColor);
-      ui::centeredMessage(renderer_, theme, core.settings.getReaderFontId(theme), tr(INDEXING));
-      renderer_.displayBuffer();
-
       createOrExtendCache(core);
 
       // Backward navigation: cache entire chapter to find actual last page
@@ -1682,6 +1684,20 @@ void ReaderState::renderCachedPage(Core& core) {
   onPageRendered(core);
 }
 
+void ReaderState::beginCacheWait(Core& core) {
+  if (cacheWaitActive_) return;
+  cacheWaitActive_ = true;
+  core.input.setPageButtonsBlocked(true);
+  const Theme& theme = THEME_MANAGER.current();
+  ui::centeredMessage(renderer_, theme, core.settings.getReaderFontId(theme), tr(INDEXING));
+}
+
+void ReaderState::endCacheWait(Core& core) {
+  if (!cacheWaitActive_) return;
+  core.input.setPageButtonsBlocked(false);
+  cacheWaitActive_ = false;
+}
+
 bool ReaderState::ensurePageCached(Core& core, uint32_t pageNum) {
   // Caller must have stopped background task (we own pageCache_)
   if (!pageCache_) {
@@ -1708,9 +1724,6 @@ bool ReaderState::ensurePageCached(Core& core, uint32_t pageNum) {
   }
 
   LOG_DBG(TAG, "Extending cache for page %u", pageNum);
-
-  const Theme& theme = THEME_MANAGER.current();
-  ui::centeredMessage(renderer_, theme, core.settings.getReaderFontId(theme), tr(LOADING));
 
   createOrExtendCache(core);
 
@@ -1757,6 +1770,7 @@ void ReaderState::loadCacheFromDisk(Core& core) {
 }
 
 void ReaderState::createOrExtendCache(Core& core) {
+  beginCacheWait(core);
   const Theme& theme = THEME_MANAGER.current();
   ContentType type = core.content.metadata().type;
 
@@ -2150,9 +2164,9 @@ bool ReaderState::isFullyIndexed(Core& core) {
     const int spineCount = provider->getEpub()->getSpineItemsCount();
 
     const std::string sectionsDir = provider->getEpub()->getCachePath() + "/sections";
-    std::vector<MetricsEntry> entries;
+    std::vector<SectionPageMetric> entries;
     if (readMetricsIndexFile(sectionsDir, config, spineCount, entries)) {
-      return std::all_of(entries.begin(), entries.end(), [](const MetricsEntry& e) { return e.exact; });
+      return std::all_of(entries.begin(), entries.end(), [](const SectionPageMetric& e) { return e.exact; });
     }
 
     for (int i = 0; i < spineCount; ++i) {
@@ -2169,9 +2183,9 @@ bool ReaderState::isFullyIndexed(Core& core) {
     const int sectionCount = fb2Provider->getSectionCount();
 
     const std::string sectionsDir = fb2Provider->getFb2()->getCachePath();
-    std::vector<MetricsEntry> entries;
+    std::vector<SectionPageMetric> entries;
     if (readMetricsIndexFile(sectionsDir, config, sectionCount, entries)) {
-      return std::all_of(entries.begin(), entries.end(), [](const MetricsEntry& e) { return e.exact; });
+      return std::all_of(entries.begin(), entries.end(), [](const SectionPageMetric& e) { return e.exact; });
     }
 
     for (int i = 0; i < sectionCount; ++i) {
@@ -2196,6 +2210,17 @@ void ReaderState::startFullBookIndexing(Core& core) {
   const Theme& theme = THEME_MANAGER.current();
   const auto vp = getReaderViewport(core.settings.statusBar != 0);
   const auto config = makeRenderConfig(core, theme, vp);
+  // Retained counts let a completed run publish metrics without a rescan.
+  // The array stays empty when the heap cannot hold it as one block; the
+  // completion path then falls back to the existing scan.
+  auto allocateIndexingMetrics = [this]() {
+    globalSectionPageMetrics_.clear();
+    globalSectionPageMetricsInitialized_ = false;
+    if (indexingTotalSpines_ <= 0) return;
+    const size_t bytes = sizeof(SectionPageMetric) * static_cast<size_t>(indexingTotalSpines_);
+    if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < bytes) return;
+    globalSectionPageMetrics_.assign(static_cast<size_t>(indexingTotalSpines_), SectionPageMetric{});
+  };
 
   indexingInProgress_ = true;
   indexingSpine_ = 0;
@@ -2206,19 +2231,27 @@ void ReaderState::startFullBookIndexing(Core& core) {
     bool skippedViaIndex = false;
     if (provider && provider->getEpub() && indexingTotalSpines_ > 0) {
       const std::string sectionsDir = provider->getEpub()->getCachePath() + "/sections";
-      std::vector<MetricsEntry> entries;
-      if (readMetricsIndexFile(sectionsDir, config, indexingTotalSpines_, entries)) {
-        while (indexingSpine_ < indexingTotalSpines_ && entries[static_cast<size_t>(indexingSpine_)].exact) {
+      if (loadMetricsIndex(sectionsDir, config, indexingTotalSpines_)) {
+        while (indexingSpine_ < indexingTotalSpines_ &&
+               globalSectionPageMetrics_[static_cast<size_t>(indexingSpine_)].exact) {
           indexingSpine_++;
+        }
+        for (int i = indexingSpine_; i < indexingTotalSpines_; ++i) {
+          globalSectionPageMetrics_[static_cast<size_t>(i)].exact = false;
         }
         skippedViaIndex = true;
       }
     }
     if (!skippedViaIndex) {
+      allocateIndexingMetrics();
       while (indexingSpine_ < indexingTotalSpines_) {
         const auto cachePath = epubSectionCachePath(provider->getEpub()->getCachePath(), indexingSpine_);
         const auto probe = PageCache::probe(cachePath, config);
         if (!probe.valid || probe.partial) break;
+        if (indexingSpine_ < static_cast<int>(globalSectionPageMetrics_.size())) {
+          page_metrics::applyCache(globalSectionPageMetrics_[static_cast<size_t>(indexingSpine_)], probe.pageCount,
+                                   probe.partial);
+        }
         indexingSpine_++;
       }
     }
@@ -2228,19 +2261,27 @@ void ReaderState::startFullBookIndexing(Core& core) {
     bool skippedViaIndex = false;
     if (fb2Provider && fb2Provider->getFb2() && indexingTotalSpines_ > 0) {
       const std::string sectionsDir = fb2Provider->getFb2()->getCachePath();
-      std::vector<MetricsEntry> entries;
-      if (readMetricsIndexFile(sectionsDir, config, indexingTotalSpines_, entries)) {
-        while (indexingSpine_ < indexingTotalSpines_ && entries[static_cast<size_t>(indexingSpine_)].exact) {
+      if (loadMetricsIndex(sectionsDir, config, indexingTotalSpines_)) {
+        while (indexingSpine_ < indexingTotalSpines_ &&
+               globalSectionPageMetrics_[static_cast<size_t>(indexingSpine_)].exact) {
           indexingSpine_++;
+        }
+        for (int i = indexingSpine_; i < indexingTotalSpines_; ++i) {
+          globalSectionPageMetrics_[static_cast<size_t>(i)].exact = false;
         }
         skippedViaIndex = true;
       }
     }
     if (!skippedViaIndex) {
+      allocateIndexingMetrics();
       while (indexingSpine_ < indexingTotalSpines_) {
         const auto cachePath = fb2Provider->getSectionCachePath(indexingSpine_);
         const auto probe = PageCache::probe(cachePath, config);
         if (!probe.valid || probe.partial) break;
+        if (indexingSpine_ < static_cast<int>(globalSectionPageMetrics_.size())) {
+          page_metrics::applyCache(globalSectionPageMetrics_[static_cast<size_t>(indexingSpine_)], probe.pageCount,
+                                   probe.partial);
+        }
         indexingSpine_++;
       }
     }
@@ -2263,6 +2304,38 @@ void ReaderState::processIndexingChunk(Core& core) {
   const Theme& theme = THEME_MANAGER.current();
   const auto vp = getReaderViewport(core.settings.statusBar != 0);
   const auto config = makeRenderConfig(core, theme, vp);
+
+  auto noteCurrentExact = [this](uint32_t pages) {
+    if (indexingSpine_ < 0 || indexingSpine_ >= static_cast<int>(globalSectionPageMetrics_.size())) return;
+    page_metrics::applyCache(globalSectionPageMetrics_[static_cast<size_t>(indexingSpine_)], pages, false);
+  };
+  // Publish only when this run verified every section. A skipped, failed, or
+  // deferred section keeps the old behaviour: drop the index and let the
+  // first page rebuild it from the caches on disk.
+  auto publishIndexingMetrics = [this, &core, type, &config]() {
+    const bool complete = (type == ContentType::Epub || type == ContentType::Fb2) && indexingTotalSpines_ > 0 &&
+                          globalSectionPageMetrics_.size() == static_cast<size_t>(indexingTotalSpines_) &&
+                          std::all_of(globalSectionPageMetrics_.begin(), globalSectionPageMetrics_.end(),
+                                      [](const SectionPageMetric& metric) { return metric.exact; });
+    if (!complete) {
+      deleteMetricsIndex(core);
+      invalidateGlobalPageMetrics();
+      return;
+    }
+    globalSectionPageMetricsInitialized_ = true;
+    std::string sectionsDir;
+    if (type == ContentType::Epub) {
+      sectionsDir = std::string(core.content.cacheDir()) + "/sections";
+    } else {
+      auto* fb2Provider = core.content.asFb2();
+      if (!fb2Provider || !fb2Provider->getFb2()) return;
+      sectionsDir = fb2Provider->getFb2()->getCachePath();
+    }
+    if (!saveMetricsIndex(sectionsDir, config)) {
+      deleteMetricsIndex(core);
+      LOG_WRN(TAG, "Indexing: metrics save failed; the next open will rebuild metrics");
+    }
+  };
 
   auto shouldAbort = [this, &core]() -> bool {
     if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < 4 * 1024) return true;
@@ -2287,6 +2360,11 @@ void ReaderState::processIndexingChunk(Core& core) {
     LOG_WRN(TAG, "Full book indexing failed, falling back to page-by-page caching");
   };
   auto skipCurrentSpine = [this]() {
+    if (indexingSpine_ >= 0 && indexingSpine_ < static_cast<int>(globalSectionPageMetrics_.size())) {
+      auto& metric = globalSectionPageMetrics_[static_cast<size_t>(indexingSpine_)];
+      metric.exact = false;
+      if (indexingCache_) metric.pages = indexingCache_->pageCount();
+    }
     indexingCache_.reset();
     indexingParser_.reset();
     renderer_.clearWidthCache();
@@ -2298,8 +2376,7 @@ void ReaderState::processIndexingChunk(Core& core) {
     indexingCache_.reset();
     indexingParser_.reset();
     LOG_INF(TAG, "Full book indexing complete");
-    deleteMetricsIndex(core);
-    invalidateGlobalPageMetrics();
+    publishIndexingMetrics();
     startBackgroundCaching(core);
     renderer_.clearScreen(theme.backgroundColor);
     renderer_.displayBuffer(papyrix::hal::Display::HALF_REFRESH);
@@ -2341,6 +2418,7 @@ void ReaderState::processIndexingChunk(Core& core) {
         saveAnchorMap(*indexingParser_, indexingCache_->path());
       }
       LOG_DBG(TAG, "Indexing: spine %d complete (%d pages)", indexingSpine_, indexingCache_->pageCount());
+      noteCurrentExact(indexingCache_->pageCount());
       indexingCache_.reset();
       indexingParser_.reset();
       renderer_.clearWidthCache();
@@ -2356,6 +2434,7 @@ void ReaderState::processIndexingChunk(Core& core) {
   // --- CREATE PATH: start a new spine ---
 
   // Skip already-complete spines
+  bool loadExistingCache = true;
   while (indexingSpine_ < indexingTotalSpines_) {
     std::string probePath;
     if (type == ContentType::Epub) {
@@ -2367,8 +2446,16 @@ void ReaderState::processIndexingChunk(Core& core) {
       if (fb2) probePath = fb2->getSectionCachePath(indexingSpine_);
     }
     if (probePath.empty()) break;
+    // Exclusive creation avoids read retries for a cache that does not exist.
+    auto newCache = SdMan.open(probePath.c_str(), O_WRONLY | O_CREAT | O_EXCL);
+    if (newCache) {
+      newCache.close();
+      loadExistingCache = false;
+      break;
+    }
     const auto probe = PageCache::probe(probePath, config);
     if (!probe.valid || probe.partial) break;
+    noteCurrentExact(probe.pageCount);
     indexingSpine_++;
   }
 
@@ -2377,8 +2464,7 @@ void ReaderState::processIndexingChunk(Core& core) {
     indexingCache_.reset();
     indexingParser_.reset();
     LOG_INF(TAG, "Full book indexing complete");
-    deleteMetricsIndex(core);
-    invalidateGlobalPageMetrics();
+    publishIndexingMetrics();
     startBackgroundCaching(core);
     needsRender_ = true;
     return;
@@ -2473,9 +2559,10 @@ void ReaderState::processIndexingChunk(Core& core) {
   }
   indexingCache_.reset(c);
 
-  const bool cacheLoaded = indexingCache_->load(config);
+  const bool cacheLoaded = loadExistingCache && indexingCache_->load(config);
   const auto cacheAction = page_cache::fullIndexCacheAction(cacheLoaded, cacheLoaded && indexingCache_->isPartial());
   if (cacheAction == page_cache::FullIndexCacheAction::Skip) {
+    noteCurrentExact(indexingCache_->pageCount());
     indexingCache_.reset();
     indexingParser_.reset();
     indexingSpine_++;
@@ -2493,6 +2580,7 @@ void ReaderState::processIndexingChunk(Core& core) {
   }
 
   uint16_t maxPages = kIndexingChunk;
+  size_t indexingItemBytes = 0;
 
   if (type == ContentType::Fb2) {
     const auto* fb2Provider = core.content.asFb2();
@@ -2502,6 +2590,7 @@ void ReaderState::processIndexingChunk(Core& core) {
       if (file.open(sectionPath.c_str(), O_RDONLY)) {
         size_t fileSize = file.size();
         file.close();
+        indexingItemBytes = fileSize;
         if (page_metrics::estimatePagesForBytes(fileSize) < 30) {
           maxPages = 0;
         }
@@ -2513,6 +2602,7 @@ void ReaderState::processIndexingChunk(Core& core) {
       auto spineItem = provider->getEpub()->getSpineItem(indexingSpine_);
       size_t itemSize = 0;
       if (provider->getEpub()->getItemSize(spineItem.href, &itemSize)) {
+        indexingItemBytes = itemSize;
         if (page_metrics::estimatePagesForBytes(itemSize) < 30) {
           maxPages = 0;
         }
@@ -2520,6 +2610,10 @@ void ReaderState::processIndexingChunk(Core& core) {
     }
   }
 
+  if (indexingItemBytes > 0 && indexingSpine_ >= 0 &&
+      indexingSpine_ < static_cast<int>(globalSectionPageMetrics_.size())) {
+    globalSectionPageMetrics_[static_cast<size_t>(indexingSpine_)].byteSize = static_cast<uint32_t>(indexingItemBytes);
+  }
   indexingParser_->reset();
   if (!indexingCache_->create(*indexingParser_, config, maxPages, 0, shouldAbort)) {
     if (indexingCancelled_) {
@@ -2539,6 +2633,7 @@ void ReaderState::processIndexingChunk(Core& core) {
       saveAnchorMap(*indexingParser_, indexingCache_->path());
     }
     LOG_DBG(TAG, "Indexing: spine %d complete (%d pages)", indexingSpine_, indexingCache_->pageCount());
+    noteCurrentExact(indexingCache_->pageCount());
     indexingCache_.reset();
     indexingParser_.reset();
     renderer_.clearWidthCache();
@@ -2847,11 +2942,6 @@ void ReaderState::jumpToTocEntry(Core& core, int tocIndex) {
 
       // Anchor not resolved — build cache until found or chapter fully parsed
       if (page < 0) {
-        const Theme& theme = THEME_MANAGER.current();
-        renderer_.clearScreen(theme.backgroundColor);
-        ui::centeredMessage(renderer_, theme, core.settings.getReaderFontId(theme), tr(INDEXING));
-        renderer_.displayBuffer();
-
         createOrExtendCache(core);
         page = loadAnchorPage(cachePath, tocItem.anchor);
 

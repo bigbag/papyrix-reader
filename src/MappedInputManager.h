@@ -16,6 +16,8 @@ class MappedInputManager {
 
   bool wasPressed(Button button) const;
   bool wasReleased(Button button) const;
+  bool wasSuppressed(Button button) const;
+  void setPageButtonsBlocked(bool blocked);
   bool isPressed(Button button) const;
   bool wasAnyPressed() const;
   bool wasAnyReleased() const;

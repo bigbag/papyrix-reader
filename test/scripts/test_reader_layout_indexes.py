@@ -21,14 +21,15 @@ HARNESS = r'''
 #include <SDCardManager.h>
 #include <Serialization.h>
 #include <RenderConfig.h>
+#include <content/GlobalPageMetrics.h>
 #include <platform_stubs.h>
+namespace page_metrics = papyrix::page_metrics;
 MockSerial Serial;
 #ifndef TAG
 #define TAG "TEST"
 #endif
 
 @CONSTANTS@
-@METRICS_ENTRY@;
 @METRICS_READER@
 class ContentParser {
  public:
@@ -106,14 +107,20 @@ void anchorFixture(uint8_t version) {
 }
 int main() {
   RenderConfig config;
-  std::vector<MetricsEntry> metrics;
-  metricsFixture(7, config);
+  std::vector<page_metrics::Section> metrics;
+  metricsFixture(8, config);
   check(!readMetricsIndexFile("/sections", config, 1, metrics), "old metrics must not supply exact page counts");
   metricsFixture(kMetricsIndexVersion, config);
   check(readMetricsIndexFile("/sections", config, 1, metrics), "current metrics must load");
   check(metrics.size() == 1 && metrics[0].pages == 19 && metrics[0].exact && metrics[0].byteSize == 2300,
         "current metrics preserve page counts and byte sizes");
-  anchorFixture(4);
+  testSetLargestFreeBlock(sizeof(page_metrics::Section) - 1);
+  check(!readMetricsIndexFile("/sections", config, 1, metrics), "low memory defers metrics decoding");
+  testResetLargestFreeBlock();
+  check(metrics.size() == 1 && metrics[0].pages == 19 && metrics[0].exact && metrics[0].byteSize == 2300,
+        "deferred decoding preserves the previous counts");
+  check(SdMan.exists("/sections/metrics.bin"), "deferred decoding preserves the stored index");
+  anchorFixture(5);
   check(ReaderState::loadAnchorPage("/sections/0.bin", "heading") == -1,
         "old anchor must not choose a page before the section cache is rebuilt");
   check(ReaderState::loadAnchorMap("/sections/0.bin").empty(), "old anchors must not supply chapter ranges");
@@ -137,7 +144,7 @@ int main() {
     check(ReaderState::loadAnchorPage("/sections/0.bin", "heading") == 7, "regeneration writes current anchors");
   }
 
-  anchorFixture(4);
+  anchorFixture(5);
   check(ReaderState::loadAnchorPage("/sections/0.bin", "heading") == -1, "old anchors still do not resolve");
   check(SdMan.exists("/sections/0.bin.anchors"), "old anchor file exists beside the complete cache");
   {
@@ -185,7 +192,6 @@ def main():
     constants = "\n".join(line for line in reader.splitlines()
                           if line.startswith("constexpr ") and any(name in line for name in names))
     harness = HARNESS.replace("@CONSTANTS@", constants)
-    harness = harness.replace("@METRICS_ENTRY@", block(reader, "struct MetricsEntry"))
     harness = harness.replace("@METRICS_READER@", block(reader, "bool readMetricsIndexFile("))
     harness = harness.replace("@ANCHOR_READERS@", block(reader, "int ReaderState::loadAnchorPage(") + "\n" +
                               block(reader, "std::vector<std::pair<std::string, uint32_t>> ReaderState::loadAnchorMap(") +

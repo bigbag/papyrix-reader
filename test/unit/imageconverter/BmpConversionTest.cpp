@@ -3,6 +3,7 @@
 #include <Bitmap.h>
 #include <ImageConverter.h>
 #include <SDCardManager.h>
+#include <freertos/task.h>
 
 #include <cstdint>
 #include <algorithm>
@@ -142,6 +143,21 @@ bool outputIsCanonical1Bit(const std::string& out, const int width, const int he
 
 int main() {
   TestUtils::TestRunner runner("BmpConversionTest");
+
+  {
+    const std::string source = build1bpp(24, 10);
+    std::string out;
+    mockTaskStackHighWaterMarkBytes = 2048;
+    mockTaskFreeStackBytes = 4096;
+    runner.expectTrue(convert(source, out), "restored stack permits conversion after an earlier deep call");
+    runner.expectTrue(out == source, "restored stack conversion preserves image pixels");
+    mockTaskFreeStackBytes = 4095;
+    runner.expectFalse(convert(source, out), "insufficient current stack prevents conversion");
+    runner.expectFalse(SdMan.exists("/out.bmp"), "insufficient stack publishes no image");
+    runner.expectFalse(SdMan.exists("/out.bmp.part"), "insufficient stack creates no temporary image");
+    mockTaskFreeStackBytes = 4096;
+    mockTaskStackHighWaterMarkBytes = 4096;
+  }
 
   // ---- Test: 24-bpp bottom-up converts to canonical 1-bit top-down ----
   {

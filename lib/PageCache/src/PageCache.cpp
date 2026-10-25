@@ -21,7 +21,7 @@ bool PageCache::failHeaderCommitOnce_ = false;
 #endif
 
 namespace {
-constexpr uint8_t CACHE_FILE_VERSION = 27;
+constexpr uint8_t CACHE_FILE_VERSION = 28;
 
 // Header layout (offsets are absolute from start of file):
 // - version (1 byte)        @ 0

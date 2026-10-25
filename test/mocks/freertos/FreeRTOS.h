@@ -19,3 +19,4 @@ typedef uint32_t EventBits_t;
 #define portMAX_DELAY 0xFFFFFFFFUL
 #define portTICK_PERIOD_MS 1
 #define pdMS_TO_TICKS(ms) (ms)
+#define portSTACK_GROWTH (-1)

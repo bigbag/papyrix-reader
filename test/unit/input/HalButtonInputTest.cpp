@@ -141,6 +141,36 @@ int main() {
   sample(8150);
   runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonLongPress && event.button == Button::Power,
                     "hold after edgeless clear emits long press");
+  pressedPin = -1;
+  sample(8175);
+  sample(8200);
+  queue.pop(event);
+  pressedPin = PAPYRIX_TARGET_MURPHY_M4 ? 1 : PAPYRIX_TARGET_STICKY ? 5 : 7;
+  sample(8210);
+  sample(8240);
+  runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonPress && event.button == Button::Up,
+                    "fallback page press starts before the wait");
+  input.setPageButtonsBlocked(true);
+  sample(9000);
+  runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonCancel && event.button == Button::Up,
+                    "fallback wait cancels a held direction without a release");
+  input.setPageButtonsBlocked(false);
+  sample(10000);
+  runner.expectFalse(queue.pop(event), "fallback held button remains silent after the wait");
+  pressedPin = -1;
+  sample(10010);
+  sample(10040);
+  runner.expectFalse(queue.pop(event), "fallback suppressed release cannot navigate");
+  pressedPin = PAPYRIX_TARGET_MURPHY_M4 ? 1 : PAPYRIX_TARGET_STICKY ? 5 : 7;
+  sample(10050);
+  sample(10080);
+  runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonPress && event.button == Button::Up,
+                    "fallback fresh press works after release");
+  pressedPin = -1;
+  sample(10100);
+  sample(10130);
+  runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonRelease && event.button == Button::Up,
+                    "fallback fresh release completes one tap");
 #if PAPYRIX_TARGET_MURPHY_M4
   fixture.releaseForStop();
 #endif

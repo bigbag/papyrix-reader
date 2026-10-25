@@ -62,6 +62,7 @@ class ReaderState : public State {
   uint32_t currentPage_;
   bool needsRender_;
   bool suppressRender_ = false;
+  bool cacheWaitActive_ = false;
   bool contentLoaded_;
   bool loadFailed_ = false;  // Track if content loading failed (for error state transition)
 
@@ -152,6 +153,8 @@ class ReaderState : public State {
   bool ensurePageCached(Core& core, uint32_t pageNum);
   void loadCacheFromDisk(Core& core);
   void createOrExtendCache(Core& core);
+  void beginCacheWait(Core& core);
+  void endCacheWait(Core& core);
 
   void createOrExtendCacheImpl(ContentParser& parser, const std::string& cachePath, const RenderConfig& config);
   void backgroundCacheImpl(ContentParser& parser, const std::string& cachePath, const RenderConfig& config,

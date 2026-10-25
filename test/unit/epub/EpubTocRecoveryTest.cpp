@@ -111,6 +111,10 @@ struct EpubSpec {
   std::vector<std::string> ncxSrcs;
   std::string navOverride;  // replaces the nav document when non-empty
   std::string ncxOverride;
+  // (href, content) in manifest order; entries are stored under OEBPS/.
+  std::vector<std::pair<std::string, std::string>> cssFiles;
+  // Declared in the manifest but with no stored entry.
+  std::vector<std::string> missingCssFiles;
 };
 
 std::string navDocument(const EpubSpec& spec) {
@@ -161,6 +165,14 @@ std::string makeEpub(const EpubSpec& spec) {
   if (spec.withNcx) {
     manifest += "<item id=\"ncx\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/>";
   }
+  for (const auto& href : spec.missingCssFiles) {
+    manifest += "<item id=\"cssmissing\" href=\"" + href + "\" media-type=\"text/css\"/>";
+  }
+  int cssIndex = 1;
+  for (const auto& css : spec.cssFiles) {
+    manifest += "<item id=\"css" + std::to_string(cssIndex++) + "\" href=\"" + css.first +
+                "\" media-type=\"text/css\"/>";
+  }
   for (int i = 1; i <= spec.chapters; i++) {
     manifest += "<item id=\"ch" + std::to_string(i) + "\" href=\"ch" + std::to_string(i) +
                 ".xhtml\" media-type=\"application/xhtml+xml\"/>";
@@ -190,6 +202,9 @@ std::string makeEpub(const EpubSpec& spec) {
   if (spec.withNcx) {
     entries.push_back({"OEBPS/toc.ncx", spec.ncxOverride.empty() ? ncxDocument(spec) : spec.ncxOverride});
   }
+  for (const auto& css : spec.cssFiles) {
+    entries.push_back({"OEBPS/" + css.first, css.second});
+  }
   for (int i = 1; i <= spec.chapters; i++) {
     entries.push_back({"OEBPS/ch" + std::to_string(i) + ".xhtml", chapterHtml(i)});
   }
@@ -212,17 +227,50 @@ EpubSpec goodSpec(const std::string& title) {
   return spec;
 }
 
-// Counts how often one full load() opens the EPUB archive itself, ignoring
+// Counts how often one load() opens the EPUB archive itself, ignoring
 // cache and retry-state reads.
-size_t archiveOpensDuring(const std::string& bookPath, const std::string& cacheDir) {
+size_t archiveOpensDuring(const std::string& bookPath, const std::string& cacheDir,
+                          const bool buildIfMissing = true) {
   size_t archiveOpens = 0;
   SdMan.setReadObserver([&](const char* path) {
     if (path == bookPath) archiveOpens++;
   });
   Epub epub(bookPath, cacheDir);
-  const bool loaded = epub.load();
+  const bool loaded = epub.load(buildIfMissing);
   SdMan.setReadObserver(nullptr);
   return loaded ? archiveOpens : SIZE_MAX;
+}
+
+// Persisted TOC retry byte for a cache directory, or -1 when absent/unwritten.
+int tocRetryState(const std::string& cachePath) {
+  const std::string data = SdMan.getWrittenData(cachePath + "/toc.retry");
+  return data.size() == 1 ? static_cast<unsigned char>(data[0]) : -1;
+}
+
+EpubSpec cssSpec(const std::string& title) {
+  EpubSpec spec = goodSpec(title);
+  // The second sheet wins the shared text-align, keeps the first sheet's
+  // margin, and adds bold to the first sheet's italic class.
+  spec.cssFiles = {{"styles/first.css", "p { text-align: left; margin-top: 12px; } .note { font-style: italic; }"},
+                   {"styles/second.css", "p { text-align: center; } .note { font-weight: bold; }"}};
+  return spec;
+}
+
+void expectCssStyles(TestUtils::TestRunner& runner, const Epub& epub, const std::string& prefix) {
+  const CssParser* parser = epub.getCssParser();
+  runner.expectTrue(parser != nullptr, prefix + "_ParserPresent");
+  if (!parser) return;
+  const CssStyle paragraph = parser->getTagStyle("p");
+  runner.expectTrue(paragraph.hasTextAlign() && paragraph.textAlign == TextAlign::Center,
+                    prefix + "_SecondSheetWinsTextAlign");
+  runner.expectTrue(paragraph.hasMarginTop(), prefix + "_FirstSheetMarginKept");
+  runner.expectFloatEq(12.0f, paragraph.marginTop.value, prefix + "_FirstSheetMarginValue");
+  const CssStyle* note = parser->getStyleForClass(".note");
+  runner.expectTrue(note != nullptr, prefix + "_ClassStylePresent");
+  if (note) {
+    runner.expectTrue(note->hasFontStyle() && note->fontStyle == CssFontStyle::Italic, prefix + "_FirstSheetItalic");
+    runner.expectTrue(note->hasFontWeight() && note->fontWeight == CssFontWeight::Bold, prefix + "_SecondSheetBold");
+  }
 }
 
 }  // namespace
@@ -274,8 +322,10 @@ int main() {
     }
     runner.expectTrue(allMapped, "A_HealthyRecovery_TocMappedToSpine");
 
-    // The recovered cache is complete: later opens do not parse the archive.
-    runner.expectEq(size_t(0), archiveOpensDuring("/books/low.epub", "/cacheA"), "A_Settled_NoArchiveParse");
+    // The recovered cache is complete and serves later cache-only opens.
+    Epub settled("/books/low.epub", "/cacheA");
+    runner.expectTrue(settled.load(false), "A_Settled_CacheOnlyLoads");
+    runner.expectEq(4, settled.getTocItemsCount(), "A_Settled_TocKept");
   }
 
   // ======================== B. Genuine no-TOC book never retries ========================
@@ -297,7 +347,10 @@ int main() {
     Epub second("/books/notoc.epub", "/cacheB");
     runner.expectTrue(second.load(), "B_NoToc_SecondLoad_WithZipRemoved");
     runner.expectEq(0, second.getTocItemsCount(), "B_NoToc_SecondLoad_EmptyToc");
-    runner.expectEq(size_t(0), archiveOpensDuring("/books/notoc.epub", "/cacheB"), "B_NoToc_ThirdLoad_NoArchiveParse");
+    runner.expectEq(0xFF, tocRetryState(second.getCachePath()), "B_NoToc_SettledRetryState");
+    Epub third("/books/notoc.epub", "/cacheB");
+    runner.expectTrue(third.load(), "B_NoToc_ThirdLoad_WithZipRemoved");
+    runner.expectEq(0, third.getTocItemsCount(), "B_NoToc_ThirdLoad_EmptyToc");
   }
 
   // ======================== C. Persistent failures stop retrying ========================
@@ -313,24 +366,17 @@ int main() {
     runner.expectTrue(first.load(), "C_Broken_FirstBuild_Loads");
     runner.expectEq(0, first.getTocItemsCount(), "C_Broken_FirstBuild_EmptyToc");
 
-    // Fresh opens retry a bounded number of times, then stop parsing the book.
-    bool retryHappened = false;
-    bool previousParsed = false;
-    bool lastParsed = false;
+    // Fresh opens retry a bounded number of times, then stop: the persisted
+    // retry byte reaches the attempt limit and the cache stays intact.
     for (int open = 0; open < 10; open++) {
-      const size_t opens = archiveOpensDuring("/books/broken.epub", "/cacheC");
-      const bool parsed = opens > 0 && opens != SIZE_MAX;
-      if (parsed) retryHappened = true;
-      previousParsed = lastParsed;
-      lastParsed = parsed;
+      Epub attempt("/books/broken.epub", "/cacheC");
+      runner.expectTrue(attempt.load(), "C_Broken_OpenLoads_" + std::to_string(open));
       Epub check("/books/broken.epub", "/cacheC");
       runner.expectTrue(check.load(false), "C_Broken_CacheIntact_" + std::to_string(open));
       runner.expectEq(0, check.getTocItemsCount(), "C_Broken_EmptyTocKept_" + std::to_string(open));
       runner.expectEqual("Broken Toc Book", check.getTitle(), "C_Broken_MetadataKept_" + std::to_string(open));
     }
-    runner.expectTrue(retryHappened, "C_Broken_RetriedAcrossOpens");
-    runner.expectFalse(lastParsed, "C_Broken_LastOpen_NoArchiveParse");
-    runner.expectFalse(previousParsed, "C_Broken_RetriesStopBeforeEnd");
+    runner.expectEq(3, tocRetryState(first.getCachePath()), "C_Broken_RetryLimitPersisted");
   }
 
   // ======================== D. Sparse nav loses to a usable NCX ========================
@@ -349,8 +395,9 @@ int main() {
     runner.expectEq(4, epub.getTocItemsCount(), "D_SparseNav_NcxSelected");
     runner.expectTrue(!epub.getTocItem(0).title.empty() && epub.getTocItem(0).title.rfind("NCX ", 0) == 0,
                       "D_SparseNav_NcxTitles");
-    runner.expectEq(size_t(0), archiveOpensDuring("/books/sparse.epub", "/cacheD"),
-                    "D_SparseNav_NoArchiveParseAfterBuild");
+    Epub settled("/books/sparse.epub", "/cacheD");
+    runner.expectTrue(settled.load(false), "D_SparseNav_CacheOnlyLoads");
+    runner.expectEq(4, settled.getTocItemsCount(), "D_SparseNav_CacheOnlyTocKept");
   }
 
   // ======================== E. Stale NCX does not replace a better nav ========================
@@ -371,8 +418,9 @@ int main() {
     runner.expectTrue(!epub.getTocItem(0).title.empty() && epub.getTocItem(0).title.rfind("Nav ", 0) == 0,
                       "E_StaleNcx_NavTitles");
     runner.expectEq(int16_t(0), epub.getTocItem(0).spineIndex, "E_StaleNcx_NavMapped");
-    runner.expectEq(size_t(0), archiveOpensDuring("/books/stale.epub", "/cacheE"),
-                    "E_StaleNcx_NoArchiveParseAfterBuild");
+    Epub settled("/books/stale.epub", "/cacheE");
+    runner.expectTrue(settled.load(false), "E_StaleNcx_CacheOnlyLoads");
+    runner.expectEq(3, settled.getTocItemsCount(), "E_StaleNcx_CacheOnlyTocKept");
   }
 
   // ======================== F. Failed replacement preserves the good cache ========================
@@ -403,8 +451,9 @@ int main() {
     Epub retry("/books/replace.epub", "/cacheF");
     runner.expectTrue(retry.load(), "F_RetryAfterFailure_Loads");
     runner.expectEq(4, retry.getTocItemsCount(), "F_RetryAfterFailure_TocRestored");
-    runner.expectEq(size_t(0), archiveOpensDuring("/books/replace.epub", "/cacheF"),
-                    "F_RetryAfterFailure_NoArchiveParse");
+    Epub settled("/books/replace.epub", "/cacheF");
+    runner.expectTrue(settled.load(false), "F_RetryAfterFailure_CacheOnlyLoads");
+    runner.expectEq(4, settled.getTocItemsCount(), "F_RetryAfterFailure_CacheOnlyTocKept");
 
     // A commit rename that reports failure after moving keeps the new cache loadable.
     SdMan.reset();
@@ -481,8 +530,9 @@ int main() {
     runner.expectTrue(recovered.load(), "G_LegacyWithToc_Loads");
     runner.expectEq(4, recovered.getTocItemsCount(), "G_LegacyWithToc_TocRecovered");
     runner.expectEqual("Legacy Book", recovered.getTitle(), "G_LegacyWithToc_MetadataPreserved");
-    runner.expectEq(size_t(0), archiveOpensDuring("/books/legacy.epub", "/cacheG"),
-                    "G_LegacyWithToc_NoArchiveParseAfter");
+    Epub settled("/books/legacy.epub", "/cacheG");
+    runner.expectTrue(settled.load(false), "G_LegacyWithToc_CacheOnlyLoads");
+    runner.expectEq(4, settled.getTocItemsCount(), "G_LegacyWithToc_CacheOnlyTocKept");
 
     // A legacy no-TOC cache settles after its one classification probe.
     SdMan.reset();
@@ -504,8 +554,10 @@ int main() {
     Epub probe("/books/legacy2.epub", "/cacheG2");
     runner.expectTrue(probe.load(), "G_LegacyNoToc_FirstLoad");
     runner.expectEq(0, probe.getTocItemsCount(), "G_LegacyNoToc_EmptyToc");
-    runner.expectEq(size_t(0), archiveOpensDuring("/books/legacy2.epub", "/cacheG2"), "G_LegacyNoToc_Settles");
-    runner.expectEq(size_t(0), archiveOpensDuring("/books/legacy2.epub", "/cacheG2"), "G_LegacyNoToc_StaysSettled");
+    runner.expectEq(0xFF, tocRetryState(probe.getCachePath()), "G_LegacyNoToc_SettledRetryState");
+    Epub settled2("/books/legacy2.epub", "/cacheG2");
+    runner.expectTrue(settled2.load(), "G_LegacyNoToc_StaysSettledLoads");
+    runner.expectEq(0, settled2.getTocItemsCount(), "G_LegacyNoToc_StaysSettled");
   }
 
   // ======================== H. Duplicate targets do not inflate coverage ========================
@@ -611,8 +663,9 @@ int main() {
     runner.expectTrue(unreadable.load(), "S_UnreadableState_Loads");
     runner.expectEq(0, unreadable.getTocItemsCount(), "S_UnreadableState_TocEmpty");
     runner.expectEqual("State Fault Book", unreadable.getTitle(), "S_UnreadableState_MetadataUsable");
-    runner.expectEq(size_t(0), archiveOpensDuring("/books/statefault.epub", "/cacheS"),
-                    "S_UnreadableState_NoArchiveParse");
+    Epub settled("/books/statefault.epub", "/cacheS");
+    runner.expectTrue(settled.load(false), "S_UnreadableState_CacheOnlyLoads");
+    runner.expectEq(0, settled.getTocItemsCount(), "S_UnreadableState_CacheOnlyTocEmpty");
 
     // A failed attempt-reservation write defers the recovery to a later open.
     SdMan.reset();
@@ -631,8 +684,7 @@ int main() {
     Epub writeFailure("/books/statefault2.epub", "/cacheS2");
     runner.expectTrue(writeFailure.load(), "S_WriteFailure_Loads");
     runner.expectEq(0, writeFailure.getTocItemsCount(), "S_WriteFailure_TocEmpty");
-    runner.expectEq(size_t(0), archiveOpensDuring("/books/statefault2.epub", "/cacheS2"),
-                    "S_WriteFailure_NoArchiveParse");
+    // The failed reservation defers recovery; the next healthy open recovers.
     SdMan.setSyncResult(true);
 
     Epub later("/books/statefault2.epub", "/cacheS2");
@@ -671,6 +723,107 @@ int main() {
       runner.expectEq(static_cast<int>(bytes.size()), file.read(&bytes[0], bytes.size()), "User file remains readable");
       runner.expectEqual(entry.second, bytes, "Metadata invalidation preserves user data");
     }
+  }
+
+  // ======================== J. External CSS on fresh and cached opens ========================
+  {
+    SdMan.reset();
+    testResetLargestFreeBlock();
+    SdMan.setFileData("/books/styled.epub", makeEpub(cssSpec("Styled Book")));
+
+    Epub fresh("/books/styled.epub", "/cacheJ");
+    runner.expectTrue(fresh.load(), "J_Fresh_Loads");
+    expectCssStyles(runner, fresh, "J_Fresh");
+    runner.expectEq(4, fresh.getTocItemsCount(), "J_Fresh_TocBuilt");
+
+    // User data in the cache directory must survive a cached open.
+    const std::vector<std::pair<std::string, std::string>> userFiles = {
+        {fresh.getCachePath() + "/progress.bin", "PROGRESS"}, {fresh.getCachePath() + "/bookmarks.bin", "BOOKMARKS"}};
+    for (const auto& entry : userFiles) SdMan.registerFile(entry.first, entry.second);
+
+    Epub cached("/books/styled.epub", "/cacheJ");
+    runner.expectTrue(cached.load(), "J_Cached_Loads");
+    expectCssStyles(runner, cached, "J_Cached");
+    runner.expectEqual("Styled Book", cached.getTitle(), "J_Cached_TitlePreserved");
+    runner.expectEq(4, cached.getSpineItemsCount(), "J_Cached_SpinePreserved");
+    runner.expectEq(4, cached.getTocItemsCount(), "J_Cached_TocPreserved");
+    for (const auto& entry : userFiles) {
+      FsFile file = SdMan.open(entry.first.c_str());
+      std::string bytes(entry.second.size(), '\0');
+      runner.expectEq(static_cast<int>(bytes.size()), file.read(&bytes[0], bytes.size()),
+                      "J_Cached_UserFileReadable");
+      runner.expectEqual(entry.second, bytes, "J_Cached_UserDataPreserved");
+    }
+
+    // Cache-only and metadata-only opens stay light: no source parse, no CSS.
+    runner.expectEq(size_t(0), archiveOpensDuring("/books/styled.epub", "/cacheJ", false),
+                    "J_CacheOnly_NoArchiveParse");
+    Epub cacheOnly("/books/styled.epub", "/cacheJ");
+    runner.expectTrue(cacheOnly.load(false), "J_CacheOnly_Loads");
+    runner.expectTrue(cacheOnly.getCssParser() == nullptr, "J_CacheOnly_NoCssParser");
+    runner.expectEq(4, cacheOnly.getTocItemsCount(), "J_CacheOnly_TocPreserved");
+    Epub metadataOnly("/books/styled.epub", "/cacheJ");
+    runner.expectTrue(metadataOnly.loadMetadataOnly(), "J_MetadataOnly_Loads");
+    runner.expectTrue(metadataOnly.getCssParser() == nullptr, "J_MetadataOnly_NoCssParser");
+
+    // A low-heap cached open keeps the book usable without styles, and a
+    // later healthy open still loads them.
+    Epub lowHeap("/books/styled.epub", "/cacheJ");
+    testSetLargestFreeBlock(8 * 1024);
+    runner.expectTrue(lowHeap.load(), "J_LowHeapCached_Loads");
+    testResetLargestFreeBlock();
+    runner.expectTrue(lowHeap.getCssParser() == nullptr || !lowHeap.getCssParser()->hasStyles(),
+                      "J_LowHeapCached_NoStyles");
+    runner.expectEq(4, lowHeap.getTocItemsCount(), "J_LowHeapCached_TocPreserved");
+    Epub healthy("/books/styled.epub", "/cacheJ");
+    runner.expectTrue(healthy.load(), "J_HealthyAfterLowHeap_Loads");
+    expectCssStyles(runner, healthy, "J_HealthyAfterLowHeap");
+
+    // A missing EPUB source must not destroy the valid metadata cache.
+    SdMan.remove("/books/styled.epub");
+    Epub sourceGone("/books/styled.epub", "/cacheJ");
+    runner.expectTrue(sourceGone.load(), "J_SourceGone_LoadsFromCache");
+    runner.expectEqual("Styled Book", sourceGone.getTitle(), "J_SourceGone_TitlePreserved");
+    runner.expectEq(4, sourceGone.getSpineItemsCount(), "J_SourceGone_SpinePreserved");
+    runner.expectEq(4, sourceGone.getTocItemsCount(), "J_SourceGone_TocPreserved");
+    runner.expectTrue(sourceGone.getCssParser() == nullptr || !sourceGone.getCssParser()->hasStyles(),
+                      "J_SourceGone_NoStyles");
+    Epub sourceGoneCheck("/books/styled.epub", "/cacheJ");
+    runner.expectTrue(sourceGoneCheck.load(false), "J_SourceGone_CacheStillLoads");
+  }
+
+  // ======================== K. CSS failures stay nonfatal ========================
+  {
+    // A declared stylesheet with no stored entry does not block the others.
+    SdMan.reset();
+    testResetLargestFreeBlock();
+    EpubSpec spec = cssSpec("Missing Css Book");
+    spec.missingCssFiles = {"styles/missing.css"};
+    SdMan.setFileData("/books/missingcss.epub", makeEpub(spec));
+
+    Epub fresh("/books/missingcss.epub", "/cacheK");
+    runner.expectTrue(fresh.load(), "K_Missing_FreshLoads");
+    expectCssStyles(runner, fresh, "K_Missing_Fresh");
+    Epub cached("/books/missingcss.epub", "/cacheK");
+    runner.expectTrue(cached.load(), "K_Missing_CachedLoads");
+    expectCssStyles(runner, cached, "K_Missing_Cached");
+    Epub check("/books/missingcss.epub", "/cacheK");
+    runner.expectTrue(check.load(false), "K_Missing_CacheStillLoads");
+    runner.expectEqual("Missing Css Book", check.getTitle(), "K_Missing_MetadataKept");
+
+    // TOC recovery and CSS share the OPF parse on the same cached open.
+    SdMan.reset();
+    testResetLargestFreeBlock();
+    SdMan.setFileData("/books/recovercss.epub", makeEpub(cssSpec("Recover Css Book")));
+    Epub lowFirst("/books/recovercss.epub", "/cacheK2");
+    testSetLargestFreeBlock(8 * 1024);
+    runner.expectTrue(lowFirst.load(), "K_Recovery_FirstBuildLoads");
+    runner.expectEq(0, lowFirst.getTocItemsCount(), "K_Recovery_TocSkipped");
+    testResetLargestFreeBlock();
+    Epub recovered("/books/recovercss.epub", "/cacheK2");
+    runner.expectTrue(recovered.load(), "K_Recovery_Loads");
+    runner.expectEq(4, recovered.getTocItemsCount(), "K_Recovery_TocRestored");
+    expectCssStyles(runner, recovered, "K_Recovery");
   }
 
   runner.printSummary();

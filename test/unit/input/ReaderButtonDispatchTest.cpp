@@ -149,6 +149,19 @@ int main() {
                     "Second long press -> PrevChapter");
     c.process(release(Button::Left));
   }
+  {
+    DispatchCase c;
+    c.config.powerShortPageTurn = true;
+    c.nowMs = 41;
+    c.process(press(Button::Power));
+    c.process(repeat(Button::Right));
+    runner.expectEq(int(ReaderButtonAction::None), int(c.process(Event::buttonCancel(Button::Right))),
+                    "Cancelled chapter hold does not turn a page");
+    runner.expectEq(uint32_t(41), c.d.powerPressStartedMs(), "Directional cancellation keeps Power timing");
+    c.process(press(Button::Right));
+    runner.expectEq(int(ReaderButtonAction::Next), int(c.process(release(Button::Right))),
+                    "Fresh tap works after chapter hold cancellation");
+  }
 
   // ============================================
   // Center / Back buttons

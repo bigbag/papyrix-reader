@@ -23,6 +23,8 @@ class InputManager {
   void update();
 
   bool isDebouncePending() const;
+  void setSuppressedButtons(uint8_t mask);
+  bool wasSuppressed(uint8_t buttonIndex) const;
 
   /**
    * Returns true if the button was being held at the time of the last #update() call.
@@ -102,12 +104,18 @@ class InputManager {
   struct StateChange {
     unsigned long time;
     uint8_t state;
+    uint8_t suppressAfter = 0;
   };
   std::array<StateChange, 32> pending_{};
   size_t readIndex_ = 0;
   size_t writeIndex_ = 0;
   size_t pendingCount_ = 0;
   uint8_t sampledState_ = 0;
+  uint8_t queuedState_ = 0;
+  uint8_t suppressedButtons_ = 0;
+  uint8_t releaseSuppressedButtons_ = 0;
+  uint8_t pendingSuppression_ = 0;
+  uint8_t suppressedEvents_ = 0;
   bool sampling_ = false;
   mutable std::mutex samplingMutex_;
 

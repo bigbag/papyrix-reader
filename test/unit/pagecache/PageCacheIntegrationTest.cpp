@@ -56,7 +56,7 @@ bool writeSyntheticCache(const char* path, const RenderConfig& config, uint32_t 
   FsFile file;
   if (!SdMan.openFileForWrite("CACHE", path, file)) return false;
 
-  constexpr uint8_t version = 27;
+  constexpr uint8_t version = 28;
   constexpr uint32_t headerSize = 43;
   constexpr uint32_t lutOffset = 45;
   constexpr uint32_t pagePosition = headerSize;
@@ -115,7 +115,7 @@ int main() {
     PageCache current(path);
     runner.expectTrue(current.loadRaw(), "the current layout remains readable without a config");
     std::string previousLayout = SdMan.getWrittenData(path);
-    previousLayout[0] = 26;
+    previousLayout[0] = 27;
     SdMan.setFileData(path, previousLayout);
     runner.expectFalse(PageCache::probe(path, config).valid, "the previous layout does not supply page counts");
     PageCache raw(path);

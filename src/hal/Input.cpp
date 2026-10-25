@@ -71,6 +71,8 @@ void Input::poll() {
   pollTouch();
 }
 
+void Input::setPageButtonsBlocked(const bool blocked) { mappedInputManager.setPageButtonsBlocked(blocked); }
+
 void Input::checkButton(Button btn, uint8_t mask) {
   bool wasDown = (prevButtonState_ & mask) != 0;
   bool isDown = false;
@@ -101,6 +103,10 @@ void Input::checkButton(Button btn, uint8_t mask) {
       break;
     case Button::Count:
       return;
+  }
+  if ((mask & REPEAT_BUTTON_MASK) && mappedInputManager.wasSuppressed(mappedBtn)) {
+    if (wasDown) queue_->push(Event::buttonCancel(btn));
+    return;
   }
 
   isDown = mappedInputManager.isPressed(mappedBtn);

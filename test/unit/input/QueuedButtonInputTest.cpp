@@ -1,3 +1,4 @@
+#include <HardwareIdentity.h>
 #include <InputManager.h>
 #include <MappedInputManager.h>
 #include <TargetConfig.h>
@@ -10,6 +11,8 @@
 #include <vector>
 
 #include "hal/Input.h"
+#include "core/PapyrixSettings.h"
+#include "core/ReaderButtonDispatcher.h"
 #include "test_utils.h"
 
 InputManager inputManager;
@@ -18,6 +21,7 @@ MappedInputManager mappedInputManager(inputManager);
 namespace {
 constexpr papyrix::Button kTestButton = PAPYRIX_TARGET_STICKY ? papyrix::Button::Up : papyrix::Button::Back;
 std::atomic<bool> backHeld{false};
+std::atomic<uint8_t> waitHeld{0};
 std::mutex sampleMutex;
 std::condition_variable sampled;
 unsigned samples = 0;
@@ -149,9 +153,22 @@ int main() {
       ++samples;
       sampled.notify_all();
     }
+    const auto& pins = papyrix::board::HardwareIdentity::instance().profile().input;
+    const int physicalPins[] = {pins.back, pins.confirm, pins.left, pins.right, pins.up, pins.down, pins.power};
+    for (unsigned button = 0; button < 7; ++button) {
+      if (pin == physicalPins[button] && (waitHeld.load() & (1u << button))) return LOW;
+    }
     return pin == (PAPYRIX_TARGET_STICKY ? 5 : 9) && backHeldNow() ? LOW : HIGH;
   });
-  testSetAnalogReadHook([](int pin) { return pin == 1 && backHeldNow() ? 3512 : 4095; });
+  testSetAnalogReadHook([](int pin) {
+    if (pin == 1 && backHeldNow()) return 3512;
+    const uint8_t held = waitHeld.load();
+    const int values[] = {3512, 2694, 1493, 5, 2242, 5};
+    for (unsigned button = pin == 1 ? 0 : 4; button < (pin == 1 ? 4u : 6u); ++button) {
+      if (held & (1u << button)) return values[button];
+    }
+    return 4095;
+  });
   testSetVTaskDelayHook(sweepDelayHook);
   inputManager.begin();
   EventQueue queue;
@@ -274,6 +291,186 @@ int main() {
       }
       runner.expectTrue(pulsesOk, "pulses within the 20 ms debounce window are dropped");
     }
+    tapWindowStartMs = tapWindowEndMs = 0;
+    const auto settle = [&](uint8_t held) {
+      waitHeld.store(held);
+      for (unsigned tick = 0; tick < 8 && !stepBroken; ++tick) stepSampler();
+    };
+    ReaderButtonDispatcher dispatch;
+    const ReaderButtonConfig dispatchConfig{};
+    std::vector<ReaderButtonAction> actions;
+    std::vector<Button> buttons;
+    std::vector<EventType> edges;
+    const auto drain = [&]() {
+      for (unsigned tick = 0; tick < 40; ++tick) {
+        inputManager.update();
+        input.poll();
+        Event event{};
+        while (queue.pop(event)) {
+          const auto action = dispatch.processEvent(event, millis(), dispatchConfig);
+          if (action == ReaderButtonAction::Next || action == ReaderButtonAction::Prev ||
+              action == ReaderButtonAction::NextChapter || action == ReaderButtonAction::PrevChapter) {
+            actions.push_back(action);
+          }
+          if ((event.type == EventType::ButtonPress || event.type == EventType::ButtonRelease) &&
+              (event.button == Button::Back || event.button == Button::Power || event.button == Button::Center)) {
+            buttons.push_back(event.button);
+            edges.push_back(event.type);
+          }
+        }
+      }
+    };
+    constexpr uint8_t next = 1u << InputManager::BTN_DOWN;
+    constexpr uint8_t left = 1u << (PAPYRIX_TARGET_STICKY ? InputManager::BTN_UP : InputManager::BTN_LEFT);
+    settle(next);
+    settle(0);
+    input.setPageButtonsBlocked(true);
+    settle(next);
+    settle(0);
+    input.setPageButtonsBlocked(false);
+    drain();
+    runner.expectTrue(actions == std::vector<ReaderButtonAction>{ReaderButtonAction::Next},
+                      "complete pre-wait tap survives without replaying wait taps");
+
+    actions.clear();
+    settle(next);
+    drain();
+    input.setPageButtonsBlocked(true);
+    settle(next);
+    input.setPageButtonsBlocked(false);
+    for (unsigned tick = 0; tick < 160; ++tick) stepSampler();
+    drain();
+    settle(0);
+    drain();
+    runner.expectTrue(actions.empty(), "held page button cannot repeat or navigate on its release");
+    settle(next);
+    settle(0);
+    drain();
+    runner.expectTrue(actions == std::vector<ReaderButtonAction>{ReaderButtonAction::Next},
+                      "fresh tap after a held release navigates once");
+
+    actions.clear();
+    input.setPageButtonsBlocked(true);
+    waitHeld.store(next);
+    input.setPageButtonsBlocked(false);
+    settle(next);
+    drain();
+    settle(0);
+    drain();
+    runner.expectTrue(actions.empty(), "unsampled press at completion still requires release");
+    settle(next);
+    settle(0);
+    drain();
+    runner.expectTrue(actions == std::vector<ReaderButtonAction>{ReaderButtonAction::Next},
+                      "fresh tap works after the late press releases");
+
+    actions.clear();
+    input.setPageButtonsBlocked(true);
+    settle(next | left);
+    input.setPageButtonsBlocked(false);
+    drain();
+    settle(left);
+    drain();
+    settle(next | left);
+    settle(left);
+    drain();
+    runner.expectTrue(actions == std::vector<ReaderButtonAction>{ReaderButtonAction::Next},
+                      "released page button can navigate while another button remains suppressed");
+    settle(0);
+    drain();
+    settle(left);
+    settle(0);
+    drain();
+    runner.expectTrue(actions == std::vector<ReaderButtonAction>{ReaderButtonAction::Next, ReaderButtonAction::Prev},
+                      "each held button requires its own release and fresh press");
+
+    for (unsigned tap = 0; tap < 20; ++tap) {
+      settle(next);
+      settle(0);
+      drain();
+    }
+    actions.clear();
+    buttons.clear();
+    edges.clear();
+    input.setPageButtonsBlocked(true);
+    for (unsigned tap = 0; tap < 40; ++tap) {
+      settle(next);
+      settle(0);
+      if ((!PAPYRIX_TARGET_STICKY && tap == 7) || tap == 20) {
+        settle(1u << (tap == 7 ? InputManager::BTN_BACK : InputManager::BTN_POWER));
+        settle(0);
+      }
+    }
+    input.setPageButtonsBlocked(false);
+    drain();
+    runner.expectTrue(actions.empty(), "blocked page taps cannot overflow into navigation");
+    const std::vector<Button> retainedButtons = PAPYRIX_TARGET_STICKY
+                                                   ? std::vector<Button>{Button::Power, Button::Power}
+                                                   : std::vector<Button>{Button::Back, Button::Back, Button::Power,
+                                                                         Button::Power};
+    const std::vector<EventType> retainedEdges =
+        PAPYRIX_TARGET_STICKY
+            ? std::vector<EventType>{EventType::ButtonPress, EventType::ButtonRelease}
+            : std::vector<EventType>{EventType::ButtonPress, EventType::ButtonRelease, EventType::ButtonPress,
+                                     EventType::ButtonRelease};
+    runner.expectTrue(buttons == retainedButtons && edges == retainedEdges,
+                      "wrapped queue keeps available Back and Power edges during blocked taps");
+
+    actions.clear();
+    buttons.clear();
+    edges.clear();
+    constexpr uint8_t firstHeld = 1u << (PAPYRIX_TARGET_STICKY ? InputManager::BTN_POWER : InputManager::BTN_BACK);
+    constexpr Button firstButton = PAPYRIX_TARGET_STICKY ? Button::Power : Button::Back;
+    settle(firstHeld);
+    settle(0);
+    for (unsigned tap = 0; tap < 15; ++tap) {
+      settle(next);
+      settle(0);
+    }
+    input.setPageButtonsBlocked(true);
+    settle(next);
+    settle(0);
+    input.setPageButtonsBlocked(false);
+    drain();
+    runner.expectTrue(buttons == std::vector<Button>{firstButton, firstButton} &&
+                          edges == std::vector<EventType>{EventType::ButtonPress, EventType::ButtonRelease},
+                      "suppression boundary preserves the first non-page tap in a full queue");
+    runner.expectTrue(actions == std::vector<ReaderButtonAction>(15, ReaderButtonAction::Next),
+                      "full pre-wait queue keeps every completed page tap");
+
+    Settings settings{};
+    mappedInputManager.setSettings(&settings);
+#if !PAPYRIX_TARGET_STICKY
+    for (bool reversed : {false, true}) {
+      settings.frontButtonLayout = reversed ? Settings::FrontLRBC : Settings::FrontBCLR;
+      settings.sideButtonLayout = reversed ? Settings::NextPrev : Settings::PrevNext;
+      const uint8_t frontNext = 1u << (reversed ? InputManager::BTN_CONFIRM : InputManager::BTN_RIGHT);
+      const uint8_t back = 1u << (reversed ? InputManager::BTN_LEFT : InputManager::BTN_BACK);
+      const uint8_t confirm = 1u << (reversed ? InputManager::BTN_RIGHT : InputManager::BTN_CONFIRM);
+      const uint8_t sideNext = 1u << (reversed ? InputManager::BTN_UP : InputManager::BTN_DOWN);
+      actions.clear();
+      buttons.clear();
+      input.setPageButtonsBlocked(true);
+      for (uint8_t key : {frontNext, sideNext, back, confirm}) {
+        settle(key);
+        settle(0);
+      }
+      input.setPageButtonsBlocked(false);
+      drain();
+      runner.expectTrue(actions.empty() &&
+                            buttons == std::vector<Button>{Button::Back, Button::Back, Button::Center, Button::Center},
+                        "configured page mapping keeps Back and Confirm available");
+      settle(frontNext);
+      settle(0);
+      settle(sideNext);
+      settle(0);
+      drain();
+      runner.expectTrue(actions == std::vector<ReaderButtonAction>{ReaderButtonAction::Next, ReaderButtonAction::Next},
+                        "fresh front and side taps follow the configured layouts");
+    }
+#endif
+    mappedInputManager.setSettings(nullptr);
+    runner.expectFalse(stepBroken, "cache-wait sampling remains deterministic");
   } else {
     runner.expectTrue(false, "sampler enters lock-step for the idle-gap sweep");
   }

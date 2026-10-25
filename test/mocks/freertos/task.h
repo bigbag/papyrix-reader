@@ -1,5 +1,6 @@
 #pragma once
 
+#include <esp_cpu.h>
 #include <atomic>
 #include <condition_variable>
 #include <cstring>
@@ -17,6 +18,7 @@ using StackType_t = uint32_t;
 
 inline UBaseType_t mockTaskStackHighWaterMarkBytes = 4096;
 inline UBaseType_t uxTaskGetStackHighWaterMark(TaskHandle_t) { return mockTaskStackHighWaterMarkBytes; }
+inline uint8_t* pxTaskGetStackStart(TaskHandle_t) { return reinterpret_cast<uint8_t*>(mockTaskStackBase); }
 inline const char* pcTaskGetName(TaskHandle_t) { return "test"; }
 
 // Mock task structure

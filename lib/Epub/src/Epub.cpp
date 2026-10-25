@@ -23,6 +23,7 @@
 
 namespace {
 constexpr size_t MIN_HEAP_FOR_TOC = 20 * 1024;
+constexpr size_t MIN_HEAP_FOR_CSS_PARSING = 96 * 1024;
 constexpr int MAX_TOC_RECOVERY_ATTEMPTS = 3;
 constexpr uint8_t TOC_RETRY_NO_TOC = 0xFF;
 constexpr char tocRetryFile[] = "/toc.retry";
@@ -450,7 +451,6 @@ bool Epub::parseCssFiles() {
 
   // Skip CSS that would risk OOM during parsing or that exceeds the parser's cap.
   // Style map can reach ~78KB at 512 rules (84 bytes/CssStyle + map overhead).
-  constexpr size_t MIN_HEAP_FOR_CSS_PARSING = 96 * 1024;
   constexpr size_t MAX_CSS_FILE_SIZE = 64 * 1024;
 
   for (const auto& cssHref : cssFiles_) {
@@ -511,6 +511,18 @@ bool Epub::load(const bool buildIfMissing) {
       if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
         LOG_ERR(TAG, "Cache became invalid during TOC recovery");
         return false;
+      }
+      // book.bin does not store stylesheet paths.
+      if (cssFiles_.empty() && heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) >= MIN_HEAP_FOR_CSS_PARSING) {
+        BookMetadataCache::BookMetadata cssMetadata;
+        if (!parseContentOpf(cssMetadata, true)) {
+          LOG_ERR(TAG, "Could not read CSS list from source, continuing without external styles");
+        }
+      }
+      if (!cssFiles_.empty()) {
+        parseCssFiles();
+        std::vector<std::string> tmp;
+        cssFiles_.swap(tmp);
       }
     }
     LOG_INF(TAG, "Loaded ePub: %s", filepath.c_str());

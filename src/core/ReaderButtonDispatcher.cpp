@@ -19,6 +19,12 @@ ReaderButtonAction ReaderButtonDispatcher::processEvent(const Event& e, const ui
     return config.reversePageZones ? ReaderButtonAction::Prev : ReaderButtonAction::Next;
   }
   switch (e.type) {
+    case EventType::ButtonCancel:
+      if (e.button == Button::Left || e.button == Button::Right || e.button == Button::Up || e.button == Button::Down) {
+        holdNavigated_ = false;
+      }
+      return ReaderButtonAction::None;
+
     case EventType::ButtonPress:
       switch (e.button) {
         case Button::Center:

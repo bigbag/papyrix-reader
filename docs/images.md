@@ -170,7 +170,7 @@ This makes sure that some damaged images do not prevent you from reading the rem
 
 ### Heap and Stack Checks
 
-The converter checks the lowest recorded free stack of the current task. It stops below 4096 bytes on both ESP32-S3 and ESP32-C3. BMP conversion also checks row-buffer memory when it needs more than 1024 bytes. It stops if the estimated buffers need more than 80% of the largest free 8-bit heap block.
+The converter checks the current free stack from the CPU stack pointer and the task's stack base. It stops below 4096 bytes on both ESP32-S3 and ESP32-C3. An earlier low stack watermark does not block conversion after the stack space becomes available again. BMP conversion also checks row-buffer memory when it needs more than 1024 bytes. It stops if the estimated buffers need more than 80% of the largest free 8-bit heap block.
 
 The ESP32-S3 reader and cache tasks each use a 20 KiB stack. The ESP32-C3 reader and cache tasks each use a 12 KiB stack.
 

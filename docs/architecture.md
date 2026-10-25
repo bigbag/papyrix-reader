@@ -32,6 +32,8 @@ The device restarts when it changes boot modes.
 Persistent state records the book and reading position.
 The reader records the resume target after a successful page render. If the settings save fails, it retries after the next successful render. It adds the book to recent books after the save succeeds. A pending open uses a separate path. If the reader restarts before it saves the resume target, the next boot returns to the UI. The previous resume target remains available.
 
+Cancelling full-book indexing restarts the device in UI mode. It keeps the return destination and does not replace saved reading progress before the first page renders.
+
 ## Hardware
 
 `lib/BoardSupport` owns board profiles and hardware selection.
@@ -76,6 +78,9 @@ A fixed queue stores up to 32 state changes with their timestamps.
 On overflow, the queue discards the oldest change and retains the newest state.
 The main loop consumes one change per update and remains the sole producer of button events.
 Pending changes suppress hold events until input processing reaches the current state.
+
+Input suppression keeps completed taps that precede the wait and cancels incomplete page gestures. A page button held when suppression ends needs a release and a new press before it can navigate again. Suppression does not remove other button events.
+
 ADC button, battery, and USB-supply reads share one mutex.
 Startup checks sample directly before the task starts.
 Shutdown stops the task before GPIO configuration changes.

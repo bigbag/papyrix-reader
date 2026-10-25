@@ -41,11 +41,11 @@ int main() {
 
   ImageConvertConfig config;
   config.logTag = "TEST";
-  mockTaskStackHighWaterMarkBytes = 2048;
+  mockTaskFreeStackBytes = 2048;
   runner.expectFalse(ImageConverterFactory::convertToBmp("/wrong.png", "/low-stack.bmp", config),
                      "2 KB of actual free stack prevents image conversion");
   runner.expectFalse(SdMan.exists("/low-stack.bmp"), "low-stack image is not published");
-  mockTaskStackHighWaterMarkBytes = 4096;
+  mockTaskFreeStackBytes = 4096;
 
   // Invalid BMP payload must be rejected by the real converter (not raw-copied)
   runner.expectFalse(ImageConverterFactory::convertToBmp("/source.bmp.bin", "/copy.bmp", config),

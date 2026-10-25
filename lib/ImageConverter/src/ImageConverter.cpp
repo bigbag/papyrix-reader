@@ -12,10 +12,12 @@
 #if PAPYRIX_CAP_PROGRESSIVE_JPEG
 #include "ProgressiveJpegImageConverter.h"
 #endif
+#include <esp_cpu.h>
 #include <esp_heap_caps.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include <cstdint>
 #include <cstring>
 #include <memory>
 
@@ -219,10 +221,12 @@ ImageFormat ImageConverterFactory::detectFormat(const std::string& filePath) {
 
 bool ImageConverterFactory::convertToBmp(const std::string& inputPath, const std::string& outputPath,
                                          const ImageConvertConfig& config) {
-  // PNG and JPEG decoding can exhaust a task stack after a deep EPUB parse.
-  // ESP-IDF reports the task's lowest recorded free stack in bytes.
+  // The watermark retains earlier peaks, not the stack space available now.
+  static_assert(portSTACK_GROWTH == -1, "Image stack checks require a downward-growing stack");
   constexpr size_t kMinImageStackBytes = 4096;
-  const size_t freeStackBytes = uxTaskGetStackHighWaterMark(nullptr);
+  const uintptr_t stackBase = reinterpret_cast<uintptr_t>(pxTaskGetStackStart(nullptr));
+  const uintptr_t stackPointer = reinterpret_cast<uintptr_t>(esp_cpu_get_sp());
+  const size_t freeStackBytes = stackBase != 0 && stackPointer > stackBase ? stackPointer - stackBase : 0;
   if (freeStackBytes < kMinImageStackBytes) {
     LOG_WRN(config.logTag, "Skip image convert (stack=%zu bytes task=%s): %s", freeStackBytes, pcTaskGetName(nullptr),
             inputPath.c_str());

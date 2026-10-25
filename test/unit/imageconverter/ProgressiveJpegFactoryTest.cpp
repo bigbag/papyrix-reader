@@ -30,7 +30,7 @@ bool blackBmp(const std::string& bytes, bool oneBit) {
 
 int main() {
   TestUtils::TestRunner runner("ProgressiveJpegFactory");
-  mockTaskStackHighWaterMarkBytes = 8192;
+  mockTaskFreeStackBytes = 8192;
   for (bool oneBit : {false, true}) {
     for (const char* name : {"black.jpg", "black-baseline.jpg", "black.png", "black.bmp"}) {
       SdMan.reset();
@@ -65,14 +65,14 @@ int main() {
     if (fault == 2) SdMan.setReadLimit(12);
     if (fault == 3) config.validateOutput = [](const std::string&) { return false; };
     if (fault == 4) config.shouldAbort = [] { return true; };
-    if (fault == 5) mockTaskStackHighWaterMarkBytes = 2048;
+    if (fault == 5) mockTaskFreeStackBytes = 2048;
     if (fault == 6) config.shouldAbort = [&] { return ++polls > 3; };
     runner.expectFalse(ImageConverterFactory::convertToBmp("/input.jpg", "/output.bmp", config),
                        "conversion fault blocks publication");
     runner.expectEq(std::string("previous-output"), SdMan.open("/output.bmp").getBuffer(),
                     "fault preserves completed output");
     runner.expectFalse(SdMan.exists("/output.bmp.part"), "fault removes partial output");
-    mockTaskStackHighWaterMarkBytes = 8192;
+    mockTaskFreeStackBytes = 8192;
   }
   for (bool oneBit : {false, true}) {
     SdMan.reset();

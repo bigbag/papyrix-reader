@@ -359,15 +359,13 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 27
+### Version 28
 
-PapyriX rebuilds section caches with an unsupported format version when it opens the book.
+PapyriX rebuilds section caches with an unsupported format version when it opens the book. This version rebuilds layouts that can lack external EPUB styles. PapyriX keeps saved reading progress and bookmarks.
 
-The page-count index (`metrics.bin`) uses version 8.
-Anchor maps (`.anchors`) use version 5.
-PapyriX rejects indexes with an unsupported version before it uses their page counts or anchor positions.
-It rebuilds a section cache if its anchor map is missing or has an invalid header.
-A valid empty anchor map does not cause a rebuild.
+The page-count index (`metrics.bin`) uses version 9. Anchor maps (`.anchors`) use version 6. PapyriX rejects indexes with an unsupported version before it uses their page counts or anchor positions.
+
+It rebuilds a section cache if its anchor map is missing or has an invalid header. A valid empty anchor map does not cause a rebuild.
 
 ImHex Pattern:
 
@@ -377,7 +375,7 @@ import std.string;
 import std.core;
 
 // === Configuration ===
-#define EXPECTED_VERSION 27
+#define EXPECTED_VERSION 28
 #define MAX_STRING_LENGTH 65535
 
 // === String Structure ===

@@ -182,7 +182,7 @@ class FsFile : public Print {
     return result;
   }
 
-  FsFile openNextFile() {
+  FsFile openNextFile(int = O_RDONLY) {
     FsFile entry;
     if (!isOpen_ || !isDirectory_ || directoryIndex_ >= directoryEntries_.size()) return entry;
     entry.setDirectoryEntry(directoryEntries_[directoryIndex_++]);

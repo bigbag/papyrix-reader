@@ -165,8 +165,10 @@ test-tools: ## Host-tool tests (packaging, HTML, clock simulators)
 	@python3 test/scripts/test_sleep_cancellation.py
 	@python3 test/scripts/test_sleep_abort.py
 	@python3 test/scripts/test_reader_resume.py
+	@python3 test/scripts/test_reader_button_cancel.py
 	@python3 test/scripts/test_reader_layout_indexes.py
 	@python3 test/scripts/test_reader_background_cache.py
+	@python3 test/scripts/test_reader_full_index.py
 	@python3 test/scripts/test_clock_app.py
 	@python3 test/scripts/test_clock_faces.py
 	@python3 test/scripts/test_clock_display.py

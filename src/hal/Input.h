@@ -31,6 +31,7 @@ class Input {
 
   // Call each frame to check buttons and push events
   void poll();
+  void setPageButtonsBlocked(bool blocked);
 
   // Time since last input activity (ms)
   uint32_t idleTimeMs() const;

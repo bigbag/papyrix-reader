@@ -15,6 +15,7 @@ enum class EventType : uint8_t {
   ButtonLongPress,
   ButtonRepeat,
   ButtonRelease,
+  ButtonCancel,
   Tap,
 
   // System events
@@ -64,6 +65,13 @@ struct Event {
   static Event buttonRelease(Button btn) {
     Event e;
     e.type = EventType::ButtonRelease;
+    e.button = btn;
+    return e;
+  }
+
+  static Event buttonCancel(Button btn) {
+    Event e;
+    e.type = EventType::ButtonCancel;
     e.button = btn;
     return e;
   }

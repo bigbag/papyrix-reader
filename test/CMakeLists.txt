@@ -230,6 +230,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
       add_executable(${INPUT_TEST} ${TEST_SRC}
         ${PROJECT_ROOT}/src/hal/Input.cpp
         ${PROJECT_ROOT}/src/MappedInputManager.cpp
+        ${PROJECT_ROOT}/src/core/ReaderButtonDispatcher.cpp
         ${PROJECT_ROOT}/lib/InputManager/src/InputManager.cpp
         ${PROJECT_ROOT}/lib/AsyncTask/src/BackgroundTask.cpp
         ${PROJECT_ROOT}/lib/BoardSupport/src/TouchBackend.cpp
