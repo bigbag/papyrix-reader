@@ -33,6 +33,7 @@ class ParsedText {
   std::list<std::string> words;
   std::list<WordInfo> wordInfos;
   uint32_t nextSourceIndex_ = 0;
+  size_t pendingWindowWords_ = 0;
   TextBlock::BLOCK_STYLE style;
   uint8_t indentLevel;
   bool indentApplied = false;

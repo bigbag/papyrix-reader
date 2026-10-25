@@ -842,12 +842,7 @@ bool ChapterHtmlSlimParser::initParser() {
     return false;
   }
 
-  if (byteRangeMode_) {
-    file_.seek(rangeOffset_);
-    totalSize_ = rangeLength_;
-  } else {
-    totalSize_ = file_.size();
-  }
+  totalSize_ = file_.size();
   bytesRead_ = 0;
   lastProgress_ = -1;
   pagesCreated_ = 0;
@@ -873,17 +868,6 @@ bool ChapterHtmlSlimParser::initParser() {
 bool ChapterHtmlSlimParser::parseLoop() {
   int done;
 
-  // Byte-range mode: feed virtual prologue to Expat before body content
-  if (byteRangeMode_ && !prologueXml_.empty() && bytesRead_ == 0) {
-    if (XML_Parse(xmlParser_, prologueXml_.c_str(), static_cast<int>(prologueXml_.size()), 0) == XML_STATUS_ERROR) {
-      LOG_ERR(TAG, "Prologue parse error: %s", XML_ErrorString(XML_GetErrorCode(xmlParser_)));
-      cleanupParser();
-      return false;
-    }
-  }
-
-  const size_t bodyLimit = byteRangeMode_ ? rangeLength_ : 0;
-
   do {
     if (shouldAbort()) {
       LOG_DBG(TAG, "Aborting parse, pages created: %u", pagesCreated_);
@@ -901,20 +885,13 @@ bool ChapterHtmlSlimParser::parseLoop() {
       return false;
     }
 
-    size_t maxRead = kReadChunkSize;
-    if (byteRangeMode_ && bodyLimit > 0) {
-      size_t remaining = bodyLimit - bytesRead_;
-      if (remaining < maxRead) maxRead = remaining;
-    }
-
-    size_t len = file_.read(static_cast<uint8_t*>(buf), maxRead);
-
-    if (len == 0) {
-      if (byteRangeMode_) break;
+    const int bytesRead = file_.read(static_cast<uint8_t*>(buf), kReadChunkSize);
+    if (bytesRead <= 0) {
       LOG_ERR(TAG, "File read error");
       cleanupParser();
       return false;
     }
+    size_t len = static_cast<size_t>(bytesRead);
 
     const size_t originalLen = len;
     len = dataUriStripper_.strip(static_cast<char*>(buf), len, kReadChunkSize + kDataUriPrefixSize);
@@ -928,13 +905,9 @@ bool ChapterHtmlSlimParser::parseLoop() {
       }
     }
 
-    if (byteRangeMode_) {
-      done = (bytesRead_ >= bodyLimit) ? 1 : 0;
-    } else {
-      done = file_.available() == 0;
-    }
+    done = file_.available() == 0;
 
-    const auto status = XML_ParseBuffer(xmlParser_, static_cast<int>(len), done && epilogueXml_.empty());
+    const auto status = XML_ParseBuffer(xmlParser_, static_cast<int>(len), done);
     if (status == XML_STATUS_ERROR) {
       LOG_ERR(TAG, "Parse error at line %lu: %s", XML_GetCurrentLineNumber(xmlParser_),
               XML_ErrorString(XML_GetErrorCode(xmlParser_)));
@@ -955,39 +928,20 @@ bool ChapterHtmlSlimParser::parseLoop() {
     // By splitting here, we save that stack space - critical for external fonts which
     // add extra frames through getExternalGlyphWidth() → ExternalFont::getGlyph() (SD I/O).
     if (pendingEmergencySplit_ && currentTextBlock && !currentTextBlock->isEmpty()) {
-      const size_t freeHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
-      if (freeHeap < MIN_FREE_HEAP) {
-        LOG_ERR(TAG, "Low memory (%zu), deferring emergency split", freeHeap);
-      } else {
-        pendingEmergencySplit_ = false;
-        LOG_DBG(TAG, "Text block too long (%zu words), splitting", currentTextBlock->size());
-        currentTextBlock->setUseGreedyBreaking(true);
-        const int inset = currentBlockStyle_.totalHorizontalInset();
-        const uint16_t splitWidth =
-            (inset < config.viewportWidth) ? static_cast<uint16_t>(config.viewportWidth - inset) : config.viewportWidth;
-        currentLeftInset_ = currentBlockStyle_.leftInset();
-        const uint32_t layoutStarted = perfMsNow();
-        const bool layoutCompleted = currentTextBlock->layoutAndExtractLines(
-            renderer, config.fontId, splitWidth,
-            [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); }, true,
-            [this]() -> bool { return stopRequested_ || shouldAbort(); }, buildScratch_);
-        readerPerfLog("epub-layout", layoutStarted);
-        if (chapter_html::layoutWasAborted(layoutCompleted, stopRequested_)) {
-          aborted_ = true;
-        }
-      }
+      makeEmergencyPages();
     }
 
     if (aborted_) {
       cleanupParser();
       return true;
     }
+    if (stopRequested_) {
+      suspended_ = true;
+      xmlDone_ = done;
+      file_.close();
+      return true;
+    }
   } while (!done);
-
-  // Byte-range mode: feed virtual epilogue to close the XML document
-  if (byteRangeMode_ && !epilogueXml_.empty() && !aborted_) {
-    XML_Parse(xmlParser_, epilogueXml_.c_str(), static_cast<int>(epilogueXml_.size()), 1);
-  }
 
   // Reached end of file — finalize unless cancellation already stopped parsing.
   // Process last page if there is still text.
@@ -1047,7 +1001,11 @@ bool ChapterHtmlSlimParser::resumeParsing() {
     }
 
     if (currentTextBlock && !currentTextBlock->isEmpty()) {
-      makePages();
+      if (pendingEmergencySplit_) {
+        makeEmergencyPages();
+      } else {
+        makePages();
+      }
       if (aborted_) {
         cleanupParser();
         return true;
@@ -1073,7 +1031,10 @@ bool ChapterHtmlSlimParser::resumeParsing() {
     cleanupParser();
     return false;
   }
-  file_.seek(byteRangeMode_ ? (rangeOffset_ + bytesRead_) : bytesRead_);
+  if (!file_.seek(bytesRead_)) {
+    cleanupParser();
+    return false;
+  }
 
   // Reset per-extend state
   parseStartTime_ = millis();
@@ -1089,7 +1050,11 @@ bool ChapterHtmlSlimParser::resumeParsing() {
   // previous batch hit its page limit. Without this, words after the page-break
   // point in a paragraph are silently lost.
   if (currentTextBlock && !currentTextBlock->isEmpty()) {
-    makePages();
+    if (pendingEmergencySplit_) {
+      makeEmergencyPages();
+    } else {
+      makePages();
+    }
     if (aborted_) {
       cleanupParser();
       return true;
@@ -1271,11 +1236,33 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
   bindAnchorsInLine(*line, pagesCreated_);
 }
 
+void ChapterHtmlSlimParser::makeEmergencyPages() {
+  const size_t freeHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+  if (freeHeap < MIN_FREE_HEAP) {
+    LOG_ERR(TAG, "Low memory (%zu), aborting emergency split", freeHeap);
+    aborted_ = true;
+    return;
+  }
+  currentTextBlock->setUseGreedyBreaking(true);
+  const int inset = currentBlockStyle_.totalHorizontalInset();
+  const uint16_t width =
+      (inset < config.viewportWidth) ? static_cast<uint16_t>(config.viewportWidth - inset) : config.viewportWidth;
+  currentLeftInset_ = currentBlockStyle_.leftInset();
+  const uint32_t layoutStarted = perfMsNow();
+  const bool completed = currentTextBlock->layoutAndExtractLines(
+      renderer, config.fontId, width, [this](const std::shared_ptr<TextBlock>& line) { addLineToPage(line); }, true,
+      [this]() -> bool { return stopRequested_ || shouldAbort(); }, buildScratch_);
+  readerPerfLog("epub-layout", layoutStarted);
+  pendingEmergencySplit_ = stopRequested_ && !currentTextBlock->isEmpty();
+  if (chapter_html::layoutWasAborted(completed, stopRequested_)) aborted_ = true;
+}
+
 void ChapterHtmlSlimParser::makePages() {
   if (!currentTextBlock) {
     LOG_ERR(TAG, "No text block to make pages for");
     return;
   }
+  pendingEmergencySplit_ = false;
 
   flushPartWordBuffer();
 
@@ -1321,7 +1308,7 @@ void ChapterHtmlSlimParser::makePages() {
   }
 
   // Apply bottom spacing from CSS block style
-  if (!stopRequested_ && currentBlockStyle_.bottomInset() > 0) {
+  if ((!stopRequested_ || currentTextBlock->isEmpty()) && currentBlockStyle_.bottomInset() > 0) {
     currentPageNextY += currentBlockStyle_.bottomInset();
   }
 
@@ -1355,9 +1342,9 @@ void ChapterHtmlSlimParser::makePages() {
   }
   // If stopRequested_ with remaining words, keep skipParagraphSpacing_ for resume.
 
-  // Reset only when fully drained — suspended blocks keep their style for resumeParsing().
+  // Keep the block style while a suspended block has unplaced words.
   // Mid-block continuations (<br>, pre newlines) re-apply horizontal insets after this.
-  if (!stopRequested_) {
+  if (!stopRequested_ || currentTextBlock->isEmpty()) {
     currentBlockStyle_ = BlockStyle{};
   }
 }

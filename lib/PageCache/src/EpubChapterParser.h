@@ -45,18 +45,10 @@ class EpubChapterParser : public ContentParser {
   uint32_t pagesCreated_ = 0;
   bool hitMaxPages_ = false;
 
-  // Chapter-wide anchors from parsed sub-sections.
+  // Retain anchors after the live parser closes.
   std::vector<std::pair<std::string, uint32_t>> anchorMap_;
-  size_t capturedSubSectionAnchors_ = 0;
-
-  // Sub-section chaining for on-demand spine splitting
-  int currentSubSection_ = 0;
-  int totalSubSections_ = 0;
-  int subSectionPageOffset_ = 0;
-  uint32_t currentSubSectionPages_ = 0;
 
   void cleanupTempFiles();
-  void captureSubSectionAnchors();
 
  public:
   EpubChapterParser(std::shared_ptr<Epub> epub, int spineIndex, GfxRenderer& renderer, const RenderConfig& config,

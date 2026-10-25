@@ -64,6 +64,8 @@ class SDCardManager {
     return ::mkdir(path, 0755) == 0;
   }
 
+  bool ensureDirectoryExists(const char* path) { return mkdir(path); }
+
   static SDCardManager& getInstance() {
     static SDCardManager instance;
     return instance;

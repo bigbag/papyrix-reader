@@ -133,6 +133,7 @@ class ChapterHtmlSlimParser {
   void flushPartWordBuffer();
   void reapplyContinuationInsets();
   void makePages();
+  void makeEmergencyPages();
   void deferAnchor(std::string id);
   void noteAnchorWord(uint32_t sourceIndex);
   void bindAnchorsInLine(const TextBlock& line, uint32_t page);
@@ -153,13 +154,6 @@ class ChapterHtmlSlimParser {
   int lastProgress_ = -1;
   bool suspended_ = false;  // True when parser is suspended mid-parse (can resume)
   bool xmlDone_ = false;    // XML parser finished but content remains to flush
-
-  // Byte-range mode: read from a subrange of a larger file with virtual prologue/epilogue
-  uint32_t rangeOffset_ = 0;
-  uint32_t rangeLength_ = 0;
-  std::string prologueXml_;
-  std::string epilogueXml_;
-  bool byteRangeMode_ = false;
 
   bool initParser();
   bool parseLoop();
@@ -184,14 +178,6 @@ class ChapterHtmlSlimParser {
         cssParser_(cssParser),
         externalAbortCallback_(externalAbortCallback) {}
   ~ChapterHtmlSlimParser();
-
-  void setByteRange(uint32_t offset, uint32_t length, const std::string& prologue, const std::string& epilogue) {
-    byteRangeMode_ = true;
-    rangeOffset_ = offset;
-    rangeLength_ = length;
-    prologueXml_ = prologue;
-    epilogueXml_ = epilogue;
-  }
 
   void setBuildScratch(BuildArena* scratch) { buildScratch_ = scratch; }
   void setExternalAbortCallback(const std::function<bool()>& callback) { externalAbortCallback_ = callback; }

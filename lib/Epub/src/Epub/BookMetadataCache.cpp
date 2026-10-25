@@ -8,7 +8,7 @@
 #define TAG "META_CACHE"
 
 namespace {
-constexpr uint8_t BOOK_CACHE_VERSION = 7;
+constexpr uint8_t BOOK_CACHE_VERSION = 8;
 constexpr char bookBinFile[] = "/book.bin";
 constexpr char bookBinBackupFile[] = "/book.bin.bak";
 constexpr char tmpSpineBinFile[] = "/spine.bin.tmp";

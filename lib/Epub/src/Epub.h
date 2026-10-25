@@ -7,7 +7,6 @@
 #include <functional>
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "Epub/BookMetadataCache.h"
@@ -18,23 +17,8 @@ class ZipFile;
 
 class Epub {
  public:
-  struct SectionRange {
-    uint32_t startOffset = 0;
-    uint32_t endOffset = 0;
-  };
-
-  struct SpineSplit {
-    int originalSpineIndex = -1;
-    std::string originalHref;
-    std::string chapterBasePath;
-    std::string headHtml;
-    std::vector<SectionRange> sections;
-    std::unordered_map<std::string, uint32_t> anchorByteOffsets;
-  };
-
-  static constexpr size_t MAX_SECTION_SIZE = 64 * 1024;
-  static constexpr size_t MIN_SECTION_SIZE = 1024;
-  static constexpr size_t MIN_HEAP_FOR_SCAN = 48 * 1024;
+  static constexpr size_t MIN_CACHED_CHAPTER_SIZE = 64 * 1024;
+  static constexpr size_t MIN_HEAP_FOR_PREPARE = 48 * 1024;
 
  private:
   std::string tocNcxItem;
@@ -55,10 +39,6 @@ class Epub {
   void maybeRecoverLostToc();
   void recoverLostToc();
 
-  bool scanSectionBoundaries(const std::string& htmlPath, SpineSplit& result, int splitDepth, uint8_t* ioBuf) const;
-  bool extractSections(const std::string& htmlPath, const SpineSplit& split, uint8_t* ioBuf);
-  bool rebuildBookBinWithSplits(const std::vector<SpineSplit>& splits);
-  std::string sectionFilePath(int originalSpineIndex, int sectionIndex) const;
   home_thumbnail::Result extractCoverSource(const std::string& itemHref,
                                             const std::function<bool()>& shouldAbort) const;
   bool generateCoverFromItem(const std::string& itemHref, bool use1BitDithering,
@@ -72,11 +52,8 @@ class Epub {
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true);
   bool loadMetadataOnly();
-  bool splitLargeSpineItems(uint8_t* decompressBuffer = nullptr);
-  bool splitSingleSpineItem(int spineIndex, uint8_t* decompressBuffer = nullptr);
-  int getVirtualSectionCount(int spineIndex) const;
-  std::string getVirtualSectionPath(int spineIndex, int sectionIndex) const;
-  std::string getSectionIndexPath(int spineIndex) const;
+  bool prepareChapterHtml(int spineIndex, uint32_t sourceFingerprint, std::string& preparedPath,
+                          uint8_t* decompressBuffer, BuildArena* scratch, const std::function<bool()>& shouldAbort);
   bool clearCache() const;
   void setupCacheDir() const;
   const std::string& getCachePath() const;

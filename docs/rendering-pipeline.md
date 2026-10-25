@@ -89,7 +89,11 @@ The previous header remains valid if extension stops before that update.
 EPUB caches chapters separately.
 Markdown, FB2, HTML, and TXT use a page cache for the document.
 EPUB partial and complete cache saves keep anchors in source order.
-Split-spine anchors use chapter-wide page indexes.
+Each original EPUB spine item uses one XML stream with 4 KiB input blocks.
+Large chapters use complete normalized XHTML files on the SD card.
+The parser keeps paragraph and page state across input blocks.
+It does not add XML wrappers or page breaks at byte boundaries.
+Metadata, page caches, page-count indexes, and anchor maps rebuild through version checks.
 See [file formats](file-formats.md) for record layouts.
 
 ## Cache Scheduling
@@ -104,6 +108,15 @@ The reader uses the stored page count to select the last page.
 Background caching extends the cache while the user reads.
 Cancellation uses `AbortCallback`.
 The background task deletes itself after it stops.
+Cancellation after setup keeps a compatible cache that has already loaded.
+The next page turn can keep the live parser instead of parsing the chapter again.
+The live parser keeps its bounded text-layout window, buffered word, and block spacing across batch stops, including the final input block.
+Layout windows can end inside a CJK source word.
+The parser clears completed block styles before it continues after an image.
+If memory is too low for layout, the parser keeps the chapter incomplete.
+After a restart, the parser reads the chapter from the beginning and skips pages already in the cache.
+This replay cost grows with the cached part of the chapter.
+Page progress resets the parser timeout during replay.
 
 The background task owns the parser and page cache while it runs.
 The main thread accesses them only after the task stops.

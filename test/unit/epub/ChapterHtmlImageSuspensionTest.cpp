@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "platform_stubs.h"
 #include "test_utils.h"
 
 uint8_t GfxRenderer::frameBuffer_[papyrix::hal::Display::BUFFER_SIZE];
@@ -180,6 +181,81 @@ int main() {
         }
       }
     }
+  }
+
+  std::string spacedWords;
+  for (unsigned count = 1; count <= 40; ++count) {
+    spacedWords += "one two three four five ";
+    const auto body = "<p style=\"margin-bottom:28px\">" + spacedWords + "</p>" + filler(20);
+    Pages reference;
+    Pages batched;
+    const auto label = "bottom spacing boundary " + std::to_string(count);
+    runner.expectTrue(parse(renderer, config, body, 0, reference), label + " parses");
+    runner.expectTrue(parse(renderer, config, body, 1, batched), label + " resumes");
+    runner.expectTrue(snapshot(batched) == snapshot(reference), label + " retains spacing and page positions");
+  }
+
+  {
+    std::string body = "<p style=\"margin-top:28px\">";
+    for (unsigned i = 0; i < 800; ++i) body += "aa ";
+    body += "</p>";
+    Pages reference;
+    runner.expectTrue(parse(renderer, config, body, 0, reference), "final-buffer paragraph parses");
+    for (unsigned batch : {1U, 5U}) {
+      Pages batched;
+      runner.expectTrue(parse(renderer, config, body, batch, batched), "final-buffer paragraph resumes");
+      runner.expectTrue(snapshot(batched) == snapshot(reference), "final-buffer resume preserves paragraph spacing");
+    }
+    SdMan.registerFile(CHAPTER, "<html><body>" + body + "</body></html>");
+    unsigned committed = 0;
+    ChapterHtmlSlimParser parser(CHAPTER, renderer, config, [&](auto) {
+      ++committed;
+      return false;
+    });
+    runner.expectTrue(parser.parseAndBuildPages() && parser.isSuspended(), "final-buffer layout suspends with words");
+    const unsigned savedCount = committed;
+    testSetLargestFreeBlock(1024);
+    const bool resumed = parser.resumeParsing();
+    testResetLargestFreeBlock();
+    runner.expectTrue(resumed && parser.wasAborted(), "low memory cannot complete unfinished EOF layout");
+    runner.expectEq(savedCount, committed, "low-memory EOF resume does not publish a final page");
+  }
+
+  {
+    std::string body = "<p style=\"margin-bottom:28px\">";
+    for (unsigned i = 0; i < 800; ++i) body += "aa ";
+    body += "</p><img src=\"small.png\"/>" + filler(2);
+    Pages reference;
+    runner.expectTrue(parse(renderer, config, body, 0, reference), "large block before image parses");
+    for (unsigned batch : {1U, 5U}) {
+      Pages batched;
+      runner.expectTrue(parse(renderer, config, body, batch, batched), "large block before image resumes");
+      runner.expectTrue(snapshot(batched) == snapshot(reference), "image retains spacing after a scheduled split");
+    }
+  }
+
+  {
+    // The first input block ends when emergency layout starts a new page.
+    std::string body = "<p data-pad=\"" + std::string(31, 'x') + "\">";
+    for (unsigned i = 0; i < 1346; ++i) body += "aa ";
+    for (unsigned i = 0; i < 500; ++i) body += "elongated ";
+    body += "</p>";
+    Pages reference;
+    Pages batched;
+    runner.expectTrue(parse(renderer, config, body, 0, reference), "read-boundary paragraph parses");
+    runner.expectTrue(parse(renderer, config, body, 1, batched), "read-boundary paragraph resumes");
+    runner.expectTrue(snapshot(batched) == snapshot(reference), "drained emergency split does not split later text");
+  }
+
+  {
+    std::string body = "<p style=\"margin-bottom:14px\">";
+    for (unsigned i = 0; i < 126; ++i) body += "aa ";
+    body += "</p><img src=\"small.png\"/>tailword<p>afterword</p>" + filler(2);
+    Pages reference;
+    Pages batched;
+    runner.expectTrue(parse(renderer, config, body, 0, reference), "drained block before image parses");
+    runner.expectTrue(parse(renderer, config, body, 1, batched), "drained block before image resumes");
+    runner.expectTrue(snapshot(batched) == snapshot(reference), "drained block applies bottom spacing only once");
   }
 
   const auto body = filler(6) + "<div>first<img src=\"tall.png\"/></div>" + filler(6) +

@@ -1,7 +1,6 @@
 // Production Epub::load() and BookMetadataCache TOC recovery checks. Uses real
 // stored-entry EPUB archives on the mock SD card.
 #include <Epub.h>
-#include <HtmlSplitter.h>
 #include <SDCardManager.h>
 #include <platform_stubs.h>
 
@@ -254,16 +253,11 @@ int main() {
       runner.expectEq(0, cacheOnly.getTocItemsCount(), "A_CacheOnly_DoesNotRecover");
     }
 
-    // A split spine sidecar must survive the recovery.
-    const std::string sections = first.getCachePath() + "/sections/";
-    std::string body;
-    for (int i = 0; i < 40; ++i) body += "<p>" + std::string(1000, 'x') + "</p>\n";
-    SdMan.registerFile(sections + "0.body", body);
-    runner.expectTrue(html5::scanSectionIndex(sections + "0.body", sections + "0.idx", 0, body.size(), 24 * 1024, ""),
-                      "A_Split_IndexCreated");
-    Epub splitBefore("/books/low.epub", "/cacheA");
-    const int sectionsBefore = splitBefore.load(false) ? splitBefore.getVirtualSectionCount(0) : -1;
-    runner.expectTrue(sectionsBefore >= 2, "A_Split_MultipleSections");
+    const auto hrefsBefore = spineHrefs(first);
+    std::string preparedPath;
+    runner.expectTrue(first.prepareChapterHtml(0, 11, preparedPath, nullptr, nullptr, nullptr),
+                      "A_PrepareCompleteChapter");
+    const std::string preparedContent = SdMan.getWrittenData(preparedPath);
 
     // Healthy open recovers navigation from the book file.
     Epub healthy("/books/low.epub", "/cacheA");
@@ -271,10 +265,9 @@ int main() {
     runner.expectEq(4, healthy.getTocItemsCount(), "A_HealthyRecovery_TocRestored");
     runner.expectEqual("Low Heap Book", healthy.getTitle(), "A_HealthyRecovery_TitlePreserved");
     runner.expectEqual("Fixture Author", healthy.getAuthor(), "A_HealthyRecovery_AuthorPreserved");
-    const auto hrefsBefore = spineHrefs(splitBefore);
     const auto hrefsAfter = spineHrefs(healthy);
     runner.expectTrue(hrefsBefore == hrefsAfter, "A_HealthyRecovery_SpinePreserved");
-    runner.expectEq(sectionsBefore, healthy.getVirtualSectionCount(0), "A_HealthyRecovery_SplitStatePreserved");
+    runner.expectEqual(preparedContent, SdMan.getWrittenData(preparedPath), "A_HealthyRecovery_ChapterPreserved");
     bool allMapped = healthy.getTocItemsCount() == 4;
     for (int i = 0; i < healthy.getTocItemsCount(); i++) {
       if (healthy.getTocItem(i).spineIndex != i) allMapped = false;
@@ -645,6 +638,39 @@ int main() {
     Epub later("/books/statefault2.epub", "/cacheS2");
     runner.expectTrue(later.load(), "S_WriteFailure_LaterRecovers");
     runner.expectEq(4, later.getTocItemsCount(), "S_WriteFailure_LaterTocRestored");
+  }
+
+  {
+    SdMan.reset();
+    testResetLargestFreeBlock();
+    const std::string path = "/books/old-layout.epub";
+    const std::string zip = makeEpub(goodSpec("Original spine"));
+    SdMan.registerFile(path, zip);
+    Epub epub(path, "/cacheVersion");
+    {
+      BookMetadataCache old(epub.getCachePath());
+      runner.expectTrue(old.rebuildFromMemory({"Old split", "", "", "", ""},
+                                             {{epub.getCachePath() + "/sections/0_0.html", -1}}, {}),
+                        "Create obsolete virtual spine fixture");
+    }
+    const std::string metadataPath = epub.getCachePath() + "/book.bin";
+    std::string previous = SdMan.getWrittenData(metadataPath);
+    previous[0] = 7;
+    SdMan.setFileData(metadataPath, previous);
+    const std::vector<std::pair<std::string, std::string>> userFiles = {
+        {path, zip}, {epub.getCachePath() + "/progress.bin", "PROGRESS"},
+        {epub.getCachePath() + "/bookmarks.bin", "BOOKMARKS"}, {"/.papyrix/settings.bin", "SETTINGS"}};
+    for (const auto& entry : userFiles) SdMan.registerFile(entry.first, entry.second);
+    runner.expectFalse(epub.load(false), "Reject previous virtual spine metadata");
+    runner.expectTrue(epub.load(), "Rebuild original spine from EPUB");
+    runner.expectEq(4, epub.getSpineItemsCount(), "Rebuild retains original spine count");
+    runner.expectEqual("OEBPS/ch1.xhtml", epub.getSpineItem(0).href, "Rebuild restores original chapter href");
+    for (const auto& entry : userFiles) {
+      FsFile file = SdMan.open(entry.first.c_str());
+      std::string bytes(entry.second.size(), '\0');
+      runner.expectEq(static_cast<int>(bytes.size()), file.read(&bytes[0], bytes.size()), "User file remains readable");
+      runner.expectEqual(entry.second, bytes, "Metadata invalidation preserves user data");
+    }
   }
 
   runner.printSummary();

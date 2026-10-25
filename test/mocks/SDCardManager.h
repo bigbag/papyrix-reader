@@ -87,6 +87,7 @@ class SDCardManager {
     writeLimitActive_ = false;
     syncResult_ = true;
     seekEndResult_ = true;
+    seeksBeforeFailure_ = SIZE_MAX;
     renameResult_ = true;
     renameFailures_.clear();
     renameCalls_ = 0;
@@ -137,6 +138,7 @@ class SDCardManager {
 
   void setSyncResult(bool result) { syncResult_ = result; }
   void setSeekEndResult(bool result) { seekEndResult_ = result; }
+  void setFailSeekAfter(size_t count) { seeksBeforeFailure_ = count; }
   void setFailBufferReadAfter(size_t successfulCalls) {
     failBufferReadAfter_ = successfulCalls;
     failBufferReadAfterActive_ = true;
@@ -202,6 +204,7 @@ class SDCardManager {
       }
       if (readLimitActive_) file.setReadLimit(readLimit_);
       if (failBufferReadAfterActive_) file.setFailBufferReadAfter(failBufferReadAfter_);
+      file.setFailSeekAfter(seeksBeforeFailure_);
     }
     return file;
   }
@@ -357,6 +360,7 @@ class SDCardManager {
   bool writeLimitActive_ = false;
   bool syncResult_ = true;
   bool seekEndResult_ = true;
+  size_t seeksBeforeFailure_ = SIZE_MAX;
   bool renameResult_ = true;
   size_t renameCalls_ = 0;
   std::map<size_t, RenameFailMode> renameFailures_;

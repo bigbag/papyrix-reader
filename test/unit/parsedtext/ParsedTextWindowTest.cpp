@@ -165,6 +165,85 @@ int main() {
     runner.expectTrue(got == expectedWords(kWords), "resume: all words once, in order");
   }
 
+  {
+    auto complete = makeBlock(1500, false);
+    auto resumed = makeBlock(1500, false);
+    std::vector<std::vector<std::string>> expected, actual;
+    auto capture = [](auto& rows, const std::shared_ptr<TextBlock>& line) {
+      std::vector<std::string> row;
+      for (const auto& word : line->getWords()) row.push_back(word.word);
+      rows.push_back(std::move(row));
+    };
+    complete->layoutAndExtractLines(renderer, kFontId, 400,
+                                    [&](auto line) { capture(expected, line); });
+    for (int guard = 0; !resumed->isEmpty() && guard < 1000; ++guard) {
+      int lines = 0;
+      resumed->layoutAndExtractLines(renderer, kFontId, 400, [&](auto line) {
+        capture(actual, line);
+        ++lines;
+      }, true, [&]() { return lines >= 3; });
+    }
+    runner.expectTrue(actual == expected, "Resume preserves bounded-window line breaks");
+  }
+
+  {
+    auto complete = std::make_unique<ParsedText>(TextBlock::LEFT_ALIGN, 0, false, true);
+    auto resumed = std::make_unique<ParsedText>(TextBlock::LEFT_ALIGN, 0, false, true);
+    for (unsigned count : {601U, 899U}) {
+      std::string word;
+      for (unsigned i = 0; i < count; ++i) word += "\xe4\xb8\xad";
+      complete->addWord(word, EpdFontFamily::REGULAR);
+      resumed->addWord(word, EpdFontFamily::REGULAR);
+    }
+    std::vector<size_t> expected, actual;
+    complete->layoutAndExtractLines(renderer, kFontId, 172,
+                                    [&](auto line) { expected.push_back(line->getWords().size()); });
+    for (unsigned guard = 0; !resumed->isEmpty() && guard < 1000; ++guard) {
+      unsigned lines = 0;
+      resumed->layoutAndExtractLines(
+          renderer, kFontId, 172,
+          [&](auto line) {
+            actual.push_back(line->getWords().size());
+            ++lines;
+          },
+          true, [&]() { return lines >= 12; });
+    }
+    runner.expectTrue(resumed->isEmpty(), "CJK resume drains every glyph");
+    runner.expectTrue(actual == expected, "CJK resume preserves a window boundary inside one source word");
+  }
+
+  {
+    ParsedText complete(TextBlock::LEFT_ALIGN, 0, true, true);
+    ParsedText resumed(TextBlock::LEFT_ALIGN, 0, true, true);
+    for (unsigned i = 0; i < 800; ++i) {
+      const std::string word = i % 7 == 3 ? "abcdefghi\xc2\xadjklmnopqr\xc2\xadstuvwxyz" : "aa";
+      complete.addWord(word, EpdFontFamily::REGULAR);
+      resumed.addWord(word, EpdFontFamily::REGULAR);
+    }
+    std::vector<std::vector<std::string>> expected, actual;
+    auto capture = [](auto& rows, const std::shared_ptr<TextBlock>& line) {
+      std::vector<std::string> row;
+      for (const auto& word : line->getWords()) row.push_back(word.word);
+      rows.push_back(std::move(row));
+    };
+    complete.layoutAndExtractLines(renderer, kFontId, 172, [&](auto line) { capture(expected, line); });
+    runner.expectTrue(
+        !expected.empty() && expected.front() == std::vector<std::string>{"aa", "aa", "aa", "abcdefghijklmnopqr-"},
+        "Interrupted-layout fixture uses an inserted hyphen");
+    for (unsigned guard = 0; !resumed.isEmpty() && guard < 1000; ++guard) {
+      unsigned lines = 0;
+      resumed.layoutAndExtractLines(
+          renderer, kFontId, 172,
+          [&](auto line) {
+            capture(actual, line);
+            ++lines;
+          },
+          true, [&]() { return lines >= 12; });
+    }
+    runner.expectTrue(resumed.isEmpty(), "Hyphenated resume drains every word");
+    runner.expectTrue(actual == expected, "Rejoining split words preserves the pending window");
+  }
+
   // --- includeLastLine=false on a windowed block: only the final line defers ---
   {
     const int kWords = 1500;

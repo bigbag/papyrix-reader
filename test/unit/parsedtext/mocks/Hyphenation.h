@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-// Stub Hyphenation for ParsedText unit tests — no actual hyphenation.
+// Use fixed word breaks for interrupted-layout tests.
 namespace Hyphenation {
 
 struct BreakInfo {
@@ -12,7 +12,10 @@ struct BreakInfo {
   bool requiresInsertedHyphen;
 };
 
-inline std::vector<BreakInfo> breakOffsets(const std::string&, bool) { return {}; }
+inline std::vector<BreakInfo> breakOffsets(const std::string& word, bool) {
+  if (word == "abcdefghijklmnopqrstuvwxyz") return {{9, true}, {18, true}};
+  return {};
+}
 inline void setLanguage(const std::string&) {}
 
 }  // namespace Hyphenation

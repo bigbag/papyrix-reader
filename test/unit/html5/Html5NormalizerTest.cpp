@@ -301,5 +301,32 @@ int main() {
     runner.expectFalse(result, "fail: returns false on read open failure");
   }
 
+  for (int failure = 0; failure < 4; ++failure) {
+    const std::string input = "<p>" + std::string(4096, 'x') + "<br></p>";
+    SdMan.reset();
+    SdMan.registerFile("/in.html", input);
+    if (failure == 0) SdMan.setFailBufferReadAfter(1);
+    if (failure == 1) SdMan.setReadLimit(1024);
+    if (failure == 2) SdMan.setWriteLimit(10);
+    if (failure == 3) SdMan.setSyncResult(false);
+    runner.expectFalse(html5::normalizeHtmlForXml("/in.html", "/out.html"),
+                       ("Incomplete normalization fails: " + std::to_string(failure)).c_str());
+    runner.expectFalse(SdMan.exists("/out.html"), "Incomplete normalized output is removed");
+    SdMan.reset();
+    SdMan.registerFile("/in.html", input);
+    runner.expectTrue(html5::normalizeHtmlForXml("/in.html", "/out.html"), "Normalization retries successfully");
+    runner.expectEqual("<p>" + std::string(4096, 'x') + "<br /></p>", SdMan.getWrittenData("/out.html"),
+                       "Retry retains the complete input");
+  }
+
+  {
+    SdMan.reset();
+    SdMan.registerFile("/in.html", "<p>" + std::string(4096, 'x') + "</p>");
+    int checks = 0;
+    runner.expectFalse(html5::normalizeHtmlForXml("/in.html", "/out.html", nullptr, [&]() { return ++checks > 1; }),
+                       "Cancellation stops normalization");
+    runner.expectFalse(SdMan.exists("/out.html"), "Cancellation removes incomplete normalized output");
+  }
+
   return runner.allPassed() ? 0 : 1;
 }

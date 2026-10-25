@@ -718,7 +718,6 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/Hyphenation/src/LiangHyphenation.cpp
       # Encoding / zip support
       ${PROJECT_ROOT}/lib/Html5/src/Html5Normalizer.cpp
-      ${PROJECT_ROOT}/lib/Html5/src/HtmlSplitter.cpp
       ${PROJECT_ROOT}/lib/ZipFile/src/ZipFile.cpp
       ${PROJECT_ROOT}/lib/InflateReader/src/InflateReader.cpp
       ${PROJECT_ROOT}/lib/uzlib/src/tinflate.c
@@ -851,14 +850,6 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/Epub/src/Epub/htmlEntities.cpp
       ${TEST_HELPERS}
     )
-  elseif(TEST_NAME STREQUAL "SpineSplitTest")
-    find_package(EXPAT REQUIRED)
-    add_executable(${TEST_NAME}
-      ${TEST_SRC}
-      ${TEST_HELPERS}
-    )
-    target_compile_definitions(${TEST_NAME} PRIVATE XML_GE=0)
-    target_link_libraries(${TEST_NAME} PRIVATE EXPAT::EXPAT)
   elseif(TEST_NAME STREQUAL "ChapterHtmlImageSuspensionTest" OR TEST_NAME STREQUAL "ChapterAnchorPlacementTest")
     find_package(EXPAT REQUIRED)
     add_executable(${TEST_NAME}

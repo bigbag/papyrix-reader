@@ -4,7 +4,6 @@
 #include <Epub/parsers/ChapterHtmlSlimParser.h>
 #include <GfxRenderer.h>
 #include <Html5Normalizer.h>
-#include <HtmlSplitter.h>
 #include <Hyphenation.h>
 #include <Logging.h>
 #include <Page.h>
@@ -77,27 +76,10 @@ void EpubChapterParser::reset() {
   parseHtmlPath_.clear();
   chapterBasePath_.clear();
   anchorMap_.clear();
-  capturedSubSectionAnchors_ = 0;
-  currentSubSection_ = 0;
-  totalSubSections_ = 0;
-  subSectionPageOffset_ = 0;
-  currentSubSectionPages_ = 0;
 }
 
 const std::vector<std::pair<std::string, uint32_t>>& EpubChapterParser::getAnchorMap() const {
-  if (liveParser_ && totalSubSections_ == 0) {
-    return liveParser_->getAnchorMap();
-  }
-  return anchorMap_;
-}
-
-void EpubChapterParser::captureSubSectionAnchors() {
-  if (totalSubSections_ == 0) return;
-  const auto& anchors = liveParser_->getAnchorMap();
-  for (; capturedSubSectionAnchors_ < anchors.size(); ++capturedSubSectionAnchors_) {
-    const auto& anchor = anchors[capturedSubSectionAnchors_];
-    anchorMap_.emplace_back(anchor.first, anchor.second + static_cast<uint32_t>(subSectionPageOffset_));
-  }
+  return liveParser_ ? liveParser_->getAnchorMap() : anchorMap_;
 }
 
 bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page>)>& onPageComplete, uint32_t maxPages,
@@ -116,280 +98,81 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
   maxPages_ = maxPages;
   pagesCreated_ = 0;
   hitMaxPages_ = false;
+  if (shouldAbort && shouldAbort()) return false;
+  Hyphenation::setLanguage(epub_->getLanguage());
 
-  // RESUME PATH: parser is alive from a previous call, just resume.
-  if (initialized_ && liveParser_ && liveParser_->isSuspended()) {
-    Hyphenation::setLanguage(epub_->getLanguage());
-
-    liveParser_->setExternalAbortCallback(shouldAbort);
-    liveParser_->setBuildScratch(&scratch);
-    bool success = liveParser_->resumeParsing();
-    liveParser_->setBuildScratch(nullptr);
-    captureSubSectionAnchors();
-    currentSubSectionPages_ += pagesCreated_;
-
-    hasMore_ = liveParser_->isSuspended() || liveParser_->wasAborted() || (!success && pagesCreated_ > 0);
-
-    if (liveParser_->isSuspended()) {
-      return success || pagesCreated_ > 0;
+  const bool resume = initialized_ && liveParser_ && liveParser_->isSuspended();
+  if (!resume) {
+    const auto localPath = epub_->getSpineItem(spineIndex_).href;
+    if (localPath.empty() || localPath.front() == '/') return false;
+    const size_t lastSlash = localPath.rfind('/');
+    chapterBasePath_ = lastSlash == std::string::npos ? "" : localPath.substr(0, lastSlash + 1);
+    parseHtmlPath_.clear();
+    size_t itemSize = 0;
+    if (epub_->getItemSize(localPath, &itemSize) && itemSize > Epub::MIN_CACHED_CHAPTER_SIZE) {
+      epub_->prepareChapterHtml(spineIndex_, config_.sourceFingerprint, parseHtmlPath_, activeDict_, &scratch,
+                                shouldAbort);
     }
+    if (shouldAbort && shouldAbort()) return false;
 
-    bool wasAborted = liveParser_->wasAborted();
-
-    if (totalSubSections_ > 0 && currentSubSection_ < totalSubSections_ - 1) {
-      subSectionPageOffset_ += currentSubSectionPages_;
-      currentSubSectionPages_ = 0;
-      currentSubSection_++;
-      liveParser_.reset();
-      cleanupTempFiles();
-      initialized_ = false;
-      renderer_.clearWidthCache();
-
-      if (hitMaxPages_ || wasAborted || (shouldAbort && shouldAbort())) {
-        hasMore_ = true;
-        return success || pagesCreated_ > 0;
-      }
-      // Fall through to INIT loop for next sub-section
-    } else {
-      if (totalSubSections_ == 0) {
-        anchorMap_ = liveParser_->getAnchorMap();
-      }
-      liveParser_.reset();
-      cleanupTempFiles();
-      initialized_ = false;
-      renderer_.clearWidthCache();
-      return success || pagesCreated_ > 0;
-    }
-  }
-
-  // INIT PATH: loop through sub-sections
-  for (;;) {
-    Hyphenation::setLanguage(epub_->getLanguage());
-
-    auto localPath = epub_->getSpineItem(spineIndex_).href;
-    bool isVirtualSection = localPath.find("/sections/") != std::string::npos;
-
-    // On-demand spine splitting: detect or trigger splitting for oversized items
-    if (!isVirtualSection && totalSubSections_ == 0) {
-      int vsCount = epub_->getVirtualSectionCount(spineIndex_);
-      if (vsCount > 0) {
-        totalSubSections_ = vsCount;
-        currentSubSection_ = 0;
-      } else {
-        size_t itemSize = 0;
-        if (epub_->getItemSize(localPath, &itemSize) && itemSize > Epub::MAX_SECTION_SIZE) {
-          if (epub_->splitSingleSpineItem(spineIndex_, scratchBuffer.data())) {
-            vsCount = epub_->getVirtualSectionCount(spineIndex_);
-            if (vsCount > 0) {
-              totalSubSections_ = vsCount;
-              currentSubSection_ = 0;
-            }
-          }
-        }
-      }
-    }
-    if (totalSubSections_ > 0) {
-      localPath = epub_->getVirtualSectionPath(spineIndex_, currentSubSection_);
-      isVirtualSection = true;
-    }
-
-    if (isVirtualSection) {
-      parseHtmlPath_ = localPath;
-      tmpHtmlPath_.clear();
-      normalizedPath_.clear();
-
-      chapterBasePath_.clear();
-      {
-        size_t sectionsPos = localPath.rfind("/sections/");
-        if (sectionsPos != std::string::npos) {
-          size_t nameStart = sectionsPos + 10;
-          // Extract spine index from "27_0.html" or "27.body"
-          size_t underscore = localPath.find('_', nameStart);
-          size_t dot = localPath.find('.', nameStart);
-          size_t nameEnd = (underscore != std::string::npos && underscore < dot) ? underscore : dot;
-          if (nameEnd != std::string::npos) {
-            std::string origIdx = localPath.substr(nameStart, nameEnd - nameStart);
-            const std::string bpFile = epub_->getCachePath() + "/sections/" + origIdx + ".base";
-            FsFile bp;
-            if (SdMan.openFileForRead("ECP", bpFile, bp)) {
-              char buf[256];
-              const size_t n = bp.read(reinterpret_cast<uint8_t*>(buf), sizeof(buf) - 1);
-              if (n > 0) {
-                buf[n] = '\0';
-                chapterBasePath_ = buf;
-              }
-              bp.close();
-            }
-          }
-        }
-      }
-
-      if (chapterBasePath_.empty()) {
-        for (int si = spineIndex_; si >= 0; si--) {
-          const auto entry = epub_->getSpineItem(si);
-          if (entry.href.find("/sections/") == std::string::npos) {
-            size_t lastSlash = entry.href.rfind('/');
-            if (lastSlash != std::string::npos) {
-              chapterBasePath_ = entry.href.substr(0, lastSlash + 1);
-            }
-            break;
-          }
-        }
-      }
-    } else {
+    if (parseHtmlPath_.empty()) {
       tmpHtmlPath_ = epub_->getCachePath() + "/.tmp_" + std::to_string(spineIndex_) + ".html";
-
-      {
-        size_t lastSlash = localPath.rfind('/');
-        if (lastSlash != std::string::npos) {
-          chapterBasePath_ = localPath.substr(0, lastSlash + 1);
-        } else {
-          chapterBasePath_.clear();
-        }
-      }
-
       bool extracted = false;
-      for (int attempt = 0; attempt < 3 && !extracted; attempt++) {
+      for (int attempt = 0; attempt < 3 && !extracted; ++attempt) {
+        if (shouldAbort && shouldAbort()) return false;
         if (attempt > 0) {
           LOG_ERR(TAG, "Retrying stream (attempt %d)...", attempt + 1);
           delay(50);
         }
-
-        if (SdMan.exists(tmpHtmlPath_.c_str())) {
-          SdMan.remove(tmpHtmlPath_.c_str());
-        }
-
+        SdMan.remove(tmpHtmlPath_.c_str());
         FsFile tmpHtml;
-        if (!SdMan.openFileForWrite("EPUB", tmpHtmlPath_, tmpHtml)) {
-          continue;
-        }
+        if (!SdMan.openFileForWrite("EPUB", tmpHtmlPath_, tmpHtml)) continue;
         const uint32_t extractionStarted = perfMsNow();
-        extracted = epub_->readItemContentsToStream(localPath, tmpHtml, 1024, scratchBuffer.data(), &scratch);
+        extracted = epub_->readItemContentsToStream(localPath, tmpHtml, 1024, activeDict_, &scratch, shouldAbort) &&
+                    tmpHtml.sync();
         readerPerfLog("epub-extract", extractionStarted);
         tmpHtml.close();
-
-        if (!extracted && SdMan.exists(tmpHtmlPath_.c_str())) {
-          SdMan.remove(tmpHtmlPath_.c_str());
-        }
+        if (!extracted) SdMan.remove(tmpHtmlPath_.c_str());
       }
-
-      if (!extracted) {
-        LOG_ERR(TAG, "Failed to stream HTML to temp file");
-        return false;
-      }
+      if (!extracted || (shouldAbort && shouldAbort())) return false;
 
       normalizedPath_ = epub_->getCachePath() + "/.norm_" + std::to_string(spineIndex_) + ".html";
       parseHtmlPath_ = tmpHtmlPath_;
       const uint32_t normalizationStarted = perfMsNow();
-      if (html5::normalizeHtmlForXml(tmpHtmlPath_, normalizedPath_, &scratch)) {
+      if (html5::normalizeHtmlForXml(tmpHtmlPath_, normalizedPath_, &scratch, shouldAbort)) {
         parseHtmlPath_ = normalizedPath_;
       }
       readerPerfLog("epub-normalize", normalizationStarted);
+      if (shouldAbort && shouldAbort()) return false;
     }
 
     auto readItemFn = [this](const std::string& href, Print& out, size_t chunkSize, BuildArena* arena) -> bool {
       return epub_->readItemContentsToStream(href, out, chunkSize, activeDict_, arena);
     };
-
-    uint32_t pagesBeforeThisSubSection = pagesCreated_;
-
     auto wrappedCallback = [this](std::unique_ptr<Page> page) -> bool {
       if (hitMaxPages_) return false;
-
       onPageComplete_(std::move(page));
-      pagesCreated_++;
-
-      if (maxPages_ > 0 && pagesCreated_ >= maxPages_) {
-        hitMaxPages_ = true;
-        return false;
-      }
-      return true;
+      ++pagesCreated_;
+      hitMaxPages_ = maxPages_ > 0 && pagesCreated_ >= maxPages_;
+      return !hitMaxPages_;
     };
-
     liveParser_.reset(new ChapterHtmlSlimParser(parseHtmlPath_, renderer_, config_, wrappedCallback, nullptr,
                                                 chapterBasePath_, imageCachePath_, readItemFn, epub_->getCssParser(),
                                                 shouldAbort));
-    capturedSubSectionAnchors_ = 0;
-
-    // Index-based byte-range mode: read section from .body file using .idx metadata
-    if (totalSubSections_ > 0 && parseHtmlPath_.size() > 5 &&
-        parseHtmlPath_.compare(parseHtmlPath_.size() - 5, 5, ".body") == 0) {
-      const std::string idxPath = epub_->getSectionIndexPath(spineIndex_);
-      html5::SectionIndex sectionIndex;
-      if (html5::readSectionIndex(idxPath, sectionIndex) &&
-          currentSubSection_ < static_cast<int>(sectionIndex.sections.size())) {
-        const auto& entry = sectionIndex.sections[static_cast<size_t>(currentSubSection_)];
-
-        // Tag stack from PREVIOUS section's end = tags to reopen at THIS section's start
-        const auto& openTags = (currentSubSection_ > 0)
-                                   ? sectionIndex.sections[static_cast<size_t>(currentSubSection_ - 1)].tagStack
-                                   : std::vector<std::string>();
-
-        std::string prologue =
-            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-            "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n";
-        if (!sectionIndex.headHtml.empty()) {
-          prologue += sectionIndex.headHtml;
-          prologue += "\n";
-        }
-        prologue += "<body><div>\n";
-        for (const auto& tag : openTags) {
-          prologue += tag;
-        }
-
-        std::string epilogue;
-        for (int t = static_cast<int>(openTags.size()) - 1; t >= 0; t--) {
-          const auto& tag = openTags[static_cast<size_t>(t)];
-          size_t nameEnd = 1;
-          while (nameEnd < tag.size() && tag[nameEnd] != ' ' && tag[nameEnd] != '>' && tag[nameEnd] != '/') nameEnd++;
-          epilogue += "</";
-          epilogue += tag.substr(1, nameEnd - 1);
-          epilogue += ">";
-        }
-        epilogue += "\n</div></body>\n</html>\n";
-
-        liveParser_->setByteRange(entry.bodyOffset, entry.bodyLength, prologue, epilogue);
-      }
-    }
-
-    liveParser_->setBuildScratch(&scratch);
-    bool success = liveParser_->parseAndBuildPages();
-    liveParser_->setBuildScratch(nullptr);
-    captureSubSectionAnchors();
     initialized_ = true;
-    currentSubSectionPages_ = pagesCreated_ - pagesBeforeThisSubSection;
+  }
 
-    hasMore_ = liveParser_->isSuspended() || liveParser_->wasAborted() || (!success && pagesCreated_ > 0);
-
-    if (liveParser_->isSuspended()) {
-      return success || pagesCreated_ > 0;
-    }
-
-    if (totalSubSections_ > 0 && currentSubSection_ < totalSubSections_ - 1) {
-      subSectionPageOffset_ += currentSubSectionPages_;
-      currentSubSectionPages_ = 0;
-      currentSubSection_++;
-      bool wasAborted = liveParser_->wasAborted();
-      liveParser_.reset();
-      cleanupTempFiles();
-      initialized_ = false;
-      renderer_.clearWidthCache();
-
-      if (!hitMaxPages_ && !wasAborted && !(shouldAbort && shouldAbort())) {
-        continue;
-      }
-      hasMore_ = true;
-      return success || pagesCreated_ > 0;
-    }
-
-    if (totalSubSections_ == 0) {
-      anchorMap_ = liveParser_->getAnchorMap();
-    }
+  liveParser_->setExternalAbortCallback(shouldAbort);
+  liveParser_->setBuildScratch(&scratch);
+  const bool success = resume ? liveParser_->resumeParsing() : liveParser_->parseAndBuildPages();
+  liveParser_->setBuildScratch(nullptr);
+  hasMore_ = liveParser_->isSuspended() || liveParser_->wasAborted() || !success;
+  if (!liveParser_->isSuspended()) {
+    anchorMap_ = liveParser_->getAnchorMap();
     liveParser_.reset();
     cleanupTempFiles();
     initialized_ = false;
     renderer_.clearWidthCache();
-
-    return success || pagesCreated_ > 0;
   }
+  return success || pagesCreated_ > 0;
 }

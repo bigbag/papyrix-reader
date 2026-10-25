@@ -263,16 +263,19 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle)
 void ParsedText::rejoinInterruptedWords() {
   auto wordIt = words.begin();
   auto infoIt = wordInfos.begin();
+  size_t wordIndex = 0;
   while (wordIt != words.end()) {
     auto nextWord = std::next(wordIt);
     if (nextWord != words.end() && hasTrailingSoftHyphen(*wordIt)) {
       wordIt->resize(wordIt->size() - 2);
       *wordIt += *nextWord;
+      if (wordIndex + 1 < pendingWindowWords_) --pendingWindowWords_;
       words.erase(nextWord);
       wordInfos.erase(std::next(infoIt));
     } else {
       ++wordIt;
       ++infoIt;
+      ++wordIndex;
     }
   }
 }
@@ -303,7 +306,7 @@ bool ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   // transient heap used by preprocessing and width/break workspaces stays O(cap), not
   // O(block). Done after the rejoin pass so no soft-hyphen split straddles a
   // window boundary (Issue #137).
-  if (words.size() > kMaxWordsPerBlock) {
+  if (pendingWindowWords_ != 0 || words.size() > kMaxWordsPerBlock) {
     return layoutInWindows(renderer, fontId, viewportWidth, processLine, includeLastLine, shouldAbort, scratch);
   }
 
@@ -351,7 +354,8 @@ bool ParsedText::layoutInWindows(const GfxRenderer& renderer, const int fontId, 
       return false;
     }
 
-    const size_t windowSize = std::min(kMaxWordsPerBlock, words.size());
+    const size_t windowSize =
+        pendingWindowWords_ != 0 ? pendingWindowWords_ : std::min(kMaxWordsPerBlock, words.size());
     auto wordEnd = words.begin();
     std::advance(wordEnd, windowSize);
     auto infoEnd = wordInfos.begin();
@@ -365,6 +369,7 @@ bool ParsedText::layoutInWindows(const GfxRenderer& renderer, const int fontId, 
     const bool finalWindow = words.empty();
     const bool inc = finalWindow ? includeLastLine : true;
     const bool ok = sub.layoutAndExtractLines(renderer, fontId, viewportWidth, processLine, inc, shouldAbort, scratch);
+    pendingWindowWords_ = !ok ? sub.words.size() : 0;
 
     // Propagate whether the indent was actually consumed (it may not have been if
     // the sub-block aborted before laying out its first line).

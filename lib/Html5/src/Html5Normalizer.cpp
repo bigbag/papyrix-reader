@@ -47,7 +47,8 @@ bool isAttrNameChar(char c) {
 
 }  // namespace
 
-bool normalizeHtmlForXml(const std::string& inputPath, const std::string& outputPath, BuildArena* scratch) {
+bool normalizeHtmlForXml(const std::string& inputPath, const std::string& outputPath, BuildArena* scratch,
+                         const std::function<bool()>& shouldAbort) {
   FsFile inFile, outFile;
 
   if (!SdMan.openFileForRead("H5N", inputPath, inFile)) {
@@ -93,9 +94,11 @@ bool normalizeHtmlForXml(const std::string& inputPath, const std::string& output
   if (!readBuffer || !writeBuffer) {
     inFile.close();
     outFile.close();
+    SdMan.remove(outputPath.c_str());
     return false;
   }
   size_t writePos = 0;
+  size_t remaining = inFile.size();
 
   auto flushWrite = [&]() -> bool {
     if (writePos > 0) {
@@ -144,9 +147,11 @@ bool normalizeHtmlForXml(const std::string& inputPath, const std::string& output
     return writeChar('>');
   };
 
-  while (inFile.available()) {
-    int bytesRead = inFile.read(readBuffer, BUFFER_SIZE);
-    if (bytesRead <= 0) break;
+  while (remaining > 0) {
+    if (shouldAbort && shouldAbort()) goto error;
+    const int bytesRead = inFile.read(readBuffer, BUFFER_SIZE);
+    if (bytesRead <= 0 || static_cast<size_t>(bytesRead) > remaining) goto error;
+    remaining -= static_cast<size_t>(bytesRead);
 
     for (int i = 0; i < bytesRead; i++) {
       char c = static_cast<char>(readBuffer[i]);
@@ -362,7 +367,7 @@ bool normalizeHtmlForXml(const std::string& inputPath, const std::string& output
     }
   }
 
-  if (!flushWrite()) goto error;
+  if ((shouldAbort && shouldAbort()) || !flushWrite() || !outFile.sync()) goto error;
 
   inFile.close();
   outFile.close();

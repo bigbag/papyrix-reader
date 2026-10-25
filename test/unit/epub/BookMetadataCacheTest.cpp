@@ -18,7 +18,7 @@
 
 namespace {
 
-constexpr uint8_t BOOK_CACHE_VERSION = 7;
+constexpr uint8_t BOOK_CACHE_VERSION = 8;
 
 uint32_t readU32(const std::string& data, size_t offset) {
   uint32_t value = 0;
