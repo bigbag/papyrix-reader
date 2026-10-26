@@ -587,6 +587,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
     add_executable(${TEST_NAME}
       ${TEST_SRC}
       ${PROJECT_ROOT}/lib/Epub/src/Epub/css/CssParser.cpp
+      ${PROJECT_ROOT}/lib/uzlib/src/crc32.c
       ${TEST_HELPERS}
     )
   elseif(TEST_NAME STREQUAL "XtcCoverHelperTest")
@@ -858,6 +859,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/Epub/src/Epub/parsers/ChapterHtmlSlimParser.cpp
       ${PROJECT_ROOT}/lib/Epub/src/Epub/htmlEntities.cpp
       ${PROJECT_ROOT}/lib/Epub/src/Epub/css/CssParser.cpp
+      ${PROJECT_ROOT}/lib/uzlib/src/crc32.c
       ${PROJECT_ROOT}/lib/RenderTypes/src/ParsedText.cpp
       ${PROJECT_ROOT}/lib/RenderTypes/src/blocks/TextBlock.cpp
       ${PROJECT_ROOT}/lib/RenderTypes/src/blocks/ImageBlock.cpp

@@ -86,6 +86,7 @@ class SDCardManager {
     writeLimit_ = 0;
     writeLimitActive_ = false;
     syncResult_ = true;
+    closeResult_ = true;
     seekEndResult_ = true;
     seeksBeforeFailure_ = SIZE_MAX;
     renameResult_ = true;
@@ -137,6 +138,7 @@ class SDCardManager {
   }
 
   void setSyncResult(bool result) { syncResult_ = result; }
+  void setCloseResult(bool result) { closeResult_ = result; }
   void setSeekEndResult(bool result) { seekEndResult_ = result; }
   void setFailSeekAfter(size_t count) { seeksBeforeFailure_ = count; }
   void setFailBufferReadAfter(size_t successfulCalls) {
@@ -180,6 +182,7 @@ class SDCardManager {
           [this, pathStr = std::string(path)](uint16_t d, uint16_t t) { modifyDateTimes_[pathStr] = {d, t}; });
       if (writeLimitActive_) file.setWriteLimit(writeLimit_);
       file.setSyncResult(syncResult_);
+      file.setCloseResult(closeResult_);
       file.setSeekEndResult(seekEndResult_);
       return file;
     }
@@ -240,6 +243,7 @@ class SDCardManager {
     }
     if (writeLimitActive_) file.setWriteLimit(writeLimit_);
     file.setSyncResult(syncResult_);
+    file.setCloseResult(closeResult_);
     file.setSeekEndResult(seekEndResult_);
     return true;
   }
@@ -359,6 +363,7 @@ class SDCardManager {
   size_t writeLimit_ = 0;
   bool writeLimitActive_ = false;
   bool syncResult_ = true;
+  bool closeResult_ = true;
   bool seekEndResult_ = true;
   size_t seeksBeforeFailure_ = SIZE_MAX;
   bool renameResult_ = true;

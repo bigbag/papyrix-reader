@@ -733,6 +733,9 @@ int main() {
 
     Epub fresh("/books/styled.epub", "/cacheJ");
     runner.expectTrue(fresh.load(), "J_Fresh_Loads");
+    testSetLargestFreeBlock(94196);
+    runner.expectTrue(fresh.prepareCssStyles(1234), "J_Fresh_C3SizedHeapPreparesStyles");
+    testResetLargestFreeBlock();
     expectCssStyles(runner, fresh, "J_Fresh");
     runner.expectEq(4, fresh.getTocItemsCount(), "J_Fresh_TocBuilt");
 
@@ -740,9 +743,16 @@ int main() {
     const std::vector<std::pair<std::string, std::string>> userFiles = {
         {fresh.getCachePath() + "/progress.bin", "PROGRESS"}, {fresh.getCachePath() + "/bookmarks.bin", "BOOKMARKS"}};
     for (const auto& entry : userFiles) SdMan.registerFile(entry.first, entry.second);
+    runner.expectEq(size_t{0}, archiveOpensDuring("/books/styled.epub", "/cacheJ", true),
+                    "J_CachedOpen_NoSourceCssWork");
 
     Epub cached("/books/styled.epub", "/cacheJ");
     runner.expectTrue(cached.load(), "J_Cached_Loads");
+    size_t sourceReads = 0;
+    SdMan.setReadObserver([&](const char* path) { if (std::string(path) == "/books/styled.epub") ++sourceReads; });
+    runner.expectTrue(cached.prepareCssStyles(1234), "J_Cached_PreparesFromRules");
+    SdMan.setReadObserver(nullptr);
+    runner.expectEq(size_t{0}, sourceReads, "J_Cached_NoSourceCssParsing");
     expectCssStyles(runner, cached, "J_Cached");
     runner.expectEqual("Styled Book", cached.getTitle(), "J_Cached_TitlePreserved");
     runner.expectEq(4, cached.getSpineItemsCount(), "J_Cached_SpinePreserved");
@@ -760,24 +770,36 @@ int main() {
                     "J_CacheOnly_NoArchiveParse");
     Epub cacheOnly("/books/styled.epub", "/cacheJ");
     runner.expectTrue(cacheOnly.load(false), "J_CacheOnly_Loads");
-    runner.expectTrue(cacheOnly.getCssParser() == nullptr, "J_CacheOnly_NoCssParser");
     runner.expectEq(4, cacheOnly.getTocItemsCount(), "J_CacheOnly_TocPreserved");
     Epub metadataOnly("/books/styled.epub", "/cacheJ");
     runner.expectTrue(metadataOnly.loadMetadataOnly(), "J_MetadataOnly_Loads");
-    runner.expectTrue(metadataOnly.getCssParser() == nullptr, "J_MetadataOnly_NoCssParser");
 
-    // A low-heap cached open keeps the book usable without styles, and a
-    // later healthy open still loads them.
+    // Failed preparation keeps metadata usable and permits a later retry.
     Epub lowHeap("/books/styled.epub", "/cacheJ");
     testSetLargestFreeBlock(8 * 1024);
     runner.expectTrue(lowHeap.load(), "J_LowHeapCached_Loads");
+    testSetLargestFreeBlock(0);
+    runner.expectFalse(lowHeap.prepareCssStyles(1234), "J_LowHeap_PreparationFails");
     testResetLargestFreeBlock();
-    runner.expectTrue(lowHeap.getCssParser() == nullptr || !lowHeap.getCssParser()->hasStyles(),
-                      "J_LowHeapCached_NoStyles");
+    runner.expectTrue(lowHeap.prepareCssStyles(1234), "J_LowHeap_RetryPreparesCompleteStyles");
+    expectCssStyles(runner, lowHeap, "J_LowHeap_Retry");
     runner.expectEq(4, lowHeap.getTocItemsCount(), "J_LowHeapCached_TocPreserved");
     Epub healthy("/books/styled.epub", "/cacheJ");
     runner.expectTrue(healthy.load(), "J_HealthyAfterLowHeap_Loads");
+    runner.expectTrue(healthy.prepareCssStyles(1234), "J_Healthy_PreparesStyles");
     expectCssStyles(runner, healthy, "J_HealthyAfterLowHeap");
+
+    auto changed = cssSpec("Styled Book");
+    changed.cssFiles[1].second = "p { text-align: right; } .note { font-weight: bold; }";
+    SdMan.setFileData("/books/styled.epub", makeEpub(changed));
+    runner.expectTrue(cached.prepareCssStyles(5678), "J_ChangedSource_RebuildsStyles");
+    runner.expectTrue(cached.getCssParser()->getTagStyle("p").textAlign == TextAlign::Right,
+                      "J_ChangedSource_UsesNewRules");
+    SdMan.registerFile(cached.getCachePath() + "/styles.bin", "truncated");
+    Epub corrupt("/books/styled.epub", "/cacheJ");
+    runner.expectTrue(corrupt.load() && corrupt.prepareCssStyles(5678), "J_CorruptCache_Rebuilds");
+    runner.expectTrue(corrupt.getCssParser() && corrupt.getCssParser()->getTagStyle("p").textAlign == TextAlign::Right,
+                      "J_CorruptCache_RestoresSourceRules");
 
     // A missing EPUB source must not destroy the valid metadata cache.
     SdMan.remove("/books/styled.epub");
@@ -786,15 +808,18 @@ int main() {
     runner.expectEqual("Styled Book", sourceGone.getTitle(), "J_SourceGone_TitlePreserved");
     runner.expectEq(4, sourceGone.getSpineItemsCount(), "J_SourceGone_SpinePreserved");
     runner.expectEq(4, sourceGone.getTocItemsCount(), "J_SourceGone_TocPreserved");
-    runner.expectTrue(sourceGone.getCssParser() == nullptr || !sourceGone.getCssParser()->hasStyles(),
-                      "J_SourceGone_NoStyles");
+    runner.expectTrue(sourceGone.prepareCssStyles(5678), "J_SourceGone_CompleteRulesStillLoad");
+    runner.expectTrue(sourceGone.getCssParser() &&
+                          sourceGone.getCssParser()->getTagStyle("p").textAlign == TextAlign::Right,
+                      "J_SourceGone_CachedStylesPreserved");
+    runner.expectFalse(sourceGone.prepareCssStyles(9012), "J_SourceGone_CannotPrepareDifferentSource");
     Epub sourceGoneCheck("/books/styled.epub", "/cacheJ");
     runner.expectTrue(sourceGoneCheck.load(false), "J_SourceGone_CacheStillLoads");
   }
 
-  // ======================== K. CSS failures stay nonfatal ========================
+  // CSS preparation failures do not invalidate metadata.
   {
-    // A declared stylesheet with no stored entry does not block the others.
+    // A missing sheet must not publish rules from the other sheets.
     SdMan.reset();
     testResetLargestFreeBlock();
     EpubSpec spec = cssSpec("Missing Css Book");
@@ -803,10 +828,12 @@ int main() {
 
     Epub fresh("/books/missingcss.epub", "/cacheK");
     runner.expectTrue(fresh.load(), "K_Missing_FreshLoads");
-    expectCssStyles(runner, fresh, "K_Missing_Fresh");
+    runner.expectFalse(fresh.prepareCssStyles(1234), "K_Missing_PreparationFails");
+    runner.expectFalse(SdMan.exists(fresh.getCachePath() + "/styles.bin"), "K_Missing_NoPartialCache");
+    runner.expectTrue(fresh.getCssParser() == nullptr, "K_Missing_NoPartialRules");
     Epub cached("/books/missingcss.epub", "/cacheK");
     runner.expectTrue(cached.load(), "K_Missing_CachedLoads");
-    expectCssStyles(runner, cached, "K_Missing_Cached");
+    runner.expectFalse(cached.prepareCssStyles(1234), "K_Missing_RetryCannotAcceptPartialRules");
     Epub check("/books/missingcss.epub", "/cacheK");
     runner.expectTrue(check.load(false), "K_Missing_CacheStillLoads");
     runner.expectEqual("Missing Css Book", check.getTitle(), "K_Missing_MetadataKept");
@@ -823,7 +850,84 @@ int main() {
     Epub recovered("/books/recovercss.epub", "/cacheK2");
     runner.expectTrue(recovered.load(), "K_Recovery_Loads");
     runner.expectEq(4, recovered.getTocItemsCount(), "K_Recovery_TocRestored");
+    runner.expectTrue(recovered.prepareCssStyles(1234), "K_Recovery_PreparesStyles");
     expectCssStyles(runner, recovered, "K_Recovery");
+  }
+
+  for (bool metadataOnly : {false, true}) {
+    SdMan.reset();
+    testResetLargestFreeBlock();
+    SdMan.setFileData("/books/replaced.epub", makeEpub(goodSpec("Replaced")));
+    Epub book("/books/replaced.epub", "/cacheReplaced");
+    runner.expectTrue(book.load(), "ChangedManifest_InitialMetadataLoads");
+    SdMan.setFileData("/books/replaced.epub", makeEpub(cssSpec("Replaced")));
+    runner.expectTrue(metadataOnly ? book.loadMetadataOnly() : book.load(), "ChangedManifest_MetadataReloads");
+    runner.expectTrue(book.prepareCssStyles(5678), "ChangedManifest_PreparesCurrentRules");
+    expectCssStyles(runner, book, "ChangedManifest_CurrentRules");
+    Epub reopened("/books/replaced.epub", "/cacheReplaced");
+    runner.expectTrue(reopened.load(false) && reopened.prepareCssStyles(5678), "ChangedManifest_CacheReloads");
+    expectCssStyles(runner, reopened, "ChangedManifest_PersistedRules");
+  }
+
+  {
+    SdMan.reset();
+    testResetLargestFreeBlock();
+    SdMan.setFileData("/books/emptycss.epub", makeEpub(goodSpec("No Css")));
+    Epub empty("/books/emptycss.epub", "/cacheEmpty");
+    runner.expectTrue(empty.load() && empty.prepareCssStyles(1234), "EmptyCss_CompleteResult");
+    SdMan.remove("/books/emptycss.epub");
+    Epub reopened("/books/emptycss.epub", "/cacheEmpty");
+    runner.expectTrue(reopened.load(false) && reopened.prepareCssStyles(1234), "EmptyCss_ReusedWithoutSource");
+    runner.expectTrue(reopened.getCssParser() && !reopened.getCssParser()->getTagStyle("p").hasTextAlign(),
+                      "EmptyCss_NoStaleStyles");
+  }
+
+  {
+    SdMan.reset();
+    testResetLargestFreeBlock();
+    SdMan.setFileData("/books/abortcss.epub", makeEpub(cssSpec("Abort Css")));
+    Epub cancelled("/books/abortcss.epub", "/cacheAbort");
+    runner.expectTrue(cancelled.load(), "AbortCss_MetadataLoads");
+    runner.expectFalse(cancelled.prepareCssStyles(1234, nullptr, nullptr, [] { return true; }),
+                       "AbortCss_PreparationStops");
+    runner.expectFalse(SdMan.exists(cancelled.getCachePath() + "/styles.bin"), "AbortCss_NoCachePublished");
+    runner.expectTrue(cancelled.prepareCssStyles(1234), "AbortCss_RetryCompletes");
+    expectCssStyles(runner, cancelled, "AbortCss_Retry");
+
+    const std::string stylesPath = cancelled.getCachePath() + "/styles.bin";
+    const std::string savedStyles = SdMan.getWrittenData(stylesPath);
+    Epub reopened("/books/abortcss.epub", "/cacheAbort");
+    runner.expectTrue(reopened.load(false), "AbortCss_CachedMetadataLoads");
+    bool loadingStyles = false;
+    bool consumedBack = false;
+    size_t sourceReads = 0;
+    SdMan.setReadObserver([&](const char* path) {
+      if (std::string(path) == stylesPath) loadingStyles = true;
+      if (std::string(path) == "/books/abortcss.epub") ++sourceReads;
+    });
+    runner.expectFalse(reopened.prepareCssStyles(1234, nullptr, nullptr, [&] {
+      if (!loadingStyles || consumedBack) return false;
+      consumedBack = true;
+      return true;
+    }), "AbortCss_OneShotLoadCancellationStops");
+    SdMan.setReadObserver(nullptr);
+    runner.expectEq(size_t{0}, sourceReads, "AbortCss_CancelledLoadDoesNotParseSource");
+    runner.expectTrue(reopened.getCssParser() == nullptr, "AbortCss_CancelledLoadHasNoRules");
+    runner.expectEqual(savedStyles, SdMan.getWrittenData(stylesPath), "AbortCss_CancelledLoadPreservesCache");
+    runner.expectTrue(reopened.prepareCssStyles(1234), "AbortCss_CancelledLoadCanRetry");
+    expectCssStyles(runner, reopened, "AbortCss_LoadRetry");
+
+    consumedBack = false;
+    runner.expectFalse(reopened.prepareCssStyles(5678, nullptr, nullptr, [&] {
+      if (consumedBack || !SdMan.exists(stylesPath + ".tmp")) return false;
+      consumedBack = true;
+      return true;
+    }), "AbortCss_OneShotSaveCancellationStops");
+    runner.expectTrue(reopened.getCssParser() == nullptr, "AbortCss_CancelledSaveHasNoRules");
+    runner.expectFalse(SdMan.exists(stylesPath + ".tmp"), "AbortCss_CancelledSaveRemovesTemporary");
+    runner.expectEqual(savedStyles, SdMan.getWrittenData(stylesPath), "AbortCss_CancelledSavePreservesCache");
+    runner.expectTrue(reopened.prepareCssStyles(5678), "AbortCss_CancelledSaveCanRetry");
+    expectCssStyles(runner, reopened, "AbortCss_SaveRetry");
   }
 
   runner.printSummary();

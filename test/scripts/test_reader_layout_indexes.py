@@ -108,7 +108,7 @@ void anchorFixture(uint8_t version) {
 int main() {
   RenderConfig config;
   std::vector<page_metrics::Section> metrics;
-  metricsFixture(8, config);
+  metricsFixture(9, config);
   check(!readMetricsIndexFile("/sections", config, 1, metrics), "old metrics must not supply exact page counts");
   metricsFixture(kMetricsIndexVersion, config);
   check(readMetricsIndexFile("/sections", config, 1, metrics), "current metrics must load");
@@ -120,7 +120,7 @@ int main() {
   check(metrics.size() == 1 && metrics[0].pages == 19 && metrics[0].exact && metrics[0].byteSize == 2300,
         "deferred decoding preserves the previous counts");
   check(SdMan.exists("/sections/metrics.bin"), "deferred decoding preserves the stored index");
-  anchorFixture(5);
+  anchorFixture(6);
   check(ReaderState::loadAnchorPage("/sections/0.bin", "heading") == -1,
         "old anchor must not choose a page before the section cache is rebuilt");
   check(ReaderState::loadAnchorMap("/sections/0.bin").empty(), "old anchors must not supply chapter ranges");
@@ -144,7 +144,7 @@ int main() {
     check(ReaderState::loadAnchorPage("/sections/0.bin", "heading") == 7, "regeneration writes current anchors");
   }
 
-  anchorFixture(5);
+  anchorFixture(6);
   check(ReaderState::loadAnchorPage("/sections/0.bin", "heading") == -1, "old anchors still do not resolve");
   check(SdMan.exists("/sections/0.bin.anchors"), "old anchor file exists beside the complete cache");
   {

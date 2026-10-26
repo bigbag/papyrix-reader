@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "test_utils.h"
@@ -22,40 +23,60 @@ constexpr const char* bookPath = "/books/anchors.epub";
 constexpr const char* chapterHref = "OEBPS/chapter.xhtml";
 using Snapshot = std::vector<std::string>;
 
-std::string storedChapter(const std::string& html) {
+std::string storedChapter(const std::string& html, const std::string& css = "") {
+  const std::string opf =
+      "<package xmlns='http://www.idpf.org/2007/opf'><metadata/><manifest>"
+      "<item id='chapter' href='chapter.xhtml' media-type='application/xhtml+xml'/>" +
+      std::string(css.empty() ? "" : "<item id='css' href='style.css' media-type='text/css'/>") +
+      "</manifest><spine><itemref idref='chapter'/></spine></package>";
+  std::vector<std::pair<std::string_view, std::string_view>> entries = {
+      {chapterHref, html},
+      {"META-INF/container.xml",
+       "<container version='1.0' xmlns='urn:oasis:names:tc:opendocument:xmlns:container'><rootfiles>"
+       "<rootfile full-path='OEBPS/content.opf' media-type='application/oebps-package+xml'/>"
+       "</rootfiles></container>"},
+      {"OEBPS/content.opf", opf}};
+  if (!css.empty()) entries.emplace_back("OEBPS/style.css", css);
+  uint32_t offsets[4] = {};
   std::string zip;
-  const std::string name = chapterHref;
   auto put16 = [&](uint16_t n) {
     zip.push_back(static_cast<char>(n));
     zip.push_back(static_cast<char>(n >> 8));
   };
   auto put32 = [&](uint32_t n) { for (int i = 0; i < 4; ++i) zip.push_back(static_cast<char>(n >> (i * 8))); };
-  put32(0x04034b50);
-  for (uint16_t n : {20, 0, 0, 0, 0}) put16(n);
-  put32(0);
-  put32(html.size());
-  put32(html.size());
-  put16(name.size());
-  put16(0);
-  zip += name;
-  zip += html;
+  for (size_t i = 0; i < entries.size(); ++i) {
+    const auto& [name, data] = entries[i];
+    offsets[i] = zip.size();
+    put32(0x04034b50);
+    for (uint16_t n : {20, 0, 0, 0, 0}) put16(n);
+    put32(0);
+    put32(data.size());
+    put32(data.size());
+    put16(name.size());
+    put16(0);
+    zip += name;
+    zip += data;
+  }
   const uint32_t central = zip.size();
-  put32(0x02014b50);
-  for (uint16_t n : {20, 20, 0, 0, 0, 0}) put16(n);
-  put32(0);
-  put32(html.size());
-  put32(html.size());
-  put16(name.size());
-  for (int i = 0; i < 4; ++i) put16(0);
-  put32(0);
-  put32(0);
-  zip += name;
+  for (size_t i = 0; i < entries.size(); ++i) {
+    const auto& [name, data] = entries[i];
+    put32(0x02014b50);
+    for (uint16_t n : {20, 20, 0, 0, 0, 0}) put16(n);
+    put32(0);
+    put32(data.size());
+    put32(data.size());
+    put16(name.size());
+    for (int n = 0; n < 4; ++n) put16(0);
+    put32(0);
+    put32(offsets[i]);
+    zip += name;
+  }
   const uint32_t centralSize = zip.size() - central;
   put32(0x06054b50);
   put16(0);
   put16(0);
-  put16(1);
-  put16(1);
+  put16(entries.size());
+  put16(entries.size());
   put32(centralSize);
   put32(central);
   put16(0);
@@ -308,5 +329,95 @@ int main() {
     runner.expectEq(13, saved.read(progress, 13), "User progress remains readable");
     runner.expectEqual("USER-PROGRESS", std::string(progress, 13), "Preparation preserves user data");
   }
+  {
+    SdMan.reset();
+    testResetLargestFreeBlock();
+    const std::string html = "<html><body><p>Styled words for the first line.</p><p>Next paragraph.</p></body></html>";
+    const std::string css = "p { margin-left: 3em; text-align: right; font-style: italic; }";
+    SdMan.registerFile(bookPath, storedChapter(html, css));
+    auto epub = std::make_shared<Epub>(bookPath, "/styled");
+    runner.expectTrue(epub->load(), "Styled chapter metadata loads");
+    const auto cachePath = epub->getCachePath() + "/pages.bin";
+    EpubChapterParser parser(epub, 0, renderer, config, "");
+    PageCache cache(cachePath);
+    runner.expectTrue(cache.create(parser, config, 0), "Styled chapter creates a full cache");
+    Snapshot cold;
+    for (uint32_t p = 0; p < cache.pageCount(); ++p) appendPage(cold, *cache.loadPage(p));
+    runner.expectTrue(epub->getCssParser() && epub->getCssParser()->getTagStyle("p").hasMarginLeft(),
+                      "Layout prepares external paragraph rules");
+    auto warmBook = std::make_shared<Epub>(bookPath, "/styled");
+    runner.expectTrue(warmBook->load(false), "Warm layout loads metadata");
+    EpubChapterParser warm(warmBook, 0, renderer, config, "");
+    Snapshot repeated;
+    runner.expectTrue(warm.parsePages([&](auto page) { appendPage(repeated, *page); }, 0),
+                      "Warm layout uses persisted rules");
+    runner.expectTrue(cold == repeated, "Cold and warm styled pages match");
+    SdMan.remove(bookPath);
+    SdMan.remove((epub->getCachePath() + "/styles.bin").c_str());
+    PageCache cached(cachePath);
+    runner.expectTrue(cached.load(config), "Complete page cache loads without source or styles");
+    Snapshot cachedPages;
+    for (uint32_t p = 0; p < cached.pageCount(); ++p) appendPage(cachedPages, *cached.loadPage(p));
+    runner.expectTrue(cold == cachedPages, "Cached pages keep their stored styling");
+  }
+
+  {
+    SdMan.reset();
+    testResetLargestFreeBlock();
+    std::string html = "<html><body><p id='first'>First ";
+    for (unsigned i = 0; i < 1500; ++i) html += "word ";
+    html += "</p><p id='last'>Last paragraph.</p></body></html>";
+    const std::string source = storedChapter(html, "p { text-align: right; }");
+    SdMan.registerFile(bookPath, source);
+    auto epub = std::make_shared<Epub>(bookPath, "/failed-extend");
+    runner.expectTrue(epub->load(), "Partial styled chapter metadata loads");
+    Snapshot reference;
+    EpubChapterParser complete(epub, 0, renderer, config, "");
+    runner.expectTrue(complete.parsePages([&](auto page) { appendPage(reference, *page); }, 0),
+                      "Reference chapter completes");
+    const auto referenceAnchors = complete.getAnchorMap();
+    EpubChapterParser initial(epub, 0, renderer, config, "");
+    const auto path = epub->getCachePath() + "/pages.bin";
+    PageCache cache(path);
+    runner.expectTrue(cache.create(initial, config, 1) && cache.isPartial(), "Styled partial cache is created");
+    const auto committedBytes = SdMan.getWrittenData(path);
+    Snapshot committedPage;
+    appendPage(committedPage, *cache.loadPage(0));
+    initial.reset();
+    SdMan.remove((epub->getCachePath() + "/styles.bin").c_str());
+    auto fresh = std::make_shared<Epub>(bookPath, "/failed-extend");
+    runner.expectTrue(fresh->load(false), "Cold extension loads cached metadata");
+    EpubChapterParser parser(fresh, 0, renderer, config, "");
+    SdMan.remove(bookPath);
+    runner.expectFalse(cache.extend(parser, 1), "CSS preparation failure fails cold extension");
+    runner.expectEqual(committedBytes, SdMan.getWrittenData(path), "Failed extension preserves committed bytes");
+    PageCache reopened(path);
+    runner.expectTrue(reopened.load(config) && reopened.isPartial(), "Failed extension remains retryable");
+    Snapshot restoredPage;
+    appendPage(restoredPage, *reopened.loadPage(0));
+    runner.expectTrue(committedPage == restoredPage, "Failed extension preserves the styled page");
+    SdMan.registerFile(bookPath, source);
+    runner.expectTrue(reopened.extend(parser, 5) && !reopened.isPartial(), "CSS preparation retry completes");
+    Snapshot restored;
+    for (uint32_t page = 0; page < reopened.pageCount(); ++page) appendPage(restored, *reopened.loadPage(page));
+    runner.expectTrue(restored == reference, "Retry keeps every source page and its styling");
+    runner.expectTrue(parser.getAnchorMap() == referenceAnchors, "Retry recovers every source anchor");
+  }
+
+  {
+    SdMan.reset();
+    SdMan.registerFile(bookPath, storedChapter("<html><body><p>Do not publish without styles.</p></body></html>",
+                                               std::string(65537, 'x')));
+    auto epub = std::make_shared<Epub>(bookPath, "/failed-style");
+    runner.expectTrue(epub->load(), "Oversized CSS leaves metadata usable");
+    EpubChapterParser parser(epub, 0, renderer, config, "");
+    unsigned pages = 0;
+    runner.expectFalse(parser.parsePages([&](auto) { ++pages; }, 0), "Incomplete styles prevent new layout");
+    runner.expectEq(0u, pages, "CSS failure emits no unstyled page");
+    PageCache cache(epub->getCachePath() + "/pages.bin");
+    runner.expectFalse(cache.create(parser, config, 0), "CSS failure cannot create a complete page cache");
+    runner.expectFalse(cache.load(config), "Failed style preparation leaves no reusable page cache");
+  }
+
   return runner.allPassed() ? 0 : 1;
 }

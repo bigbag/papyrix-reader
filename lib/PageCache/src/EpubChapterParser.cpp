@@ -103,6 +103,7 @@ bool EpubChapterParser::parsePages(const std::function<void(std::unique_ptr<Page
 
   const bool resume = initialized_ && liveParser_ && liveParser_->isSuspended();
   if (!resume) {
+    if (!epub_->prepareCssStyles(config_.sourceFingerprint, activeDict_, &scratch, shouldAbort)) return false;
     const auto localPath = epub_->getSpineItem(spineIndex_).href;
     if (localPath.empty() || localPath.front() == '/') return false;
     const size_t lastSlash = localPath.rfind('/');

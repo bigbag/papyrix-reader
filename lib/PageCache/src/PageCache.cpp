@@ -21,7 +21,7 @@ bool PageCache::failHeaderCommitOnce_ = false;
 #endif
 
 namespace {
-constexpr uint8_t CACHE_FILE_VERSION = 28;
+constexpr uint8_t CACHE_FILE_VERSION = 29;
 
 // Header layout (offsets are absolute from start of file):
 // - version (1 byte)        @ 0
@@ -326,7 +326,7 @@ bool PageCache::create(ContentParser& parser, const RenderConfig& config, uint32
     return false;
   }
 
-  if ((!success && pageCount_ == 0) || aborted) {
+  if ((!success && pageCount_ == skipPages) || aborted) {
     file_.close();
     parser.reset();
     if (skipPages == 0) {

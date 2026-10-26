@@ -29,10 +29,14 @@ class Epub {
   std::unique_ptr<BookMetadataCache> bookMetadataCache;
   std::unique_ptr<CssParser> cssParser_;
   std::vector<std::string> cssFiles_;
+  bool cssFilesKnown_ = false;
+  uint32_t cssFingerprint_ = 0;
 
-  bool findContentOpfFile(std::string* contentOpfFile) const;
-  bool parseCssFiles();
-  bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, bool metadataOnly = false);
+  bool findContentOpfFile(std::string* contentOpfFile, uint8_t* decompressBuffer = nullptr,
+                          BuildArena* scratch = nullptr, const std::function<bool()>& shouldAbort = {}) const;
+  bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, bool metadataOnly = false,
+                       uint8_t* decompressBuffer = nullptr, BuildArena* scratch = nullptr,
+                       const std::function<bool()>& shouldAbort = {});
   bool parseTocNcxFile() const;
   bool parseTocNavFile() const;
   bool parseTocCandidates();
@@ -54,6 +58,8 @@ class Epub {
   bool loadMetadataOnly();
   bool prepareChapterHtml(int spineIndex, uint32_t sourceFingerprint, std::string& preparedPath,
                           uint8_t* decompressBuffer, BuildArena* scratch, const std::function<bool()>& shouldAbort);
+  bool prepareCssStyles(uint32_t sourceFingerprint, uint8_t* decompressBuffer = nullptr, BuildArena* scratch = nullptr,
+                        const std::function<bool()>& shouldAbort = {});
   bool clearCache() const;
   void setupCacheDir() const;
   const std::string& getCachePath() const;

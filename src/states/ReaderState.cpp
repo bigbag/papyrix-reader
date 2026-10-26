@@ -59,10 +59,10 @@ static constexpr int kCacheTaskStopTimeoutMs = 10000;  // 10s - generous for slo
 namespace {
 constexpr int horizontalPadding = 5;
 constexpr int statusBarMargin = 23;
-constexpr uint8_t kMetricsIndexVersion = 9;
+constexpr uint8_t kMetricsIndexVersion = 10;
 constexpr const char* kMetricsIndexFilename = "metrics.bin";
 constexpr uint32_t kAnchorMapMagic = 0x48434E41;  // "ANCH" in little-endian files
-constexpr uint8_t kAnchorMapVersion = 6;
+constexpr uint8_t kAnchorMapVersion = 7;
 constexpr size_t kColdMinFreeHeap = 28 * 1024;
 constexpr size_t kColdMinLargestBlock = 10 * 1024;
 constexpr size_t kHotMinFreeHeap = 15 * 1024;

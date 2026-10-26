@@ -244,6 +244,33 @@ Cancellation or a detected failure removes the temporary output.
 A zero source fingerprint disables reuse.
 Old virtual-section files and indexes are not used.
 
+## `styles.bin`
+
+### Version 1
+
+This EPUB cache stores parsed external CSS rules. PapyriX prepares it when a chapter first needs layout. A compatible page-cache read does not load CSS. Later layout work loads these rules instead of extracting and parsing the source stylesheets.
+
+All multi-byte fields use little-endian order. The header contains:
+
+| Offset | Size | Field |
+|---|---|---|
+| `0x00` | 4 bytes | Magic `0x53435850` (`PXCS`) |
+| `0x04` | 1 byte | Version `1` |
+| `0x05` | 4 bytes | Source fingerprint (`uint32_t`) |
+| `0x09` | 2 bytes | Rule count (`uint16_t`, at most 512) |
+| `0x0B` | Variable | Rule records |
+| End − 4 | 4 bytes | CRC32 of all preceding bytes |
+
+Each rule contains a `uint32_t` selector byte length, 1–256 selector bytes, and 47 style bytes. The style bytes contain a `uint16_t` property mask, five enum bytes, and eight length records. Each length record contains a 32-bit float and one unit byte.
+
+Mask bits 0–12 represent text alignment, font style, font weight, direction, four margins, four paddings, and display. Margins and paddings use top, bottom, left, right order. The five enum bytes represent text alignment, font style, font weight, direction, and display. Their values match `CssStyle.h`.
+
+Length units are `0` for pixels, `1` for `em`, `2` for `rem`, `3` for points, and `4` for percent. The cache keeps relative values and explicit zero properties. Font and viewport changes do not require source CSS parsing. CRC32 uses initial value `0xFFFFFFFF` and final XOR `0xFFFFFFFF`.
+
+A zero-rule cache is valid. A zero source fingerprint disables persistent rule reuse and publication. A missing, outdated, or corrupt cache requires source preparation. The loader rejects truncated records, invalid field values, duplicate selectors, extra bytes, and checksum errors. Each source CSS file remains limited to 64 KiB.
+
+Preparation writes `styles.bin.tmp`, checks each write, synchronizes and closes the file, then publishes only if every step succeeds. Failure before publication keeps the previous cache. Replacement removes the previous file before rename. A publication failure can leave no cache; the next preparation builds it again. A CSS preparation failure does not publish new pages with incomplete styles. Failure to save complete rules can leave those rules usable in memory. Reading progress and bookmarks use separate files and do not change.
+
 ## `book.bin`
 
 ### Version 8
@@ -359,11 +386,11 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 28
+### Version 29
 
-PapyriX rebuilds section caches with an unsupported format version when it opens the book. This version rebuilds layouts that can lack external EPUB styles. PapyriX keeps saved reading progress and bookmarks.
+PapyriX rebuilds section caches with an unsupported format version when it opens the book. This version rebuilds layouts that can lack external EPUB styles after a low-memory open. PapyriX keeps saved reading progress and bookmarks. Page numbers can change after layout.
 
-The page-count index (`metrics.bin`) uses version 9. Anchor maps (`.anchors`) use version 6. PapyriX rejects indexes with an unsupported version before it uses their page counts or anchor positions.
+The page-count index (`metrics.bin`) uses version 10. Anchor maps (`.anchors`) use version 7. PapyriX rejects indexes with an unsupported version before it uses their page counts or anchor positions.
 
 It rebuilds a section cache if its anchor map is missing or has an invalid header. A valid empty anchor map does not cause a rebuild.
 
@@ -375,7 +402,7 @@ import std.string;
 import std.core;
 
 // === Configuration ===
-#define EXPECTED_VERSION 28
+#define EXPECTED_VERSION 29
 #define MAX_STRING_LENGTH 65535
 
 // === String Structure ===

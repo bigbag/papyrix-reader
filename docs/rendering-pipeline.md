@@ -96,7 +96,9 @@ It does not add XML wrappers or page breaks at byte boundaries.
 Metadata, page caches, page-count indexes, and anchor maps rebuild through version checks.
 See [file formats](file-formats.md) for record layouts.
 
-EPUB reader opens restore external stylesheets from the OPF after loading `book.bin`. Metadata-only opens do not load stylesheets. The same memory and file-size limits apply to fresh and cached opens.
+EPUB metadata loads do not prepare external styles. Reloading metadata discards the previous manifest's stylesheet list. The first chapter that needs layout loads compatible parsed rules from `styles.bin`, or prepares all source stylesheets and saves the complete result. Complete page-cache reads do not load CSS. An empty rule cache is valid for a book without external styles. The cache keeps property flags, precedence, and relative units, so font and viewport changes reuse the parsed rules.
+
+CSS preparation uses the chapter's existing scratch storage for ZIP extraction. Memory checks cover string growth, declaration work, and retained rules instead of a fixed 96 KiB threshold. The free-block check covers simultaneous declaration copies. The parser excludes surrounding whitespace from the copy budget. The limits remain 64 KiB per source stylesheet, 512 rules, and 256 bytes per selector. Failed or cancelled preparation does not emit new pages with incomplete styles. Failed preparation stops cache extension and keeps the committed page cache. A missing or invalid rule cache rebuilds from source. Page cache version 29, metrics version 10, and anchor version 7 invalidate older layouts without deleting progress or bookmarks.
 
 ## Cache Scheduling
 

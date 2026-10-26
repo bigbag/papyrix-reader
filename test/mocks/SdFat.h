@@ -49,6 +49,7 @@ class FsFile : public Print {
     totalWritten_ = 0;
     writeLimitActive_ = false;
     syncResult_ = true;
+    closeResult_ = true;
     seekEndResult_ = true;
     seeksRemaining_ = SIZE_MAX;
     failBufferReadAfterActive_ = false;
@@ -70,6 +71,7 @@ class FsFile : public Print {
     totalWritten_ = 0;
     writeLimitActive_ = false;
     syncResult_ = true;
+    closeResult_ = true;
     seekEndResult_ = true;
     seeksRemaining_ = SIZE_MAX;
     hasModifyDateTime_ = false;
@@ -110,6 +112,7 @@ class FsFile : public Print {
   }
 
   void setSyncResult(bool result) { syncResult_ = result; }
+  void setCloseResult(bool result) { closeResult_ = result; }
   void setSeekEndResult(bool result) { seekEndResult_ = result; }
 
   void setModifyDateTime(uint16_t date, uint16_t time) {
@@ -156,7 +159,7 @@ class FsFile : public Print {
   }
 
   bool close() {
-    const bool result = !isOpen_ || syncResult_;
+    const bool result = !isOpen_ || (syncResult_ && closeResult_);
     if (sharedBuffer_) {
       *sharedBuffer_ = buffer_;
     }
@@ -321,6 +324,7 @@ class FsFile : public Print {
   bool writeLimitActive_ = false;
   size_t totalWritten_ = 0;
   bool syncResult_ = true;
+  bool closeResult_ = true;
   bool seekEndResult_ = true;
   size_t seeksRemaining_ = SIZE_MAX;
   uint16_t modifyDate_ = 0;

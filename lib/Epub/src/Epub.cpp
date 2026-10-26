@@ -14,6 +14,8 @@
 
 #define TAG "EPUB"
 
+#include <new>
+
 #include "../../src/config.h"
 #include "Epub/parsers/ContainerParser.h"
 #include "Epub/parsers/ContentOpfParser.h"
@@ -23,7 +25,6 @@
 
 namespace {
 constexpr size_t MIN_HEAP_FOR_TOC = 20 * 1024;
-constexpr size_t MIN_HEAP_FOR_CSS_PARSING = 96 * 1024;
 constexpr int MAX_TOC_RECOVERY_ATTEMPTS = 3;
 constexpr uint8_t TOC_RETRY_NO_TOC = 0xFF;
 constexpr char tocRetryFile[] = "/toc.retry";
@@ -132,7 +133,8 @@ uint32_t coverImageArea(const std::string& path, const std::function<bool()>& sh
 }
 }  // namespace
 
-bool Epub::findContentOpfFile(std::string* contentOpfFile) const {
+bool Epub::findContentOpfFile(std::string* contentOpfFile, uint8_t* decompressBuffer, BuildArena* scratch,
+                              const std::function<bool()>& shouldAbort) const {
   const auto containerPath = "META-INF/container.xml";
   size_t containerSize;
 
@@ -149,7 +151,7 @@ bool Epub::findContentOpfFile(std::string* contentOpfFile) const {
   }
 
   // Stream read (reusing your existing stream logic)
-  if (!readItemContentsToStream(containerPath, containerParser, 512)) {
+  if (!readItemContentsToStream(containerPath, containerParser, 512, decompressBuffer, scratch, shouldAbort)) {
     LOG_ERR(TAG, "Could not read META-INF/container.xml");
     return false;
   }
@@ -164,9 +166,10 @@ bool Epub::findContentOpfFile(std::string* contentOpfFile) const {
   return true;
 }
 
-bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const bool metadataOnly) {
+bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const bool metadataOnly,
+                           uint8_t* decompressBuffer, BuildArena* scratch, const std::function<bool()>& shouldAbort) {
   std::string contentOpfFilePath;
-  if (!findContentOpfFile(&contentOpfFilePath)) {
+  if (!findContentOpfFile(&contentOpfFilePath, decompressBuffer, scratch, shouldAbort)) {
     LOG_ERR(TAG, "Could not find content.opf in zip");
     return false;
   }
@@ -188,7 +191,7 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const 
     return false;
   }
 
-  if (!readItemContentsToStream(contentOpfFilePath, opfParser, 1024)) {
+  if (!readItemContentsToStream(contentOpfFilePath, opfParser, 1024, decompressBuffer, scratch, shouldAbort)) {
     LOG_ERR(TAG, "Could not read content.opf");
     return false;
   }
@@ -210,6 +213,7 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const 
 
   // Capture CSS files from manifest
   cssFiles_ = opfParser.getCssFiles();
+  cssFilesKnown_ = true;
   LOG_DBG(TAG, "Found %d CSS files in manifest", static_cast<int>(cssFiles_.size()));
 
   LOG_INF(TAG, "Successfully parsed content.opf");
@@ -441,65 +445,76 @@ void Epub::recoverLostToc() {
   }
 }
 
-bool Epub::parseCssFiles() {
-  if (cssFiles_.empty()) {
-    LOG_DBG(TAG, "No CSS files to parse");
-    return true;
+bool Epub::prepareCssStyles(uint32_t sourceFingerprint, uint8_t* decompressBuffer, BuildArena* scratch,
+                            const std::function<bool()>& shouldAbort) {
+  bool aborted = false;
+  const std::function<bool()> checkAbort = [&]() {
+    aborted = aborted || (shouldAbort && shouldAbort());
+    return aborted;
+  };
+  if (checkAbort()) return false;
+  if (cssParser_ && cssFingerprint_ == sourceFingerprint) return true;
+  cssParser_.reset();
+  const size_t setupBytes = sizeof(CssParser) + cachePath.size() * 2 + 512;
+  if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < setupBytes ||
+      heap_caps_get_free_size(MALLOC_CAP_8BIT) < setupBytes) {
+    LOG_ERR(TAG, "Insufficient heap to prepare CSS");
+    return false;
   }
-
-  cssParser_.reset(new CssParser());
-
-  // Skip CSS that would risk OOM during parsing or that exceeds the parser's cap.
-  // Style map can reach ~78KB at 512 rules (84 bytes/CssStyle + map overhead).
-  constexpr size_t MAX_CSS_FILE_SIZE = 64 * 1024;
-
-  for (const auto& cssHref : cssFiles_) {
-    const size_t freeHeap = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
-    if (freeHeap < MIN_HEAP_FOR_CSS_PARSING) {
-      LOG_ERR(TAG, "Insufficient heap for CSS (%zu < %zu), skipping: %s", freeHeap, MIN_HEAP_FOR_CSS_PARSING,
-              cssHref.c_str());
-      continue;
+  cssParser_.reset(new (std::nothrow) CssParser());
+  if (!cssParser_) return false;
+  auto fail = [&]() {
+    cssParser_.reset();
+    std::vector<std::string>().swap(cssFiles_);
+    cssFilesKnown_ = false;
+    return false;
+  };
+  const std::string stylesPath = cachePath + "/styles.bin";
+  const bool cached = cssParser_->loadCache(stylesPath.c_str(), sourceFingerprint, checkAbort);
+  if (!cached) {
+    if (checkAbort()) return fail();
+    if (!cssFilesKnown_) {
+      BookMetadataCache::BookMetadata metadata;
+      if (!parseContentOpf(metadata, true, decompressBuffer, scratch, checkAbort)) return fail();
     }
-
-    size_t cssFileSize = 0;
-    if (getItemSize(cssHref, &cssFileSize) && cssFileSize > MAX_CSS_FILE_SIZE) {
-      LOG_ERR(TAG, "CSS file too large (%zu > %zu), skipping: %s", cssFileSize, MAX_CSS_FILE_SIZE, cssHref.c_str());
-      continue;
+    const std::string temporary = cachePath + "/.tmp_css.css";
+    for (const auto& href : cssFiles_) {
+      if (checkAbort()) return fail();
+      size_t size = 0;
+      if (!getItemSize(href, &size) || size > 64 * 1024) {
+        LOG_ERR(TAG, "Missing or oversized stylesheet: %s", href.c_str());
+        return fail();
+      }
+      FsFile file;
+      if (!SdMan.openFileForWrite(TAG, temporary, file)) return fail();
+      bool ok = readItemContentsToStream(href, file, 1024, decompressBuffer, scratch, checkAbort) && file.sync();
+      file.close();
+      if (ok) ok = cssParser_->parseFile(temporary.c_str(), checkAbort);
+      SdMan.remove(temporary.c_str());
+      if (!ok) {
+        LOG_ERR(TAG, "Failed to prepare stylesheet: %s", href.c_str());
+        return fail();
+      }
     }
-
-    // Extract CSS file to temp location
-    const auto tmpCssPath = getCachePath() + "/.tmp_css.css";
-
-    FsFile tempCssFile;
-    if (!SdMan.openFileForWrite("EBP", tmpCssPath, tempCssFile)) {
-      LOG_ERR(TAG, "Failed to create temp CSS file");
-      continue;
+    if (checkAbort()) return fail();
+    if (sourceFingerprint && !cssParser_->saveCache(stylesPath.c_str(), sourceFingerprint, checkAbort)) {
+      if (checkAbort()) return fail();
+      LOG_ERR(TAG, "Could not save CSS rules; retaining complete rules in memory");
     }
-
-    if (!readItemContentsToStream(cssHref, tempCssFile, 1024)) {
-      LOG_ERR(TAG, "Failed to extract CSS: %s", cssHref.c_str());
-      tempCssFile.close();
-      SdMan.remove(tmpCssPath.c_str());
-      continue;
-    }
-    tempCssFile.close();
-
-    // Parse the CSS file
-    if (!cssParser_->parseFile(tmpCssPath.c_str())) {
-      LOG_ERR(TAG, "Failed to parse CSS: %s", cssHref.c_str());
-    }
-
-    // Clean up temp file
-    SdMan.remove(tmpCssPath.c_str());
   }
-
-  LOG_INF(TAG, "Parsed CSS files, %d style rules loaded", static_cast<int>(cssParser_->getStyleCount()));
+  cssFingerprint_ = sourceFingerprint;
+  std::vector<std::string>().swap(cssFiles_);
+  cssFilesKnown_ = false;
+  LOG_INF(TAG, "%s %u CSS rules", cached ? "Loaded cached" : "Prepared",
+          static_cast<unsigned>(cssParser_->getStyleCount()));
   return true;
 }
 
 // load in the meta data for the epub file
 bool Epub::load(const bool buildIfMissing) {
   LOG_INF(TAG, "Loading ePub: %s", filepath.c_str());
+  std::vector<std::string>().swap(cssFiles_);
+  cssFilesKnown_ = false;
 
   // Initialize spine/TOC cache
   bookMetadataCache.reset(new BookMetadataCache(cachePath));
@@ -511,18 +526,6 @@ bool Epub::load(const bool buildIfMissing) {
       if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
         LOG_ERR(TAG, "Cache became invalid during TOC recovery");
         return false;
-      }
-      // book.bin does not store stylesheet paths.
-      if (cssFiles_.empty() && heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) >= MIN_HEAP_FOR_CSS_PARSING) {
-        BookMetadataCache::BookMetadata cssMetadata;
-        if (!parseContentOpf(cssMetadata, true)) {
-          LOG_ERR(TAG, "Could not read CSS list from source, continuing without external styles");
-        }
-      }
-      if (!cssFiles_.empty()) {
-        parseCssFiles();
-        std::vector<std::string> tmp;
-        cssFiles_.swap(tmp);
       }
     }
     LOG_INF(TAG, "Loaded ePub: %s", filepath.c_str());
@@ -558,14 +561,6 @@ bool Epub::load(const bool buildIfMissing) {
   if (!bookMetadataCache->endContentOpfPass()) {
     LOG_ERR(TAG, "Could not end writing content.opf pass");
     return false;
-  }
-
-  // Parse CSS files for styling
-  parseCssFiles();
-  // Free CSS file paths - no longer needed after rules are parsed into cssParser_
-  {
-    std::vector<std::string> tmp;
-    cssFiles_.swap(tmp);
   }
 
   // TOC Pass - skip if heap is too low for inflate + expat
@@ -620,6 +615,8 @@ bool Epub::load(const bool buildIfMissing) {
 
 bool Epub::loadMetadataOnly() {
   LOG_INF(TAG, "Loading metadata only: %s", filepath.c_str());
+  std::vector<std::string>().swap(cssFiles_);
+  cssFilesKnown_ = false;
 
   bookMetadataCache.reset(new BookMetadataCache(cachePath));
 

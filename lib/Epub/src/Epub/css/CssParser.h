@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <map>
 #include <string>
 #include <vector>
@@ -30,7 +31,9 @@ class CssParser {
    * Parse a CSS file and add its rules to the style map
    * Returns true if parsing was successful
    */
-  bool parseFile(const char* filepath);
+  bool parseFile(const char* filepath, const std::function<bool()>& shouldAbort = {});
+  bool loadCache(const char* path, uint32_t sourceFingerprint, const std::function<bool()>& shouldAbort = {});
+  bool saveCache(const char* path, uint32_t sourceFingerprint, const std::function<bool()>& shouldAbort = {}) const;
 
   /**
    * Get the style for a given selector (class or tag)
@@ -61,7 +64,7 @@ class CssParser {
   void clear() { styleMap_.clear(); }
 
  private:
-  void parseRule(const std::string& selector, const std::string& properties);
+  bool parseRule(const std::string& selector, const std::string& properties, const std::function<bool()>& shouldAbort);
   static void parseProperty(const std::string& name, const std::string& value, CssStyle& style);
   static TextAlign parseTextAlign(const std::string& value);
   static CssFontStyle parseFontStyle(const std::string& value);
