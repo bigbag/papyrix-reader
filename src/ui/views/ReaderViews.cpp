@@ -2,6 +2,7 @@
 
 #include <I18n.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <iterator>
 
@@ -96,7 +97,71 @@ void render(const GfxRenderer& r, const Theme& t, const ReaderMenuView& v) {
 
   const char* items[] = {tr(CHAPTERS), tr(BOOKMARKS), tr(BOOK_STATS), tr(BACK)};
   static_assert(std::size(items) == ReaderMenuView::ITEM_COUNT);
-  ui::popupMenu(r, t, tr(MENU), items, ReaderMenuView::ITEM_COUNT, v.selected);
+  if (!v.hasFrontLight && !v.hasTouch) {
+    ui::popupMenu(r, t, tr(MENU), items, v.itemCount(), v.selected);
+    r.displayBuffer();
+    return;
+  }
+
+  const int screenW = r.getScreenWidth();
+  const int screenH = r.getScreenHeight();
+  const int16_t itemHeight = static_cast<int16_t>(t.itemHeight);
+  const auto geometry = v.layout(screenW, screenH, itemHeight);
+  const touch::Rect menu = geometry.menu;
+  r.clearArea(menu.x, menu.y, menu.width, menu.height, t.backgroundColor);
+  r.drawRect(menu.x, menu.y, menu.width, menu.height, t.primaryTextBlack);
+
+  const int titleW = r.getTextWidth(t.uiFontId, tr(MENU), EpdFontFamily::BOLD);
+  r.drawText(t.uiFontId, menu.x + (menu.width - titleW) / 2, menu.y + 10, tr(MENU), t.primaryTextBlack,
+             EpdFontFamily::BOLD);
+  r.drawLine(menu.x + 10, menu.y + 35, menu.x + menu.width - 10, menu.y + 35, t.primaryTextBlack);
+
+  const int lineHeight = r.getLineHeight(t.uiFontId);
+  for (int i = 0; i < v.itemCount(); i++) {
+    const touch::Rect item = geometry.items[i];
+    const int textW = r.getTextWidth(t.uiFontId, items[i]);
+    const int textX = item.x + (item.width - textW) / 2;
+    const int textY = item.y + (item.height - lineHeight) / 2;
+    if (i == v.selected) {
+      r.fillRect(item.x, item.y, item.width, item.height, t.selectionFillBlack);
+      r.drawText(t.uiFontId, textX, textY, items[i], t.selectionTextBlack);
+    } else {
+      r.drawText(t.uiFontId, textX, textY, items[i], t.primaryTextBlack);
+    }
+  }
+
+  const auto drawCentered = [&](touch::Rect bounds, const char* text, bool black) {
+    const int textW = r.getTextWidth(t.uiFontId, text);
+    r.drawText(t.uiFontId, bounds.x + (bounds.width - textW) / 2, bounds.y + (bounds.height - lineHeight) / 2, text,
+               black);
+  };
+  const auto drawBar = [&](touch::Rect minus, touch::Rect bar, touch::Rect plus, uint8_t value) {
+    r.drawRect(minus.x, minus.y, minus.width, minus.height, t.primaryTextBlack);
+    drawCentered(minus, "-", t.primaryTextBlack);
+    r.drawRect(plus.x, plus.y, plus.width, plus.height, t.primaryTextBlack);
+    drawCentered(plus, "+", t.primaryTextBlack);
+    r.drawRect(bar.x, bar.y, bar.width, bar.height, t.primaryTextBlack);
+    const int fillWidth = bar.width * std::min<int>(value, 100) / 100;
+    if (fillWidth > 2) r.fillRect(bar.x + 1, bar.y + 1, fillWidth - 2, bar.height - 2, t.primaryTextBlack);
+  };
+  const auto drawLabel = [&](touch::Rect label, const char* text, uint8_t value) {
+    char percent[8];
+    snprintf(percent, sizeof(percent), "%u%%", static_cast<unsigned>(std::min<int>(value, 100)));
+    const int textY = label.y + (label.height - lineHeight) / 2;
+    r.drawText(t.uiFontId, label.x, textY, text, t.primaryTextBlack);
+    const int percentW = r.getTextWidth(t.uiFontId, percent);
+    r.drawText(t.uiFontId, label.x + label.width - percentW, textY, percent, t.primaryTextBlack);
+  };
+
+  if (v.hasFrontLight) {
+    const int separatorY = geometry.items[0].y - 6;
+    r.drawLine(menu.x + 10, separatorY, menu.x + menu.width - 10, separatorY, t.primaryTextBlack);
+    drawLabel(geometry.brightnessLabel, tr(BRIGHTNESS), v.brightness);
+    drawBar(geometry.brightnessMinus, geometry.brightnessBar, geometry.brightnessPlus, v.brightness);
+    drawLabel(geometry.warmthLabel, tr(WARMTH), v.warmth);
+    drawBar(geometry.warmthMinus, geometry.warmthBar, geometry.warmthPlus, v.warmth);
+  }
+
   r.displayBuffer();
 }
 

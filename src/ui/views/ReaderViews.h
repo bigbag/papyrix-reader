@@ -181,9 +181,10 @@ void render(const GfxRenderer& r, const Theme& t, const BookStatsView& v);
 
 struct ReaderMenuView {
   struct Hit {
-    enum class Type : uint8_t { None, Item };
+    enum class Type : uint8_t { None, Item, Brightness, Warmth, Dismiss };
     Type type = Type::None;
     int index = -1;
+    int value = 0;
   };
   enum class Item : int8_t { Chapters, Bookmarks, BookStats, Back, Count };
   static constexpr int ITEM_COUNT = static_cast<int>(Item::Count);
@@ -191,6 +192,11 @@ struct ReaderMenuView {
   int8_t selected = 0;
   bool visible = false;
   bool needsRender = true;
+  bool hasFrontLight = false;
+  bool hasTouch = false;
+  bool showBack = true;
+  uint8_t brightness = 0;
+  uint8_t warmth = 50;
 
   void show() {
     visible = true;
@@ -204,35 +210,119 @@ struct ReaderMenuView {
   }
 
   void moveUp() {
-    selected = (selected == 0) ? ITEM_COUNT - 1 : selected - 1;
+    selected = (selected == 0) ? itemCount() - 1 : selected - 1;
     needsRender = true;
   }
 
   void moveDown() {
-    selected = (selected + 1) % ITEM_COUNT;
+    selected = (selected + 1) % itemCount();
     needsRender = true;
   }
 
   Item selectedItem() const { return static_cast<Item>(selected); }
+  int itemCount() const { return showBack ? ITEM_COUNT : static_cast<int>(Item::Back); }
 
-  static touch::Rect menuBounds(int16_t screenWidth, int16_t screenHeight, int16_t itemHeight) {
-    const int16_t height = ITEM_COUNT * (itemHeight + 8) + 50;
-    return {static_cast<int16_t>((screenWidth - 200) / 2), static_cast<int16_t>((screenHeight - height) / 2), 200,
-            height};
+  struct Layout {
+    touch::Rect menu;
+    touch::Rect items[ITEM_COUNT];
+    touch::Rect brightnessLabel;
+    touch::Rect brightnessMinus;
+    touch::Rect brightnessBar;
+    touch::Rect brightnessPlus;
+    touch::Rect warmthLabel;
+    touch::Rect warmthMinus;
+    touch::Rect warmthBar;
+    touch::Rect warmthPlus;
+  };
+
+  Layout layout(int16_t screenWidth, int16_t screenHeight, int16_t itemHeight) const {
+    const bool enhanced = hasFrontLight || hasTouch;
+    const int rowHeight = enhanced ? std::clamp<int>(itemHeight, 30, 40) : itemHeight;
+    Layout result{};
+    int itemsOffset = 45;
+    if (!enhanced) {
+      const int16_t height = static_cast<int16_t>(itemCount() * (rowHeight + 8) + 50);
+      result.menu = {static_cast<int16_t>((screenWidth - 200) / 2), static_cast<int16_t>((screenHeight - height) / 2),
+                     200, height};
+    } else {
+      const int menuWidth = hasFrontLight ? std::min(360, std::max(0, static_cast<int>(screenWidth) - 16)) : 200;
+      const int labelHeight = std::max(rowHeight, 30);
+      const int barHeight = 38;
+      const int itemsHeight = itemCount() * (rowHeight + 8);
+      int menuHeight = 45 + itemsHeight + 10;
+      if (hasFrontLight) menuHeight += labelHeight + barHeight + 6 + labelHeight + barHeight + 12;
+      result.menu = {static_cast<int16_t>((screenWidth - menuWidth) / 2),
+                     static_cast<int16_t>((screenHeight - menuHeight) / 2), static_cast<int16_t>(menuWidth),
+                     static_cast<int16_t>(menuHeight)};
+      const int innerX = result.menu.x + 10;
+      const int innerWidth = menuWidth - 20;
+      int y = result.menu.y + 45;
+      if (hasFrontLight) {
+        result.brightnessLabel = {static_cast<int16_t>(innerX), static_cast<int16_t>(y),
+                                  static_cast<int16_t>(innerWidth), static_cast<int16_t>(labelHeight)};
+        y += labelHeight;
+        result.brightnessMinus = {static_cast<int16_t>(innerX), static_cast<int16_t>(y), 40,
+                                  static_cast<int16_t>(barHeight)};
+        result.brightnessBar = {static_cast<int16_t>(innerX + 48), static_cast<int16_t>(y),
+                                static_cast<int16_t>(innerWidth - 96), static_cast<int16_t>(barHeight)};
+        result.brightnessPlus = {static_cast<int16_t>(result.menu.x + menuWidth - 50), static_cast<int16_t>(y), 40,
+                                 static_cast<int16_t>(barHeight)};
+        y += barHeight + 6;
+        result.warmthLabel = {static_cast<int16_t>(innerX), static_cast<int16_t>(y), static_cast<int16_t>(innerWidth),
+                              static_cast<int16_t>(labelHeight)};
+        y += labelHeight;
+        result.warmthMinus = {static_cast<int16_t>(innerX), static_cast<int16_t>(y), 40,
+                              static_cast<int16_t>(barHeight)};
+        result.warmthBar = {static_cast<int16_t>(innerX + 48), static_cast<int16_t>(y),
+                            static_cast<int16_t>(innerWidth - 96), static_cast<int16_t>(barHeight)};
+        result.warmthPlus = {static_cast<int16_t>(result.menu.x + menuWidth - 50), static_cast<int16_t>(y), 40,
+                             static_cast<int16_t>(barHeight)};
+        y += barHeight;
+        itemsOffset = y - result.menu.y + 12;
+      }
+    }
+    for (int i = 0; i < itemCount(); ++i) {
+      result.items[i] = {static_cast<int16_t>(result.menu.x + 10),
+                         static_cast<int16_t>(result.menu.y + itemsOffset + i * (rowHeight + 8)),
+                         static_cast<int16_t>(result.menu.width - 20), static_cast<int16_t>(rowHeight)};
+    }
+    return result;
   }
 
-  static touch::Rect itemBounds(int index, int16_t screenWidth, int16_t screenHeight, int16_t itemHeight) {
-    const touch::Rect menu = menuBounds(screenWidth, screenHeight, itemHeight);
-    return {static_cast<int16_t>(menu.x + 10), static_cast<int16_t>(menu.y + 45 + index * (itemHeight + 8)), 180,
-            itemHeight};
+  touch::Rect menuBounds(int16_t screenWidth, int16_t screenHeight, int16_t itemHeight) const {
+    return layout(screenWidth, screenHeight, itemHeight).menu;
+  }
+
+  touch::Rect itemBounds(int index, int16_t screenWidth, int16_t screenHeight, int16_t itemHeight) const {
+    if (index < 0 || index >= itemCount()) return {};
+    return layout(screenWidth, screenHeight, itemHeight).items[index];
   }
 
   Hit hitTest(touch::Point point, int16_t screenWidth, int16_t screenHeight, int16_t itemHeight) const {
     if (!visible) return {};
-    for (int i = 0; i < ITEM_COUNT; ++i) {
-      if (itemBounds(i, screenWidth, screenHeight, itemHeight).contains(point)) return {Hit::Type::Item, i};
+    const Layout geometry = layout(screenWidth, screenHeight, itemHeight);
+    if (hasFrontLight) {
+      if (geometry.brightnessMinus.contains(point)) return {Hit::Type::Brightness, -1, stepped(brightness, -5)};
+      if (geometry.brightnessPlus.contains(point)) return {Hit::Type::Brightness, -1, stepped(brightness, 5)};
+      if (geometry.brightnessBar.contains(point))
+        return {Hit::Type::Brightness, -1, barValue(point, geometry.brightnessBar)};
+      if (geometry.warmthMinus.contains(point)) return {Hit::Type::Warmth, -1, stepped(warmth, -5)};
+      if (geometry.warmthPlus.contains(point)) return {Hit::Type::Warmth, -1, stepped(warmth, 5)};
+      if (geometry.warmthBar.contains(point)) return {Hit::Type::Warmth, -1, barValue(point, geometry.warmthBar)};
     }
+    for (int i = 0; i < itemCount(); ++i) {
+      if (geometry.items[i].contains(point)) return {Hit::Type::Item, i};
+    }
+    if (hasTouch && !geometry.menu.contains(point)) return {Hit::Type::Dismiss, -1, 0};
     return {};
+  }
+
+ private:
+  static int stepped(uint8_t current, int delta) { return std::clamp(static_cast<int>(current) + delta, 0, 100); }
+  static int barValue(touch::Point point, touch::Rect bar) {
+    const int span = bar.width - 1;
+    if (span <= 0) return 0;
+    return std::clamp(((point.x - bar.x) * 100 + span / 2) / span, 0, 100);
   }
 };
 

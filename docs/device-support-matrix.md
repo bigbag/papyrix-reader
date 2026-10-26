@@ -111,6 +111,8 @@ A successful NTP update writes UTC time to an available RTC.
 Wi-Fi starts on demand.
 Deep sleep stops Wi-Fi and turns off the front light.
 Settings > Screen contains Brightness and Warmth on X4 Pro and M4.
+Reader Menu shows these controls above the navigation items.
+Brightness zero turns the light off.
 
 Except on M4, the CPU policy uses 10 MHz at idle.
 It restores 160 MHz on ESP32-C3 and 240 MHz on ESP32-S3 for active work.
@@ -125,7 +127,8 @@ Each profile selects its controller byte layout and coordinate transform.
 M4 uses FT6336U-compatible touch on native I2C1.
 Its acquisition task polls every 10 ms and coordinates shared reset with the display.
 
-X3, X4, and X4 v2 Classic use button controls and have no touch input. X4 Pro, Sticky, and M4 use touch for menu selection. X4 Pro also maps its capacitive Home key to Back. Sticky and M4 have no Home key or physical Back or Confirm buttons. In Reader Menu, the Back item closes the book and returns to its source screen. See the [reading controls](user_guide.md#4-reading-mode) for each device group.
+X3, X4, and X4 v2 Classic use button controls and have no touch input. X4 Pro, Sticky, and M4 use touch for menu selection. X4 Pro maps its capacitive Home key to Back and does not show a Back item in Reader Menu. Press and release Home while reading to close the book. Sticky and M4 have no Home key or physical Back or Confirm buttons. They keep the Back menu item to close the book and return to its source screen. See the [reading controls](user_guide.md#4-reading-mode) for each device group.
+On touch devices, a tap outside Reader Menu closes the menu without closing the book.
 
 Reader touch zones use 24 percent of the width for Previous,
 52 percent for Menu, and 24 percent for Next.

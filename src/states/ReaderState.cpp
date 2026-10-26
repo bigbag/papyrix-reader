@@ -3062,6 +3062,11 @@ void ReaderState::exitToUI(Core& core) {
 
 void ReaderState::enterMenuMode(Core& core) {
   if (!stopBackgroundCaching()) return;
+  menuView_.hasTouch = PAPYRIX_CAP_TOUCH != 0;
+  menuView_.showBack = !PAPYRIX_TARGET_X4PRO;
+  menuView_.hasFrontLight = core.frontLight.isAvailable();
+  menuView_.brightness = core.frontLight.brightness();
+  menuView_.warmth = core.frontLight.warmth();
   menuView_.show();
   menuMode_ = true;
   needsRender_ = true;
@@ -3070,6 +3075,7 @@ void ReaderState::enterMenuMode(Core& core) {
 
 void ReaderState::exitMenuMode() {
   menuView_.hide();
+  overlayTapGuard_.closedAt(millis());
   menuMode_ = false;
   needsRender_ = true;
   LOG_DBG(TAG, "Exited menu mode");
@@ -3079,11 +3085,32 @@ void ReaderState::handleMenuInput(Core& core, const Event& e) {
   if (e.type == EventType::Tap) {
     const auto hit = menuView_.hitTest({e.touch.x, e.touch.y}, renderer_.getScreenWidth(), renderer_.getScreenHeight(),
                                        THEME_MANAGER.current().itemHeight);
-    if (hit.type == ui::ReaderMenuView::Hit::Type::Item) {
-      menuView_.selected = static_cast<int8_t>(hit.index);
-      overlayTapGuard_.closedAt(millis());
-      handleMenuAction(core, menuView_.selectedItem());
+    using HitType = ui::ReaderMenuView::Hit::Type;
+    bool saved = true;
+    switch (hit.type) {
+      case HitType::Item:
+        menuView_.selected = static_cast<int8_t>(hit.index);
+        handleMenuAction(core, menuView_.selectedItem());
+        return;
+      case HitType::Dismiss:
+        exitMenuMode();
+        startBackgroundCaching(core);
+        return;
+      case HitType::Brightness:
+        if (hit.value == core.frontLight.brightness()) return;
+        saved = core.frontLight.setBrightness(static_cast<uint8_t>(hit.value));
+        break;
+      case HitType::Warmth:
+        if (hit.value == core.frontLight.warmth()) return;
+        saved = core.frontLight.setWarmth(static_cast<uint8_t>(hit.value));
+        break;
+      case HitType::None:
+        return;
     }
+    menuView_.brightness = core.frontLight.brightness();
+    menuView_.warmth = core.frontLight.warmth();
+    if (!saved) LOG_ERR(TAG, "Could not save front light setting");
+    needsRender_ = true;
     return;
   }
   if (e.type != EventType::ButtonPress) return;

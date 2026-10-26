@@ -1570,6 +1570,22 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
       ${TEST_HELPERS})
     target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_STICKY=1)
+  elseif(TEST_NAME STREQUAL "FrontLightTest")
+    foreach(LIGHT_TARGET X4PRO MURPHY_M4 XTEINK_C3)
+      set(LIGHT_TEST FrontLight${LIGHT_TARGET}Test)
+      add_executable(${LIGHT_TEST} ${TEST_SRC}
+        ${PROJECT_ROOT}/src/hal/FrontLight.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/FrontLightBackend.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
+        ${TEST_HELPERS})
+      target_compile_definitions(${LIGHT_TEST} PRIVATE PAPYRIX_TARGET_${LIGHT_TARGET}=1)
+      if(LIGHT_TARGET STREQUAL "MURPHY_M4")
+        target_sources(${LIGHT_TEST} PRIVATE ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4Batch.cpp)
+      endif()
+      set_target_properties(${LIGHT_TEST} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+    endforeach()
+    continue()
   elseif(TEST_NAME STREQUAL "MurphyM4PeripheralTest")
     add_executable(${TEST_NAME} ${TEST_SRC}
       ${PROJECT_ROOT}/src/hal/Battery.cpp

@@ -577,7 +577,7 @@ Use the controls for your device. X3, X4, and X4 v2 Classic use buttons only. X4
 | Next chapter | Hold **Right** or **Down**, then release | Hold **Down**, then release |
 | Open Reader Menu | Press **Confirm** | Tap the center menu zone |
 | Select a menu item | Use **Up/Down**, then press **Confirm** | Tap the item |
-| Close the book | Press **Back**, or select **Back** in Reader Menu | Open Reader Menu and tap **Back** |
+| Close the book | Press **Back**, or select **Back** in Reader Menu | X4 Pro: press and release **Home** while reading. Sticky and M4: open Reader Menu and tap **Back** |
 
 The table shows the default page-button layout. The side-button preference can reverse the page actions. See [Button and Touch Layout](#button-and-touch-layout) for the touch zones.
 
@@ -604,11 +604,22 @@ On button devices, press **Confirm** to open Reader Menu. On touch devices, tap 
 - **Chapters** — Open the Table of Contents / Chapter Selection screen
 - **Bookmarks** — Open the Bookmarks overlay for the current book
 - **Book stats** — Show Progress, total Time read, and Sessions for the current book
-- **Back** — Close the book and return to the screen that opened it
+- **Back** (except X4 Pro) — Close the book and return to the screen that opened it
 
 Book Stats stays available here when **Show Recents** is off. On button devices, use **Up/Down** to highlight an item and **Confirm** to select it. On touch devices, tap the item.
 
-The physical **Back** button closes the menu and returns to reading. The X4 Pro Home key does the same. The **Back** item inside Reader Menu closes the book instead. Sticky and Murphy M4 use this item to return to the screen that opened the book.
+The physical **Back** button closes the menu and returns to reading. The X4 Pro Home key does the same. On X4 Pro, press and release Home while reading to close the book. Sticky and Murphy M4 keep the **Back** menu item because they have no Back or Home key.
+
+On touch devices, tap outside the menu to return to reading.
+This action does not turn the page.
+
+X4 Pro and Murphy M4 show front-light controls above the navigation items:
+
+- Tap the **Brightness** or **Warmth** bar to select a level from 0 to 100 percent. Tap **−** or **+** to change the level by 5 percentage points. Dragging is not supported.
+- Brightness zero turns the light off. A warmth change does not turn an off light on.
+
+Light changes apply immediately and keep the menu open.
+The same settings remain available in **Settings > Screen**.
 
 ### 4.2 Bookmarks
 

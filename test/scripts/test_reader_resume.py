@@ -22,6 +22,7 @@ def block(source, marker):
 
 HARNESS = r'''
 #include <algorithm>
+#include <TargetConfig.h>
 #include <cassert>
 #include <climits>
 #include <cstdint>
@@ -32,7 +33,8 @@ HARNESS = r'''
 #include "core/ReaderButtonDispatcher.h"
 #include "states/State.h"
 #include "ui/TouchLayout.h"
-uint32_t millis() { return 1000; }
+uint32_t nowMs = 1000;
+uint32_t millis() { return nowMs; }
 template<class... T> void logMessage(T...) {}
 #define TAG "TEST"
 #define LOG_DBG(...) logMessage(__VA_ARGS__)
@@ -64,9 +66,11 @@ struct Renderer {
   void cleanupGrayscaleWithFrameBuffer() {}
 };
 using GfxRenderer = Renderer;
+struct BitmapTurnCache { explicit BitmapTurnCache(Renderer&) {} };
 struct Fonts { void unloadReaderFonts() {} } FONT_MANAGER;
 namespace ui { template<class... T> void render(T&...) {} template<class... T> void centeredMessage(T&&...) {} }
 namespace ui {
+@TAP_GUARD@;
 @MENU_VIEW@;
 template<class... T> void overlayBox(T&&...) {}
 }
@@ -156,6 +160,13 @@ struct Core {
   Content content;
   Input input;
   int storage = 0;
+  struct {
+    bool isAvailable() const { return false; }
+    uint8_t brightness() const { return 0; }
+    uint8_t warmth() const { return 50; }
+    bool setBrightness(uint8_t) { return false; }
+    bool setWarmth(uint8_t) { return false; }
+  } frontLight;
   EventQueue events;
   struct { char text[1] = {}; } buf;
 } core;
@@ -207,10 +218,7 @@ struct ReaderState {
   uint32_t bookmarkNotifyMs_ = 0, indexingLastRenderMs_ = 0;
   int bookmarkCount_ = 0;
   ReaderButtonDispatcher readerButtons_;
-  struct TapGuard {
-    bool suppressPageTap(uint32_t) { return false; }
-    void closedAt(uint32_t) {}
-  } overlayTapGuard_;
+  ui::OverlayTapGuard overlayTapGuard_;
   int currentSpineIndex_ = 0, currentSectionPage_ = 0, lastRenderedSpineIndex_ = 0, lastRenderedSectionPage_ = 0;
   int textStartIndex_ = 0, parserSpineIndex_ = -1;
   uint32_t currentPage_ = 0, lastRenderedPage_ = 0;
@@ -287,6 +295,7 @@ struct ReaderState {
 @READER@
 void coldBoot() { core.settings = disk; cachedTransition = {}; transitionCached = false; }
 void reset() {
+  nowMs = 1000;
   core = {};
   strcpy(core.settings.lastBookPath, "/good.epub");
   disk = core.settings;
@@ -318,10 +327,28 @@ int main() {
         check(core.events.push(Event::tap({int16_t(reader.renderer_.width / 2), 100})), "menu tap is queued");
         reader.update(core);
         check(reader.menuMode_, "touch opens the reader menu from text and cover");
-        check(core.events.push(Event::tap({int16_t(reader.renderer_.width / 2),
-                                           int16_t(reader.renderer_.height / 2 + 76)})), "Back tap is queued");
+        if (PAPYRIX_TARGET_X4PRO) {
+          check(core.events.push(Event::tap({0, 0})), "outside tap is queued");
+          reader.update(core);
+          check(!reader.menuMode_ && ESP.count == 0, "outside tap returns to reading without closing the book");
+          check(core.events.push(Event::tap({0, 100})), "trailing page tap is queued");
+          reader.update(core);
+          nowMs += 300;
+          check(core.events.push(Event::tap({int16_t(reader.renderer_.width / 2), 100})), "menu reopens");
+          reader.update(core);
+          check(reader.menuMode_, "menu opens after the close guard expires");
+          check(core.events.push(Event::buttonPress(Button::Back)), "physical Back closes the menu");
+          reader.update(core);
+          check(!reader.menuMode_ && ESP.count == 0, "physical Back returns from the menu to reading");
+          check(core.events.push(Event::buttonPress(Button::Back)), "physical Back exits the book");
+        } else {
+          const auto back = reader.menuView_.itemBounds(static_cast<int>(ui::ReaderMenuView::Item::Back),
+              reader.renderer_.width, reader.renderer_.height, THEME_MANAGER.current().itemHeight);
+          check(core.events.push(Event::tap({int16_t(back.x + back.width / 2),
+                                             int16_t(back.y + back.height / 2)})), "Back tap is queued");
+        }
         reader.update(core);
-        check(ESP.count == 1, "touch menu exits the book without a physical Back key");
+        check(ESP.count == 1, "reader exit remains available for each input layout");
         coldBoot();
         check(detectBootMode() == BootMode::UI, "touch reader exit boots into UI mode");
         check(cachedTransition.returnTo == ReturnTo::RECENT, "touch reader exit keeps the return destination");
@@ -540,6 +567,7 @@ def main():
     harness = HARNESS.replace("@BOOT@", "\n".join(block(boot, name) for name in boot_methods))
     harness = harness.replace("@READER@", "\n".join(block(reader, name) for name in reader_methods))
     views = (ROOT / "src/ui/views/ReaderViews.h").read_text()
+    harness = harness.replace("@TAP_GUARD@", block(views, "class OverlayTapGuard"))
     harness = harness.replace("@MENU_VIEW@", block(views, "struct ReaderMenuView"))
     policy = (ROOT / "src/core/ExitToUiTransition.cpp").read_text()
     harness = harness.replace("@EXIT_POLICY@", block(policy, "ExitToUiPlan planExitToUi("))
@@ -548,11 +576,14 @@ def main():
         source = path / "resume.cpp"
         source.write_text(harness)
         binary = path / "resume"
-        subprocess.run(["c++", "-std=c++17", "-Wall", "-Wextra", "-I", str(ROOT / "src"),
-                        str(source), str(ROOT / "src/core/ReaderButtonDispatcher.cpp"),
-                        str(ROOT / "src/ui/TouchLayout.cpp"),
-                        "-o", str(binary)], check=True)
-        subprocess.run([str(binary)], check=True)
+        for target in ("X4PRO", "STICKY", "MURPHY_M4"):
+            subprocess.run(["c++", "-std=c++17", "-Wall", "-Wextra", f"-DPAPYRIX_TARGET_{target}=1",
+                            "-I", str(ROOT / "src"), "-I", str(ROOT / "lib/BoardSupport/include"),
+                            "-I", str(ROOT / "lib/EInkDisplay/include"),
+                            str(source), str(ROOT / "src/core/ReaderButtonDispatcher.cpp"),
+                            str(ROOT / "src/ui/TouchLayout.cpp"),
+                            "-o", str(binary)], check=True)
+            subprocess.run([str(binary)], check=True)
 
 
 if __name__ == "__main__":
