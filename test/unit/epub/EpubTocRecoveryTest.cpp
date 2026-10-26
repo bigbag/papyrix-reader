@@ -930,6 +930,26 @@ int main() {
     expectCssStyles(runner, reopened, "AbortCss_SaveRetry");
   }
 
+  for (int chapters : {500, 501, 505}) {
+    SdMan.reset();
+    testResetLargestFreeBlock();
+    EpubSpec spec;
+    spec.title = "Spine limit";
+    spec.chapters = chapters;
+    spec.withNcx = false;
+    spec.navTocHrefs = {"ch" + std::to_string(chapters) + ".xhtml"};
+    SdMan.registerFile("/books/limit.epub", makeEpub(spec));
+    Epub book("/books/limit.epub", "/limit");
+    runner.expectTrue(book.load() == (chapters == 500), "SpineLimit_LoadsOnlySupportedCount");
+    if (chapters == 500) {
+      runner.expectEq(500, book.getSpineItemsCount(), "SpineLimit_KeepsLastSupportedChapter");
+      runner.expectEq<int>(499, book.getTocItem(0).spineIndex, "SpineLimit_LastChapterTocRemainsValid");
+    } else {
+      runner.expectFalse(SdMan.exists(book.getCachePath() + "/book.bin"),
+                         "SpineLimit_DoesNotPublishOversizedMetadata");
+    }
+  }
+
   runner.printSummary();
   return runner.allPassed() ? 0 : 1;
 }

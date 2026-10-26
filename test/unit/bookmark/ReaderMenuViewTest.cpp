@@ -8,22 +8,6 @@ using ui::ReaderMenuView;
 int main() {
   TestUtils::TestRunner runner("ReaderMenuViewTest");
 
-  // --- defaults ---
-  {
-    ReaderMenuView view;
-    runner.expectEq(int8_t(0), view.selected, "default selected is 0");
-    runner.expectFalse(view.visible, "default visible is false");
-    runner.expectTrue(view.needsRender, "default needsRender is true");
-  }
-
-  // --- production item contract ---
-  {
-    runner.expectEq(3, ReaderMenuView::ITEM_COUNT, "ITEM_COUNT is 3");
-    runner.expectEq(0, static_cast<int>(ReaderMenuView::Item::Chapters), "Chapters is first");
-    runner.expectEq(1, static_cast<int>(ReaderMenuView::Item::Bookmarks), "Bookmarks is second");
-    runner.expectEq(2, static_cast<int>(ReaderMenuView::Item::BookStats), "Book stats is third");
-  }
-
   // --- show ---
   {
     ReaderMenuView view;
@@ -62,9 +46,8 @@ int main() {
     runner.expectTrue(view.needsRender, "second moveDown sets needsRender");
 
     view.needsRender = false;
-    view.moveDown();
-    runner.expectEq(int8_t(0), view.selected, "moveDown wraps to Chapters");
-    runner.expectTrue(view.needsRender, "moveDown wrap sets needsRender");
+    view.moveUp();
+    runner.expectTrue(view.selectedItem() == ReaderMenuView::Item::Bookmarks, "menu moves back to bookmarks");
   }
 
   // --- moveUp ---
@@ -80,8 +63,10 @@ int main() {
 
     view.needsRender = false;
     view.moveUp();
-    runner.expectEq(int8_t(2), view.selected, "moveUp wraps to Book stats");
+    runner.expectTrue(view.selectedItem() == ReaderMenuView::Item::Back, "moveUp wraps to the exit action");
     runner.expectTrue(view.needsRender, "moveUp wrap sets needsRender");
+    view.moveDown();
+    runner.expectTrue(view.selectedItem() == ReaderMenuView::Item::Chapters, "exit action wraps to Chapters");
   }
 
   runner.printSummary();

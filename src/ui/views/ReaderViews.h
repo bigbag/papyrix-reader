@@ -185,7 +185,7 @@ struct ReaderMenuView {
     Type type = Type::None;
     int index = -1;
   };
-  enum class Item : int8_t { Chapters, Bookmarks, BookStats, Count };
+  enum class Item : int8_t { Chapters, Bookmarks, BookStats, Back, Count };
   static constexpr int ITEM_COUNT = static_cast<int>(Item::Count);
 
   int8_t selected = 0;

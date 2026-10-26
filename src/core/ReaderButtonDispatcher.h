@@ -26,7 +26,6 @@ struct ReaderButtonConfig {
   uint32_t powerButtonDurationMs = 400;
   bool touchPageTurns = false;
   bool reversePageZones = false;
-  bool menuAllowed = true;
   int16_t logicalWidth = 0;
 };
 

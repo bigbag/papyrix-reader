@@ -9,6 +9,7 @@
 
 namespace {
 constexpr uint8_t BOOK_CACHE_VERSION = 8;
+constexpr uint16_t kMaxEntries = 500;
 constexpr char bookBinFile[] = "/book.bin";
 constexpr char bookBinBackupFile[] = "/book.bin.bak";
 constexpr char tmpSpineBinFile[] = "/spine.bin.tmp";
@@ -256,7 +257,7 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
 
 bool BookMetadataCache::rebuildFromMemory(const BookMetadata& metadata, const std::vector<SpineEntry>& spine,
                                           const std::vector<TocEntry>& toc) {
-  if (spine.size() > 500 || toc.size() > 500) return false;
+  if (spine.size() > kMaxEntries || toc.size() > kMaxEntries) return false;
   const uint16_t newSpineCount = static_cast<uint16_t>(spine.size());
   const uint16_t newTocCount = static_cast<uint16_t>(toc.size());
   const std::string spineTmpPath = cachePath + tmpSpineBinFile;
@@ -461,6 +462,12 @@ void BookMetadataCache::createSpineEntry(const std::string& href) {
     LOG_ERR(TAG, "createSpineEntry called but not in build mode");
     return;
   }
+  if (buildFailed) return;
+  if (spineCount >= kMaxEntries) {
+    LOG_ERR(TAG, "Spine entry count exceeds limit");
+    buildFailed = true;
+    return;
+  }
 
   const SpineEntry entry(href, -1);
   if (!writeSpineEntry(spineFile, entry)) {
@@ -547,7 +554,6 @@ bool BookMetadataCache::load() {
     return false;
   }
 
-  constexpr uint16_t kMaxEntries = 500;
   if (fileSpineCount > kMaxEntries || fileTocCount > kMaxEntries) {
     LOG_ERR(TAG, "Cache entry count exceeds limit: spine=%u toc=%u", fileSpineCount, fileTocCount);
     bookFile.close();

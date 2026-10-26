@@ -31,6 +31,7 @@ HARNESS = r'''
 #include <string>
 #include "core/ReaderButtonDispatcher.h"
 #include "states/State.h"
+#include "ui/TouchLayout.h"
 uint32_t millis() { return 1000; }
 template<class... T> void logMessage(T...) {}
 #define TAG "TEST"
@@ -40,13 +41,15 @@ template<class... T> void logMessage(T...) {}
 #define tr(x) #x
 constexpr int BOLD = 1;
 namespace papyrix { namespace hal { struct Display { enum { FAST_REFRESH, HALF_REFRESH }; }; } }
-struct Theme { int backgroundColor = 0; bool primaryTextBlack = true; int uiFontId = 0; };
+struct Theme { int backgroundColor = 0; bool primaryTextBlack = true; int uiFontId = 0, itemHeight = 32; };
 struct Themes { Theme value; Theme& current() { return value; } Theme& mutableCurrent() { return value; } } THEME_MANAGER;
 struct Renderer {
   enum { BW, GRAYSCALE_LSB, GRAYSCALE_MSB };
   enum class Orientation { Portrait };
   void setOrientation(Orientation) {}
-  int getScreenWidth() const { return 480; }
+  int width = 480, height = 800;
+  int getScreenWidth() const { return width; }
+  int getScreenHeight() const { return height; }
   int displays = 0;
   template<class... T> void clearScreen(T...) {}
   template<class... T> void drawCenteredText(T...) {}
@@ -63,6 +66,10 @@ struct Renderer {
 using GfxRenderer = Renderer;
 struct Fonts { void unloadReaderFonts() {} } FONT_MANAGER;
 namespace ui { template<class... T> void render(T&...) {} template<class... T> void centeredMessage(T&&...) {} }
+namespace ui {
+@MENU_VIEW@;
+template<class... T> void overlayBox(T&&...) {}
+}
 struct Page {
   void warmGlyphs(Renderer&, int) {}
   bool hasImages() { return false; }
@@ -138,6 +145,7 @@ struct Content {
   unsigned pageCount() { return 5; }
   const char* cacheDir() { return "/cache"; }
   void close() {}
+  unsigned tocCount() { return 0; }
 };
 struct Input {
   bool pageButtonsBlocked = false;
@@ -199,7 +207,10 @@ struct ReaderState {
   uint32_t bookmarkNotifyMs_ = 0, indexingLastRenderMs_ = 0;
   int bookmarkCount_ = 0;
   ReaderButtonDispatcher readerButtons_;
-  struct TapGuard { bool suppressPageTap(uint32_t) { assert(false); return false; } } overlayTapGuard_;
+  struct TapGuard {
+    bool suppressPageTap(uint32_t) { return false; }
+    void closedAt(uint32_t) {}
+  } overlayTapGuard_;
   int currentSpineIndex_ = 0, currentSectionPage_ = 0, lastRenderedSpineIndex_ = 0, lastRenderedSectionPage_ = 0;
   int textStartIndex_ = 0, parserSpineIndex_ = -1;
   uint32_t currentPage_ = 0, lastRenderedPage_ = 0;
@@ -210,7 +221,8 @@ struct ReaderState {
   std::unique_ptr<Cache> indexingCache_;
   std::unique_ptr<Parser> indexingParser_;
   Task cacheTask_;
-  struct View { bool needsRender = false; } bookStatsView_, menuView_;
+  struct View { bool needsRender = false; } bookStatsView_;
+  ui::ReaderMenuView menuView_;
   struct Session { void updateProgress(int) {} } readingSession_;
   struct GlobalPageMetrics { int currentPage = 0, totalPages = 0; };
   struct Viewport { int marginTop = 0, marginRight = 0, marginBottom = 0, marginLeft = 0; };
@@ -235,10 +247,15 @@ struct ReaderState {
     indexingCancelled_ = cancelIndexingChunk;
   }
   void handleBookStatsInput(Core&, const Event&) { assert(false); }
-  void handleMenuInput(Core&, const Event&) { assert(false); }
+  void handleMenuInput(Core&, const Event&);
   void handleBookmarkInput(Core&, const Event&) { assert(false); }
   void handleTocInput(Core&, const Event&) { assert(false); }
-  void enterMenuMode(Core&) { assert(false); }
+  void enterMenuMode(Core&);
+  void exitMenuMode();
+  void handleMenuAction(Core&, ui::ReaderMenuView::Item);
+  void enterTocMode(Core&) {}
+  void enterBookmarkMode(Core&) {}
+  void enterBookStatsMode(Core&) {}
   void navigateNext(Core&) { assert(false); }
   void navigatePrev(Core&) { assert(false); }
   void navigateNextChapter(Core&) { assert(false); }
@@ -285,6 +302,32 @@ void check(bool condition, const char* message) {
 }  // namespace papyrix
 int main() {
   using namespace papyrix;
+  for (bool cover : {false, true}) {
+    for (bool landscape : {false, true}) {
+      for (bool pageTaps : {false, true}) {
+        reset();
+        saveTransition(BootMode::READER, "/new.epub", ReturnTo::RECENT);
+        coldBoot();
+        check(detectBootMode() == BootMode::READER, "touch exit starts from a reader boot");
+        ReaderState reader;
+        reader.sourceState_ = StateId::Recent;
+        reader.currentSectionPage_ = cover ? -1 : 0;
+        reader.renderer_.width = landscape ? 800 : 480;
+        reader.renderer_.height = landscape ? 480 : 800;
+        core.settings.touchPageTurns = pageTaps;
+        check(core.events.push(Event::tap({int16_t(reader.renderer_.width / 2), 100})), "menu tap is queued");
+        reader.update(core);
+        check(reader.menuMode_, "touch opens the reader menu from text and cover");
+        check(core.events.push(Event::tap({int16_t(reader.renderer_.width / 2),
+                                           int16_t(reader.renderer_.height / 2 + 76)})), "Back tap is queued");
+        reader.update(core);
+        check(ESP.count == 1, "touch menu exits the book without a physical Back key");
+        coldBoot();
+        check(detectBootMode() == BootMode::UI, "touch reader exit boots into UI mode");
+        check(cachedTransition.returnTo == ReturnTo::RECENT, "touch reader exit keeps the return destination");
+      }
+    }
+  }
   for (bool duringChunk : {false, true}) {
     reset();
     saveTransition(BootMode::READER, "/new.epub", ReturnTo::RECENT);
@@ -489,11 +532,15 @@ def main():
     reader_methods = ["void ReaderState::render(", "void ReaderState::renderCurrentPage(",
                       "void ReaderState::renderCachedPage(", "void ReaderState::renderXtcPage(",
                       "void ReaderState::exit(", "void ReaderState::exitToUI(",
-                      "void ReaderState::endCacheWait(", "StateTransition ReaderState::update("]
+                      "void ReaderState::endCacheWait(", "StateTransition ReaderState::update(",
+                      "void ReaderState::enterMenuMode(", "void ReaderState::exitMenuMode(",
+                      "void ReaderState::handleMenuInput(", "void ReaderState::handleMenuAction("]
     if "void ReaderState::onPageRendered(" in reader:
         reader_methods.append("void ReaderState::onPageRendered(")
     harness = HARNESS.replace("@BOOT@", "\n".join(block(boot, name) for name in boot_methods))
     harness = harness.replace("@READER@", "\n".join(block(reader, name) for name in reader_methods))
+    views = (ROOT / "src/ui/views/ReaderViews.h").read_text()
+    harness = harness.replace("@MENU_VIEW@", block(views, "struct ReaderMenuView"))
     policy = (ROOT / "src/core/ExitToUiTransition.cpp").read_text()
     harness = harness.replace("@EXIT_POLICY@", block(policy, "ExitToUiPlan planExitToUi("))
     with tempfile.TemporaryDirectory(prefix="papyrix-reader-resume-") as directory:
@@ -503,6 +550,7 @@ def main():
         binary = path / "resume"
         subprocess.run(["c++", "-std=c++17", "-Wall", "-Wextra", "-I", str(ROOT / "src"),
                         str(source), str(ROOT / "src/core/ReaderButtonDispatcher.cpp"),
+                        str(ROOT / "src/ui/TouchLayout.cpp"),
                         "-o", str(binary)], check=True)
         subprocess.run([str(binary)], check=True)
 

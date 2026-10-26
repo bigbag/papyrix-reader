@@ -14,6 +14,10 @@ int main() {
   menuHit = menu.hitTest({310, 290}, 800, 480, 32);
   r.expectTrue(menuHit.type == ui::ReaderMenuView::Hit::Type::Item && menuHit.index == 2,
                "reader menu book statistics");
+  menuHit = menu.hitTest({310, 310}, 800, 480, 32);
+  r.expectTrue(menuHit.type == ui::ReaderMenuView::Hit::Type::Item &&
+                   menuHit.index == static_cast<int>(ui::ReaderMenuView::Item::Back),
+               "reader menu exit action accepts touch");
   menu.hide();
   r.expectTrue(menu.hitTest({310, 210}, 800, 480, 32).type == ui::ReaderMenuView::Hit::Type::None,
                "hidden reader menu rejects taps");

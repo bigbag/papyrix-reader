@@ -10,7 +10,7 @@ ReaderButtonAction ReaderButtonDispatcher::processEvent(const Event& e, const ui
     }
     const int16_t edgeWidth = static_cast<int16_t>((static_cast<int32_t>(config.logicalWidth) * 24) / 100);
     if (e.touch.x >= edgeWidth && e.touch.x < config.logicalWidth - edgeWidth) {
-      return config.menuAllowed ? ReaderButtonAction::Menu : ReaderButtonAction::None;
+      return ReaderButtonAction::Menu;
     }
     if (!config.touchPageTurns) return ReaderButtonAction::None;
     if (e.touch.x < edgeWidth) {

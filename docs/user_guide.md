@@ -567,21 +567,25 @@ Press **Back** to leave the app. The device discards the current timer. The time
 
 ## 4. Reading Mode
 
-After you open a book, the button layout changes to help you read.
+Use the controls for your device. X3, X4, and X4 v2 Classic use buttons only. X4 Pro, Sticky, and Murphy M4 use touch and their physical page buttons.
 
-### Page Turning
+| Action | Button devices: X3, X4, X4 v2 Classic | Touch devices: X4 Pro, Sticky, Murphy M4 |
+|---|---|---|
+| Previous page | Press **Left** or **Up** | Tap the left page zone or press **Up** |
+| Next page | Press **Right** or **Down** | Tap the right page zone or press **Down** |
+| Previous chapter | Hold **Left** or **Up**, then release | Hold **Up**, then release |
+| Next chapter | Hold **Right** or **Down**, then release | Hold **Down**, then release |
+| Open Reader Menu | Press **Confirm** | Tap the center menu zone |
+| Select a menu item | Use **Up/Down**, then press **Confirm** | Tap the item |
+| Close the book | Press **Back**, or select **Back** in Reader Menu | Open Reader Menu and tap **Back** |
 
-- **Previous Page:** Press **Left** or **Volume Up**
-- **Next Page:** Press **Right** or **Volume Down**
-- **Power Button:** When **Short Power Button** is set to **Page Turn** in Settings, a press of the power button goes to the next page (useful for one-handed reading). When set to **Bookmark**, it bookmarks the current page.
+The table shows the default page-button layout. The side-button preference can reverse the page actions. See [Button and Touch Layout](#button-and-touch-layout) for the touch zones.
 
-### Chapter Navigation
-* **Next Chapter:** Press and **hold** the **Right** (or **Volume Down**) button for a short time, then release.
-* **Previous Chapter:** Press and **hold** the **Left** (or **Volume Up**) button for a short time, then release.
+X4 Pro also has a capacitive Home key. Release it to send the Back action. Sticky and Murphy M4 have no Home key, physical Back button, or physical Confirm button. Use the on-screen controls on these devices.
 
-### System Navigation
-* **Return to Home:** Press **Back** to close the book and go back to the Book Selection screen.
-* **Reader Menu:** Press **Confirm** to open the Reader Menu (access chapters, bookmarks, and Book Stats).
+When **Touch page turns** is off, the page zones do not turn pages. The center menu zone and menu items still accept taps. This setting does not disable physical page buttons.
+
+When **Short Power Button** is **Page Turn**, a short Power press goes to the next page. When it is **Bookmark**, a short Power press adds a bookmark.
 
 ### Status Bar
 
@@ -595,13 +599,16 @@ EPUB chapters cache one chapter at a time, so `~` usually clears when the curren
 
 ### 4.1 Reader Menu
 
-Press **Confirm** while you read to open the Reader Menu. The menu is not available on the cover page. Turn to the first text page first. The menu has three options:
+On button devices, press **Confirm** to open Reader Menu. On touch devices, tap the center menu zone. The menu is available on the cover page and text pages.
 
 - **Chapters** — Open the Table of Contents / Chapter Selection screen
 - **Bookmarks** — Open the Bookmarks overlay for the current book
 - **Book stats** — Show Progress, total Time read, and Sessions for the current book
+- **Back** — Close the book and return to the screen that opened it
 
-Book Stats stays available here when **Show Recents** is off. Use **Left/Right** to highlight a menu item and **Confirm** to select. Press **Back** to close the menu and go back to reading.
+Book Stats stays available here when **Show Recents** is off. On button devices, use **Up/Down** to highlight an item and **Confirm** to select it. On touch devices, tap the item.
+
+The physical **Back** button closes the menu and returns to reading. The X4 Pro Home key does the same. The **Back** item inside Reader Menu closes the book instead. Sticky and Murphy M4 use this item to return to the screen that opened the book.
 
 ### 4.2 Bookmarks
 
@@ -614,7 +621,7 @@ The Bookmarks overlay lists all saved bookmarks for the current book, sorted by 
 - **Add** — Bookmark the current page
 - **Del** — Remove the selected bookmark
 
-Use **Left/Right** (or **Volume Up/Down**) to move the selection cursor through the bookmark list.
+On button devices, use **Up/Down** to select a bookmark and **Confirm** to open it. **Left** adds a bookmark. **Right** deletes the selected bookmark. On touch devices, tap a bookmark to open it, or tap an on-screen action.
 
 #### Details
 

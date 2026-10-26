@@ -226,6 +226,7 @@ The image is converted to 1-bit dithered BMP format for display.
 ## EPUB Cache Files
 
 EPUB files use a more complex cache format in `<device-cache>/epub_<hash>/`.
+The metadata builder accepts up to 500 spine items. It rejects an extra item before TOC processing and does not publish a metadata cache for the unsupported book.
 
 ### Image Cache (`images/` subdirectory)
 

@@ -1042,7 +1042,6 @@ StateTransition ReaderState::update(Core& core) {
                                     core.settings.getPowerButtonDuration()};
     buttonConfig.touchPageTurns = core.settings.touchPageTurns != 0;
     buttonConfig.reversePageZones = core.settings.sideButtonLayout == Settings::NextPrev;
-    buttonConfig.menuAllowed = !ReaderNavigation::isCoverPosition(currentSpineIndex_, currentSectionPage_);
     buttonConfig.logicalWidth = static_cast<int16_t>(renderer_.getScreenWidth());
     switch (readerButtons_.processEvent(e, millis(), buttonConfig)) {
       case ReaderButtonAction::Menu:
@@ -3062,7 +3061,6 @@ void ReaderState::exitToUI(Core& core) {
 // ============================================================================
 
 void ReaderState::enterMenuMode(Core& core) {
-  if (ReaderNavigation::isCoverPosition(currentSpineIndex_, currentSectionPage_)) return;
   if (!stopBackgroundCaching()) return;
   menuView_.show();
   menuMode_ = true;
@@ -3131,6 +3129,9 @@ void ReaderState::handleMenuAction(Core& core, ui::ReaderMenuView::Item action) 
       break;
     case ui::ReaderMenuView::Item::BookStats:
       enterBookStatsMode(core);
+      break;
+    case ui::ReaderMenuView::Item::Back:
+      exitToUI(core);
       break;
     case ui::ReaderMenuView::Item::Count:
       break;

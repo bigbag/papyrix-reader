@@ -94,7 +94,7 @@ void render(const GfxRenderer& r, const Theme& t, const BookStatsView& v) {
 void render(const GfxRenderer& r, const Theme& t, const ReaderMenuView& v) {
   if (!v.visible) return;
 
-  const char* items[] = {tr(CHAPTERS), tr(BOOKMARKS), tr(BOOK_STATS)};
+  const char* items[] = {tr(CHAPTERS), tr(BOOKMARKS), tr(BOOK_STATS), tr(BACK)};
   static_assert(std::size(items) == ReaderMenuView::ITEM_COUNT);
   ui::popupMenu(r, t, tr(MENU), items, ReaderMenuView::ITEM_COUNT, v.selected);
   r.displayBuffer();

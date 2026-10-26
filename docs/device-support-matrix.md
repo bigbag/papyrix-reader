@@ -125,6 +125,8 @@ Each profile selects its controller byte layout and coordinate transform.
 M4 uses FT6336U-compatible touch on native I2C1.
 Its acquisition task polls every 10 ms and coordinates shared reset with the display.
 
+X3, X4, and X4 v2 Classic use button controls and have no touch input. X4 Pro, Sticky, and M4 use touch for menu selection. X4 Pro also maps its capacitive Home key to Back. Sticky and M4 have no Home key or physical Back or Confirm buttons. In Reader Menu, the Back item closes the book and returns to its source screen. See the [reading controls](user_guide.md#4-reading-mode) for each device group.
+
 Reader touch zones use 24 percent of the width for Previous,
 52 percent for Menu, and 24 percent for Next.
 The side-button preference reverses the page zones.

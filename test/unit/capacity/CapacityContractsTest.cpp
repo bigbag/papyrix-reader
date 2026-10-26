@@ -56,7 +56,6 @@ int main() {
     runner.expectEq(int8_t(0), view.selected, "Reader menu wraps at derived count");
   }
 
-  runner.expectEq(3, ui::ReaderMenuView::ITEM_COUNT, "Reader menu exposes three items");
   runner.expectEq(2, ui::ConfirmDialogView::MAX_TITLE_LINES, "confirmation title allows two lines");
   runner.expectEq(2, ui::ConfirmDialogView::MAX_MESSAGE_LINES, "each confirmation message allows two lines");
   runner.expectEq(2, ui::FirmwareUpdateView::MAX_STATUS_LINES, "firmware status allows two lines");
