@@ -13,8 +13,7 @@
 
 namespace {
 
-std::string buildXtcFile(uint32_t magic, const std::vector<uint8_t>& pixels, uint16_t width = 8,
-                         uint16_t height = 8) {
+std::string buildXtcFile(uint32_t magic, const std::vector<uint8_t>& pixels, uint16_t width = 8, uint16_t height = 8) {
   constexpr size_t headerSize = sizeof(xtc::XtcHeader);
   constexpr size_t titleSize = 128;
   constexpr size_t authorSize = 64;
@@ -77,8 +76,7 @@ std::string buildMixedDimensionXtc() {
   for (size_t i = 0; i < pageCount; i++) {
     const size_t bitmapSize = xtc::xtgBitmapSize(widths[i], heights[i]);
     const size_t pageSize = sizeof(xtc::XtgPageHeader) + bitmapSize;
-    auto* entry =
-        reinterpret_cast<xtc::PageTableEntry*>(data + pageTableOffset + i * sizeof(xtc::PageTableEntry));
+    auto* entry = reinterpret_cast<xtc::PageTableEntry*>(data + pageTableOffset + i * sizeof(xtc::PageTableEntry));
     entry->dataOffset = offset;
     entry->dataSize = pageSize;
     entry->width = widths[i];
@@ -94,6 +92,11 @@ std::string buildMixedDimensionXtc() {
   }
 
   return file;
+}
+
+void drawTestMark(const GfxRenderer& renderer, bool black) {
+  renderer.drawPixel(0, 0, black);
+  renderer.drawPixel(0, 1, black);
 }
 
 }  // namespace
@@ -114,7 +117,8 @@ int main() {
 
     std::vector<papyrix::XtcPageRenderer::RefreshRequest> requests;
     auto result = renderer.render(
-        parser, 0, [&requests](papyrix::XtcPageRenderer::RefreshRequest request) { requests.push_back(request); });
+        parser, 0, [&requests](papyrix::XtcPageRenderer::RefreshRequest request) { requests.push_back(request); },
+        nullptr);
 
     runner.expectTrue(result == papyrix::XtcPageRenderer::RenderResult::Success, "1-bit: renders");
     runner.expectEq(size_t{1}, requests.size(), "1-bit: one refresh request");
@@ -126,16 +130,17 @@ int main() {
     SdMan.reset();
     constexpr uint16_t width = 480;
     constexpr uint16_t height = 800;
-    SdMan.registerFile("/full.xtc",
-                       buildXtcFile(xtc::XTC_MAGIC, std::vector<uint8_t>(xtc::xtgBitmapSize(width, height), 0xFF),
-                                    width, height));
+    SdMan.registerFile(
+        "/full.xtc",
+        buildXtcFile(xtc::XTC_MAGIC, std::vector<uint8_t>(xtc::xtgBitmapSize(width, height), 0xFF), width, height));
 
     xtc::XtcParser parser;
     runner.expectTrue(parser.open("/full.xtc") == xtc::XtcError::OK, "full-size 1-bit: parser opens");
     std::vector<papyrix::XtcPageRenderer::RefreshRequest> requests;
     testSetLargestFreeBlock(5120);
     const auto result = renderer.render(
-        parser, 0, [&requests](papyrix::XtcPageRenderer::RefreshRequest request) { requests.push_back(request); });
+        parser, 0, [&requests](papyrix::XtcPageRenderer::RefreshRequest request) { requests.push_back(request); },
+        nullptr);
     testResetLargestFreeBlock();
     runner.expectTrue(result == papyrix::XtcPageRenderer::RenderResult::Success,
                       "full-size 1-bit: renders with 4KB scratch");
@@ -151,7 +156,8 @@ int main() {
 
     std::vector<papyrix::XtcPageRenderer::RefreshRequest> requests;
     auto result = renderer.render(
-        parser, 0, [&requests](papyrix::XtcPageRenderer::RefreshRequest request) { requests.push_back(request); });
+        parser, 0, [&requests](papyrix::XtcPageRenderer::RefreshRequest request) { requests.push_back(request); },
+        nullptr);
 
     runner.expectTrue(result == papyrix::XtcPageRenderer::RenderResult::Success, "2-bit: renders");
     runner.expectEq(size_t{1}, requests.size(), "2-bit: one refresh request");
@@ -200,11 +206,14 @@ int main() {
     runner.expectTrue(parser.open("/full.xtch") == xtc::XtcError::OK, "full-size 2-bit: parser opens");
     std::vector<uint8_t> base;
     testSetLargestFreeBlock(10240);
-    const auto result = fullRenderer.render(parser, 0, [&](papyrix::XtcPageRenderer::RefreshRequest request) {
-      if (request == papyrix::XtcPageRenderer::RefreshRequest::GrayscaleBase) {
-        base.assign(fullGfx.getFrameBuffer(), fullGfx.getFrameBuffer() + fullGfx.getBufferSize());
-      }
-    });
+    const auto result = fullRenderer.render(
+        parser, 0,
+        [&](papyrix::XtcPageRenderer::RefreshRequest request) {
+          if (request == papyrix::XtcPageRenderer::RefreshRequest::GrayscaleBase) {
+            base.assign(fullGfx.getFrameBuffer(), fullGfx.getFrameBuffer() + fullGfx.getBufferSize());
+          }
+        },
+        nullptr);
     testResetLargestFreeBlock();
     runner.expectTrue(result == papyrix::XtcPageRenderer::RenderResult::Success,
                       "full-size 2-bit: renders with 8KB scratch");
@@ -217,14 +226,17 @@ int main() {
     fullDisplay.setSupportsGrayscale(false);
     const int grayCount = fullDisplay.displayGrayCount();
     unsigned bwRefreshes = 0;
-    const auto bwResult = fullRenderer.render(parser, 0, [&](papyrix::XtcPageRenderer::RefreshRequest request) {
-      runner.expectTrue(request == papyrix::XtcPageRenderer::RefreshRequest::Cadenced,
-                        "unsupported grayscale uses monochrome refresh");
-      bool correct = true;
-      for (size_t i = 0; i < fullGfx.getBufferSize(); ++i) correct &= fullGfx.getFrameBuffer()[i] == 0x81;
-      runner.expectTrue(correct, "monochrome refresh contains the complete four-tone page");
-      ++bwRefreshes;
-    });
+    const auto bwResult = fullRenderer.render(
+        parser, 0,
+        [&](papyrix::XtcPageRenderer::RefreshRequest request) {
+          runner.expectTrue(request == papyrix::XtcPageRenderer::RefreshRequest::Cadenced,
+                            "unsupported grayscale uses monochrome refresh");
+          bool correct = true;
+          for (size_t i = 0; i < fullGfx.getBufferSize(); ++i) correct &= fullGfx.getFrameBuffer()[i] == 0x81;
+          runner.expectTrue(correct, "monochrome refresh contains the complete four-tone page");
+          ++bwRefreshes;
+        },
+        nullptr);
     runner.expectTrue(bwResult == papyrix::XtcPageRenderer::RenderResult::Success && bwRefreshes == 1,
                       "unsupported grayscale completes one monochrome update");
     runner.expectEq(grayCount, fullDisplay.displayGrayCount(), "unsupported grayscale never activates gray LUTs");
@@ -245,10 +257,9 @@ int main() {
     papyrix::XtcPageRenderer invertedRenderer(invertedGfx);
     xtc::XtcParser invertedParser;
     invertedParser.open("/inverted.xtch");
-    const auto invertedResult = invertedRenderer.render(
-        invertedParser, 0, [](papyrix::XtcPageRenderer::RefreshRequest) {});
-    runner.expectTrue(invertedResult == papyrix::XtcPageRenderer::RenderResult::Success,
-                      "generic inverted: renders");
+    const auto invertedResult =
+        invertedRenderer.render(invertedParser, 0, [](papyrix::XtcPageRenderer::RefreshRequest) {}, nullptr);
+    runner.expectTrue(invertedResult == papyrix::XtcPageRenderer::RenderResult::Success, "generic inverted: renders");
     runner.expectTrue(isPhysicalBlack(invertedGfx.getFrameBuffer(), papyrix::hal::Display::DISPLAY_WIDTH_BYTES, 799, 0),
                       "generic inverted: maps logical origin");
 
@@ -261,7 +272,7 @@ int main() {
     papyrix::XtcPageRenderer x3Renderer(x3Gfx);
     xtc::XtcParser x3Parser;
     x3Parser.open("/x3.xtch");
-    const auto x3Result = x3Renderer.render(x3Parser, 0, [](papyrix::XtcPageRenderer::RefreshRequest) {});
+    const auto x3Result = x3Renderer.render(x3Parser, 0, [](papyrix::XtcPageRenderer::RefreshRequest) {}, nullptr);
     runner.expectTrue(x3Result == papyrix::XtcPageRenderer::RenderResult::Success, "generic X3: renders");
     runner.expectTrue(isPhysicalBlack(x3Gfx.getFrameBuffer(), papyrix::hal::Display::X3_DISPLAY_WIDTH_BYTES, 0, 527),
                       "generic X3: maps logical origin");
@@ -275,7 +286,8 @@ int main() {
     runner.expectTrue(parser.open("/mixed.xtc") == xtc::XtcError::OK, "mixed dimensions: parser opens");
     std::vector<papyrix::XtcPageRenderer::RefreshRequest> requests;
     const auto result = renderer.render(
-        parser, 1, [&requests](papyrix::XtcPageRenderer::RefreshRequest request) { requests.push_back(request); });
+        parser, 1, [&requests](papyrix::XtcPageRenderer::RefreshRequest request) { requests.push_back(request); },
+        nullptr);
     runner.expectTrue(result == papyrix::XtcPageRenderer::RenderResult::Success,
                       "mixed dimensions: requested page renders");
     runner.expectEq(size_t{1}, requests.size(), "mixed dimensions: one refresh request");
@@ -297,12 +309,11 @@ int main() {
       failureGfx.begin();
       papyrix::XtcPageRenderer failureRenderer(failureGfx);
       xtc::XtcParser parser;
-      runner.expectTrue(parser.open("/read-failure.xtch") == xtc::XtcError::OK,
-                        "pass failure: parser opens");
+      runner.expectTrue(parser.open("/read-failure.xtch") == xtc::XtcError::OK, "pass failure: parser opens");
       std::vector<papyrix::XtcPageRenderer::RefreshRequest> requests;
       const auto result = failureRenderer.render(
-          parser, 0,
-          [&requests](papyrix::XtcPageRenderer::RefreshRequest request) { requests.push_back(request); });
+          parser, 0, [&requests](papyrix::XtcPageRenderer::RefreshRequest request) { requests.push_back(request); },
+          nullptr);
       runner.expectTrue(result == papyrix::XtcPageRenderer::RenderResult::PageLoadFailed,
                         "pass failure: returns page load failure");
       if (limit == firstPassFailureLimit) {
@@ -313,8 +324,7 @@ int main() {
                           "later pass failure: refresh followed by cleanup");
       }
       const int expectedGrayDisplays = limit == finalBaseFailureLimit ? 1 : 0;
-      runner.expectEq(expectedGrayDisplays, failureDisplay.displayGrayCount(),
-                      "pass failure: grayscale display count");
+      runner.expectEq(expectedGrayDisplays, failureDisplay.displayGrayCount(), "pass failure: grayscale display count");
     }
     SdMan.reset();
   }
@@ -333,11 +343,54 @@ int main() {
     runner.expectTrue(parser.open("/malformed.xtch") == xtc::XtcError::OK, "malformed stream: parser opens");
     std::vector<papyrix::XtcPageRenderer::RefreshRequest> requests;
     const auto result = renderer.render(
-        parser, 1, [&requests](papyrix::XtcPageRenderer::RefreshRequest request) { requests.push_back(request); });
+        parser, 1, [&requests](papyrix::XtcPageRenderer::RefreshRequest request) { requests.push_back(request); },
+        nullptr);
     runner.expectTrue(result == papyrix::XtcPageRenderer::RenderResult::PageLoadFailed,
                       "malformed stream: page load fails safely");
     runner.expectTrue(requests.empty(), "malformed stream: no refresh requested");
   }
+
+  struct OverlayCase {
+    bool twoBit;
+    bool grayscale;
+  };
+  for (const auto mode : {OverlayCase{false, false}, OverlayCase{true, false}, OverlayCase{true, true}}) {
+    for (const bool withOverlay : {false, true}) {
+      SdMan.reset();
+      std::vector<uint8_t> pixels(mode.twoBit ? 16 : 8, mode.twoBit ? 0 : 0xFF);
+      if (mode.twoBit) pixels[15] = 0x40;
+      SdMan.registerFile("/overlay.xtc", buildXtcFile(mode.twoBit ? xtc::XTCH_MAGIC : xtc::XTC_MAGIC, pixels));
+      xtc::XtcParser parser;
+      runner.expectTrue(parser.open("/overlay.xtc") == xtc::XtcError::OK, "overlay page opens");
+      papyrix::hal::Display overlayDisplay;
+      overlayDisplay.setSupportsGrayscale(mode.grayscale);
+      GfxRenderer overlayGfx(overlayDisplay);
+      overlayGfx.begin();
+      papyrix::XtcPageRenderer overlayRenderer(overlayGfx);
+      const auto checkBase = [&](const uint8_t* buffer) {
+        runner.expectTrue(isPhysicalBlack(buffer, 100, 0, 479) == withOverlay,
+                          "monochrome pass includes overlay ink only when requested");
+        runner.expectTrue(!isPhysicalBlack(buffer, 100, 0, 478), "overlay preserves adjacent page pixels");
+      };
+      const auto result = overlayRenderer.render(
+          parser, 0, [&](papyrix::XtcPageRenderer::RefreshRequest) { checkBase(overlayGfx.getFrameBuffer()); },
+          withOverlay ? drawTestMark : nullptr);
+      runner.expectTrue(result == papyrix::XtcPageRenderer::RenderResult::Success, "overlay page renders");
+      checkBase(overlayGfx.getFrameBuffer());
+      if (mode.grayscale) {
+        for (const auto* mask : {&overlayDisplay.grayscaleLsb(), &overlayDisplay.grayscaleMsb()}) {
+          runner.expectTrue(mask->size() == overlayGfx.getBufferSize() &&
+                                isPhysicalBlack(mask->data(), 100, 1, 479) == withOverlay &&
+                                isPhysicalBlack(mask->data(), 100, 0, 478),
+                            "grayscale masks clear overlay ink without changing adjacent pixels");
+        }
+        runner.expectTrue(overlayDisplay.cleanupBuffer().size() == overlayGfx.getBufferSize() &&
+                              isPhysicalBlack(overlayDisplay.cleanupBuffer().data(), 100, 0, 479) == withOverlay,
+                          "cleanup preserves the monochrome overlay");
+      }
+    }
+  }
+  SdMan.reset();
 
   runner.printSummary();
   return runner.allPassed() ? 0 : 1;

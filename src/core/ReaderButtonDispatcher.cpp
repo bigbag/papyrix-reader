@@ -1,22 +1,28 @@
 #include "ReaderButtonDispatcher.h"
 
+#include "ui/TouchLayout.h"
+
 namespace papyrix {
 
 ReaderButtonAction ReaderButtonDispatcher::processEvent(const Event& e, const uint32_t nowMs,
                                                         const ReaderButtonConfig& config) {
   if (e.type == EventType::Tap) {
-    if (config.logicalWidth <= 0 || e.touch.x < 0 || e.touch.x >= config.logicalWidth) {
-      return ReaderButtonAction::None;
+    using ui::touch::ReaderRegion;
+    switch (ui::touch::readerRegionAt({e.touch.x, e.touch.y}, config.logicalWidth, config.logicalHeight)) {
+      case ReaderRegion::Menu:
+      case ReaderRegion::Confirm:
+        return ReaderButtonAction::Menu;
+      case ReaderRegion::Back:
+        return ReaderButtonAction::Exit;
+      case ReaderRegion::Previous:
+        if (!config.touchPageTurns) return ReaderButtonAction::None;
+        return config.reversePageZones ? ReaderButtonAction::Next : ReaderButtonAction::Prev;
+      case ReaderRegion::Next:
+        if (!config.touchPageTurns) return ReaderButtonAction::None;
+        return config.reversePageZones ? ReaderButtonAction::Prev : ReaderButtonAction::Next;
+      case ReaderRegion::None:
+        return ReaderButtonAction::None;
     }
-    const int16_t edgeWidth = static_cast<int16_t>((static_cast<int32_t>(config.logicalWidth) * 24) / 100);
-    if (e.touch.x >= edgeWidth && e.touch.x < config.logicalWidth - edgeWidth) {
-      return ReaderButtonAction::Menu;
-    }
-    if (!config.touchPageTurns) return ReaderButtonAction::None;
-    if (e.touch.x < edgeWidth) {
-      return config.reversePageZones ? ReaderButtonAction::Next : ReaderButtonAction::Prev;
-    }
-    return config.reversePageZones ? ReaderButtonAction::Prev : ReaderButtonAction::Next;
   }
   switch (e.type) {
     case EventType::ButtonCancel:

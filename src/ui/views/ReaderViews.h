@@ -13,6 +13,8 @@
 #include "../Elements.h"
 
 namespace ui {
+void readerTouchHints(const GfxRenderer& renderer, bool black);
+
 class OverlayTapGuard {
  public:
   void closedAt(uint32_t nowMs) {
@@ -181,7 +183,7 @@ void render(const GfxRenderer& r, const Theme& t, const BookStatsView& v);
 
 struct ReaderMenuView {
   struct Hit {
-    enum class Type : uint8_t { None, Item, Brightness, Warmth, Dismiss };
+    enum class Type : uint8_t { None, Item, Brightness, Warmth, Dismiss, Confirm };
     Type type = Type::None;
     int index = -1;
     int value = 0;
@@ -313,7 +315,11 @@ struct ReaderMenuView {
     for (int i = 0; i < itemCount(); ++i) {
       if (geometry.items[i].contains(point)) return {Hit::Type::Item, i};
     }
-    if (hasTouch && !geometry.menu.contains(point)) return {Hit::Type::Dismiss, -1, 0};
+    if (hasTouch && !geometry.menu.contains(point)) {
+      return {touch::readerRegionAt(point, screenWidth, screenHeight) == touch::ReaderRegion::Confirm
+                  ? Hit::Type::Confirm
+                  : Hit::Type::Dismiss};
+    }
     return {};
   }
 

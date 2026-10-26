@@ -20,7 +20,8 @@ XtcPageRenderer::RenderResult mapStreamError(const xtc::XtcError error) {
 XtcPageRenderer::XtcPageRenderer(GfxRenderer& renderer) : renderer_(renderer) {}
 
 XtcPageRenderer::RenderResult XtcPageRenderer::render(xtc::XtcParser& parser, const uint32_t pageNum,
-                                                      const RefreshCallback& refreshCallback) {
+                                                      const RefreshCallback& refreshCallback,
+                                                      void (*drawOverlay)(const GfxRenderer&, bool)) {
   if (pageNum >= parser.getPageCount()) return RenderResult::EndOfBook;
 
   xtc::PageInfo pageInfo;
@@ -33,14 +34,15 @@ XtcPageRenderer::RenderResult XtcPageRenderer::render(xtc::XtcParser& parser, co
     return RenderResult::InvalidDimensions;
   }
 
-  if (pageInfo.bitDepth == 1) return render1Bit(parser, pageNum, width, height, refreshCallback);
-  if (pageInfo.bitDepth == 2) return render2Bit(parser, pageNum, width, height, refreshCallback);
+  if (pageInfo.bitDepth == 1) return render1Bit(parser, pageNum, width, height, refreshCallback, drawOverlay);
+  if (pageInfo.bitDepth == 2) return render2Bit(parser, pageNum, width, height, refreshCallback, drawOverlay);
   return RenderResult::InvalidDimensions;
 }
 
 XtcPageRenderer::RenderResult XtcPageRenderer::render1Bit(xtc::XtcParser& parser, const uint32_t pageNum,
                                                           const uint16_t width, const uint16_t height,
-                                                          const RefreshCallback& refreshCallback) {
+                                                          const RefreshCallback& refreshCallback,
+                                                          void (*drawOverlay)(const GfxRenderer&, bool)) {
   const size_t rowBytes = (static_cast<size_t>(width) + 7) / 8;
   const size_t bitmapSize = rowBytes * height;
   bool streamOverflow = false;
@@ -79,6 +81,7 @@ XtcPageRenderer::RenderResult XtcPageRenderer::render1Bit(xtc::XtcParser& parser
     return error == xtc::XtcError::OK ? RenderResult::PageLoadFailed : mapStreamError(error);
   }
 
+  if (drawOverlay) drawOverlay(renderer_, true);
   refreshCallback(RefreshRequest::Cadenced);
   LOG_DBG(TAG, "Rendered page %u/%u (1-bit)", pageNum + 1, parser.getPageCount());
   return RenderResult::Success;
@@ -86,12 +89,14 @@ XtcPageRenderer::RenderResult XtcPageRenderer::render1Bit(xtc::XtcParser& parser
 
 XtcPageRenderer::RenderResult XtcPageRenderer::render2Bit(xtc::XtcParser& parser, const uint32_t pageNum,
                                                           const uint16_t width, const uint16_t height,
-                                                          const RefreshCallback& refreshCallback) {
+                                                          const RefreshCallback& refreshCallback,
+                                                          void (*drawOverlay)(const GfxRenderer&, bool)) {
   RenderResult result = compose2BitPass(parser, pageNum, width, height, GrayscalePass::Base);
   if (result != RenderResult::Success) {
     renderer_.clearScreen();
     return result;
   }
+  if (drawOverlay) drawOverlay(renderer_, true);
   if (!renderer_.supportsGrayscale()) {
     refreshCallback(RefreshRequest::Cadenced);
     return RenderResult::Success;
@@ -103,6 +108,7 @@ XtcPageRenderer::RenderResult XtcPageRenderer::render2Bit(xtc::XtcParser& parser
     recoverGrayscaleFailure();
     return result;
   }
+  if (drawOverlay) drawOverlay(renderer_, true);
   renderer_.copyGrayscaleLsbBuffers();
 
   result = compose2BitPass(parser, pageNum, width, height, GrayscalePass::Msb);
@@ -110,6 +116,7 @@ XtcPageRenderer::RenderResult XtcPageRenderer::render2Bit(xtc::XtcParser& parser
     recoverGrayscaleFailure();
     return result;
   }
+  if (drawOverlay) drawOverlay(renderer_, true);
   renderer_.copyGrayscaleMsbBuffers();
   renderer_.displayGrayBuffer();
 
@@ -118,6 +125,7 @@ XtcPageRenderer::RenderResult XtcPageRenderer::render2Bit(xtc::XtcParser& parser
     recoverGrayscaleFailure();
     return result;
   }
+  if (drawOverlay) drawOverlay(renderer_, true);
   renderer_.cleanupGrayscaleWithFrameBuffer();
 
   LOG_DBG(TAG, "Rendered page %u/%u (2-bit grayscale)", pageNum + 1, parser.getPageCount());

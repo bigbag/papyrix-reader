@@ -53,7 +53,7 @@ inline CenteredRect calculateCenteredRect(int imageWidth, int imageHeight, int v
 // turnOffScreen: power down display after refresh (sunlight fading fix)
 bool renderCoverFromBmp(GfxRenderer& renderer, const std::string& bmpPath, int marginTop, int marginRight,
                         int marginBottom, int marginLeft, int& pagesUntilFullRefresh, int pagesPerRefreshValue,
-                        bool turnOffScreen = false);
+                        bool turnOffScreen, void (*drawOverlay)(const GfxRenderer&, bool));
 
 // Find a cover image file in the given directory
 // Looks for: baseName.jpg, baseName.jpeg, baseName.png, baseName.bmp, cover.jpg, etc.

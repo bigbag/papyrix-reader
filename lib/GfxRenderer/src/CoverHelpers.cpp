@@ -14,7 +14,7 @@ namespace CoverHelpers {
 
 bool renderCoverFromBmp(GfxRenderer& renderer, const std::string& bmpPath, int marginTop, int marginRight,
                         int marginBottom, int marginLeft, int& pagesUntilFullRefresh, int pagesPerRefreshValue,
-                        bool turnOffScreen) {
+                        bool turnOffScreen, void (*drawOverlay)(const GfxRenderer&, bool)) {
   FsFile coverFile;
   if (!SdMan.openFileForRead("CVR", bmpPath, coverFile)) {
     LOG_ERR(TAG, "Failed to open cover BMP: %s", bmpPath.c_str());
@@ -38,6 +38,7 @@ bool renderCoverFromBmp(GfxRenderer& renderer, const std::string& bmpPath, int m
 
   renderer.clearScreen(0xFF);
   renderer.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height);
+  if (drawOverlay) drawOverlay(renderer, true);
 
   if (pagesPerRefreshValue == 0) {
     renderer.displayBuffer(papyrix::hal::Display::FAST_REFRESH, turnOffScreen);
@@ -55,12 +56,14 @@ bool renderCoverFromBmp(GfxRenderer& renderer, const std::string& bmpPath, int m
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     renderer.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height);
+    if (drawOverlay) drawOverlay(renderer, true);
     renderer.copyGrayscaleLsbBuffers();
 
     bitmap.rewindToData();
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
     renderer.drawBitmap(bitmap, rect.x, rect.y, rect.width, rect.height);
+    if (drawOverlay) drawOverlay(renderer, true);
     renderer.copyGrayscaleMsbBuffers();
 
     renderer.displayGrayBuffer(turnOffScreen);

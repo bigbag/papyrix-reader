@@ -39,6 +39,7 @@ int main() {
 
   ui::ReaderMenuView touchMenu;
   touchMenu.hasTouch = true;
+  touchMenu.showBack = false;
   touchMenu.show();
   const auto touchLayout = touchMenu.layout(800, 480, 32);
   auto touchHit = touchMenu.hitTest(center(touchLayout.items[0]), 800, 480, 32);
@@ -46,7 +47,13 @@ int main() {
                "touch menu without light keeps first item");
   r.expectTrue(touchMenu.hitTest({0, 0}, 800, 480, 32).type == ui::ReaderMenuView::Hit::Type::Dismiss,
                "touch menu without light dismisses on outside tap");
-  const Rect touchControls[] = {touchLayout.items[0], touchLayout.items[1], touchLayout.items[2], touchLayout.items[3]};
+  r.expectTrue(touchMenu.hitTest({799, 479}, 800, 480, 32).type == ui::ReaderMenuView::Hit::Type::Confirm,
+               "bottom-right corner confirms the current menu item");
+  r.expectTrue(touchMenu.hitTest({0, 479}, 800, 480, 32).type == ui::ReaderMenuView::Hit::Type::Dismiss,
+               "bottom-left corner closes the menu");
+  r.expectTrue(touchMenu.hitTest({400, 479}, 800, 480, 32).type == ui::ReaderMenuView::Hit::Type::Dismiss,
+               "bottom center closes the menu instead of staying inactive");
+  const Rect touchControls[] = {touchLayout.items[0], touchLayout.items[1], touchLayout.items[2]};
   bool touchFits = true;
   bool touchDisjoint = true;
   for (const Rect& control : touchControls) {
@@ -120,6 +127,8 @@ int main() {
                "brightness plus clamps at 100");
   r.expectTrue(lightMenu.hitTest({0, 0}, 800, 480, 32).type == ui::ReaderMenuView::Hit::Type::Dismiss,
                "light menu dismisses on outside tap");
+  r.expectTrue(lightMenu.hitTest({799, 479}, 800, 480, 32).type == ui::ReaderMenuView::Hit::Type::Confirm,
+               "light menu keeps the bottom-right Confirm action");
   const auto brightnessLabel = lightLayout.brightnessLabel;
   r.expectTrue(
       lightMenu

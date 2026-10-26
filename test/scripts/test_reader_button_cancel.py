@@ -194,6 +194,7 @@ def main():
         source.write_text(harness)
         subprocess.run(["c++", "-std=c++17", "-Wall", "-Wextra", "-I", str(ROOT / "src"),
                         str(source), str(ROOT / "src/core/ReaderButtonDispatcher.cpp"),
+                        str(ROOT / "src/ui/TouchLayout.cpp"),
                         "-o", str(binary)], check=True)
         subprocess.run([str(binary)], check=True)
 

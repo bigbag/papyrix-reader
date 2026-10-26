@@ -22,7 +22,8 @@ class XtcPageRenderer {
 
   explicit XtcPageRenderer(GfxRenderer& renderer);
 
-  RenderResult render(xtc::XtcParser& parser, uint32_t pageNum, const RefreshCallback& refreshCallback);
+  RenderResult render(xtc::XtcParser& parser, uint32_t pageNum, const RefreshCallback& refreshCallback,
+                      void (*drawOverlay)(const GfxRenderer&, bool));
 
  private:
   enum class GrayscalePass : uint8_t { Base, Lsb, Msb };
@@ -30,9 +31,9 @@ class XtcPageRenderer {
   GfxRenderer& renderer_;
 
   RenderResult render1Bit(xtc::XtcParser& parser, uint32_t pageNum, uint16_t width, uint16_t height,
-                          const RefreshCallback& refreshCallback);
+                          const RefreshCallback& refreshCallback, void (*drawOverlay)(const GfxRenderer&, bool));
   RenderResult render2Bit(xtc::XtcParser& parser, uint32_t pageNum, uint16_t width, uint16_t height,
-                          const RefreshCallback& refreshCallback);
+                          const RefreshCallback& refreshCallback, void (*drawOverlay)(const GfxRenderer&, bool));
   RenderResult compose2BitPass(xtc::XtcParser& parser, uint32_t pageNum, uint16_t width, uint16_t height,
                                GrayscalePass pass);
   bool usesNativeXthLayout(uint16_t width, uint16_t height, size_t planeSize) const;

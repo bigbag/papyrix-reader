@@ -1043,6 +1043,7 @@ StateTransition ReaderState::update(Core& core) {
     buttonConfig.touchPageTurns = core.settings.touchPageTurns != 0;
     buttonConfig.reversePageZones = core.settings.sideButtonLayout == Settings::NextPrev;
     buttonConfig.logicalWidth = static_cast<int16_t>(renderer_.getScreenWidth());
+    buttonConfig.logicalHeight = static_cast<int16_t>(renderer_.getScreenHeight());
     switch (readerButtons_.processEvent(e, millis(), buttonConfig)) {
       case ReaderButtonAction::Menu:
         enterMenuMode(core);
@@ -1625,6 +1626,7 @@ void ReaderState::renderCachedPage(Core& core) {
 
   renderPageContents(core, *page, vp.marginTop, vp.marginRight, vp.marginBottom, vp.marginLeft);
   renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
+  if (PAPYRIX_CAP_TOUCH) ui::readerTouchHints(renderer_, theme.primaryTextBlack);
 
   const bool aaEnabled =
       core.settings.textAntiAliasing && renderer_.supportsGrayscale() && renderer_.fontSupportsGrayscale(fontId);
@@ -1640,11 +1642,13 @@ void ReaderState::renderCachedPage(Core& core) {
     if (page->getImageBoundingBox(imgX, imgY, imgW, imgH)) {
       // Step 1: Display page with image area blanked (text appears, image area white)
       renderer_.fillRect(imgX + vp.marginLeft, imgY + vp.marginTop, imgW, imgH, !theme.primaryTextBlack);
+      if (PAPYRIX_CAP_TOUCH) ui::readerTouchHints(renderer_, theme.primaryTextBlack);
       renderer_.displayBuffer(papyrix::hal::Display::FAST_REFRESH, turnOffScreen);
 
       // Step 2: Re-render with images and display again (images appear clean)
       renderPageContents(core, *page, vp.marginTop, vp.marginRight, vp.marginBottom, vp.marginLeft);
       renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
+      if (PAPYRIX_CAP_TOUCH) ui::readerTouchHints(renderer_, theme.primaryTextBlack);
       renderer_.displayBuffer(papyrix::hal::Display::FAST_REFRESH, turnOffScreen);
     } else {
       renderer_.displayBuffer(papyrix::hal::Display::HALF_REFRESH, turnOffScreen);
@@ -1660,12 +1664,14 @@ void ReaderState::renderCachedPage(Core& core) {
     renderer_.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     page->render(renderer_, fontId, vp.marginLeft, vp.marginTop, theme.primaryTextBlack);
     renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
+    if (PAPYRIX_CAP_TOUCH) ui::readerTouchHints(renderer_, true);
     renderer_.copyGrayscaleLsbBuffers();
 
     renderer_.clearScreen(0x00);
     renderer_.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
     page->render(renderer_, fontId, vp.marginLeft, vp.marginTop, theme.primaryTextBlack);
     renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
+    if (PAPYRIX_CAP_TOUCH) ui::readerTouchHints(renderer_, true);
     renderer_.copyGrayscaleMsbBuffers();
 
     const bool turnOffScreen = core.settings.sunlightFadingFix != 0;
@@ -1676,6 +1682,7 @@ void ReaderState::renderCachedPage(Core& core) {
     renderer_.clearScreen(theme.backgroundColor);
     renderPageContents(core, *page, vp.marginTop, vp.marginRight, vp.marginBottom, vp.marginLeft);
     renderStatusBar(core, vp.marginRight, vp.marginBottom, vp.marginLeft);
+    if (PAPYRIX_CAP_TOUCH) ui::readerTouchHints(renderer_, theme.primaryTextBlack);
     renderer_.cleanupGrayscaleWithFrameBuffer();
   }
 
@@ -1899,14 +1906,16 @@ void ReaderState::renderXtcPage(Core& core) {
 
   const Theme& theme = THEME_MANAGER.current();
 
-  auto result =
-      xtcRenderer_.render(provider->getParser(), currentPage_, [this, &core](XtcPageRenderer::RefreshRequest request) {
+  auto result = xtcRenderer_.render(
+      provider->getParser(), currentPage_,
+      [this, &core](XtcPageRenderer::RefreshRequest request) {
         if (request == XtcPageRenderer::RefreshRequest::GrayscaleBase) {
           displayGrayscaleBase(core);
         } else {
           displayWithRefresh(core);
         }
-      });
+      },
+      PAPYRIX_CAP_TOUCH ? ui::readerTouchHints : nullptr);
 
   switch (result) {
     case XtcPageRenderer::RenderResult::Success: {
@@ -1982,9 +1991,9 @@ bool ReaderState::renderCoverPage(Core& core) {
   int pagesUntilRefresh = pagesUntilFullRefresh_;
   const bool turnOffScreen = core.settings.sunlightFadingFix != 0;
 
-  bool rendered = CoverHelpers::renderCoverFromBmp(renderer_, coverPath, vp.marginTop, vp.marginRight, vp.marginBottom,
-                                                   vp.marginLeft, pagesUntilRefresh,
-                                                   core.settings.getPagesPerRefreshValue(), turnOffScreen);
+  bool rendered = CoverHelpers::renderCoverFromBmp(
+      renderer_, coverPath, vp.marginTop, vp.marginRight, vp.marginBottom, vp.marginLeft, pagesUntilRefresh,
+      core.settings.getPagesPerRefreshValue(), turnOffScreen, PAPYRIX_CAP_TOUCH ? ui::readerTouchHints : nullptr);
 
   forceDoubleRefresh_ = true;
   return rendered;
@@ -3063,7 +3072,7 @@ void ReaderState::exitToUI(Core& core) {
 void ReaderState::enterMenuMode(Core& core) {
   if (!stopBackgroundCaching()) return;
   menuView_.hasTouch = PAPYRIX_CAP_TOUCH != 0;
-  menuView_.showBack = !PAPYRIX_TARGET_X4PRO;
+  menuView_.showBack = PAPYRIX_CAP_TOUCH == 0;
   menuView_.hasFrontLight = core.frontLight.isAvailable();
   menuView_.brightness = core.frontLight.brightness();
   menuView_.warmth = core.frontLight.warmth();
@@ -3090,6 +3099,9 @@ void ReaderState::handleMenuInput(Core& core, const Event& e) {
     switch (hit.type) {
       case HitType::Item:
         menuView_.selected = static_cast<int8_t>(hit.index);
+        handleMenuAction(core, menuView_.selectedItem());
+        return;
+      case HitType::Confirm:
         handleMenuAction(core, menuView_.selectedItem());
         return;
       case HitType::Dismiss:

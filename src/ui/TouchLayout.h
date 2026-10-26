@@ -17,6 +17,9 @@ struct DialogLayout {
   Rect bounds;
   Rect choices[2];
 };
+enum class ReaderRegion : uint8_t { None, Previous, Menu, Next, Back, Confirm };
+inline constexpr int16_t READER_BOTTOM_ZONE_HEIGHT = 50;
+ReaderRegion readerRegionAt(Point point, int16_t screenWidth, int16_t screenHeight);
 int rowAt(Point point, Rect bounds, int16_t rowHeight, int rowCount);
 int clippedRowAt(Point point, Rect bounds, int16_t rowHeight, int rowCount, int firstRow);
 int gridIndexAt(Point point, Rect bounds, int columns, int rows);

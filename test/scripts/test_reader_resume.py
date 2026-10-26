@@ -68,10 +68,12 @@ struct Renderer {
 using GfxRenderer = Renderer;
 struct BitmapTurnCache { explicit BitmapTurnCache(Renderer&) {} };
 struct Fonts { void unloadReaderFonts() {} } FONT_MANAGER;
+struct ReadingStats { void load() {} } READING_STATS;
 namespace ui { template<class... T> void render(T&...) {} template<class... T> void centeredMessage(T&&...) {} }
 namespace ui {
 @TAP_GUARD@;
 @MENU_VIEW@;
+void readerTouchHints(const GfxRenderer&, bool) {}
 template<class... T> void overlayBox(T&&...) {}
 }
 struct Page {
@@ -199,7 +201,7 @@ struct XtcPageRenderer {
   enum class RefreshRequest { GrayscaleBase, Normal };
   enum class RenderResult { Success, EndOfBook, InvalidDimensions, AllocationFailed, PageLoadFailed };
   RenderResult result = RenderResult::Success;
-  template<class F> RenderResult render(int, uint32_t, F refresh) {
+  template<class F> RenderResult render(int, uint32_t, F refresh, void (*)(const GfxRenderer&, bool)) {
     if (result == RenderResult::Success) refresh(RefreshRequest::Normal);
     return result;
   }
@@ -229,7 +231,7 @@ struct ReaderState {
   std::unique_ptr<Cache> indexingCache_;
   std::unique_ptr<Parser> indexingParser_;
   Task cacheTask_;
-  struct View { bool needsRender = false; } bookStatsView_;
+  struct View { bool needsRender = false, showOpen = true; } bookStatsView_;
   ui::ReaderMenuView menuView_;
   struct Session { void updateProgress(int) {} } readingSession_;
   struct GlobalPageMetrics { int currentPage = 0, totalPages = 0; };
@@ -263,7 +265,8 @@ struct ReaderState {
   void handleMenuAction(Core&, ui::ReaderMenuView::Item);
   void enterTocMode(Core&) {}
   void enterBookmarkMode(Core&) {}
-  void enterBookStatsMode(Core&) {}
+  void enterBookStatsMode(Core&);
+  void populateBookStatsView(Core&) {}
   void navigateNext(Core&) { assert(false); }
   void navigatePrev(Core&) { assert(false); }
   void navigateNextChapter(Core&) { assert(false); }
@@ -324,37 +327,48 @@ int main() {
         reader.renderer_.width = landscape ? 800 : 480;
         reader.renderer_.height = landscape ? 480 : 800;
         core.settings.touchPageTurns = pageTaps;
+        const TouchPoint back{0, int16_t(reader.renderer_.height - 1)};
+        const TouchPoint confirm{int16_t(reader.renderer_.width - 1), back.y};
+        const TouchPoint footer{int16_t(reader.renderer_.width / 2), back.y};
+        check(core.events.push(Event::tap(footer)), "bottom-center tap is queued");
+        reader.update(core);
+        check(!reader.menuMode_ && ESP.count == 0, "bottom center stays inactive on text and cover");
+        check(core.events.push(Event::tap(confirm)), "Confirm tap is queued");
+        reader.update(core);
+        check(reader.menuMode_, "Confirm opens the reader menu from text and cover");
+        check(reader.menuView_.itemCount() == 3, "all touch menus omit the book-exit item");
+        check(core.events.push(Event::tap(back)), "Back closes the popup");
+        reader.update(core);
+        check(!reader.menuMode_ && ESP.count == 0, "corner Back returns to reading without closing the book");
+        check(core.events.push(Event::tap(back)), "trailing Back tap is queued");
+        reader.update(core);
+        check(ESP.count == 0, "close guard prevents a trailing corner tap from exiting");
+        nowMs += 300;
         check(core.events.push(Event::tap({int16_t(reader.renderer_.width / 2), 100})), "menu tap is queued");
         reader.update(core);
-        check(reader.menuMode_, "touch opens the reader menu from text and cover");
-        if (PAPYRIX_TARGET_X4PRO) {
-          check(core.events.push(Event::tap({0, 0})), "outside tap is queued");
-          reader.update(core);
-          check(!reader.menuMode_ && ESP.count == 0, "outside tap returns to reading without closing the book");
-          check(core.events.push(Event::tap({0, 100})), "trailing page tap is queued");
-          reader.update(core);
-          nowMs += 300;
-          check(core.events.push(Event::tap({int16_t(reader.renderer_.width / 2), 100})), "menu reopens");
-          reader.update(core);
-          check(reader.menuMode_, "menu opens after the close guard expires");
-          check(core.events.push(Event::buttonPress(Button::Back)), "physical Back closes the menu");
-          reader.update(core);
-          check(!reader.menuMode_ && ESP.count == 0, "physical Back returns from the menu to reading");
-          check(core.events.push(Event::buttonPress(Button::Back)), "physical Back exits the book");
-        } else {
-          const auto back = reader.menuView_.itemBounds(static_cast<int>(ui::ReaderMenuView::Item::Back),
-              reader.renderer_.width, reader.renderer_.height, THEME_MANAGER.current().itemHeight);
-          check(core.events.push(Event::tap({int16_t(back.x + back.width / 2),
-                                             int16_t(back.y + back.height / 2)})), "Back tap is queued");
-        }
+        check(reader.menuMode_, "menu opens after the close guard expires");
+        check(core.events.push(Event::tap(footer)), "outside bottom-center tap is queued");
         reader.update(core);
-        check(ESP.count == 1, "reader exit remains available for each input layout");
+        check(!reader.menuMode_ && ESP.count == 0, "bottom center dismisses an open popup");
+        nowMs += 300;
+        check(core.events.push(Event::tap(back)), "Back exits the book after the guard expires");
+        reader.update(core);
+        check(ESP.count == 1, "corner Back exits on every touch device");
         coldBoot();
         check(detectBootMode() == BootMode::UI, "touch reader exit boots into UI mode");
         check(cachedTransition.returnTo == ReturnTo::RECENT, "touch reader exit keeps the return destination");
       }
     }
   }
+  reset();
+  ReaderState confirmReader;
+  check(core.events.push(Event::tap({479, 799})), "Confirm opens the menu");
+  confirmReader.update(core);
+  confirmReader.menuView_.selected = static_cast<int8_t>(ui::ReaderMenuView::Item::BookStats);
+  check(core.events.push(Event::tap({479, 799})), "Confirm selects the current item");
+  confirmReader.update(core);
+  check(confirmReader.bookStatsMode_ && !confirmReader.menuMode_ && ESP.count == 0,
+        "corner Confirm enters the selected statistics screen without exiting");
   for (bool duringChunk : {false, true}) {
     reset();
     saveTransition(BootMode::READER, "/new.epub", ReturnTo::RECENT);
@@ -561,7 +575,8 @@ def main():
                       "void ReaderState::exit(", "void ReaderState::exitToUI(",
                       "void ReaderState::endCacheWait(", "StateTransition ReaderState::update(",
                       "void ReaderState::enterMenuMode(", "void ReaderState::exitMenuMode(",
-                      "void ReaderState::handleMenuInput(", "void ReaderState::handleMenuAction("]
+                      "void ReaderState::handleMenuInput(", "void ReaderState::handleMenuAction(",
+                      "void ReaderState::enterBookStatsMode("]
     if "void ReaderState::onPageRendered(" in reader:
         reader_methods.append("void ReaderState::onPageRendered(")
     harness = HARNESS.replace("@BOOT@", "\n".join(block(boot, name) for name in boot_methods))

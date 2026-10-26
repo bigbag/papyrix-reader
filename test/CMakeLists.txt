@@ -231,6 +231,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
         ${PROJECT_ROOT}/src/hal/Input.cpp
         ${PROJECT_ROOT}/src/MappedInputManager.cpp
         ${PROJECT_ROOT}/src/core/ReaderButtonDispatcher.cpp
+        ${PROJECT_ROOT}/src/ui/TouchLayout.cpp
         ${PROJECT_ROOT}/lib/InputManager/src/InputManager.cpp
         ${PROJECT_ROOT}/lib/AsyncTask/src/BackgroundTask.cpp
         ${PROJECT_ROOT}/lib/BoardSupport/src/TouchBackend.cpp
@@ -655,6 +656,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
     add_executable(${TEST_NAME}
       ${TEST_SRC}
       ${PROJECT_ROOT}/src/core/ReaderButtonDispatcher.cpp
+      ${PROJECT_ROOT}/src/ui/TouchLayout.cpp
       ${TEST_HELPERS}
     )
   elseif(TEST_NAME STREQUAL "ContentHandleThumbnailTest" OR TEST_NAME STREQUAL "EpubIndexAnchorsTest" OR
@@ -1093,7 +1095,8 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/GfxRenderer/src/BitmapHelpers.cpp
       ${TEST_HELPERS}
     )
-  elseif(TEST_NAME STREQUAL "BmpPolarityRoundTripTest" OR TEST_NAME STREQUAL "BitmapTurnCacheTest")
+  elseif(TEST_NAME STREQUAL "BmpPolarityRoundTripTest" OR TEST_NAME STREQUAL "BitmapTurnCacheTest" OR
+         TEST_NAME STREQUAL "ReaderTouchRenderingTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
       ${PROJECT_ROOT}/lib/GfxRenderer/src/GfxRenderer.cpp
@@ -1107,7 +1110,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/ExternalFont/src
       ${PROJECT_ROOT}/lib/ThaiShaper/src
     )
-    if(TEST_NAME STREQUAL "BitmapTurnCacheTest")
+    if(TEST_NAME STREQUAL "BitmapTurnCacheTest" OR TEST_NAME STREQUAL "ReaderTouchRenderingTest")
       target_sources(${TEST_NAME} PRIVATE
         ${PROJECT_ROOT}/lib/RenderTypes/src/BitmapTurnCache.cpp
         ${PROJECT_ROOT}/lib/RenderTypes/src/blocks/ImageBlock.cpp
@@ -1124,6 +1127,16 @@ foreach(TEST_SRC ${TEST_SOURCES})
       )
       target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_X4PRO=1)
       target_include_directories(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/RenderTypes/src/blocks)
+    endif()
+    if(TEST_NAME STREQUAL "ReaderTouchRenderingTest")
+      target_sources(${TEST_NAME} PRIVATE
+        ${PROJECT_ROOT}/src/ui/views/ReaderViews.cpp
+        ${PROJECT_ROOT}/lib/GfxRenderer/src/CoverHelpers.cpp
+      )
+      target_include_directories(${TEST_NAME} PRIVATE
+        ${PROJECT_ROOT}/lib/I18n/src
+        ${PROJECT_ROOT}/lib/ImageConverter/src
+      )
     endif()
     if(MSVC)
       target_compile_options(${TEST_NAME} PRIVATE /Gy)

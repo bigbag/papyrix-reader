@@ -37,15 +37,28 @@ M4 has Up1, Down2, and Power0 buttons with no physical Confirm or Home key.
 Its FT6336U-compatible touch controller supplies menu and keyboard actions.
 The M4 Power button also uses the existing Power-button preferences.
 
-On touch devices, reader taps use these zones:
+X4 Pro, Sticky, and Murphy M4 use the same five active regions on the reading page:
 
-- Left 24 percent: previous page
-- Center 52 percent: reader menu
-- Right 24 percent: next page
+![Reading page and five touch regions, with an inactive bottom center](images/reader-touch-zones.svg)
 
-The side-button preference can reverse the page zones. Menus, lists, dialogs,
-the keyboard, and reader overlays accept direct taps. Swipe gestures are not
-supported.
+- **Previous / Next:** Tap a side region above the bottom strip to turn the page.
+- **Menu:** Tap the center region above the bottom strip to open Reader Menu.
+- **Back:** Tap the bottom-left corner to close the book and return to its source screen.
+- **Confirm:** Tap the bottom-right corner to open Reader Menu.
+- **Bottom center:** A tap has no action while the reading page is visible.
+
+Each side region uses 24 percent of the screen width. The center uses 52 percent.
+The bottom strip is 50 pixels high in each screen orientation.
+Four small edge tabs show the page-turn and bottom-corner controls.
+Each tab is 4 pixels wide with rounded inner corners.
+The tabs do not change the page layout or touch regions.
+The colored regions and labels appear only in this guide.
+The regions stay in the same positions when the status bar is hidden.
+
+The side-button preference reverses Previous and Next only.
+Menus, lists, dialogs, the keyboard, and reader overlays accept direct taps.
+Full-screen reader overlays keep their own visible button bars.
+Swipe gestures are not supported.
 
 ---
 
@@ -233,7 +246,7 @@ Text and reading settings, in menu order:
 
 - **Touch page turns** (X4 Pro, Sticky, and M4, default: ON)
   - Enable or disable taps in the previous-page and next-page zones.
-  - Center menu taps and overlay controls stay active.
+  - Menu, Back, Confirm, and overlay controls stay active.
   - X3, X4, and X4 v2 Classic hide this setting.
   - Physical buttons stay active.
 
@@ -575,15 +588,16 @@ Use the controls for your device. X3, X4, and X4 v2 Classic use buttons only. X4
 | Next page | Press **Right** or **Down** | Tap the right page zone or press **Down** |
 | Previous chapter | Hold **Left** or **Up**, then release | Hold **Up**, then release |
 | Next chapter | Hold **Right** or **Down**, then release | Hold **Down**, then release |
-| Open Reader Menu | Press **Confirm** | Tap the center menu zone |
-| Select a menu item | Use **Up/Down**, then press **Confirm** | Tap the item |
-| Close the book | Press **Back**, or select **Back** in Reader Menu | X4 Pro: press and release **Home** while reading. Sticky and M4: open Reader Menu and tap **Back** |
+| Open Reader Menu | Press **Confirm** | Tap the center menu zone or the bottom-right **Confirm** corner |
+| Select a menu item | Use **Up/Down**, then press **Confirm** | Tap the item, or tap **Confirm** to select the highlighted item |
+| Dismiss Reader Menu | Press **Back** | Tap **Back** or another point outside the popup, except **Confirm** |
+| Close the book | Press **Back**, or select **Back** in Reader Menu | Tap the bottom-left **Back** corner while reading. X4 Pro also supports **Home**. |
 
 The table shows the default page-button layout. The side-button preference can reverse the page actions. See [Button and Touch Layout](#button-and-touch-layout) for the touch zones.
 
 X4 Pro also has a capacitive Home key. Release it to send the Back action. Sticky and Murphy M4 have no Home key, physical Back button, or physical Confirm button. Use the on-screen controls on these devices.
 
-When **Touch page turns** is off, the page zones do not turn pages. The center menu zone and menu items still accept taps. This setting does not disable physical page buttons.
+When **Touch page turns** is off, the page zones do not turn pages. Menu, Back, Confirm, and overlay controls stay active. This setting does not disable physical page buttons.
 
 When **Short Power Button** is **Page Turn**, a short Power press goes to the next page. When it is **Bookmark**, a short Power press adds a bookmark.
 
@@ -597,21 +611,29 @@ When **Settings → Reader → Status Bar** is not **None**, the bottom of the r
 
 EPUB chapters cache one chapter at a time, so `~` usually clears when the current chapter cache completes. TXT / Markdown / FB2 / HTML cache the full book in chunks, so `~` can stay until you read through (or go past) the full book.
 
+On touch devices, the left corner includes the battery and acts as **Back**.
+The right corner includes the page number and acts as **Confirm**.
+The center of the bottom strip has no action while reading.
+Hiding the status bar does not change these regions or the four control marks.
+
 ### 4.1 Reader Menu
 
-On button devices, press **Confirm** to open Reader Menu. On touch devices, tap the center menu zone. The menu is available on the cover page and text pages.
+On button devices, press **Confirm** to open Reader Menu. On touch devices, tap the center menu zone or the bottom-right **Confirm** corner. The menu is available on covers, text pages, and XTC/XTCH pages.
 
 - **Chapters** — Open the Table of Contents / Chapter Selection screen
 - **Bookmarks** — Open the Bookmarks overlay for the current book
 - **Book stats** — Show Progress, total Time read, and Sessions for the current book
-- **Back** (except X4 Pro) — Close the book and return to the screen that opened it
+- **Back** (button devices only) — Close the book and return to the screen that opened it
 
-Book Stats stays available here when **Show Recents** is off. On button devices, use **Up/Down** to highlight an item and **Confirm** to select it. On touch devices, tap the item.
+Book Stats stays available here when **Show Recents** is off. On button devices, use **Up/Down** to highlight an item and **Confirm** to select it. On touch devices, tap the item or use the bottom-right **Confirm** corner to select the highlighted item.
 
-The physical **Back** button closes the menu and returns to reading. The X4 Pro Home key does the same. On X4 Pro, press and release Home while reading to close the book. Sticky and Murphy M4 keep the **Back** menu item because they have no Back or Home key.
-
-On touch devices, tap outside the menu to return to reading.
-This action does not turn the page.
+The physical **Back** button closes the menu and returns to reading.
+The X4 Pro Home key does the same.
+On all touch devices, the bottom-left **Back** corner closes the menu.
+Tap another point outside the popup to return to reading, except the **Confirm** corner.
+These dismissal actions do not turn the page or close the book.
+To close the book, tap **Back** when the reading page is visible.
+Back does not mean previous page, and Confirm does not mean next page.
 
 X4 Pro and Murphy M4 show front-light controls above the navigation items:
 

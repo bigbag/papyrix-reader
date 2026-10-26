@@ -127,14 +127,25 @@ Each profile selects its controller byte layout and coordinate transform.
 M4 uses FT6336U-compatible touch on native I2C1.
 Its acquisition task polls every 10 ms and coordinates shared reset with the display.
 
-X3, X4, and X4 v2 Classic use button controls and have no touch input. X4 Pro, Sticky, and M4 use touch for menu selection. X4 Pro maps its capacitive Home key to Back and does not show a Back item in Reader Menu. Press and release Home while reading to close the book. Sticky and M4 have no Home key or physical Back or Confirm buttons. They keep the Back menu item to close the book and return to its source screen. See the [reading controls](user_guide.md#4-reading-mode) for each device group.
-On touch devices, a tap outside Reader Menu closes the menu without closing the book.
+X3, X4, and X4 v2 Classic use button controls and have no touch input.
+X4 Pro, Sticky, and M4 share the same touch Reader Menu without a Back item.
+Their bottom-left Back region closes the book while reading.
+Their bottom-right Confirm region opens Reader Menu.
+In Reader Menu, Back closes the popup and Confirm selects the highlighted item.
+Other taps outside the popup close it without closing the book.
+X4 Pro also maps its capacitive Home key to Back.
+Sticky and M4 have no Home key or physical Back or Confirm buttons.
 
-Reader touch zones use 24 percent of the width for Previous,
-52 percent for Menu, and 24 percent for Next.
-The side-button preference reverses the page zones.
-Disabling Touch page turns disables the page zones only.
-Menu taps, overlay taps, and physical buttons remain active.
+Above a 50-pixel bottom strip, reader touch zones use 24 percent of the width
+for Previous, 52 percent for Menu, and 24 percent for Next.
+The bottom corners use the same side widths. The bottom center is inactive while reading.
+Four small edge tabs show the side and corner controls.
+Each tab is 4 pixels wide with rounded inner corners.
+The status bar and screen orientation do not change this layout.
+The side-button preference reverses only the page zones.
+Disabling Touch page turns disables only Previous and Next.
+Menu, Back, Confirm, overlay taps, and physical buttons remain active.
+See the [touch-zone diagram](user_guide.md#button-and-touch-layout) and [reading controls](user_guide.md#4-reading-mode).
 The classifier rejects movement and multiple contacts.
 It suppresses contacts during refresh and stale contacts after wake.
 

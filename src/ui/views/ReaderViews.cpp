@@ -8,6 +8,25 @@
 
 namespace ui {
 
+void readerTouchHints(const GfxRenderer& r, bool black) {
+  int top, right, bottom, left;
+  r.getOrientedViewableTRBL(&top, &right, &bottom, &left);
+  const int height = r.getScreenHeight();
+  const int rightX = r.getScreenWidth() - right - 4;
+  const int middleY = (height - 24) / 2;
+  const int bottomY = height - touch::READER_BOTTOM_ZONE_HEIGHT + (touch::READER_BOTTOM_ZONE_HEIGHT - 18) / 2;
+  const auto drawTabs = [&](int y, int tabHeight) {
+    r.fillRect(left, y, 2, tabHeight, black);
+    r.fillRect(left + 2, y + 1, 1, tabHeight - 2, black);
+    r.fillRect(left + 3, y + 2, 1, tabHeight - 4, black);
+    r.fillRect(rightX + 2, y, 2, tabHeight, black);
+    r.fillRect(rightX + 1, y + 1, 1, tabHeight - 2, black);
+    r.fillRect(rightX, y + 2, 1, tabHeight - 4, black);
+  };
+  drawTabs(middleY, 24);
+  drawTabs(bottomY, 18);
+}
+
 void renderStatusBar(const GfxRenderer& r, const Theme& t, const ReaderStatusView& v) {
   // Draw status bar at bottom of screen
   statusBar(r, t, v.currentPage, v.totalPages, v.progressPercent);

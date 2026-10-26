@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 780" role="img" aria-labelledby="title description">
+  <title id="title">Touch reading controls on X4 Pro, Sticky, and Murphy M4</title>
+  <desc id="description">The reading page has four small edge tabs. Each tab is four pixels wide with rounded inner corners. Above the bottom strip, the left zone turns to the previous page, the center opens Reader Menu, and the right zone turns to the next page. The bottom-left corner is Back. The bottom-right corner is Confirm. The bottom center has no action. The colored zones and labels appear only in this guide.</desc>
+  <style>
+    :root { --fg: #202124; --muted: #62666b; --border: #9aa0a6; --surface: #fff; --c1: #65adc6; --c2: #81bea2; --c3: #efb652; color: var(--fg); color-scheme: light dark; }
+    @media (prefers-color-scheme: dark) {
+      :root { --fg: #eceff1; --muted: #b0b7bd; --border: #77818b; --surface: #1d2329; }
+    }
+    text { fill: currentColor; font-family: Arial, sans-serif; }
+    .heading { font-size: 22px; font-weight: 700; text-anchor: middle; }
+    .label { font-size: 21px; font-weight: 700; text-anchor: middle; }
+    .label-box { fill: var(--surface); opacity: .94; }
+    .caption { fill: var(--muted); font-size: 14px; }
+  </style>
+  <defs>
+    <g id="page-content">
+      <text x="240" y="44" text-anchor="middle" font-size="24" font-weight="700">CHAPTER I</text>
+      <text x="240" y="78" text-anchor="middle" font-size="24" font-weight="700">Down the Rabbit-Hole</text>
+      <text x="16" y="130" font-size="24">
+        <tspan x="16">Alice was beginning to get very tired</tspan>
+        <tspan x="16" dy="34">of sitting by her sister on the bank,</tspan>
+        <tspan x="16" dy="34">and of having nothing to do: once or</tspan>
+        <tspan x="16" dy="34">twice she had peeped into the book</tspan>
+        <tspan x="16" dy="34">her sister was reading, but it had no</tspan>
+        <tspan x="16" dy="34">pictures or conversations in it.</tspan>
+        <tspan x="16" dy="34">“And what is the use of a book,”</tspan>
+        <tspan x="16" dy="34">thought Alice, “without pictures</tspan>
+        <tspan x="16" dy="34">or conversations?”</tspan>
+        <tspan x="16" dy="52">So she was considering in her own</tspan>
+        <tspan x="16" dy="34">mind whether the pleasure of making</tspan>
+        <tspan x="16" dy="34">a daisy-chain would be worth the</tspan>
+        <tspan x="16" dy="34">trouble of getting up and picking</tspan>
+        <tspan x="16" dy="34">the daisies, when suddenly a White</tspan>
+        <tspan x="16" dy="34">Rabbit with pink eyes ran close</tspan>
+        <tspan x="16" dy="34">by her.</tspan>
+      </text>
+      <g fill="currentColor">
+        <path d="M3 388h2v1h1v1h1v20h-1v1h-1v1H3z"/>
+        <path d="M477 388h-2v1h-1v1h-1v20h1v1h1v1H477z"/>
+        <path d="M3 766h2v1h1v1h1v14h-1v1h-1v1H3z"/>
+        <path d="M477 766h-2v1h-1v1h-1v14h1v1h1v1H477z"/>
+      </g>
+      <g font-size="12">
+        <text x="12" y="793">82%</text>
+        <text x="240" y="793" text-anchor="middle">Alice's Adventures in Wonderland</text>
+        <text x="467" y="793" text-anchor="end">12/184</text>
+      </g>
+    </g>
+  </defs>
+  <text x="224" y="28" class="heading">Reading page</text>
+  <text x="676" y="28" class="heading">Touch regions</text>
+  <g transform="translate(20 45) scale(.85)">
+    <rect width="480" height="800" rx="5" fill="var(--surface)" stroke="var(--border)"/>
+    <use href="#page-content"/>
+  </g>
+  <g transform="translate(472 45) scale(.85)">
+    <rect width="480" height="800" rx="5" fill="var(--surface)" stroke="var(--border)"/>
+    <g opacity=".2">
+      <rect width="115" height="750" fill="var(--c1)"/>
+      <rect x="115" width="250" height="750" fill="var(--c2)"/>
+      <rect x="365" width="115" height="750" fill="var(--c1)"/>
+      <rect y="750" width="115" height="50" fill="var(--c3)"/>
+      <rect x="365" y="750" width="115" height="50" fill="var(--c3)"/>
+    </g>
+    <path d="M115 0V800 M365 0V800 M0 750H480" fill="none" stroke="var(--border)" stroke-dasharray="3 4"/>
+    <use href="#page-content"/>
+    <g class="label-box">
+      <rect x="8" y="367" width="99" height="34" rx="3"/>
+      <rect x="198" y="367" width="84" height="34" rx="3"/>
+      <rect x="383" y="367" width="79" height="34" rx="3"/>
+      <rect x="10" y="755" width="95" height="29" rx="3"/>
+      <rect x="174" y="755" width="132" height="29" rx="3"/>
+      <rect x="372" y="755" width="101" height="29" rx="3"/>
+    </g>
+    <g class="label">
+      <text x="57.5" y="391">Previous</text>
+      <text x="240" y="391">Menu</text>
+      <text x="422.5" y="391">Next</text>
+      <text x="57.5" y="777">Back</text>
+      <text x="240" y="777" font-size="18" font-weight="400">No action</text>
+      <text x="422.5" y="777">Confirm</text>
+    </g>
+  </g>
+  <text x="20" y="750" class="caption">X4 Pro · Sticky · Murphy M4</text>
+  <text x="20" y="773" class="caption">Colors and labels explain the touch regions. The reader shows only the four small tabs.</text>
+</svg>

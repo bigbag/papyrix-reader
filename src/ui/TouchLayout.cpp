@@ -5,6 +5,22 @@ bool Rect::contains(Point p) const {
   return width > 0 && height > 0 && p.x >= x && p.y >= y && p.x < x + width && p.y < y + height;
 }
 
+ReaderRegion readerRegionAt(Point point, int16_t screenWidth, int16_t screenHeight) {
+  if (screenWidth <= 0 || screenHeight <= READER_BOTTOM_ZONE_HEIGHT || point.x < 0 || point.y < 0 ||
+      point.x >= screenWidth || point.y >= screenHeight) {
+    return ReaderRegion::None;
+  }
+  const int16_t edgeWidth = static_cast<int16_t>(static_cast<int32_t>(screenWidth) * 24 / 100);
+  if (point.y >= screenHeight - READER_BOTTOM_ZONE_HEIGHT) {
+    if (point.x < edgeWidth) return ReaderRegion::Back;
+    if (point.x >= screenWidth - edgeWidth) return ReaderRegion::Confirm;
+    return ReaderRegion::None;
+  }
+  if (point.x < edgeWidth) return ReaderRegion::Previous;
+  if (point.x >= screenWidth - edgeWidth) return ReaderRegion::Next;
+  return ReaderRegion::Menu;
+}
+
 int rowAt(Point p, Rect bounds, int16_t rowHeight, int rowCount) {
   if (!bounds.contains(p) || rowHeight <= 0 || rowCount <= 0) return -1;
   const int row = (p.y - bounds.y) / rowHeight;
