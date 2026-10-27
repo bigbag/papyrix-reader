@@ -47,18 +47,22 @@ The panel list identifies supported controllers.
 ## Firmware update compatibility
 
 Current firmware checks the MCU, image structure, checksum/hash, and slot size before flash erase.
-It also requires exactly one matching board tag.
+A PapyriX board tag must match the target when present.
 The combined X3/X4 image uses the `xteink_c3` compatibility class.
 Pro, Classic, Sticky, and M4 use `x4pro`, `x4c`, `sticky`, and `murphy_m4`.
-Missing, malformed, duplicate, and incompatible tags fail validation.
+Malformed, duplicate, and incompatible PapyriX tags fail validation.
 Web upload stores the app image.
 The on-device updater validates it before installation.
 The emergency SD path uses the same validator.
 
-Older untagged images require unlocked serial installation.
-USB-locked devices can be unable to downgrade.
-Old installed updaters and direct serial flashing do not enforce this board check.
-Board tags prevent accidental mismatches.
+Compatible third-party and older images do not need a PapyriX tag.
+The validator uses PapyriX board tags only to check device compatibility within the PapyriX ecosystem.
+It ignores board tags from other firmware projects.
+For these images, the updater cannot verify the board within the same MCU family.
+Select an app image for the correct board and partition layout.
+The user accepts the risk when installing third-party firmware.
+An image for the wrong board can damage the device even when these checks pass.
+Board tags help prevent accidental mismatches.
 They do not authenticate firmware.
 
 App-only updates require an existing compatible PapyriX partition layout.
@@ -198,7 +202,7 @@ See the [Classic specifications](x4-classic-specifications.md) for pins, panel s
 Sticky uses a separate image, SPI storage, two I2C controllers, and two panel variants.
 It retains the existing PapyriX applications and reader functions.
 It has no front light or native USB storage.
-Its app-update validator rejects missing, duplicate, malformed, and wrong-board tags before erase.
+Its app-update validator rejects duplicate, malformed, and wrong-board PapyriX tags before erase.
 First installation uses the complete bundle, not an app image at offset zero.
 The bundle replaces stock firmware and can erase device data.
 Stock recovery and all physical behavior remain unverified.

@@ -70,11 +70,11 @@ See the [Classic support matrix](device-support-matrix.md#x4-classic) and
 Use **Settings → Firmware Update** for a device that can open the UI. Copy the
 correct artifact to the SD root as `/firmware.bin`.
 
-Current firmware checks MCU, image integrity, slot size, and one matching board tag before flash erase.
-It rejects an image for another S3 board.
-It also rejects missing, malformed, and duplicate tags.
-Older untagged images require unlocked serial installation.
-Old installed updaters and direct serial flashing do not enforce this board check.
+Current firmware checks MCU, image integrity, and slot size before flash erase.
+It rejects incompatible, malformed, and duplicate PapyriX board tags.
+Compatible third-party and older images do not need a PapyriX tag.
+Without this tag, the updater cannot verify the board within the same MCU family.
+Select an app image for the correct board and partition layout.
 See [update compatibility](device-support-matrix.md#firmware-update-compatibility).
 
 If the UI cannot start, copy the artifact as `/force_update.bin`. The boot path

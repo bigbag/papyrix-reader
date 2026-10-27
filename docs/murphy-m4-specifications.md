@@ -154,7 +154,7 @@ The table identifies software evidence. It does not claim on-device acceptance.
 | RTC, NTP, Clock | Clock HAL, RX8010 backend, existing synchronization and Clock app | RX8010 time/VLF/failure cases; Clock HAL and application/display tools |
 | Five applications | Existing Image Viewer, Printer, LocalSend, Pomodoro, and Clock registry | All five compile in M4 firmware; existing app, timer, image, IPP, LocalSend, and Clock suites |
 | Wi-Fi, web, Calibre, LocalSend, printing | Existing radio sessions, transfer services, and applications; no separate M4 clients | Firmware builds; web/upload, credential, LocalSend, IPP, and host-tool checks. Radio transfers need a device |
-| Updates, cleanup, trash | Existing updater, file actions, and maintenance states; strict M4 board tag and install package | Updater pre-erase rejection, package corruption/bounds cases, filesystem and trash suites; maintenance states compile |
+| Updates, cleanup, trash | Existing updater, file actions, and maintenance states; M4 board-tag check when present and install package | Updater pre-erase rejection, package corruption/bounds cases, filesystem and trash suites; maintenance states compile |
 | FAT32/exFAT and PSRAM | Four-bit block device and existing SdFat; existing S3 allocation limits and fallbacks | Actual block-device lifecycle; FAT16/FAT32/exFAT file round trips; M4 parser/font/bitmap/framebuffer allocation failures |
 | Themes, fonts, sleep choices | Existing theme/font managers, settings, and sleep states | Theme, font, settings, boot/sleep-view suites; M4 settings layout exports and shutdown smoke |
 
@@ -205,8 +205,12 @@ Web upload stores the same app image for the on-device validator.
 Emergency SD recovery uses `/force_update.bin` and the same validator.
 It requires bootable PapyriX and working SD access.
 It does not replace an erased bootloader or damaged partition table.
-Validation checks MCU, image structure, checksum/hash, slot size, and exactly one M4 board tag before erase or write.
-Board tags prevent accidental mismatches. They do not authenticate firmware.
+Validation checks MCU, image structure, checksum/hash, and slot size before erase or write.
+A PapyriX board tag must identify M4 when present.
+Compatible images without a PapyriX tag are permitted.
+For these images, select the correct board and partition layout.
+PapyriX board tags help prevent accidental mismatches.
+They do not authenticate firmware.
 
 ## Software verification
 

@@ -164,16 +164,17 @@ For normal SD updates, place the app-only image at `/firmware.bin` and use Setti
 Web upload stores that same file.
 The browser does not flash or validate it.
 The emergency `/force_update.bin` path uses the same on-device validator.
-Validation checks MCU, structure, checksum/hash, partition size, and exactly one matching board tag before erase.
+Validation checks MCU, structure, checksum/hash, and partition size before erase.
+It also checks PapyriX board tags when present.
 
 Compatibility classes are `xteink_c3`, `x4pro`, `x4c`, `sticky`, and `murphy_m4`.
 The Sticky tag is `PAPYRIX-BOARD-V1:sticky;`.
 A matching MCU is not enough for another board's image.
-Missing, malformed, duplicated, and incompatible tags are rejected.
-This prevents accidental wrong-board updates.
+Malformed, duplicate, and incompatible PapyriX tags are rejected.
+This helps prevent wrong-board updates when a PapyriX tag is present.
 It does not authenticate firmware.
-Older untagged images require unlocked serial flashing for downgrade.
-Old installed updaters and direct serial flashing do not enforce this check.
+Compatible third-party and older images do not need a PapyriX tag.
+Without this tag, the updater cannot verify the board within the same MCU family.
 A first installation still requires the correct board image and confirmed hardware.
 Stock restoration remains unverified.
 

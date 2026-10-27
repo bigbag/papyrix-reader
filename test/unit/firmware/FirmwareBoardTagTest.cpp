@@ -38,16 +38,20 @@ int main() {
     scanner.endSegment();
     runner.expectTrue(scanner.compatible(), "matching tag survives chunk split " + std::to_string(split));
   }
+  Scanner untagged;
+  feed(untagged, "plain image bytes");
+  untagged.endSegment();
+  runner.expectTrue(untagged.compatible(), "images without a PapyriX board tag remain compatible");
   const std::string prefix = "PAPYRIX-BOARD-V1:";
-  for (const auto& bytes : {std::string("plain image bytes"), wrong, expected + expected, expected + wrong,
-                            prefix + std::string(80, 'x') + ";", expected.substr(0, expected.size() - 1),
-                            prefix + ";", prefix + std::string(1, '\0') + ";"}) {
+  for (const auto& bytes :
+       {wrong, expected + expected, expected + wrong, prefix + std::string(80, 'x') + ";",
+        expected.substr(0, expected.size() - 1), prefix + ";", prefix + std::string(1, '\0') + ";"}) {
     Scanner scanner;
     feed(scanner, bytes);
     scanner.endSegment();
-    runner.expectFalse(scanner.compatible(), "missing, foreign, duplicate, or malformed identity is rejected");
+    runner.expectFalse(scanner.compatible(), "foreign, duplicate, or malformed identity is rejected");
   }
-  for (size_t split = 1; split < expected.size(); ++split) {
+  for (size_t split = prefix.size(); split < expected.size(); ++split) {
     Scanner scanner;
     feed(scanner, expected.substr(0, split));
     scanner.endSegment();

@@ -391,8 +391,8 @@ Maintenance actions for the device:
 Use an SD card for normal app updates.
 
 Use the app image for the correct board.
-The validator rejects missing, malformed, duplicate, and incompatible board tags before flash erase.
-Older untagged images require unlocked serial installation.
+The validator rejects malformed, duplicate, and incompatible PapyriX board tags before flash erase.
+Compatible third-party and older images do not need a PapyriX tag.
 See [update compatibility](device-support-matrix.md#firmware-update-compatibility) for the limits.
 
 - Copy the firmware binary as `/firmware.bin` to the root of your SD card

@@ -230,9 +230,9 @@ int main() {
 #else
   const std::string wrong = "PAPYRIX-BOARD-V1:x4pro;";
 #endif
-  for (const auto& tags : {std::string{}, wrong, matching + matching, matching + wrong,
-                           std::string("PAPYRIX-BOARD-V1:") + std::string(80, 'x') + ";",
-                           matching.substr(0, matching.size() - 1)}) {
+  for (const auto& tags :
+       {wrong, matching + matching, matching + wrong, std::string("PAPYRIX-BOARD-V1:") + std::string(80, 'x') + ";",
+        matching.substr(0, matching.size() - 1)}) {
     SdMan.reset();
     FW_UPDATER.reset();
     ESP_PARTITION.reset();
@@ -256,7 +256,7 @@ int main() {
     ESP_PARTITION.reset();
     auto data = buildMinSizeFirmware(false);
     const uint8_t checksum = data.back();
-    const uint32_t firstLength = 4097;
+    const uint32_t firstLength = 4110;
     const uint32_t secondLength = 64 * 1024 - firstLength;
     uint8_t segmentHeader[8] = {};
     memcpy(segmentHeader + 4, &secondLength, 4);
@@ -286,7 +286,7 @@ int main() {
     FW_UPDATER.findFirmwareFile("/untagged_corrupt.bin");
     runner.expectFalse(FW_UPDATER.beginUpdate(), "untagged corrupt image is rejected");
     runner.expectTrue(FW_UPDATER.progress().error == FirmwareUpdateError::BadChecksum,
-                      "checksum errors retain precedence over missing identity");
+                      "untagged images still require a valid checksum");
     runner.expectTrue(ESP_PARTITION.eraseCount_ == 0 && ESP_PARTITION.writeCount_ == 0,
                       "untagged corrupt image leaves flash unchanged");
   }
@@ -371,11 +371,11 @@ int main() {
   // beginUpdate — success + pump full flow
   // ============================================================
 
-  {
+  for (const auto& tags : {matching, std::string{}}) {
     SdMan.reset();
     FW_UPDATER.reset();
     ESP_PARTITION.reset();
-    auto data = buildMinSizeFirmware();
+    auto data = buildValidFirmware(64 * 1024, true, TARGET_CHIP_ID, tags);
     SdMan.setFileData(PAPYRIX_FIRMWARE_FILE, data);
     FW_UPDATER.findFirmwareFile();
 

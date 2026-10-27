@@ -159,11 +159,11 @@ The web server provides file management and upload functions.
 Calibre provides wireless book transfer.
 RTC and NTP services maintain system time where available.
 
-Firmware updates validate one matching board tag before flash erase.
+Firmware updates validate a PapyriX board tag before flash erase when one is present.
 The combined X3/X4 image is one compatibility class.
-Pro, Classic, Sticky, and M4 each require their own tag.
-Untagged images require unlocked serial installation.
-This check prevents accidental wrong-board updates.
+Pro, Classic, Sticky, and M4 use separate tags.
+Images without a PapyriX tag can pass the MCU, integrity, and slot-size checks.
+The tag check helps prevent accidental wrong-board updates.
 It does not authenticate firmware.
 
 `lib/Ipp` is the IPP print server core.

@@ -401,8 +401,8 @@ Built-in fonts are always available:
 Copy the correct release artifact to the SD card root as `firmware.bin`.
 Open **Settings > Firmware Update** and press **Run**.
 
-The on-device validator checks one matching board tag before flash erase.
-Older untagged images require unlocked serial installation.
+The on-device validator checks MCU, image integrity, and slot size before flash erase.
+It checks PapyriX board tags when present and permits compatible images without them.
 See [update compatibility](device-support-matrix.md#firmware-update-compatibility) for the limits.
 For Sticky first installation, use the [complete install bundle](sticky-specifications.md#installation).
 

@@ -167,11 +167,13 @@ Do not erase the chip or install a full-flash image from another device.
 For Classic partition and OTA-slot requirements, see the
 [Classic specifications](docs/x4-classic-specifications.md#installation).
 
-New firmware requires one matching board tag for SD, web-uploaded, and emergency updates.
-It rejects older untagged images, even when the MCU matches.
-An untagged downgrade requires unlocked serial flashing.
-USB-locked units can be unable to downgrade.
-Old installed updaters and serial flashing do not enforce the new board check.
+SD, web-uploaded, and emergency updates accept compatible app images without a PapyriX board tag.
+If a PapyriX board tag is present, it must match the target.
+Board tags from other firmware projects are ignored.
+MCU, integrity, and slot-size checks still apply.
+For images without a PapyriX tag, select the correct board and partition layout.
+Installing third-party firmware is the user's choice and risk.
+An image for the wrong board can damage the device even when validation passes.
 See [update compatibility](docs/device-support-matrix.md#firmware-update-compatibility) for the shared validation rules.
 
 For X3 and the original X4, the usual installation tool is

@@ -11,7 +11,7 @@ class Scanner {
  public:
   void feed(const uint8_t* data, size_t length);
   void endSegment();
-  bool compatible() const { return found_ && !invalid_ && !capturing_; }
+  bool compatible() const { return !invalid_ && !capturing_; }
 
  private:
   uint8_t matched_ = 0;
