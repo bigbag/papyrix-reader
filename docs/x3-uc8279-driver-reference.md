@@ -1,6 +1,6 @@
 # Xteink X3 UC8279d Driver Reference
 
-This document gives the register-level reference for the UC8279d controller in newer Xteink X3 units. It supports `lib/EInkDisplay/src/Uc8279X3Driver.cpp`, `lib/EInkDisplay/src/Uc8279X3Luts.h`, and `lib/EInkDisplay/src/X3DisplayProbeClassifier.cpp`. See [Xteink X3 Specifications](x3-specifications.md) for the device overview. See [X3 LUT Waveforms](x3-lut-waveforms.md) for the UC8253 tables.
+This document gives the register-level reference for the UC8279d controller in newer Xteink X3 units. It supports `lib/EInkDisplay/src/Uc8279X3Driver.cpp`, `lib/EInkDisplay/src/Uc8279X3Luts.h`, and `lib/EInkDisplay/src/X3DisplayProbe.cpp`. See [Xteink X3 Specifications](x3-specifications.md) for the device overview. See [X3 LUT Waveforms](x3-lut-waveforms.md) for the UC8253 tables.
 
 The waveform tables, the init script, and the refresh sequences come from the FreeInk SDK (`libs/display/FreeInkDisplay/src/lut/Uc8279X3Luts.h`, `libs/hardware/XteinkDetect`, `docs/xteink-x3-uc8279-support.md`). FreeInk recovered them from the stock Xteink X3 firmware (`update.bin`, July 2026, descriptor set `ZHX368_8279`). The license is in `lib/EInkDisplay/FREEINK_LICENSE`.
 
@@ -33,20 +33,20 @@ MTP layout (first 48 bytes):
 
 ### Identification Responses
 
-- **X3, UC8279d (field modules)** — VER `FF FF FF FF FF`. FLG `0x13`. The controller drives the RMTP readback. The dump is not uniform. The dump repeats on a second read. The dump contains zeros and the LUT version stamp at `0x01A`. Byte 0 is not `0xA5`.
-- **X3, UC8279d (stock firmware descriptor)** — `LUT_VER` is `0x66`.
-- **X3, UC8253** — The VER response is not observed. The classifier accepts a floating FLG or a driven idle FLG. The RMTP line floats. The read gives uniform `0xFF` through the pull-up (field-confirmed).
-
-A released SDA reads uniform `0x00` or `0xFF`.
-The classifier requires repeatable RMTP data before it accepts UC8279.
+The X3 probe uses the stock V6.3.15 protocol from FreeInk SDK.
+It reads only the first three VER bytes.
+The third byte `0x66` identifies UC8279d.
+The third byte `0xFF` selects UC8253.
+Other values are inconclusive.
+The probe does not use FLG or MTP responses.
 
 ### Probe Timing
 
-- Reset pulse: RST HIGH 2 ms, LOW 1 ms (screening pass) or 50 ms (vendor identification timing), HIGH, then 30 ms settle.
-- Bit-bang clock: approximately 500 kHz. Sample SDA while SCLK is LOW. Then pulse SCLK.
+- Reset pulse: RST HIGH 10 ms, LOW 50 ms, then HIGH for 50 ms.
+- Bit-bang clock: approximately 500 kHz. Release SDA without a pull-up. Sample each bit after SCLK becomes HIGH.
 - Release the `gpio_hold` on RST before the reset pulse. The deep-sleep hold survives the wake reset.
 - Keep SD CS (GPIO 12) HIGH during the probe. The SD card shares SCLK 8 and MOSI 10.
-- Do not wait for BUSY. The BUSY polarity depends on the controller under test.
+- Wait up to 300 ms for BUSY HIGH. Read VER even after a timeout.
 
 ---
 
@@ -153,6 +153,6 @@ The UC8279d waveforms differ from the UC8253 X3 banks. Do not copy the UC8253 X3
 ## References
 
 - FreeInk SDK, `docs/xteink-x3-uc8279-support.md`, `docs/display-driver-references.md`
-- FreeInk SDK, commit `3c74ea8` — UC8279d detection with blank MTP (repeat RMTP read)
+- [FreeInk SDK revision `83f8e01f`](https://github.com/Free-Ink/freeink-sdk/tree/83f8e01f6f7b1419917f610d7b223387df41fc7d) — stock X3 V6.3.15 detection protocol
 - UC8279d_B datasheet 0.1 (December 2025)
 - UC8253 datasheet (UltraChip / Good Display): https://www.elecrow.com/download/product/DIE01237S/UC8253_Datasheet.pdf

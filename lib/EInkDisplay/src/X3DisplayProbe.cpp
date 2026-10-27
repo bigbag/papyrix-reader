@@ -111,7 +111,84 @@ class ArduinoX3DisplayProbeTransport : public X3DisplayProbeTransport {
 
 }  // namespace
 
-X3DisplayProbeReport probeX3DisplayController(const X3DisplayProbePins& pins) {
+// This probe uses the FreeInk stock X3 protocol from revision 83f8e01f.
+// The license is in ../FREEINK_LICENSE.
+X3StockProbeResult probeX3DisplayController(const X3DisplayProbePins& pins) {
+  X3StockProbeResult result{};
+  pinMode(pins.cs, OUTPUT);
+  digitalWrite(pins.cs, HIGH);
+  pinMode(pins.sclk, OUTPUT);
+  digitalWrite(pins.sclk, LOW);
+  pinMode(pins.dc, OUTPUT);
+  digitalWrite(pins.dc, HIGH);
+  pinMode(pins.sda, OUTPUT);
+  if (pins.busy >= 0) pinMode(pins.busy, INPUT);
+
+  if (pins.reset >= 0) {
+    gpio_hold_dis(static_cast<gpio_num_t>(pins.reset));
+    pinMode(pins.reset, OUTPUT);
+    digitalWrite(pins.reset, HIGH);
+    delay(10);
+    digitalWrite(pins.reset, LOW);
+    delay(50);
+    digitalWrite(pins.reset, HIGH);
+  }
+  delay(50);
+  if (pins.busy >= 0) {
+    const unsigned long start = millis();
+    do {
+      delay(1);
+      if (digitalRead(pins.busy) == HIGH) break;
+      if (millis() - start >= 300) {
+        result.busyTimedOut = true;
+        break;
+      }
+    } while (true);
+  }
+
+  // Stock firmware reads VER even after a BUSY timeout.
+  digitalWrite(pins.cs, LOW);
+  digitalWrite(pins.dc, LOW);
+  uint8_t command = CMD_VER;
+  for (uint8_t bit = 0; bit < 8; ++bit) {
+    digitalWrite(pins.sda, (command & 0x80) != 0 ? HIGH : LOW);
+    delayMicroseconds(1);
+    digitalWrite(pins.sclk, HIGH);
+    delayMicroseconds(1);
+    digitalWrite(pins.sclk, LOW);
+    command <<= 1;
+  }
+  digitalWrite(pins.dc, HIGH);
+  delayMicroseconds(1);
+  pinMode(pins.sda, INPUT);
+  delayMicroseconds(2);
+  for (auto& byte : result.ver) {
+    for (uint8_t bit = 0; bit < 8; ++bit) {
+      digitalWrite(pins.sclk, LOW);
+      delayMicroseconds(1);
+      digitalWrite(pins.sclk, HIGH);
+      delayMicroseconds(1);
+      byte = static_cast<uint8_t>((byte << 1) | (digitalRead(pins.sda) == HIGH ? 1 : 0));
+    }
+    digitalWrite(pins.sclk, LOW);
+    delayMicroseconds(1);
+  }
+  digitalWrite(pins.cs, HIGH);
+  pinMode(pins.sda, OUTPUT);
+  pinMode(pins.sclk, INPUT);
+  pinMode(pins.sda, INPUT);
+  pinMode(pins.cs, INPUT_PULLUP);
+  pinMode(pins.dc, INPUT);
+  if (pins.reset >= 0) pinMode(pins.reset, INPUT);
+  if (pins.busy >= 0) pinMode(pins.busy, INPUT);
+
+  result.verdict = result.ver[2] == 0x66   ? X3DisplayVerdict::UC8279Confirmed
+                   : result.ver[2] == 0xFF ? X3DisplayVerdict::UC8253StableDefault
+                                           : X3DisplayVerdict::Inconclusive;
+  return result;
+}
+
+X3DisplayProbeReport probeX4ProDisplayController(const X3DisplayProbePins& pins) {
   ArduinoX3DisplayProbeTransport transport(pins);
   return runX3DisplayProbe(transport);
 }

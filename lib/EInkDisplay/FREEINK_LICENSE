@@ -20,9 +20,9 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-The X3 UC8279 driver and LUTs, the X3 half-refresh LUTs in Display.cpp,
-the X4 Pro UC8179 and UC8279 display paths, and the Sticky SSD1677
-configuration and SSD2677 driver and LUTs are selective ports from FreeInk.
+The X3 UC8279 driver and LUTs, the X3 stock display probe, the X3 half-refresh
+LUTs in Display.cpp, the X4 Pro UC8179 and UC8279 display paths, and the Sticky
+SSD1677 configuration and SSD2677 driver and LUTs are selective ports from FreeInk.
 
 The Murphy M4 SSD1677 configuration and power sequences are selective ports
 from the CrossMux FreeInk SDK. This target uses the generic SSD1677 LUT.

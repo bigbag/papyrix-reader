@@ -41,17 +41,17 @@ Stop the script with Ctrl+C.
 
 X3 production units can use a UC8253 or UC8279d display controller. The firmware detects the controller. It stores a conclusive result.
 
-After a live controller probe, the firmware writes the raw probe data to the serial log with the `DEVICE` tag:
+After a live controller probe, the firmware writes the raw probe data to the serial log with the `BOARD` tag:
 
 ```
-display probe: VER1=.. .. .. .. .. FLG1=..
-display probe: VER2=.. .. .. .. .. FLG2=..
-display probe MTP: ..
+X3 stock probe: VER=.. .. .. busy_timeout=0
 display probe verdict: uc8279-confirmed | uc8253-stable-default | inconclusive
-display controller: UC8279_X3 (probe, cached)
+panel: UC8279_X3 (probe, cached)
 ```
 
 The probe runs only when no valid cache or override exists. Clear the `epd_det` key in the `papyrix_hw` NVS namespace to run the probe again.
+Cache version 2 causes a new probe for results from the previous protocol.
+A BUSY timeout does not prevent the VER read.
 
 If an X3 screen stays blank or shows an incorrect image, attach the serial log to the issue report. Report the results for full refresh, fast refresh, grayscale, sleep, and wake.
 

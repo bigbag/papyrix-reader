@@ -40,34 +40,38 @@ The keys use the `papyrix_hw` NVS namespace. The `epd_ovr` values are `0` for au
 
 #### Live Probe
 
-The probe reads `FLG` (0x71) and `VER` (0x70). It reads `RMTP` (0xA2) after a driven idle `FLG` response. It reads `RMTP` a second time when the first dump has no `0xA5` key and is not uniform. The first screening pass uses a 1 ms reset. The firmware repeats a failed screening pass with a 50 ms reset. The firmware reads the second sample after an independent reset. The result contains two samples. The probe uses a maximum of three read sequences.
+The probe uses the stock X3 V6.3.15 protocol from FreeInk SDK.
+It resets the controller with RST HIGH for 10 ms, LOW for 50 ms, then HIGH for 50 ms.
+It waits up to 300 ms for BUSY to become HIGH.
+A timeout does not prevent the VER read.
 
-A structured UC8279d result has these properties:
+The probe sends `VER` (0x70) and reads three bytes.
+It releases SDA without a pull-up and samples each bit after SCLK becomes HIGH.
+It does not read `FLG` or `RMTP`.
 
-- Each `FLG` value shows a driven idle state.
-- Each `VER` response is not uniform.
-- The two `VER` responses are equal.
+The third VER byte selects the controller:
 
-A uniform UC8279d result has these properties:
+- `0x66` selects UC8279d.
+- `0xFF` selects UC8253.
+- Any other value is inconclusive.
 
-- Each `VER` response contains only `0xFF` values.
-- Each `FLG` value shows a driven idle state.
-- The `MTP` dump satisfies one of these conditions:
-  - `MTP[0]` contains `0xA5`.
-  - The dump is not uniform and the second `RMTP` read returns the same 48 bytes.
+The firmware logs the three VER bytes, the BUSY timeout status, and the verdict with the `BOARD` tag.
+X4 Pro and Classic keep their separate probe protocols.
 
-Field UC8279d modules have a blank `MTP`. The dump contains zeros and the LUT version stamp at offset `0x1A`. The controller drives this readback. A floating bus cannot repeat 48 bytes. The firmware writes the probe samples, the `MTP` dump, and the verdict to the serial log with the `DEVICE` tag. The `MTP` line shows `(repeat matched)` after a successful second read.
+#### Device Verification
 
-A UC8253 result has equal uniform `VER` responses and one of these shapes:
-
-- Equal `FLG` values of `0x00` or `0xFF`.
-- A driven idle `FLG` value and a uniform `MTP` dump. The UC8253 has no `RMTP` command. The line floats.
-
-All other results are inconclusive.
+A device test with `1.35.0-dev` confirms UC8253 detection and cache migration on X3.
+The next start uses the new cache.
+The user confirms correct display output, page changes, sleep, and wake.
+UC8279 display support passed earlier device tests.
+The new probe still needs a UC8279 device test.
 
 #### Cache Across Boot Modes
 
 The firmware stores a conclusive result in `epd_det`. It stores the cache format in `epd_ver`. It does not store an inconclusive result. It uses UC8253 for that start.
+Cache version 2 invalidates results from the previous X3 probe.
+The next automatic selection runs the new protocol.
+Service overrides remain valid.
 
 PapyriX restarts when it changes between UI mode and Reader mode. A valid cache prevents a new probe after these restarts. The firmware runs a new probe when no valid cache exists. An inconclusive probe runs again at each start. The `epd_ovr` override does not change the automatic cache.
 

@@ -323,8 +323,9 @@ void selectPanel(HardwareIdentity& identity) {
 
   const auto& display = identity.profile().display;
   const eink::X3DisplayProbePins pins{display.sclk, display.mosi, display.cs, display.dc, display.rst, display.busy};
-  const eink::X3DisplayProbeReport report = eink::probeX3DisplayController(pins);
-  logDisplayProbe(report);
+  const auto report = eink::probeX3DisplayController(pins);
+  LOG_INF("BOARD", "X3 stock probe: VER=%02X %02X %02X busy_timeout=%u", report.ver[0], report.ver[1], report.ver[2],
+          report.busyTimedOut);
   LOG_INF("BOARD", "display probe verdict: %s", probeVerdictName(report.verdict));
   decision = resolveProbedX3Controller(report.verdict);
   identity.setPanel(decision.controller, panelSource(decision.source));
@@ -337,7 +338,7 @@ void selectPanel(HardwareIdentity& identity) {
 #elif PAPYRIX_TARGET_X4PRO
   const auto& display = identity.profile().display;
   const eink::X3DisplayProbePins pins{display.sclk, display.mosi, display.cs, display.dc, display.rst, display.busy};
-  const eink::X3DisplayProbeReport report = eink::probeX3DisplayController(pins);
+  const eink::X3DisplayProbeReport report = eink::probeX4ProDisplayController(pins);
   logDisplayProbe(report);
   const eink::X4ProPanelVariant variant = eink::classifyX4ProPanel(report);
   if (variant == eink::X4ProPanelVariant::Uc8279) {

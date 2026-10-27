@@ -24,6 +24,12 @@ struct X3DisplayProbeReport {
   X3DisplayVerdict verdict = X3DisplayVerdict::Inconclusive;
 };
 
+struct X3StockProbeResult {
+  uint8_t ver[3] = {};
+  bool busyTimedOut = false;
+  X3DisplayVerdict verdict = X3DisplayVerdict::Inconclusive;
+};
+
 struct X3DisplayProbePins {
   int8_t sclk;
   int8_t sda;
@@ -45,6 +51,7 @@ class X3DisplayProbeTransport {
 X3DisplayVerdict classifyX3Display(const X3DisplayProbeReport& report);
 X4ProPanelVariant classifyX4ProPanel(const X3DisplayProbeReport& report);
 X3DisplayProbeReport runX3DisplayProbe(X3DisplayProbeTransport& transport);
-X3DisplayProbeReport probeX3DisplayController(const X3DisplayProbePins& pins);
+X3StockProbeResult probeX3DisplayController(const X3DisplayProbePins& pins);
+X3DisplayProbeReport probeX4ProDisplayController(const X3DisplayProbePins& pins);
 
 }  // namespace papyrix::eink

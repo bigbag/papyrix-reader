@@ -86,7 +86,7 @@ void probePanel() {
   const int busyBefore = digitalRead(display.busy);
 
   Serial.println("PANEL PROBE begin read_only=1 spi=mode0-bitbang-500kHz commands=71,70,A2 reset_low_ms=1,50");
-  const eink::X3DisplayProbeReport report = eink::probeX3DisplayController(pins);
+  const eink::X3DisplayProbeReport report = eink::probeX4ProDisplayController(pins);
   const int busyAfter = digitalRead(display.busy);
 
   printProbeSample("pass1", report.pass1);
@@ -121,7 +121,7 @@ void releasePanelPins() {
 void refreshWhitePanel() {
   const auto& display = profile->display;
   const eink::X3DisplayProbePins pins{display.sclk, display.mosi, display.cs, display.dc, display.rst, display.busy};
-  const eink::X3DisplayProbeReport report = eink::probeX3DisplayController(pins);
+  const eink::X3DisplayProbeReport report = eink::probeX4ProDisplayController(pins);
   const eink::X4ProPanelVariant variant = eink::classifyX4ProPanel(report);
   printProbeSample("white-check", report.pass2);
   if (variant == eink::X4ProPanelVariant::Ssd1677) {

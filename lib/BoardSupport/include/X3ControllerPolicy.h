@@ -10,7 +10,7 @@ namespace papyrix::board {
 constexpr uint8_t kStoredControllerAuto = 0;
 constexpr uint8_t kStoredUc8253 = 1;
 constexpr uint8_t kStoredUc8279X3 = 2;
-constexpr uint8_t kControllerCacheVersion = 1;
+constexpr uint8_t kControllerCacheVersion = 2;
 
 enum class ControllerSelectionSource : uint8_t { X4Default, Override, Cache, Probe, Fallback };
 

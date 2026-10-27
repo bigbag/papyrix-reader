@@ -1501,6 +1501,11 @@ foreach(TEST_SRC ${TEST_SOURCES})
     target_include_directories(${TEST_NAME} PRIVATE
       ${PROJECT_ROOT}/lib/EInkDisplay/src
     )
+  elseif(TEST_NAME STREQUAL "X3StockDisplayProbeTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/EInkDisplay/src/X3DisplayProbe.cpp
+      ${PROJECT_ROOT}/lib/EInkDisplay/src/X3DisplayProbeClassifier.cpp
+      ${CMAKE_CURRENT_SOURCE_DIR}/mocks/platform_stubs.cpp)
   elseif(TEST_NAME STREQUAL "X3DisplayProbeTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}

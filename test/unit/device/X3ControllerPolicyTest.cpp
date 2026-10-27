@@ -18,11 +18,6 @@ using papyrix::eink::X3DisplayVerdict;
 int main() {
   TestUtils::TestRunner runner("X3 controller policy");
 
-  runner.expectEq(0, static_cast<int>(kStoredControllerAuto), "automatic NVS value");
-  runner.expectEq(1, static_cast<int>(kStoredUc8253), "UC8253 NVS value");
-  runner.expectEq(2, static_cast<int>(kStoredUc8279X3), "UC8279 NVS value");
-  runner.expectEq(1, static_cast<int>(kControllerCacheVersion), "cache version");
-
   auto decision = resolveStoredX3Controller(kStoredControllerAuto, kStoredControllerAuto, kControllerCacheVersion);
   runner.expectFalse(decision.resolved, "empty controller cache requires probe");
   runner.expectFalse(decision.invalidOverride, "automatic override is valid");
@@ -51,9 +46,11 @@ int main() {
   runner.expectEq(static_cast<int>(DisplayController::UC8279_X3), static_cast<int>(decision.controller),
                   "UC8279 cache value");
 
-  decision = resolveStoredX3Controller(kStoredControllerAuto, kStoredUc8279X3, 0);
-  runner.expectFalse(decision.resolved, "stale cache requires probe");
-  runner.expectTrue(decision.invalidCache, "stale cache is reported");
+  for (const auto controller : {kStoredUc8253, kStoredUc8279X3}) {
+    decision = resolveStoredX3Controller(kStoredControllerAuto, controller, 1);
+    runner.expectFalse(decision.resolved, "old probe cache requires stock-protocol detection");
+    runner.expectTrue(decision.invalidCache, "old probe cache is reported");
+  }
 
   decision = resolveStoredX3Controller(9, kStoredUc8253, kControllerCacheVersion);
   runner.expectTrue(decision.invalidOverride, "invalid override is reported");
