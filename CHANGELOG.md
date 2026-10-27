@@ -1,5 +1,71 @@
 
 
+## v1.35.0 (2026-10-27)
+
+*  Add front-light controls and tap dismiss to Reader Menu [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  main: Add touch reader controls and edge tabs [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  main: Add front light timeout and smooth transitions [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  main: Accept compatible firmware without board tags [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Replace X3 detection with the FreeInk stock probe [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.34.0 (2026-10-26)
+
+*  Keep the last book when another book fails to open [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Stop saves after failed loads to keep reading history [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add recovery for missing EPUB tables of contents [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add browser caching for the web page [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Correct bit depth detection to read legacy XTC books [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add progressive JPEG support on S3 devices [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add EPUB cover discovery with cover page image selection [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add reTerminal Sticky device support [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add Murphy M4 support [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  main: Correct indexing on cached backward chapter jumps [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  fix/epub-continuous-chapters: Replace virtual EPUB sections [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  fix/reader-cache-wait: Keep reader responsive during cache preparation [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  fix/epub-css-rule-cache: Add a cache for parsed EPUB CSS rules [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  main: Correct EPUB bounds and touch reader navigation [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.33.2 (2026-10-21)
+
+*  Refuse to open a book when SD space is low. Issue #171 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add the BQ27220 design-capacity load for X3 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Enable bulk SPI transfers for SD card reads [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Skip HTML hidden attribute content in EPUB parser [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  POWER_ON only after real panel power-off on X3 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Vendor patched SdFat and add cache-invalidation test [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Return no bitmap for glyph with zero bytes [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Stop data loss in uploads and paginated books [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.33.1 (2026-10-05)
+
+*  Add manual removal from recent books. Issue #161 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add PSRAM caches for S3 readers [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add Pomodoro mini app [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add USB port selector for X4 Classic flash target [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Set Pomodoro default startMode to Auto and throttle CPU in overlay [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  USB, input, and Calibre fixes [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.33.0 (2026-09-27)
+
+*  Update changelog [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  fix/upload-memory-compatibility: Stream uploads and limit RAM [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add original filename to the reader status bar. Issue #169 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.32.1 (2026-09-23)
+
+*  Update docs [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
 ## v1.32.0 (2026-09-23)
 
 *  Add X4 v2 Classic support [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
