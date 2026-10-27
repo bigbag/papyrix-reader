@@ -22,7 +22,7 @@ Result<void> Input::init(EventQueue& eventQueue) {
   (void)inputManager.startSampling();
 
   queue_ = &eventQueue;
-  lastActivityMs_ = millis();
+  recordActivity(millis());
   prevButtonState_ = 0;
   currButtonState_ = 0;
   const auto& profile = board::HardwareIdentity::instance().profile();
@@ -127,7 +127,7 @@ void Input::checkButton(Button btn, uint8_t mask) {
     lastRepeatMs_[idx] = now;
     longPressFired_[idx] = false;
     queue_->push(Event::buttonPress(btn));
-    lastActivityMs_ = now;
+    recordActivity(now);
   }
 
   // Button held - check for long press and repeat
@@ -142,7 +142,7 @@ void Input::checkButton(Button btn, uint8_t mask) {
       if (sinceLastRepeat >= threshold) {
         queue_->push(Event::buttonRepeat(btn));
         lastRepeatMs_[idx] = now;
-        lastActivityMs_ = now;
+        recordActivity(now);
       }
     } else if (!longPressFired_[idx] && heldMs >= LONG_PRESS_MS) {
       // A press still held from setup must not emit a long press: the event
@@ -159,13 +159,20 @@ void Input::checkButton(Button btn, uint8_t mask) {
   // Button released
   if (!isDown && wasDown) {
     queue_->push(Event::buttonRelease(btn));
-    lastActivityMs_ = millis();
+    recordActivity(millis());
   }
 }
 
 uint32_t Input::idleTimeMs() const { return millis() - lastActivityMs_; }
 
+uint32_t Input::userIdleTimeMs() const { return millis() - lastUserActivityMs_; }
+
 void Input::resetIdleTimer() { lastActivityMs_ = millis(); }
+
+void Input::recordActivity(uint32_t now) {
+  lastActivityMs_ = now;
+  lastUserActivityMs_ = now;
+}
 
 bool Input::isPressed(Button btn) const {
   MappedInputManager::Button mappedBtn;
@@ -242,11 +249,11 @@ void Input::pollTouch() {
     if (raw.controllerOk && profile.touch.hasHomeKey) {
       if (homeReady_ && homeDown_ && !raw.homeDown) {
         queue_->push(Event::buttonPress(Button::Back));
-        lastActivityMs_ = now;
+        recordActivity(now);
       }
       if (raw.homeDown || homeDown_) {
         tapClassifier_.resetAfterWake();
-        lastActivityMs_ = now;
+        recordActivity(now);
       }
       homeDown_ = raw.homeDown;
       if (!homeDown_) homeReady_ = true;
@@ -271,7 +278,7 @@ void Input::pollTouch() {
     if (frame.tap) {
       const TouchPoint point{frame.position.x, frame.position.y};
       queue_->push(Event::tap(point));
-      lastActivityMs_ = now;
+      recordActivity(now);
     }
     if (!raw.fresh) break;
   }

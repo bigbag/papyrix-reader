@@ -35,6 +35,7 @@ class Input {
 
   // Time since last input activity (ms)
   uint32_t idleTimeMs() const;
+  uint32_t userIdleTimeMs() const;
 
   // Reset idle timer (e.g., when WiFi activity should prevent auto-sleep)
   void resetIdleTimer();
@@ -53,6 +54,7 @@ class Input {
  private:
   EventQueue* queue_ = nullptr;
   uint32_t lastActivityMs_ = 0;
+  uint32_t lastUserActivityMs_ = 0;
   bool initialized_ = false;
   board::TouchBackend touchBackend_;
   board::TapClassifier tapClassifier_;
@@ -79,6 +81,7 @@ class Input {
   uint32_t lastRepeatMs_[BUTTON_COUNT] = {};
   bool longPressFired_[BUTTON_COUNT] = {};
 
+  void recordActivity(uint32_t now);
   void checkButton(Button btn, uint8_t mask);
   void pollTouch();
 };

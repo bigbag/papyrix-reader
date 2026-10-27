@@ -74,17 +74,17 @@ void toggle(const GfxRenderer& r, const Theme& t, int y, const char* label, bool
   }
 }
 
-void enumValue(const GfxRenderer& r, const Theme& t, int y, const char* label, const char* value, bool selected) {
+void enumValue(const GfxRenderer& r, const Theme& t, int y, const char* label, const char* value, bool selected,
+               int height) {
   const int x = t.screenMarginSide;
   const int w = r.getScreenWidth() - 2 * t.screenMarginSide;
-  const int h = t.itemHeight;
-  const int textY = y + (h - r.getLineHeight(t.uiFontId)) / 2;
+  const int textY = y + (height - r.getLineHeight(t.uiFontId)) / 2;
 
   const int valueWidth = r.getTextWidth(t.uiFontId, value);
   const int valueX = r.getScreenWidth() - t.screenMarginSide - valueWidth - t.itemValuePadding;
 
   if (selected) {
-    r.fillRect(x, y, w, h, t.selectionFillBlack);
+    r.fillRect(x, y, w, height, t.selectionFillBlack);
     r.drawText(t.uiFontId, x + t.itemPaddingX, textY, label, t.selectionTextBlack);
     r.drawText(t.uiFontId, valueX, textY, value, t.selectionTextBlack);
   } else {

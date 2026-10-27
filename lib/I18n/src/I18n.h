@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-enum class StrId : uint8_t {
+enum class StrId : uint16_t {
   // Button labels
   STR_BACK,
   STR_OPEN,
@@ -292,6 +292,11 @@ enum class StrId : uint8_t {
   STR_BATCH_2,
   STR_CHANGE_BATCH_Q,
   STR_CHANGE_BATCH_RESTART,
+  STR_FRONT_LIGHT_TIMEOUT,
+  STR_SMOOTH_FRONT_LIGHT,
+  STR_SEC_30,
+  STR_MIN_1,
+  STR_MIN_2,
   STR__COUNT
 };
 
@@ -299,7 +304,7 @@ class I18n {
  public:
   static I18n& instance();
 
-  const char* get(StrId id) const { return strings_[static_cast<uint8_t>(id)]; }
+  const char* get(StrId id) const { return strings_[static_cast<int>(id)]; }
 
   bool setOverride(const char* keyName, const char* value);
   void resetToDefaults();

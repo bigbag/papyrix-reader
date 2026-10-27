@@ -52,7 +52,9 @@ bool writeSettingsFile(FsFile& file, const Settings& settings) {
          serialization::writePodChecked(file, settings.showRecents) &&
          serialization::writePodChecked(file, settings.recycleBinEnabled) &&
          serialization::writePodChecked(file, settings.touchPageTurns) &&
-         writeBytes(file, settings.pendingBookPath, sizeof(settings.pendingBookPath)) && file.sync();
+         writeBytes(file, settings.pendingBookPath, sizeof(settings.pendingBookPath)) &&
+         serialization::writePodChecked(file, settings.frontLightTimeout) &&
+         serialization::writePodChecked(file, settings.smoothFrontLight) && file.sync();
 }
 
 SettingsReadStatus readSettingsFile(FsFile& file, const Settings& defaults, Settings& decoded) {
@@ -140,6 +142,8 @@ SettingsReadStatus readSettingsFile(FsFile& file, const Settings& defaults, Sett
   READ_SETTING(serialization::readPodValidated(file, candidate.touchPageTurns, uint8_t(2)));
   READ_SETTING(readBytes(file, candidate.pendingBookPath, sizeof(candidate.pendingBookPath)));
   candidate.pendingBookPath[sizeof(candidate.pendingBookPath) - 1] = '\0';
+  READ_SETTING(serialization::readPodValidated(file, candidate.frontLightTimeout, uint8_t(5)));
+  READ_SETTING(serialization::readPodValidated(file, candidate.smoothFrontLight, uint8_t(2)));
 
 complete:
 #undef READ_SETTING

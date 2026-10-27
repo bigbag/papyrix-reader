@@ -12,7 +12,7 @@ Result<void> Core::init() {
   battery.init();
   usb.init(battery);
   logMemory("Battery and USB initialized");
-  frontLight.init();
+  frontLight.init(settings.smoothFrontLight != 0);
   logMemory("Front light initialized");
 
   clock.init();
@@ -39,7 +39,7 @@ void Core::shutdown() {
   if (wifi.isInitialized()) {
     wifi.shutdown();
   }
-  frontLight.shutdown();
+  frontLight.shutdown(false);
   input.shutdown();
   if (!display.deepSleep()) LOG_ERR("CORE", "Display power-off failed during shutdown");
   storage.shutdown();

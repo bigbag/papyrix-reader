@@ -273,10 +273,28 @@ Display settings, in menu order:
 - **Brightness** (X4 Pro and M4)
   - Adjust front-light brightness from 0 to 100 percent in steps of 5.
   - Zero turns the front light off.
+  - A button press or tap does not restore a manually selected zero brightness.
 
 - **Warmth** (X4 Pro and M4)
   - Adjust the cool/warm light mix from 0 to 100 percent in steps of 5.
-  - X3, X4, X4 v2 Classic, and Sticky hide both front-light settings.
+
+- **Light timer** (default: OFF; X4 Pro and M4)
+  - Options: Off, 30 seconds, 1 minute, 2 minutes, and 5 minutes.
+  - Turn the light off after this period without button or touch activity.
+  - Keep the selected brightness and warmth.
+  - A button press or tap restores the light after a timeout.
+  - The same input also performs its normal action.
+  - This timer is separate from Auto Sleep. Wi-Fi activity does not reset it.
+
+- **Smooth light** (default: OFF; X4 Pro and M4)
+  - Fade the light on or off over approximately 0.5 seconds.
+  - Apply this behavior at startup, timeout, input restore, manual on/off, and normal sleep.
+  - Changes between nonzero brightness levels remain immediate when no fade is active.
+  - Warmth changes remain immediate when no fade is active.
+  - Very low brightness can change in steps.
+
+These options apply in both Reader mode and UI mode.
+X3, X4, X4 v2 Classic, and Sticky hide all four front-light settings.
 
 - **Reading Orientation** (default: Portrait)
   - Options: Portrait, Landscape CW, Inverted, Landscape CCW
@@ -640,8 +658,8 @@ X4 Pro and Murphy M4 show front-light controls above the navigation items:
 - Tap the **Brightness** or **Warmth** bar to select a level from 0 to 100 percent. Tap **−** or **+** to change the level by 5 percentage points. Dragging is not supported.
 - Brightness zero turns the light off. A warmth change does not turn an off light on.
 
-Light changes apply immediately and keep the menu open.
-The same settings remain available in **Settings > Screen**.
+Light changes keep the menu open.
+The timeout and smooth on/off options in **Settings > Screen** also apply here.
 
 ### 4.2 Bookmarks
 

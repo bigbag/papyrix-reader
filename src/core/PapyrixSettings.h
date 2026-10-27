@@ -91,6 +91,8 @@ struct Settings {
   uint8_t recycleBinEnabled = 1;  // 1=Move deleted files to /trash, 0=delete permanently
   uint8_t touchPageTurns = 1;
   char pendingBookPath[BufferSize::FilePath] = "";
+  uint8_t frontLightTimeout = 0;
+  uint8_t smoothFrontLight = 0;
 
   // Persistence (using hal::Storage wrapper)
   Result<void> load(hal::Storage& storage);
@@ -115,6 +117,21 @@ struct Settings {
         return 0;
       default:
         return 10 * 60 * 1000;
+    }
+  }
+
+  uint32_t getFrontLightTimeoutMs() const {
+    switch (frontLightTimeout) {
+      case 1:
+        return 30000;
+      case 2:
+        return 60000;
+      case 3:
+        return 120000;
+      case 4:
+        return 300000;
+      default:
+        return 0;
     }
   }
 

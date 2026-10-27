@@ -121,12 +121,12 @@ FRONT_BCLR=B/C/L/R
 FRONT_LRBC=L/R/B/C
 
 # Cleanup
-CLEAR_RECENT=Очистити недавні книги
+CLEAR_RECENT=Очистити недавні
 CLEAR_BOOK_CACHE=Кеш книг
 CLEAR_DEVICE_STORAGE=Сховище
 FACTORY_RESET=Скидання
-CLEAR_RECENT_Q=Очистити недавні книги?
-CLEAR_RECENT_MSG=Книги та статистика зберігаються.
+CLEAR_RECENT_Q=Очистити недавні?
+CLEAR_RECENT_MSG=Книги й дані збережено.
 CLEAR_CACHES_Q=Кеші?
 CLEAR_CACHES_MSG1=Буде видалено
 CLEAR_CACHES_MSG2=кеш і прогрес.
@@ -176,7 +176,7 @@ DISCONNECTED_RESTART=Нема зв'язку. Рестарт?
 # Calibre
 WAITING_FOR_CALIBRE=Calibre...
 CONNECTING_TO_CALIBRE=Зв'язок Calibre...
-CALIBRE_HELP=Calibre: бездротовий пристрій
+CALIBRE_HELP=Calibre: бездрот. пристрій
 
 # Format strings
 FMT_IP=IP: %s
@@ -270,7 +270,7 @@ BRIGHTNESS=Яскравість
 WARMTH=Теплота
 CONVERTING=Перетворення...
 CONVERSION_FAILED=Помилка перетворення
-IMAGE_OPEN_FAILED=Не вдалося відкрити зображення
+IMAGE_OPEN_FAILED=Зображення не відкрити
 IMAGE_INVALID=Невірне зображення
 WIFI=WiFi
 SAVED_NETWORKS=Збережені
@@ -282,9 +282,14 @@ INVALID_SSID=SSID: 1-32 символи
 NETWORK_LIMIT=Ліміт мереж
 SSID_ALREADY_SAVED=Уже збережено
 FILENAME_VAL=Ім'я файлу
-LOW_SPACE_WARNING=SD-картка заповнена. Звільніть місце.
+LOW_SPACE_WARNING=SD повна. Звільніть місце.
 HARDWARE_BATCH=Партія
 BATCH_1=1
 BATCH_2=2
 CHANGE_BATCH_Q=Змінити партію?
 CHANGE_BATCH_RESTART=Зберегти. Перезапуск.
+FRONT_LIGHT_TIMEOUT=Таймер світла
+SMOOTH_FRONT_LIGHT=Плавне світло
+SEC_30=30 с
+MIN_1=1 хв
+MIN_2=2 хв

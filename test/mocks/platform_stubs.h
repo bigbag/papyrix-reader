@@ -200,9 +200,12 @@ inline void testSetDigitalReadHook(TestDigitalReadHook hook) { testDigitalReadHo
 inline int digitalRead(int pin) { return testDigitalReadHook() ? testDigitalReadHook()(pin) : 0; }
 extern std::atomic<bool> testManualMillisEnabled;
 extern std::atomic<unsigned long> testManualMillisValue;
+unsigned long millis();
+inline void testLedcSync();
 inline void testSetManualMillis(unsigned long value) {
   testManualMillisEnabled = true;
   testManualMillisValue = value;
+  testLedcSync();
 }
 inline void testUseRealtimeMillis() { testManualMillisEnabled = false; }
 inline uint32_t& testDelayCallCount() {
@@ -221,6 +224,7 @@ inline void delay(unsigned long ms) {
   testDelayCallCount()++;
   testDelayTotalMs() += static_cast<uint32_t>(ms);
   if (testManualMillisEnabled) testManualMillisValue += ms;
+  testLedcSync();
   testRecordGpioEvent(TestGpioEventType::Delay, -1, static_cast<int>(ms));
 }
 inline void delayMicroseconds(unsigned int) {}
@@ -257,25 +261,75 @@ struct TestLedcPin {
   bool attached = false;
   uint32_t hz = 0;
   uint8_t bits = 0;
+  uint8_t channel = 0;
   uint32_t duty = 0;
+  bool fading = false;
+  uint32_t fadeFrom = 0;
+  uint32_t fadeTarget = 0;
+  uint32_t fadeDurationMs = 0;
+  uint32_t fadeStartMs = 0;
 };
 inline TestLedcPin testLedcPins[64]{};
 inline int testLedcFailAttachPin = -1;
-inline bool ledcAttach(uint8_t pin, uint32_t hz, uint8_t bits) {
+inline int testLedcFailFadePin = -1;
+inline unsigned testLedcUnsafeDetachCount = 0;
+inline void testLedcSyncPin(TestLedcPin& pin) {
+  if (!pin.fading) return;
+  const uint32_t elapsed = static_cast<uint32_t>(millis()) - pin.fadeStartMs;
+  if (pin.fadeDurationMs == 0 || elapsed >= pin.fadeDurationMs) {
+    pin.duty = pin.fadeTarget;
+    pin.fading = false;
+    return;
+  }
+  const int64_t delta = static_cast<int64_t>(pin.fadeTarget) - static_cast<int64_t>(pin.fadeFrom);
+  pin.duty = static_cast<uint32_t>(static_cast<int64_t>(pin.fadeFrom) +
+                                   delta * static_cast<int64_t>(elapsed) / static_cast<int64_t>(pin.fadeDurationMs));
+}
+inline void testLedcSync() {
+  for (auto& pin : testLedcPins) testLedcSyncPin(pin);
+}
+inline bool ledcAttachChannel(uint8_t pin, uint32_t hz, uint8_t bits, uint8_t channel) {
   if (pin >= 64 || pin == testLedcFailAttachPin) return false;
   testLedcPins[pin].attached = true;
   testLedcPins[pin].hz = hz;
   testLedcPins[pin].bits = bits;
+  testLedcPins[pin].channel = channel;
+  testLedcPins[pin].fading = false;
   return true;
 }
 inline bool ledcDetach(uint8_t pin) {
   if (pin >= 64) return false;
+  testLedcSyncPin(testLedcPins[pin]);
+  if (testLedcPins[pin].fading) ++testLedcUnsafeDetachCount;
   testLedcPins[pin].attached = false;
+  testLedcPins[pin].fading = false;
   return true;
 }
 inline bool ledcWrite(uint8_t pin, uint32_t duty) {
   if (pin >= 64 || !testLedcPins[pin].attached) return false;
+  // Real ledcWrite does not stop a running fade; the next sync restores the fade duty.
   testLedcPins[pin].duty = duty;
+  return true;
+}
+inline uint32_t ledcRead(uint8_t pin) {
+  if (pin >= 64 || !testLedcPins[pin].attached) return 0;
+  testLedcSyncPin(testLedcPins[pin]);
+  return testLedcPins[pin].duty;
+}
+inline bool ledcFade(uint8_t pin, uint32_t startDuty, uint32_t targetDuty, int maxFadeTimeMs) {
+  if (pin >= 64 || !testLedcPins[pin].attached || pin == testLedcFailFadePin) return false;
+  auto& state = testLedcPins[pin];
+  state.duty = startDuty;
+  if (maxFadeTimeMs <= 0) {
+    state.duty = targetDuty;
+    state.fading = false;
+    return true;
+  }
+  state.fadeFrom = startDuty;
+  state.fadeTarget = targetDuty;
+  state.fadeDurationMs = static_cast<uint32_t>(maxFadeTimeMs);
+  state.fadeStartMs = static_cast<uint32_t>(millis());
+  state.fading = true;
   return true;
 }
 inline bool setCpuFrequencyMhz(uint32_t freq) {

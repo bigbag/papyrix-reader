@@ -173,6 +173,8 @@ int main() {
     expected.showRecents = 0;
     expected.recycleBinEnabled = 0;
     expected.touchPageTurns = 0;
+    expected.frontLightTimeout = 4;
+    expected.smoothFrontLight = 1;
 
     FsFile file;
     file.setBuffer("");
@@ -197,8 +199,9 @@ int main() {
         decoded.fileListSelectedIndex == expected.fileListSelectedIndex &&
         decoded.frontButtonLayout == expected.frontButtonLayout &&
         decoded.fullBookProcess == expected.fullBookProcess && decoded.showRecents == expected.showRecents &&
-        decoded.recycleBinEnabled == expected.recycleBinEnabled &&
-        decoded.touchPageTurns == expected.touchPageTurns;
+        decoded.recycleBinEnabled == expected.recycleBinEnabled && decoded.touchPageTurns == expected.touchPageTurns &&
+        decoded.frontLightTimeout == expected.frontLightTimeout &&
+        decoded.smoothFrontLight == expected.smoothFrontLight;
     runner.expectTrue(scalarMatch, "full_settings_scalar_roundtrip");
     runner.expectTrue(memcmp(decoded.themeName, expected.themeName, sizeof(expected.themeName)) == 0,
                       "full_settings_theme_roundtrip");
@@ -310,6 +313,76 @@ int main() {
     expectStatus(runner, SettingsReadStatus::Ok, readSettingsFile(file, defaults, decoded),
                  "out_of_range_field_is_not_truncation");
     runner.expectEq<uint8_t>(Settings::SleepLight, decoded.sleepScreen, "out_of_range_field_preserves_default");
+  }
+
+  {
+    const uint32_t expectedMs[] = {0, 30000, 60000, 120000, 300000};
+    for (uint8_t value = 0; value < 5; value++) {
+      Settings settings;
+      settings.frontLightTimeout = value;
+      runner.expectEq<uint32_t>(expectedMs[value], settings.getFrontLightTimeoutMs(),
+                                "front_light_timeout_ms_" + std::to_string(value));
+    }
+    for (const uint8_t invalid : {uint8_t(5), uint8_t(255)}) {
+      Settings settings;
+      settings.frontLightTimeout = invalid;
+      runner.expectEq<uint32_t>(0, settings.getFrontLightTimeoutMs(), "front_light_timeout_invalid_is_off");
+    }
+    Settings defaults;
+    runner.expectEq<uint8_t>(0, defaults.frontLightTimeout, "front_light_timeout_default_off");
+    runner.expectEq<uint8_t>(0, defaults.smoothFrontLight, "smooth_front_light_default_off");
+  }
+
+  {
+    Settings previous;
+    previous.frontLightTimeout = 4;
+    previous.smoothFrontLight = 1;
+    FsFile file;
+    file.setBuffer("");
+    runner.expectTrue(writeSettingsFile(file, previous), "v16_fixture_write");
+    file.seek(sizeof(kSettingsMagic));
+    serialization::writePod(file, uint8_t(16));
+    serialization::writePod(file, uint8_t(30));
+    const auto data = file.getBuffer();
+    file.setBuffer(data.substr(0, data.size() - 2));
+    Settings decoded;
+    expectStatus(runner, SettingsReadStatus::Ok, readSettingsFile(file, Settings{}, decoded), "v16_file_accepted");
+    runner.expectEq<uint8_t>(0, decoded.frontLightTimeout, "v16_front_light_timeout_defaults_off");
+    runner.expectEq<uint8_t>(0, decoded.smoothFrontLight, "v16_smooth_front_light_defaults_off");
+  }
+
+  {
+    Settings invalid;
+    invalid.frontLightTimeout = 5;
+    invalid.smoothFrontLight = 2;
+    FsFile file;
+    file.setBuffer("");
+    runner.expectTrue(writeSettingsFile(file, invalid), "invalid_front_light_write");
+    file.seek(0);
+    Settings defaults;
+    defaults.frontLightTimeout = 4;
+    defaults.smoothFrontLight = 1;
+    Settings decoded;
+    expectStatus(runner, SettingsReadStatus::Ok, readSettingsFile(file, defaults, decoded),
+                 "invalid_front_light_is_not_truncation");
+    runner.expectEq<uint8_t>(4, decoded.frontLightTimeout, "invalid_front_light_timeout_preserves_default");
+    runner.expectEq<uint8_t>(1, decoded.smoothFrontLight, "invalid_smooth_front_light_preserves_default");
+  }
+
+  for (const size_t drop : {size_t(1), size_t(2)}) {
+    Settings complete;
+    complete.frontLightTimeout = 3;
+    complete.smoothFrontLight = 1;
+    FsFile file;
+    file.setBuffer("");
+    runner.expectTrue(writeSettingsFile(file, complete), "front_light_truncation_write");
+    const auto data = file.getBuffer();
+    file.setBuffer(data.substr(0, data.size() - drop));
+    Settings decoded;
+    decoded.orientation = 77;
+    expectStatus(runner, SettingsReadStatus::Truncated, readSettingsFile(file, Settings{}, decoded),
+                 "front_light_fields_truncated_" + std::to_string(drop));
+    runner.expectEq<uint8_t>(77, decoded.orientation, "front_light_truncation_preserves_output");
   }
 
   return runner.allPassed() ? 0 : 1;

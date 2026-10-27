@@ -14,6 +14,7 @@
 namespace ui {
 struct SettingsListHit {
   static constexpr int LIST_START_Y = 60;
+  static constexpr int LIST_BOTTOM_MARGIN = 70;
   enum class Type : uint8_t { None, Row, Back, Open, Previous, Next };
   Type type = Type::None;
   int index = -1;
@@ -27,10 +28,11 @@ inline SettingsListHit settingsListHitTest(touch::Point point, int16_t screenWid
                                                  SettingsListHit::Type::Previous, SettingsListHit::Type::Next};
     return {actions[action], -1};
   }
-  const int row = touch::rowAt(point,
-                               {0, SettingsListHit::LIST_START_Y, screenWidth,
-                                static_cast<int16_t>(screenHeight - SettingsListHit::LIST_START_Y - 70)},
-                               rowHeight, rowCount);
+  const int row = touch::rowAt(
+      point,
+      {0, SettingsListHit::LIST_START_Y, screenWidth,
+       static_cast<int16_t>(screenHeight - SettingsListHit::LIST_START_Y - SettingsListHit::LIST_BOTTOM_MARGIN)},
+      rowHeight, rowCount);
   return row < 0 ? SettingsListHit{} : SettingsListHit{SettingsListHit::Type::Row, row};
 }
 
@@ -201,7 +203,7 @@ void render(const GfxRenderer& r, const Theme& t, const ReaderSettingsView& v);
 struct ScreenSettingsView {
   using SettingDef = ReaderSettingsView::SettingDef;
   using SettingType = ReaderSettingsView::SettingType;
-  static constexpr int SETTING_COUNT = 8;
+  static constexpr int SETTING_COUNT = 10;
   static constexpr int MAX_THEMES = 16;
   static SettingDef DEFS[SETTING_COUNT];
   static void initDefs();
@@ -212,10 +214,14 @@ struct ScreenSettingsView {
   int currentThemeIndex = 0;
   uint8_t values[SETTING_COUNT] = {0};
   int8_t selected = 0;
-  int8_t visibleCount = SETTING_COUNT - 2;
+  int8_t visibleCount = SETTING_COUNT - 4;
   bool needsRender = true;
 
-  int settingIndex(int row) const { return row + (visibleCount < SETTING_COUNT && row >= 1 ? 2 : 0); }
+  int settingIndex(int row) const { return row + (visibleCount < SETTING_COUNT && row >= 1 ? 4 : 0); }
+  int rowHeight(const Theme& theme, int screenHeight) const {
+    const int available = screenHeight - SettingsListHit::LIST_START_Y - SettingsListHit::LIST_BOTTOM_MARGIN;
+    return std::max(1, std::min(theme.itemHeight + theme.itemSpacing, available / visibleCount));
+  }
   bool lightSelected() const {
     const int index = settingIndex(selected);
     return index == 1 || index == 2;

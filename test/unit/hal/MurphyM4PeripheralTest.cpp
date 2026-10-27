@@ -69,7 +69,7 @@ int main() {
   store.putUChar("unknown_w", 99);
   store.end();
   hal::FrontLight light;
-  light.init();
+  light.init(false);
   runner.expectTrue(light.isAvailable() && testLedcPins[47].attached && testLedcPins[48].attached &&
                         testLedcPins[47].hz == 25000 && testLedcPins[48].hz == 25000 && testLedcPins[47].bits == 10 &&
                         testLedcPins[48].bits == 10,
@@ -99,23 +99,23 @@ int main() {
   Preferences::failBegin = true;
   runner.expectFalse(light.setWarmth(80), "failed NVS open is reported");
   Preferences::failBegin = false;
-  light.shutdown();
+  light.shutdown(false);
   runner.expectTrue(!testLedcPins[47].attached && !testLedcPins[48].attached && testLedcPins[47].duty == 0 &&
                         testLedcPins[48].duty == 0,
                     "sleep shuts off and releases both light channels");
   hal::FrontLight wake;
-  wake.init();
+  wake.init(false);
   runner.expectTrue(
       wake.brightness() == 50 && wake.warmth() == 25 && testLedcPins[47].duty > 0 && testLedcPins[48].duty > 0,
       "wake restores only the last successfully stored M4 values");
-  wake.shutdown();
+  wake.shutdown(false);
   testLedcFailAttachPin = 48;
   hal::FrontLight unavailable;
-  unavailable.init();
+  unavailable.init(false);
   runner.expectTrue(!unavailable.isAvailable() && !testLedcPins[47].attached && !testLedcPins[48].attached,
                     "partial PWM setup releases the successful channel");
   testLedcFailAttachPin = -1;
-  unavailable.shutdown();
+  unavailable.shutdown(false);
   testAnalogMillivoltsHook() = nullptr;
   testSetDigitalReadHook(nullptr);
   testUseRealtimeMillis();

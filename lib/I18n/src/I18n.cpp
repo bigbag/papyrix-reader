@@ -267,6 +267,11 @@ static constexpr KeyMapping KEY_MAP[] = {
     {"BATCH_2", StrId::STR_BATCH_2},
     {"CHANGE_BATCH_Q", StrId::STR_CHANGE_BATCH_Q},
     {"CHANGE_BATCH_RESTART", StrId::STR_CHANGE_BATCH_RESTART},
+    {"FRONT_LIGHT_TIMEOUT", StrId::STR_FRONT_LIGHT_TIMEOUT},
+    {"SMOOTH_FRONT_LIGHT", StrId::STR_SMOOTH_FRONT_LIGHT},
+    {"SEC_30", StrId::STR_SEC_30},
+    {"MIN_1", StrId::STR_MIN_1},
+    {"MIN_2", StrId::STR_MIN_2},
 };
 // clang-format on
 
@@ -307,7 +312,7 @@ bool I18n::setOverride(const char* keyName, const char* value) {
 
   char* dest = buffer_ + bufferUsed_;
   memcpy(dest, value, len + 1);
-  strings_[static_cast<uint8_t>(id)] = dest;
+  strings_[static_cast<int>(id)] = dest;
   bufferUsed_ += len + 1;
   return true;
 }

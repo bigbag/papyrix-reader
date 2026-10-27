@@ -59,12 +59,26 @@ class FrontLightBackend {
  public:
   bool begin();
   void write(uint8_t brightness, uint8_t warmth);
+  bool fadeTo(uint8_t brightness, uint8_t warmth, uint32_t durationMs);
+  bool fading() const;
   void end();
   bool available() const { return available_; }
 
  private:
+  FrontLightDuties dutiesFor(uint8_t brightness, uint8_t warmth) const;
+  FrontLightDuties currentDuties();
+  bool fadeActive();
+  void writeDutiesImmediate(const FrontLightDuties& duties);
+  void stopFades();
+
   FrontLightConfig config_{};
   bool available_ = false;
+  FrontLightDuties outputDuties_{0, 0};
+  uint32_t fadeStartMs_ = 0;
+  uint32_t fadeDurationMs_ = 0;
+  bool fading_ = false;
+  bool coolFadeStarted_ = false;
+  bool warmFadeStarted_ = false;
 };
 
 }  // namespace papyrix::board

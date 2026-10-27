@@ -118,7 +118,7 @@ void SleepState::enter(Core& core) {
     core.input.resetIdleTimer();
     return;
   }
-  core.frontLight.shutdown();
+  core.frontLight.shutdown(true);
 
   if (core.wifi.isInitialized()) {
     core.wifi.shutdown();

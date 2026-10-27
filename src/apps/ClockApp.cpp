@@ -320,7 +320,7 @@ void renderMenu(Core&) {
 
   int y = ui::SettingsListHit::LIST_START_Y;
   for (int i = 0; i < static_cast<int>(std::size(labels)); ++i) {
-    ui::enumValue(renderer, theme, y, labels[i], values[i], state.menuSelected == i);
+    ui::enumValue(renderer, theme, y, labels[i], values[i], state.menuSelected == i, theme.itemHeight);
     y += theme.itemHeight + theme.itemSpacing;
   }
   const bool syncSelected = static_cast<MenuItem>(state.menuSelected) == MenuItem::SyncNow;

@@ -64,7 +64,13 @@ int main() {
   runner.expectFalse(queue.pop(event), "unchanged held contact emits nothing");
   poll(0x80);
   runner.expectTrue(queue.pop(event) && event.type == EventType::Tap, "first post-refresh contact emits Tap");
+  runner.expectEq(uint32_t{0}, input.userIdleTimeMs(), "an accepted tap records activity without consuming its action");
   runner.expectFalse(queue.pop(event), "release emits a single Tap");
+  const auto lastTapMs = static_cast<uint32_t>(millis());
+  testManualMillisValue += 123;
+  input.resetIdleTimer();
+  runner.expectEq(uint32_t{0}, input.idleTimeMs(), "network keep-awake resets only the sleep timer");
+  runner.expectEq(uint32_t{123}, input.userIdleTimeMs(), "touch inactivity survives network keep-awake");
 
   poll(0x81);
   runner.expectFalse(queue.pop(event), "second contact holds events until release");
@@ -73,6 +79,8 @@ int main() {
   poll(0x81);
   poll(0x80);
   runner.expectFalse(queue.pop(event), "refresh during a held contact cannot create a tap");
+  runner.expectEq(static_cast<uint32_t>(millis()) - lastTapMs, input.userIdleTimeMs(),
+                  "a suppressed contact does not restore the light");
 #if PAPYRIX_TARGET_MURPHY_M4
   fixture.releaseForStop();
 #endif

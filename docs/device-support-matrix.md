@@ -110,9 +110,13 @@ A valid RTC value sets system time.
 A successful NTP update writes UTC time to an available RTC.
 Wi-Fi starts on demand.
 Deep sleep stops Wi-Fi and turns off the front light.
-Settings > Screen contains Brightness and Warmth on X4 Pro and M4.
-Reader Menu shows these controls above the navigation items.
-Brightness zero turns the light off.
+Settings > Screen contains Brightness, Warmth, Light timer, and Smooth light on X4 Pro and M4.
+The timeout and smooth on/off options default to Off and apply in both Reader mode and UI mode.
+The light timeout is separate from Auto Sleep and Wi-Fi activity.
+A button press or tap restores the light after a timeout and also performs its normal action.
+Smooth on/off uses approximately 0.5-second transitions.
+Reader Menu shows Brightness and Warmth above the navigation items.
+Brightness zero turns the light off and stays off on input.
 
 Except on M4, the CPU policy uses 10 MHz at idle.
 It restores 160 MHz on ESP32-C3 and 240 MHz on ESP32-S3 for active work.

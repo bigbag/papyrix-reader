@@ -291,6 +291,11 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "Batch 2",                         // BATCH_2
     "Change hardware batch?",          // CHANGE_BATCH_Q
     "Save and restart to apply.",      // CHANGE_BATCH_RESTART
+    "Light timer",                     // FRONT_LIGHT_TIMEOUT
+    "Smooth light",                    // SMOOTH_FRONT_LIGHT
+    "30 s",                            // SEC_30
+    "1 min",                           // MIN_1
+    "2 min",                           // MIN_2
 };
 // clang-format on
 

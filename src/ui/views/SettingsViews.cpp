@@ -52,9 +52,15 @@ void ReaderSettingsView::initDefs() {
 ScreenSettingsView::SettingDef ScreenSettingsView::DEFS[SETTING_COUNT] = {};
 
 void ScreenSettingsView::initDefs() {
+  static const char* frontLightTimeoutValues[5];
   static const char* orientationValues[4];
   static const char* pagesRefreshValues[6];
   static const char* sleepScreenValues[5];
+  frontLightTimeoutValues[0] = tr(OFF);
+  frontLightTimeoutValues[1] = tr(SEC_30);
+  frontLightTimeoutValues[2] = tr(MIN_1);
+  frontLightTimeoutValues[3] = tr(MIN_2);
+  frontLightTimeoutValues[4] = tr(MIN_5);
   orientationValues[0] = tr(PORTRAIT);
   orientationValues[1] = tr(LANDSCAPE_CW);
   orientationValues[2] = tr(INVERTED);
@@ -73,11 +79,13 @@ void ScreenSettingsView::initDefs() {
   DEFS[0] = {tr(THEME), SettingType::Enum, nullptr, 0};
   DEFS[1] = {tr(BRIGHTNESS), SettingType::Enum, nullptr, 0};
   DEFS[2] = {tr(WARMTH), SettingType::Enum, nullptr, 0};
-  DEFS[3] = {tr(READING_ORIENTATION), SettingType::Enum, orientationValues, 4};
-  DEFS[4] = {tr(TEXT_ANTI_ALIASING), SettingType::Toggle, nullptr, 0};
-  DEFS[5] = {tr(PAGES_PER_REFRESH), SettingType::Enum, pagesRefreshValues, 6};
-  DEFS[6] = {tr(SUNLIGHT_FADING_FIX), SettingType::Toggle, nullptr, 0};
-  DEFS[7] = {tr(SLEEP_SCREEN), SettingType::Enum, sleepScreenValues, 5};
+  DEFS[3] = {tr(FRONT_LIGHT_TIMEOUT), SettingType::Enum, frontLightTimeoutValues, 5};
+  DEFS[4] = {tr(SMOOTH_FRONT_LIGHT), SettingType::Toggle, nullptr, 0};
+  DEFS[5] = {tr(READING_ORIENTATION), SettingType::Enum, orientationValues, 4};
+  DEFS[6] = {tr(TEXT_ANTI_ALIASING), SettingType::Toggle, nullptr, 0};
+  DEFS[7] = {tr(PAGES_PER_REFRESH), SettingType::Enum, pagesRefreshValues, 6};
+  DEFS[8] = {tr(SUNLIGHT_FADING_FIX), SettingType::Toggle, nullptr, 0};
+  DEFS[9] = {tr(SLEEP_SCREEN), SettingType::Enum, sleepScreenValues, 5};
 }
 
 // DeviceSettingsView runtime initialization
@@ -193,7 +201,7 @@ void render(const GfxRenderer& r, const Theme& t, const ReaderSettingsView& v) {
     const int index = v.settingIndex(i);
     const auto& def = ReaderSettingsView::DEFS[index];
 
-    enumValue(r, t, y, def.label, v.getCurrentValueStr(index), i == v.selected);
+    enumValue(r, t, y, def.label, v.getCurrentValueStr(index), i == v.selected, t.itemHeight);
   }
 
   ButtonBar btns{tr(BACK), "", "<", ">"};
@@ -206,16 +214,18 @@ void render(const GfxRenderer& r, const Theme& t, const ScreenSettingsView& v) {
   r.clearScreen(t.backgroundColor);
   title(r, t, t.screenMarginTop, tr(SCREEN_SETTINGS));
   const int startY = SettingsListHit::LIST_START_Y;
+  const int rowHeight = v.rowHeight(t, r.getScreenHeight());
+  const int itemHeight = std::min<int>(t.itemHeight, rowHeight);
   for (int i = 0; i < v.visibleCount; i++) {
     const int index = v.settingIndex(i);
-    const int y = startY + i * (t.itemHeight + t.itemSpacing);
+    const int y = startY + i * rowHeight;
     const auto& def = ScreenSettingsView::DEFS[index];
     if (index == 1 || index == 2) {
       char value[8];
       snprintf(value, sizeof(value), "%u%%", static_cast<unsigned>(v.values[index]));
-      enumValue(r, t, y, def.label, value, i == v.selected);
+      enumValue(r, t, y, def.label, value, i == v.selected, itemHeight);
     } else {
-      enumValue(r, t, y, def.label, v.getCurrentValueStr(index), i == v.selected);
+      enumValue(r, t, y, def.label, v.getCurrentValueStr(index), i == v.selected, itemHeight);
     }
   }
   ButtonBar btns{tr(BACK), "", "<", ">"};
@@ -233,7 +243,8 @@ void render(const GfxRenderer& r, const Theme& t, const DeviceSettingsView& v) {
   for (int i = 1; i < v.visibleCount; i++) {
     const int index = v.settingIndex(i);
     const int y = startY + i * (t.itemHeight + t.itemSpacing);
-    enumValue(r, t, y, DeviceSettingsView::DEFS[index].label, v.getCurrentValueStr(index), i == v.selected);
+    enumValue(r, t, y, DeviceSettingsView::DEFS[index].label, v.getCurrentValueStr(index), i == v.selected,
+              t.itemHeight);
   }
 
   ButtonBar btns{tr(BACK), v.selected == 0 ? tr(OPEN) : "", v.selected == 0 ? "" : "<", v.selected == 0 ? "" : ">"};

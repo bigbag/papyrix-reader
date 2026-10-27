@@ -88,7 +88,7 @@ int main() {
 def main():
     sleep = (ROOT / "src/states/SleepState.cpp").read_text()
     start = sleep.index("  if (!core.display.deepSleep())")
-    failure = sleep[start:sleep.index("\n  core.frontLight.shutdown()", start)]
+    failure = sleep[start:sleep.index("\n  core.frontLight.shutdown(", start)]
     start = sleep.index("StateTransition SleepState::update(")
     update = sleep[start:sleep.index("\n\n", start)]
     loop = (ROOT / "src/main.cpp").read_text()

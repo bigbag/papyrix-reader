@@ -140,7 +140,7 @@ void renderMenu(Core&) {
   const Theme& theme = THEME;
   ui::title(renderer, theme, theme.screenMarginTop, "Pomodoro");
   ui::enumValue(renderer, theme, ui::SettingsListHit::LIST_START_Y, "Start mode",
-                state.timer.startMode == pomodoro::StartMode::Auto ? "Auto" : "Manual", true);
+                state.timer.startMode == pomodoro::StartMode::Auto ? "Auto" : "Manual", true, theme.itemHeight);
   ui::ButtonBar buttons("Back", "", "<", ">");
   ui::buttonBar(renderer, theme, buttons);
 }

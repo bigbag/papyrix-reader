@@ -664,6 +664,11 @@ void loop() {
 
   // Poll input and push events to queue
   papyrix::core.input.poll();
+  if (PAPYRIX_CAP_FRONTLIGHT) {
+    papyrix::core.frontLight.update(papyrix::core.input.userIdleTimeMs(),
+                                    papyrix::core.settings.getFrontLightTimeoutMs(),
+                                    papyrix::core.settings.smoothFrontLight != 0);
+  }
 
   // Auto-sleep after inactivity
   const auto autoSleepTimeout = papyrix::core.settings.getAutoSleepTimeoutMs();

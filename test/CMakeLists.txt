@@ -636,6 +636,13 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/src/ui/views/BootSleepViews.cpp
       ${TEST_HELPERS}
     )
+  elseif(TEST_NAME STREQUAL "I18nTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/I18n/src/I18n.cpp
+      ${TEST_HELPERS}
+    )
+    target_include_directories(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/I18n/src)
   elseif(TEST_NAME STREQUAL "ServiceViewsTouchTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}

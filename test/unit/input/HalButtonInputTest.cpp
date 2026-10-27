@@ -52,9 +52,14 @@ int main() {
   sample(140);
   runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonPress && event.button == Button::Up,
                     "stable press moves up once");
+  testManualMillisValue = 160;
+  input.resetIdleTimer();
+  runner.expectEq(uint32_t{0}, input.idleTimeMs(), "keep-awake resets the sleep timer");
+  runner.expectEq(uint32_t{20}, input.userIdleTimeMs(), "keep-awake does not reset physical input activity");
   sample(840);
   runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonRepeat && event.button == Button::Up,
                     "held direction still repeats");
+  runner.expectEq(uint32_t{0}, input.userIdleTimeMs(), "a repeated page action keeps the light active");
   pressedPin = -1;
   sample(1240);
   runner.expectFalse(queue.pop(event), "release during refresh cannot emit a trailing repeat");
@@ -171,6 +176,22 @@ int main() {
   sample(10130);
   runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonRelease && event.button == Button::Up,
                     "fallback fresh release completes one tap");
+  testManualMillisValue = 40130;
+  input.resetIdleTimer();
+  runner.expectEq(uint32_t{30000}, input.userIdleTimeMs(), "light timeout remains due while Wi-Fi prevents sleep");
+  runner.expectFalse(queue.pop(event), "keep-awake does not create a user input event");
+
+  sample(UINT32_MAX - 50UL);
+  pressedPin = PAPYRIX_TARGET_MURPHY_M4 ? 1 : PAPYRIX_TARGET_STICKY ? 5 : 7;
+  sample(UINT32_MAX - 40UL);
+  sample(UINT32_MAX - 15UL);
+  runner.expectTrue(queue.pop(event) && event.type == EventType::ButtonPress && event.button == Button::Up,
+                    "a fresh page press remains available near clock rollover");
+  testManualMillisValue = 14;
+  runner.expectEq(uint32_t{30}, input.userIdleTimeMs(), "user inactivity spans clock rollover");
+  input.resetIdleTimer();
+  runner.expectEq(uint32_t{30}, input.userIdleTimeMs(), "sleep reset after rollover preserves user inactivity");
+  pressedPin = -1;
 #if PAPYRIX_TARGET_MURPHY_M4
   fixture.releaseForStop();
 #endif

@@ -33,7 +33,8 @@ void menuItem(const GfxRenderer& r, const Theme& t, int y, const char* text, boo
 void toggle(const GfxRenderer& r, const Theme& t, int y, const char* label, bool value, bool selected);
 
 // Enum value - Setting with current value display
-void enumValue(const GfxRenderer& r, const Theme& t, int y, const char* label, const char* value, bool selected);
+void enumValue(const GfxRenderer& r, const Theme& t, int y, const char* label, const char* value, bool selected,
+               int height);
 
 // Set front button layout for hint remapping (0=BCLR, 1=LRBC)
 void setFrontButtonLayout(uint8_t layout);

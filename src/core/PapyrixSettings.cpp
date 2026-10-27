@@ -52,7 +52,8 @@ constexpr uint32_t kMinSettingsBytes =
     sizeof(kSizeProbe.sunlightFadingFix) + sizeof(kSizeProbe.fileListDir) + sizeof(kSizeProbe.fileListSelectedName) +
     sizeof(kSizeProbe.fileListSelectedIndex) + sizeof(kSizeProbe.frontButtonLayout) +
     sizeof(kSizeProbe.fullBookProcess) + sizeof(kSizeProbe.showRecents) + sizeof(kSizeProbe.recycleBinEnabled) +
-    sizeof(kSizeProbe.touchPageTurns) + sizeof(kSizeProbe.pendingBookPath);
+    sizeof(kSizeProbe.touchPageTurns) + sizeof(kSizeProbe.pendingBookPath) + sizeof(kSizeProbe.frontLightTimeout) +
+    sizeof(kSizeProbe.smoothFrontLight);
 }  // namespace
 
 Result<void> Settings::save(hal::Storage& storage) const {

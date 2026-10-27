@@ -95,7 +95,8 @@ void SettingsState::exit(Core& core) {
 void SettingsState::handleTap(Core& core, const Event& event) {
   const int width = renderer_.getScreenWidth();
   const int height = renderer_.getScreenHeight();
-  const int rowHeight = THEME.itemHeight + THEME.itemSpacing;
+  const int rowHeight = currentScreen_ == SettingsScreen::Screen ? screenView_.rowHeight(THEME, height)
+                                                                 : THEME.itemHeight + THEME.itemSpacing;
   const bool frontLrbc = core.settings.frontButtonLayout == Settings::FrontLRBC;
   int rowCount = 0;
   if (currentScreen_ == SettingsScreen::Menu) rowCount = ui::SettingsMenuView::ITEM_COUNT;
@@ -790,14 +791,16 @@ void SettingsState::loadScreenSettings() {
     if (themes[i] == settings.themeName) screenView_.currentThemeIndex = static_cast<int>(i);
     screenView_.themeCount++;
   }
-  screenView_.visibleCount = ui::ScreenSettingsView::SETTING_COUNT - (core_->frontLight.isAvailable() ? 0 : 2);
+  screenView_.visibleCount = ui::ScreenSettingsView::SETTING_COUNT - (core_->frontLight.isAvailable() ? 0 : 4);
   screenView_.values[1] = core_->frontLight.brightness();
   screenView_.values[2] = core_->frontLight.warmth();
-  screenView_.values[3] = settings.orientation;
-  screenView_.values[4] = settings.textAntiAliasing;
-  screenView_.values[5] = settings.pagesPerRefresh;
-  screenView_.values[6] = settings.sunlightFadingFix;
-  screenView_.values[7] = settings.sleepScreen;
+  screenView_.values[3] = settings.frontLightTimeout;
+  screenView_.values[4] = settings.smoothFrontLight;
+  screenView_.values[5] = settings.orientation;
+  screenView_.values[6] = settings.textAntiAliasing;
+  screenView_.values[7] = settings.pagesPerRefresh;
+  screenView_.values[8] = settings.sunlightFadingFix;
+  screenView_.values[9] = settings.sleepScreen;
 }
 
 void SettingsState::saveScreenSettings() {
@@ -811,11 +814,13 @@ void SettingsState::saveScreenSettings() {
     }
     themeWasChanged_ = true;
   }
-  settings.orientation = screenView_.values[3];
-  settings.textAntiAliasing = screenView_.values[4];
-  settings.pagesPerRefresh = screenView_.values[5];
-  settings.sunlightFadingFix = screenView_.values[6];
-  settings.sleepScreen = screenView_.values[7];
+  settings.frontLightTimeout = screenView_.values[3];
+  settings.smoothFrontLight = screenView_.values[4];
+  settings.orientation = screenView_.values[5];
+  settings.textAntiAliasing = screenView_.values[6];
+  settings.pagesPerRefresh = screenView_.values[7];
+  settings.sunlightFadingFix = screenView_.values[8];
+  settings.sleepScreen = screenView_.values[9];
 }
 
 void SettingsState::loadDeviceSettings() {
