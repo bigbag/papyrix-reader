@@ -138,6 +138,8 @@ TapFrame TapClassifier::update(const TouchSample& sample, uint32_t nowMs, bool e
   orientationRevision_ = orientationRevision;
   haveOrientation_ = true;
 
+  if (!sample.controllerOk) swipeValid_ = false;
+
   if (!sample.fresh) {
     if (sample.controllerOk && sample.contactCount == 0 && !active_) ignoreUntilIdle_ = false;
     if (active_ && !sample.controllerOk && nowMs - lastGoodAtMs_ >= STALE_CONTACT_MS) {
@@ -156,6 +158,15 @@ TapFrame TapClassifier::update(const TouchSample& sample, uint32_t nowMs, bool e
     frame.up = true;
     frame.tap = !moved_;
     frame.position = frame.tap ? downPosition_ : lastPosition_;
+    const int dx = lastPosition_.x - downPosition_.x;
+    const int dy = lastPosition_.y - downPosition_.y;
+    const int ax = dx < 0 ? -dx : dx;
+    const int ay = dy < 0 ? -dy : dy;
+    const int major = ax > ay ? ax : ay;
+    const int minor = ax > ay ? ay : ax;
+    frame.swipe = moved_ && swipeValid_ && nowMs - downAtMs_ <= 1000 && major >= 40 && major * 2 >= minor * 3;
+    frame.start = downPosition_;
+    frame.end = lastPosition_;
     active_ = false;
     lastReleaseAtMs_ = nowMs;
     moved_ = false;
@@ -173,6 +184,8 @@ TapFrame TapClassifier::update(const TouchSample& sample, uint32_t nowMs, bool e
     active_ = true;
     moved_ = false;
     lastGoodAtMs_ = nowMs;
+    downAtMs_ = nowMs;
+    swipeValid_ = sample.controllerOk;
     downPosition_ = sample.position;
     lastPosition_ = sample.position;
     TapFrame frame;

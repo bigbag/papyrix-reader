@@ -1,4 +1,5 @@
 #include "ClockApp.h"
+#include "Game2048App.h"
 #include "ImageViewerApp.h"
 #include "LocalsendApp.h"
 #include "MiniApp.h"
@@ -18,6 +19,8 @@ const MiniApp APPS[] = {
      pomodoro_app::exit, pomodoro_app::renderMenu, pomodoro_app::onMenuButton},
     {"Clock", clock_app::enter, clock_app::update, nullptr, clock_app::render, clock_app::exit, clock_app::renderMenu,
      clock_app::onMenuButton},
+    {"2048", game2048_app::enter, game2048_app::update, nullptr, game2048_app::render, game2048_app::exit,
+     game2048_app::renderMenu, nullptr},
 };
 const uint8_t APP_COUNT = sizeof(APPS) / sizeof(APPS[0]);
 const int8_t APP_IMAGEVIEWER = 0;
@@ -25,5 +28,6 @@ const int8_t APP_PRINTER = 1;
 const int8_t APP_LOCALSEND = 2;
 const int8_t APP_POMODORO = 3;
 const int8_t APP_CLOCK = 4;
+const int8_t APP_2048 = 5;
 
 }  // namespace papyrix

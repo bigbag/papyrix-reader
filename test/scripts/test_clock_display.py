@@ -309,12 +309,21 @@ void exit(Core&) {}
 void renderMenu(Core& core) { paint(core); }
 void onMenuButton(Core&, Button) {}
 }
+namespace game2048_app {
+void enter(Core&) { std::abort(); }
+bool update(Core&) { std::abort(); }
+bool render(Core&) { std::abort(); }
+void exit(Core&) { std::abort(); }
+void renderMenu(Core&) { std::abort(); }
+}
 @REGISTRY@
 
 class AppLauncherState {
  public:
   enum class Mode { Menu, App, Overlay };
+  enum class PendingExit { None, Apps, Sleep };
   GfxRenderer& renderer_;
+  PendingExit pendingExit_ = PendingExit::None;
   Mode mode_ = Mode::App;
   int8_t activeApp_ = APP_CLOCK;
   bool needsRender_ = true;

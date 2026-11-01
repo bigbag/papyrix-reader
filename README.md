@@ -122,6 +122,7 @@ Moving an SD card between supported devices does not reuse incompatible rendered
 - [x] Image Viewer and slideshow
 - [x] Clock with multiple faces
 - [x] Pomodoro timer
+- [x] [2048](docs/user_guide.md#312-2048) with button controls, board swipes, touch arrows, and save on exit or sleep
 
 ### Network & Connectivity
 - [x] WiFi file transfer (web server)
@@ -306,8 +307,7 @@ make flash-x4pro      # X4 Pro
 make flash-x4c        # X4 v2 Classic
 ```
 
-On X4 Pro, hold Power throughout flashing.
-Release Power after verification completes and the application starts.
+X4 Pro USB flashing does not require holding Power.
 Close the serial monitor before flashing.
 To select a port:
 

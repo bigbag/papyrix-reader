@@ -116,7 +116,9 @@ Input checks this limit before it processes a recovered contact or release.
 Replay includes the last valid held sample, even when the contact does not move.
 Touch uses the existing menu, keyboard, overlay, and reader-zone actions.
 A reset, orientation change, or input resynchronization discards contacts from the previous layout.
-Swipes and touch firmware updates are not included.
+The 2048 app accepts swipes that start on its board.
+Other screens do not use swipe navigation.
+Touch firmware updates are not included.
 
 The display owns GPIO7.
 It stops touch acquisition before it changes that pin.

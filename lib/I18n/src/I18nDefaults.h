@@ -298,6 +298,18 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "2 min",                           // MIN_2
     "Sleep Image",                     // SLEEP_IMAGE
     "Random",                          // RANDOM
+    "Score",                           // GAME_SCORE
+    "Swipe or tap an arrow",           // GAME_TOUCH_HINT
+    "Use direction buttons",           // GAME_BUTTON_HINT
+    "Resume",                          // GAME_RESUME
+    "New game",                        // GAME_NEW
+    "Start a new game?",               // GAME_RESTART
+    "Continue",                        // GAME_CONTINUE
+    "Game over",                       // GAME_OVER
+    "Cannot load game",                // GAME_LOAD_ERROR
+    "Cannot clear save",               // GAME_CLEAR_ERROR
+    "Discard changes",                 // GAME_DISCARD
+    "Old save may remain",             // GAME_KEEP_SAVE
 };
 // clang-format on
 

@@ -30,6 +30,7 @@ GOOD_X4PRO = """\
 0805a1b0 T papyrix::board::x4pro::enableTouch(papyrix::board::TouchConfig const&)
 0805c001 T Gt911Touch::init()
 0805c100 T papyrix::Sdmmc1Bit::mount()
+0805c200 T papyrix::Event::swipe(papyrix::TouchPoint, papyrix::Button)
 """
 
 GOOD_X4C = """\
@@ -44,6 +45,7 @@ GOOD_STICKY = """\
 0805c100 T BatteryMonitor::readBq27220Mv_()
 0805c200 T papyrix::board::RtcBackend::read()
 0805c300 T ProgressiveJpeg::decode(FsFile&)
+0805c400 T papyrix::Event::swipe(papyrix::TouchPoint, papyrix::Button)
 """
 
 GOOD_M4 = """\
@@ -55,6 +57,7 @@ GOOD_M4 = """\
 0805c300 T papyrix::board::RtcBackend::read()
 0805c400 T ProgressiveJpeg::decode(FsFile&)
 0805c500 D kMurphyM4Profile
+0805c600 T papyrix::Event::swipe(papyrix::TouchPoint, papyrix::Button)
 """
 
 
@@ -70,12 +73,12 @@ BAD_DEFAULT = {
 BAD_X4PRO = {
     "PaperMono board symbols": "1000bbbb D PaperMonoProfile",
     "FT6336 touch symbols": "1000dddd T Ft6336gTouch::readSample()",
-    "swipe gesture symbols": "1000eeee T Input::handleSwipeGesture()",
     "Bluetooth symbols": "1000ffff T BluetoothSerial::begin()",
     "X4ProVariant placeholder": "1000abcd D kPanelNameX4ProVariant",
 }
 BAD_X4C = {
     **BAD_X4PRO,
+    "swipe gesture symbols": "1000eeee T Input::handleSwipeGesture()",
     "GT911 touch symbols": "1000cccc T Gt911Touch::init()",
     "frontlight symbols": "1000abcd T papyrix::board::FrontLightBackend::write()",
     "Pro touch board symbols": "1000aaaa T papyrix::board::x4pro::enableTouch()",

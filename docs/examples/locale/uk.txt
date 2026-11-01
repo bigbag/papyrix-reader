@@ -35,10 +35,10 @@ CLEANUP=Очищення
 SYSTEM_INFO=Про систему
 CHAPTERS=Розділи
 BOOKMARKS=Закладки
-BOOK_STATS=Статистика книги
+BOOK_STATS=Статистика
 JOIN_NETWORK=До мережі
-CREATE_HOTSPOT=Точка доступу
-WIFI_TRANSFER=Передача WiFi
+CREATE_HOTSPOT=Точка WiFi
+WIFI_TRANSFER=Обмін WiFi
 CALIBRE_SYNC=Calibre
 LANGUAGE=Мова
 
@@ -54,7 +54,7 @@ WEB_SERVER=Вебсервер
 GO_TO_PAGE=До сторінки
 MENU=Меню
 PROGRESS=Прогрес
-TIME_READ=Час читання
+TIME_READ=Час
 SESSIONS=Сеанси
 
 # Settings labels
@@ -62,8 +62,8 @@ THEME=Тема
 FONT_SIZE=Шрифт
 TEXT_LAYOUT=Розмітка
 LINE_SPACING=Інтервал
-TEXT_ANTI_ALIASING=Згладжування
-PARAGRAPH_ALIGNMENT=Вирівнювання
+TEXT_ANTI_ALIASING=Згладж.
+PARAGRAPH_ALIGNMENT=Вирівн.
 HYPHENATION=Переноси
 SHOW_IMAGES=Зображення
 STATUS_BAR=Статус
@@ -77,8 +77,8 @@ PAGES_PER_REFRESH=Стор./оновл.
 SUNLIGHT_FADING_FIX=Антивицв.
 FRONT_BUTTONS=Передні
 SIDE_BUTTONS=Бічні
-FULL_BOOK_PROCESS=Обробка книги
-TOUCH_PAGE_TURNS=Гортання дотиком
+FULL_BOOK_PROCESS=Обробка
+TOUCH_PAGE_TURNS=Горт. дотиком
 
 # Settings enum values
 ON=УВІМК
@@ -121,12 +121,12 @@ FRONT_BCLR=B/C/L/R
 FRONT_LRBC=L/R/B/C
 
 # Cleanup
-CLEAR_RECENT=Очистити недавні
+CLEAR_RECENT=Стерти недавні
 CLEAR_BOOK_CACHE=Кеш книг
 CLEAR_DEVICE_STORAGE=Сховище
 FACTORY_RESET=Скидання
-CLEAR_RECENT_Q=Очистити недавні?
-CLEAR_RECENT_MSG=Книги й дані збережено.
+CLEAR_RECENT_Q=Стерти недавні?
+CLEAR_RECENT_MSG=Книги й дані цілі.
 CLEAR_CACHES_Q=Кеші?
 CLEAR_CACHES_MSG1=Буде видалено
 CLEAR_CACHES_MSG2=кеш і прогрес.
@@ -154,29 +154,29 @@ INDEXING=Індекс...
 OPENING_BOOK=Відкр. книги...
 DELETING=Видал...
 NO_BOOK_OPEN=Нема книги
-PRESS_FILE_TO_EXPLORE=Натисніть "Книги"
-PRESS_FILES_TO_EXPLORE=Натисніть "Файли"
-NO_FILES_FOUND=Файлів немає
+PRESS_FILE_TO_EXPLORE=Кнопка "Книги"
+PRESS_FILES_TO_EXPLORE=Кнопка "Файли"
+NO_FILES_FOUND=Нема файлів
 END_OF_BOOK=Кінець
 FAILED_TO_LOAD_PAGE=Помилка стор.
 CANNOT_DELETE_ACTIVE=Активна книга
 DELETED=Видалено
 DELETE_FAILED=Помилка видал.
 SERVER_STOPPED=Сервер стоп
-RETURNING_TO_LIBRARY=До бібліотеки...
+RETURNING_TO_LIBRARY=Бібліотека...
 SLEEPING=СОН
 
 # Network
 CONNECT_WIFI=WiFi
-CREATE_WIFI_HOTSPOT=Точка доступу
-NO_NETWORKS_FOUND=Мереж немає
-PRESS_CONFIRM_SCAN=Натисніть Підтв.
-DISCONNECTED_RESTART=Нема зв'язку. Рестарт?
+CREATE_WIFI_HOTSPOT=Точка WiFi
+NO_NETWORKS_FOUND=Нема мереж
+PRESS_CONFIRM_SCAN=Кнопка Підтв.
+DISCONNECTED_RESTART=Розрив. Рестарт?
 
 # Calibre
 WAITING_FOR_CALIBRE=Calibre...
-CONNECTING_TO_CALIBRE=Зв'язок Calibre...
-CALIBRE_HELP=Calibre: бездрот. пристрій
+CONNECTING_TO_CALIBRE=Calibre: зв'язок...
+CALIBRE_HELP=Calibre: WiFi-пристрій
 
 # Format strings
 FMT_IP=IP: %s
@@ -201,7 +201,7 @@ SPACE=Пробіл
 
 # Error
 ERROR=Помилка
-PRESS_ANY_BUTTON=Будь-яка кнопка
+PRESS_ANY_BUTTON=Будь-яка кн.
 
 # Confirm dialog
 CONFIRM_DELETE=Підтв. видал.
@@ -210,19 +210,19 @@ CONFIRM_DELETE=Підтв. видал.
 ENTER_TEXT=Текст
 NO_COVER=Без обкл.
 ADD=Додати
-NO_BOOKMARKS=Закладок немає
+NO_BOOKMARKS=Нема закладок
 BOOKS=Книги
 RECENT_BOOKS=Нещодавні
-NO_RECENT_BOOKS=Недавніх немає
+NO_RECENT_BOOKS=Нема недавніх
 REMOVE_RECENT=Прибрати
-REMOVE_RECENT_Q=Прибрати з недавніх?
+REMOVE_RECENT_Q=З недавніх?
 DELETE_FILE_Q=Видалити?
 DELETE_FOLDER_Q=Теку видалити?
 ENTER_PASSWORD=Пароль
 SAVE_PASSWORD_Q=Зберегти?
 SAVE_PASSWORD_MSG=Пароль WiFi?
-CONNECTION_FAILED=Помилка зв'язку
-HOTSPOT_FAILED=Помилка точки
+CONNECTION_FAILED=Збій зв'язку
+HOTSPOT_FAILED=Збій точки
 INITIALIZING_WIFI=WiFi...
 INVALID_FILE=Поганий файл
 MEMORY_ERROR=Помилка RAM
@@ -236,12 +236,12 @@ FIRMWARE_WARNING=Не вимикайте!
 FIRMWARE_FILE_FOUND=Знайдено
 FLASHING_UPDATE=Встановлення
 UPDATE_COMPLETE=Готово. Рестарт...
-UPDATE_FAILED=Помилка прошивки
-UPDATE_WRONG_DEVICE=Несумісна прошивка
+UPDATE_FAILED=Збій прошивки
+UPDATE_WRONG_DEVICE=Не та прошивка
 NO_FIRMWARE_FILE=Нема прошивки
 VALIDATING_FIRMWARE=Перевірка
 BOOKMARK_VAL=Закладка
-BOOKMARK_ADDED=Закладку збережено
+BOOKMARK_ADDED=Закладку додано
 RECENT_NETWORK=Остання
 
 # Recycle bin
@@ -269,9 +269,9 @@ CANNOT_DELETE_TRASH=Кошик не видаляти
 BRIGHTNESS=Яскравість
 WARMTH=Теплота
 CONVERTING=Перетворення...
-CONVERSION_FAILED=Помилка перетворення
-IMAGE_OPEN_FAILED=Зображення не відкрити
-IMAGE_INVALID=Невірне зображення
+CONVERSION_FAILED=Збій перетвор.
+IMAGE_OPEN_FAILED=Не відкрити зобр.
+IMAGE_INVALID=Хибне зобр.
 WIFI=WiFi
 SAVED_NETWORKS=Збережені
 EDIT_NETWORK=Змінити
@@ -295,3 +295,15 @@ MIN_1=1 хв
 MIN_2=2 хв
 SLEEP_IMAGE=Заставка
 RANDOM=Навмання
+GAME_SCORE=Рахунок
+GAME_TOUCH_HINT=Свайп чи стрілки
+GAME_BUTTON_HINT=Кнопки руху
+GAME_RESUME=Далі
+GAME_NEW=Нова гра
+GAME_RESTART=Нова гра?
+GAME_CONTINUE=Далі
+GAME_OVER=Кінець гри
+GAME_LOAD_ERROR=Гру не відкрити
+GAME_CLEAR_ERROR=Не стерто
+GAME_DISCARD=Відкинути зміни
+GAME_KEEP_SAVE=Стара гра може лишитись

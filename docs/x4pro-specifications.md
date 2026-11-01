@@ -48,10 +48,7 @@ To select a port, use `PLATFORMIO_UPLOAD_PORT=/dev/ttyACM0 make flash-x4pro`.
 Do not use `make flash-release` for X4 Pro.
 That command selects the X3/X4 release environment.
 
-Hold Power during USB flashing.
-The ROM download path does not assert the application power latch.
-The application asserts GPIO1 at startup.
-Release Power after verification completes and the application starts.
+USB flashing does not require holding Power.
 
 ## Read-Only Display Probe
 
@@ -72,4 +69,6 @@ The display driver completes its power-off sequence before deep sleep.
 A second display initialization failure disables display and storage rails.
 The device then waits for an explicit retry.
 
-The artifact does not include Bluetooth or swipe gestures.
+The 2048 app accepts swipes that start on its board.
+Other screens do not use swipe navigation.
+The artifact does not include Bluetooth.

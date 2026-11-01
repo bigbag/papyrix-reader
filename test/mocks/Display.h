@@ -6,12 +6,13 @@
 #include <cstring>
 #include <vector>
 
-
 namespace papyrix::hal {
 // Mock Display for GfxRenderer testing
 class Display {
  public:
   enum RefreshMode { FULL_REFRESH, HALF_REFRESH, FAST_REFRESH };
+  enum class InitResult : uint8_t { Ok, OutOfMemory = 2, UnsupportedPanel, HardwareError = 4 };
+  InitResult recover();
 
   static constexpr uint16_t DISPLAY_WIDTH = 800;
   static constexpr uint16_t DISPLAY_HEIGHT = 480;
@@ -44,17 +45,17 @@ class Display {
   bool supportsGrayscale() const { return supportsGrayscale_; }
   void setSupportsGrayscale(bool supported) { supportsGrayscale_ = supported; }
   inline static void (*onFlush)(const Display&) = nullptr;
-  void displayBuffer(RefreshMode, bool) { if (onFlush) onFlush(*this); }
+  RefreshMode lastRefreshMode = FULL_REFRESH;
+  void displayBuffer(RefreshMode mode, bool) {
+    lastRefreshMode = mode;
+    if (onFlush) onFlush(*this);
+  }
   void displayBufferDriveAll(bool = false) {}
   void displayWindow(int, int, int, int, bool) {}
   void drawImage(const uint8_t*, int, int, int, int) {}
   void grayscaleRevert() {}
-  void copyGrayscaleLsbBuffers(const uint8_t* buffer) {
-    grayscaleLsb_.assign(buffer, buffer + bufferSize_);
-  }
-  void copyGrayscaleMsbBuffers(const uint8_t* buffer) {
-    grayscaleMsb_.assign(buffer, buffer + bufferSize_);
-  }
+  void copyGrayscaleLsbBuffers(const uint8_t* buffer) { grayscaleLsb_.assign(buffer, buffer + bufferSize_); }
+  void copyGrayscaleMsbBuffers(const uint8_t* buffer) { grayscaleMsb_.assign(buffer, buffer + bufferSize_); }
   void displayGrayBuffer(bool) { displayGrayCount_++; }
   void cleanupGrayscaleBuffers(const uint8_t* buffer) {
     cleanupBuffer_.assign(buffer, buffer + bufferSize_);

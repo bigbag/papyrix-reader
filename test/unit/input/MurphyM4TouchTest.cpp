@@ -357,6 +357,24 @@ int main() {
   runner.expectTrue(display.recover() == hal::Display::InitResult::Ok,
                     "later display recovery retries the volatile touch configuration");
   fixture.waitPaused();
+  const uint32_t swipeTime = millis() + 100;
+  setDisplayOrientation(DisplayOrientation::LandscapeCounterClockwise);
+  fixture.step(swipeTime, idle);
+  drain(swipeTime);
+  fixture.step(swipeTime + 100, MurphyM4TouchFixture::frame(1, 100, 200));
+  fixture.step(swipeTime + 120, MurphyM4TouchFixture::frame(1, 100, 300));
+  fixture.step(swipeTime + 195, idle);
+  events = drain(swipeTime + 200);
+  runner.expectTrue(events.size() == 1 && events[0].type == EventType::Swipe &&
+                        events[0].gesture.direction == Button::Right && events[0].gesture.start.x == 200,
+                    "buffered native samples deliver one logical swipe with its start");
+  runner.expectTrue(drain(swipeTime + 210).empty(), "native swipe is not replayed");
+  fixture.step(swipeTime + 300, MurphyM4TouchFixture::frame(1, 100, 200));
+  drain(swipeTime + 300);
+  input.cancelTouchGesture();
+  fixture.step(swipeTime + 320, MurphyM4TouchFixture::frame(1, 100, 300));
+  fixture.step(swipeTime + 395, idle);
+  runner.expectTrue(drain(swipeTime + 400).empty(), "mode cancellation discards pending native gesture");
   testResetGpioEvents();
   SPI.reset();
   testEventWaitFailure = true;

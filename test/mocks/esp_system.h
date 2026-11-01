@@ -1,6 +1,10 @@
 #pragma once
 
 #include <cstdlib>
+#include <cstdint>
+
+inline uint32_t testEspRandom = 1;
+inline uint32_t esp_random() { return testEspRandom; }
 
 [[noreturn]] inline void esp_restart() { std::abort(); }
 enum esp_reset_reason_t {

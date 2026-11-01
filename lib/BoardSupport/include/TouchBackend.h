@@ -47,6 +47,9 @@ struct TapFrame {
   bool up = false;
   bool tap = false;
   TouchPosition position{};
+  bool swipe = false;
+  TouchPosition start{};
+  TouchPosition end{};
 };
 
 class TapClassifier {
@@ -68,6 +71,8 @@ class TapClassifier {
   bool haveOrientation_ = false;
   uint8_t orientationRevision_ = 0;
   uint32_t lastGoodAtMs_ = 0;
+  uint32_t downAtMs_ = 0;
+  bool swipeValid_ = false;
   uint32_t lastReleaseAtMs_ = 0;
   TouchPosition downPosition_{};
   TouchPosition lastPosition_{};

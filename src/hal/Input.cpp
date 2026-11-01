@@ -229,6 +229,11 @@ void Input::resyncState() {
   homeReady_ = false;
 }
 
+void Input::cancelTouchGesture() {
+  board::discardPendingTouch();
+  tapClassifier_.resetAfterWake();
+}
+
 void Input::pollTouch() {
   if (!touchBackend_.available()) return;
   const auto& profile = board::HardwareIdentity::instance().profile();
@@ -286,6 +291,14 @@ void Input::pollTouch() {
     if (frame.tap) {
       const TouchPoint point{frame.position.x, frame.position.y};
       queue_->push(Event::tap(point));
+      recordActivity(now);
+    } else if (frame.swipe) {
+      const int dx = frame.end.x - frame.start.x;
+      const int dy = frame.end.y - frame.start.y;
+      const int ax = dx < 0 ? -dx : dx;
+      const int ay = dy < 0 ? -dy : dy;
+      const Button direction = ax > ay ? (dx < 0 ? Button::Left : Button::Right) : (dy < 0 ? Button::Up : Button::Down);
+      queue_->push(Event::swipe({frame.start.x, frame.start.y}, direction));
       recordActivity(now);
     }
     if (!raw.fresh) break;

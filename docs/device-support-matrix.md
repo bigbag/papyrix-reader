@@ -204,7 +204,7 @@ It suppresses contacts during refresh and stale contacts after wake.
   - M4: Allowed
 - **PaperMono:** Forbidden on all targets.
 - **FT6336U:** Allowed on M4; forbidden on all other targets.
-- **Swipe:** Forbidden on all targets.
+- **Swipe:** Allowed on Pro, Sticky, and M4 for the 2048 game. Forbidden on C3 and Classic.
 - **Bluetooth:** Forbidden on all targets.
 - **`X4ProVariant`:** Forbidden on all targets.
 

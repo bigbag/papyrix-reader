@@ -1112,7 +1112,8 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${TEST_HELPERS}
     )
   elseif(TEST_NAME STREQUAL "BmpPolarityRoundTripTest" OR TEST_NAME STREQUAL "BitmapTurnCacheTest" OR
-         TEST_NAME STREQUAL "ReaderTouchRenderingTest" OR TEST_NAME STREQUAL "ClockFrameTest")
+         TEST_NAME STREQUAL "ReaderTouchRenderingTest" OR TEST_NAME STREQUAL "ClockFrameTest" OR
+         TEST_NAME STREQUAL "Game2048ViewTest" OR TEST_NAME STREQUAL "Game2048AppTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
       ${PROJECT_ROOT}/lib/GfxRenderer/src/GfxRenderer.cpp
@@ -1127,7 +1128,8 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/ThaiShaper/src
     )
     if(TEST_NAME STREQUAL "BitmapTurnCacheTest" OR TEST_NAME STREQUAL "ReaderTouchRenderingTest" OR
-       TEST_NAME STREQUAL "ClockFrameTest")
+       TEST_NAME STREQUAL "ClockFrameTest" OR TEST_NAME STREQUAL "Game2048ViewTest" OR
+       TEST_NAME STREQUAL "Game2048AppTest")
       target_sources(${TEST_NAME} PRIVATE
         ${PROJECT_ROOT}/lib/RenderTypes/src/BitmapTurnCache.cpp
         ${PROJECT_ROOT}/lib/RenderTypes/src/blocks/ImageBlock.cpp
@@ -1164,6 +1166,37 @@ foreach(TEST_SRC ${TEST_SOURCES})
         ${PROJECT_ROOT}/src/ui/TouchLayout.cpp
       )
       target_include_directories(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/I18n/src)
+    endif()
+    if(TEST_NAME STREQUAL "Game2048ViewTest" OR TEST_NAME STREQUAL "Game2048AppTest")
+      target_sources(${TEST_NAME} PRIVATE
+        ${PROJECT_ROOT}/src/ui/views/Game2048View.cpp
+        ${PROJECT_ROOT}/src/ui/Elements.cpp
+        ${PROJECT_ROOT}/src/ui/TouchLayout.cpp
+        ${PROJECT_ROOT}/lib/I18n/src/I18n.cpp)
+      target_include_directories(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/I18n/src)
+    endif()
+    if(TEST_NAME STREQUAL "Game2048AppTest")
+      target_compile_definitions(${TEST_NAME} PRIVATE F_CPU=240000000L)
+      target_sources(${TEST_NAME} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/common/game2048_platform.cpp
+        ${PROJECT_ROOT}/src/apps/AppRegistry.cpp
+        ${PROJECT_ROOT}/src/apps/Game2048.cpp
+        ${PROJECT_ROOT}/src/apps/Game2048Store.cpp
+        ${PROJECT_ROOT}/src/apps/Game2048App.cpp
+        ${PROJECT_ROOT}/src/states/AppLauncherState.cpp
+        ${PROJECT_ROOT}/src/ui/views/AppLauncherViews.cpp
+        ${PROJECT_ROOT}/src/ui/WrappedText.cpp
+        ${PROJECT_ROOT}/src/hal/Input.cpp
+        ${PROJECT_ROOT}/src/hal/Cpu.cpp
+        ${PROJECT_ROOT}/src/MappedInputManager.cpp
+        ${PROJECT_ROOT}/lib/InputManager/src/InputManager.cpp
+        ${PROJECT_ROOT}/lib/AsyncTask/src/BackgroundTask.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/X4ProBoard.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp)
+      target_include_directories(${TEST_NAME} PRIVATE
+        ${PROJECT_ROOT}/lib/InputManager/include
+        $<TARGET_PROPERTY:ContentHandleThumbnailTest,INCLUDE_DIRECTORIES>)
     endif()
     if(MSVC)
       target_compile_options(${TEST_NAME} PRIVATE /Gy)
@@ -1584,6 +1617,13 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/SDCardManager/include
       ${PROJECT_ROOT}/lib/uzlib/src)
     target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_XTEINK_C3=1 EINK_DISPLAY_SINGLE_BUFFER_MODE=1)
+  elseif(TEST_NAME STREQUAL "Game2048Test")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/src/apps/Game2048.cpp ${TEST_HELPERS})
+  elseif(TEST_NAME STREQUAL "Game2048StoreTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/src/apps/Game2048.cpp
+      ${PROJECT_ROOT}/src/apps/Game2048Store.cpp ${TEST_HELPERS})
   elseif(TEST_NAME STREQUAL "ClockSettingsTest")
     add_executable(${TEST_NAME} ${TEST_SRC}
       ${PROJECT_ROOT}/src/apps/ClockSettings.cpp ${TEST_HELPERS})
@@ -1925,6 +1965,25 @@ foreach(TEST_SRC ${TEST_SOURCES})
   )
   set_target_properties(${TEST_NAME} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build/bin)
+  if(TEST_NAME STREQUAL "Game2048AppTest")
+    get_target_property(GAME_SOURCES ${TEST_NAME} SOURCES)
+    foreach(GAME_TARGET STICKY MURPHY_M4)
+      set(GAME_TEST Game2048App${GAME_TARGET}Test)
+      add_executable(${GAME_TEST} ${GAME_SOURCES})
+      target_compile_definitions(${GAME_TEST} PRIVATE PAPYRIX_TARGET_${GAME_TARGET}=1 F_CPU=240000000L)
+      target_include_directories(${GAME_TEST} BEFORE PRIVATE $<TARGET_PROPERTY:${TEST_NAME},INCLUDE_DIRECTORIES>)
+      target_compile_options(${GAME_TEST} PRIVATE $<TARGET_PROPERTY:${TEST_NAME},COMPILE_OPTIONS>)
+      target_link_options(${GAME_TEST} PRIVATE $<TARGET_PROPERTY:${TEST_NAME},LINK_OPTIONS>)
+      target_link_libraries(${GAME_TEST} PRIVATE $<TARGET_PROPERTY:${TEST_NAME},LINK_LIBRARIES>)
+      if(GAME_TARGET STREQUAL "MURPHY_M4")
+        target_sources(${GAME_TEST} PRIVATE
+          ${PROJECT_ROOT}/lib/BoardSupport/src/Ft6336uBackend.cpp
+          ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4I2c.cpp
+          ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4Batch.cpp)
+      endif()
+      set_target_properties(${GAME_TEST} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build/bin)
+    endforeach()
+  endif()
   if(TEST_NAME MATCHES "^(ParserScratch|StreamingEpdFontS3|BitmapTurnCache)Test$")
     string(REPLACE "S3Test" "Test" MEMORY_TEST ${TEST_NAME})
     string(REGEX REPLACE "Test$" "StickyTest" STICKY_TEST ${MEMORY_TEST})

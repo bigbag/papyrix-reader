@@ -10,6 +10,7 @@
 
 #include "../apps/ClockApp.h"
 #include "../apps/ClockStandby.h"
+#include "../apps/Game2048App.h"
 #include "../apps/MiniApp.h"
 #include "../core/Core.h"
 #include "../ui/Elements.h"
@@ -32,6 +33,7 @@ void AppLauncherState::enter(Core& core) {
   activeApp_ = -1;
   needsRender_ = true;
   goNetwork_ = false;
+  pendingExit_ = PendingExit::None;
 
   menuView_.appCount = APP_COUNT;
   menuView_.itemCount = APP_COUNT + ui::AppMenuView::EXTRA_COUNT;
@@ -87,6 +89,7 @@ StateTransition AppLauncherState::update(Core& core) {
     // Power long-press goes to sleep in all modes
     if (e.type == EventType::ButtonLongPress && e.button == Button::Power) {
       if (!saveClockSettings(core)) continue;
+      if (!requestSleep(core)) continue;
       if (activeApp_ >= 0) {
         stopApp(core);
       }
@@ -106,6 +109,34 @@ StateTransition AppLauncherState::update(Core& core) {
       } else if (hit.type == ui::AppMenuView::Hit::Type::Back) {
         // A pending directory request routes to the file manager after the loop
         if (!core.pendingDirectory[0]) return StateTransition::to(StateId::Home);
+      }
+      continue;
+    }
+    if (activeApp_ == APP_2048) {
+      using game2048_app::Action;
+      const auto action = game2048_app::handleEvent(core, e, mode_ == Mode::Overlay);
+      if (action == Action::None) continue;
+      needsRender_ = true;
+      core.cpu.unthrottle();
+      if (action == Action::OpenMenu || action == Action::CloseMenu) {
+        game2048_app::cancelGameInput(core);
+        if (action == Action::OpenMenu)
+          showOverlay();
+        else
+          hideOverlay();
+      } else if (action == Action::Exit || action == Action::RetryExit || action == Action::DiscardExit) {
+        if (action == Action::Exit) pendingExit_ = PendingExit::Apps;
+        if (pendingExit_ != PendingExit::None && (action == Action::DiscardExit || game2048_app::prepareExit(core))) {
+          const auto destination = pendingExit_;
+          pendingExit_ = PendingExit::None;
+          stopApp(core);
+          if (destination == PendingExit::Sleep) return StateTransition::to(StateId::Sleep);
+        }
+      } else if (action == Action::CancelExit) {
+        pendingExit_ = PendingExit::None;
+        game2048_app::cancelExitPrompt();
+        game2048_app::cancelGameInput(core);
+        core.input.resetIdleTimer();
       }
       continue;
     }
@@ -196,8 +227,7 @@ StateTransition AppLauncherState::update(Core& core) {
 
   // Call app update for timer-based logic (once per frame)
   if ((mode_ == Mode::App || mode_ == Mode::Overlay) && activeApp_ >= 0) {
-    // Prevent auto-sleep while an app is running
-    core.input.resetIdleTimer();
+    if (activeApp_ != APP_2048 || pendingExit_ != PendingExit::None) core.input.resetIdleTimer();
 
     if (mode_ == Mode::App && APPS[activeApp_].update && APPS[activeApp_].update(core)) {
       needsRender_ = true;
@@ -206,7 +236,7 @@ StateTransition AppLauncherState::update(Core& core) {
     // Ensure full CPU speed for responsive display I/O when rendering
     if (needsRender_) {
       core.cpu.unthrottle();
-    } else if (mode_ == Mode::Overlay && activeApp_ == APP_POMODORO) {
+    } else if (mode_ == Mode::Overlay && (activeApp_ == APP_POMODORO || activeApp_ == APP_2048)) {
       core.cpu.throttle();
     }
   }
@@ -307,13 +337,14 @@ void AppLauncherState::render(Core& core) {
         if (APPS[activeApp_].renderMenu) {
           APPS[activeApp_].renderMenu(core);
         }
-        if (activeApp_ != APP_CLOCK && activeApp_ != APP_POMODORO) {
+        if (activeApp_ != APP_CLOCK && activeApp_ != APP_POMODORO && activeApp_ != APP_2048) {
           const int btnY = renderer_.getScreenHeight() - 50;
           renderer_.clearArea(0, btnY, renderer_.getScreenWidth(), 50, THEME.backgroundColor);
           ui::ButtonBar buttons(tr(BACK), tr(CONFIRM), "<", ">");
           ui::buttonBar(renderer_, THEME, buttons);
         }
-        renderer_.displayBuffer(papyrix::hal::Display::FAST_REFRESH, activeApp_ == APP_POMODORO);
+        renderer_.displayBuffer(papyrix::hal::Display::FAST_REFRESH,
+                                activeApp_ == APP_POMODORO || activeApp_ == APP_2048);
       }
       break;
   }
@@ -338,6 +369,16 @@ void AppLauncherState::launchApp(Core& core) {
   needsRender_ = true;
 }
 
+bool AppLauncherState::requestSleep(Core& core) {
+  if (activeApp_ != APP_2048) return true;
+  if (pendingExit_ == PendingExit::None && game2048_app::prepareExit(core)) return true;
+  if (pendingExit_ == PendingExit::None) pendingExit_ = PendingExit::Sleep;
+  needsRender_ = true;
+  core.input.resetIdleTimer();
+  core.input.suppressPowerUntilRelease();
+  return false;
+}
+
 bool AppLauncherState::saveClockSettings(Core& core) {
   if (activeApp_ != APP_CLOCK || clock_app::saveSettings(core)) return true;
   core.cpu.unthrottle();
@@ -346,6 +387,7 @@ bool AppLauncherState::saveClockSettings(Core& core) {
 }
 
 void AppLauncherState::stopApp(Core& core) {
+  pendingExit_ = PendingExit::None;
   if (activeApp_ >= 0) {
     LOG_INF(TAG, "Stopping app: %s", APPS[activeApp_].name);
     if (APPS[activeApp_].exit) {

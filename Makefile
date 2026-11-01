@@ -33,7 +33,7 @@ upload: ## Build and flash to device
 flash-xteink-c3: ## Build and flash release firmware for X3/X4
 	pio run -e release_xteink_c3 --target upload
 
-flash-x4pro: ## Build and flash release firmware for X4 Pro (hold Power)
+flash-x4pro: ## Build and flash release firmware for X4 Pro
 	pio run -e release_x4pro --target upload
 
 flash-x4c: ## Build and flash release firmware for X4 Classic

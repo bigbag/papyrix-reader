@@ -50,7 +50,6 @@ FORBIDDEN_GROUP_NAMES = {
     "x4pro": (
         "PaperMono board symbols",
         "FT6336 touch symbols",
-        "swipe gesture symbols",
         "Bluetooth symbols",
         "X4ProVariant placeholder",
         "Sticky panel symbols",
@@ -70,7 +69,6 @@ FORBIDDEN_GROUP_NAMES = {
         "X4 Pro board symbols",
         "PaperMono board symbols",
         "FT6336 touch symbols",
-        "swipe gesture symbols",
         "Bluetooth symbols",
         "X4ProVariant placeholder",
         "frontlight symbols",
@@ -82,7 +80,6 @@ FORBIDDEN_GROUP_NAMES = {
     "murphy_m4": (
         "PaperMono board symbols",
         "GT911 touch symbols",
-        "swipe gesture symbols",
         "Bluetooth symbols",
         "X4ProVariant placeholder",
         "Sticky panel symbols",

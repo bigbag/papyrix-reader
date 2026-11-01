@@ -24,7 +24,7 @@ TouchSample contact(int16_t x, int16_t y, uint8_t count = 1) { return {true, tru
 TouchSample idle() { return {true, true, 0, {}}; }
 TouchSample failure() { return {false, false, 0, {}}; }
 
-bool noEvents(const TapFrame& frame) { return !frame.down && !frame.up && !frame.tap; }
+bool noEvents(const TapFrame& frame) { return !frame.down && !frame.up && !frame.tap && !frame.swipe; }
 
 }  // namespace
 
@@ -186,6 +186,43 @@ int main() {
                     "transient controller failure preserves active contact");
   frame = classifier.update(failure(), 100 + TapClassifier::STALE_CONTACT_MS, true, false, 0);
   runner.expectTrue(frame.up && !frame.tap, "stale controller failure releases without Tap");
+
+  struct SwipeCase { int16_t dx; int16_t dy; uint32_t duration; bool accepted; };
+  const SwipeCase swipes[] = {{40, 0, 100, true}, {-40, 0, 100, true}, {0, 40, 100, true},
+                             {0, -40, 100, true}, {39, 0, 100, false}, {60, 40, 100, true},
+                             {60, 41, 100, false}, {60, 60, 100, false}, {40, 0, 1000, true},
+                             {40, 0, 1001, false}};
+  for (const auto& swipe : swipes) {
+    classifier = {};
+    classifier.update(contact(100, 120), 100, true, false, 0);
+    runner.expectFalse(classifier.update(contact(100 + swipe.dx, 120 + swipe.dy), 150, true, false, 0).swipe,
+                       "held contact never swipes");
+    frame = classifier.update(idle(), 100 + swipe.duration, true, false, 0);
+    runner.expectEq(swipe.accepted, frame.swipe, "release checks distance duration and dominance");
+    runner.expectFalse(frame.tap, "drag is never also a tap");
+    if (frame.swipe) {
+      runner.expectEq(int16_t{100}, frame.start.x, "swipe preserves start for board hit test");
+      runner.expectEq(int16_t(100 + swipe.dx), frame.end.x, "swipe preserves direction endpoint");
+    }
+    runner.expectTrue(noEvents(classifier.update(idle(), 1200, true, false, 0)), "release cannot swipe twice");
+  }
+  for (int cancel = 0; cancel < 6; ++cancel) {
+    classifier = {};
+    classifier.update(contact(100, 120), 100, true, false, 0);
+    classifier.update(contact(180, 120), 150, true, false, 0);
+    if (cancel == 0) classifier.update(contact(180, 120, 2), 160, true, false, 0);
+    if (cancel == 1) classifier.update(failure(), 160, true, false, 0);
+    if (cancel == 2) classifier.update(failure(), 260, true, false, 0);
+    if (cancel == 3) classifier.update(contact(180, 120), 160, true, true, 0);
+    if (cancel == 4) classifier.update(contact(180, 120), 160, true, false, 1);
+    if (cancel == 5) classifier.resetAfterWake();
+    runner.expectFalse(classifier.update(idle(), 280, true, false, cancel == 4 ? 1 : 0).swipe,
+                       "interrupted gesture never swipes");
+  }
+  classifier = {};
+  classifier.update(contact(100, 120), UINT32_MAX - 50, true, false, 0);
+  classifier.update(contact(180, 120), UINT32_MAX - 10, true, false, 0);
+  runner.expectTrue(classifier.update(idle(), 30, true, false, 0).swipe, "swipe duration handles timer rollover");
 
   runner.expectTrue(sizeof(Event) <= 8, "coordinate events keep Event at eight bytes or less");
   runner.expectEq(size_t{16}, EventQueue::CAPACITY, "touch events keep fixed queue capacity");

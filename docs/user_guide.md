@@ -58,7 +58,7 @@ The regions stay in the same positions when the status bar is hidden.
 The side-button preference reverses Previous and Next only.
 Menus, lists, dialogs, the keyboard, and reader overlays accept direct taps.
 Full-screen reader overlays keep their own visible button bars.
-Swipe gestures are not supported.
+Swipe gestures work only on the 2048 game board. Reader and Settings use taps.
 
 ---
 
@@ -630,6 +630,50 @@ Open **Menu** to select **Manual** or **Auto**. Manual waits for **Start** at th
 The book cat marks a focus period. The cup cat marks a break. The colors follow the current theme.
 
 Press **Back** to leave the app. The device discards the current timer. The timer does not run while you read or while the device sleeps.
+
+### 3.12 2048
+
+Open **Apps → 2048**. Merge equal tiles on the 4 by 4 board to reach 2048.
+Each move adds one tile only when the board changes.
+The score increases by the value of each merged tile.
+Select **Continue** at 2048 to keep playing.
+
+On X3, X4, and X4 v2 Classic, press the direction buttons to move.
+On X4 Pro, Sticky, and Murphy M4, swipe from inside the board or tap an arrow below it.
+Available physical direction buttons also work.
+A held direction button does not repeat a move.
+Use one finger and release it to make one move.
+Start the swipe inside the board.
+Swipes that start outside the board do not move tiles or leave the game.
+Wait for the screen update to finish before the next swipe.
+
+**Back** leaves the game and returns to Apps.
+**Menu** opens **Resume** and **New game**.
+Press Up or Down to select a row, then Confirm to open it.
+Touch devices also accept row taps.
+Back closes the menu.
+New game requires confirmation before it replaces the current game.
+
+The game requests a full screen refresh when it opens.
+Moves and New game use fast refresh requests.
+The game does not request a full refresh after a fixed number of moves.
+If old tile outlines remain visible, leave the game with Back and open it again.
+
+The device keeps one unfinished game.
+It saves the board and score when you leave the app or when the device sleeps.
+Moves and menu changes do not write to the SD card.
+Opening 2048 restores the saved game.
+New game and game over remove the old save.
+The game uses the configured Auto Sleep timeout.
+It does not change the startup screen.
+On touch devices, the game keeps the CPU active while the board is open to detect short swipes.
+
+If a save fails, the game stays open.
+**Retry** tries again and completes the requested exit or sleep.
+**Cancel** keeps the current game open.
+**Discard changes** leaves without saving the latest moves.
+An old save can remain if a write or removal fails.
+A sudden power loss can lose all moves since the last exit or sleep.
 
 ---
 

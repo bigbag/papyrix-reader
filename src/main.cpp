@@ -754,8 +754,10 @@ void loop() {
   if (autoSleepTimeout > 0 && papyrix::core.input.idleTimeMs() >= autoSleepTimeout) {
     papyrix::core.cpu.unthrottle();
     LOG_INF(TAG, "Auto-sleep after %lu ms idle", autoSleepTimeout);
-    stateMachine.init(papyrix::core, papyrix::StateId::Sleep);
-    return;
+    if (!stateMachine.isInState(papyrix::StateId::AppLauncher) || appLauncherState.requestSleep(papyrix::core)) {
+      stateMachine.init(papyrix::core, papyrix::StateId::Sleep);
+      return;
+    }
   }
 
   // Power button sleep check: track held time that excludes long rendering gaps
@@ -768,13 +770,17 @@ void loop() {
 
     if (papyrix::core.input.powerSuppressed()) {
       // hal::Input clears the flag when it observes the release.
+      powerHeldSinceMs = 0;
     } else if (inputManager.isPressed(InputManager::BTN_POWER)) {
       if (powerHeldSinceMs == 0 || loopGap > 100) {
         powerHeldSinceMs = loopStartTime;
       }
       if (loopStartTime - powerHeldSinceMs > papyrix::core.settings.getPowerButtonDuration()) {
-        stateMachine.init(papyrix::core, papyrix::StateId::Sleep);
-        return;
+        if (!stateMachine.isInState(papyrix::StateId::AppLauncher) || appLauncherState.requestSleep(papyrix::core)) {
+          stateMachine.init(papyrix::core, papyrix::StateId::Sleep);
+          return;
+        }
+        powerHeldSinceMs = 0;
       }
     } else {
       powerHeldSinceMs = 0;

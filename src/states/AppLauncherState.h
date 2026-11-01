@@ -23,9 +23,12 @@ class AppLauncherState : public State {
   void render(Core& core) override;
   StateId id() const override { return StateId::AppLauncher; }
   void resumeClock(Core& core, const clock_app::ResumeRecord& record);
+  bool requestSleep(Core& core);
 
  private:
   enum class Mode : uint8_t { Menu, App, Overlay };
+  enum class PendingExit : uint8_t { None, Apps, Sleep };
+  PendingExit pendingExit_ = PendingExit::None;
 
   GfxRenderer& renderer_;
   Mode mode_;

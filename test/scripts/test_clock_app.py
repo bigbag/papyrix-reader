@@ -43,6 +43,7 @@ HARNESS = r'''
 #include <ui/TouchLayout.h>
 #include <core/EventQueue.h>
 #include <states/State.h>
+#include <apps/Game2048App.h>
 using papyrix::Button;
 using papyrix::Event;
 using papyrix::EventType;
@@ -373,6 +374,14 @@ void buttonBar(Renderer& r, const Theme& t, const ButtonBar& buttons) {
 }
 constexpr int APP_CLOCK = 0;
 constexpr int APP_POMODORO = 1;
+constexpr int APP_2048 = 2;
+namespace game2048_app {
+using Action = papyrix::game2048_app::Action;
+Action handleEvent(Core&, const Event&, bool) { assert(false); return Action::None; }
+void cancelGameInput(Core&) { assert(false); }
+bool prepareExit(Core&) { assert(false); return false; }
+void cancelExitPrompt() { assert(false); }
+}
 namespace clock_faces {
 enum class Face : uint8_t {
   Big = 0,
@@ -476,6 +485,9 @@ constexpr int APP_COUNT = 1;
 class AppLauncherState {
  public:
   enum class Mode { Menu, App, Overlay };
+  enum class PendingExit { None, Apps, Sleep };
+  PendingExit pendingExit_ = PendingExit::None;
+  bool requestSleep(Core&) { assert(activeApp_ != APP_2048); return true; }
   Mode mode_ = Mode::Overlay;
   int activeApp_ = APP_CLOCK;
   bool needsRender_ = false, goNetwork_ = false, launched = false;
