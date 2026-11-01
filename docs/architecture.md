@@ -73,6 +73,7 @@ See the [device support matrix](device-support-matrix.md).
 `InputManager` samples physical buttons in a `BackgroundTask` above the main-loop priority.
 The task uses a 10 ms idle interval and a 5 ms interval while changes are pending.
 The debounce interval remains 20 ms.
+The background task continues to capture input during rendering.
 If the task cannot start, the main loop samples buttons and limits its sleep to 10 ms.
 A fixed queue stores up to 32 state changes with their timestamps.
 On overflow, the queue discards the oldest change and retains the newest state.
@@ -82,11 +83,54 @@ Pending changes suppress hold events until input processing reaches the current 
 Input suppression keeps completed taps that precede the wait and cancels incomplete page gestures. A page button held when suppression ends needs a release and a new press before it can navigate again. Suppression does not remove other button events.
 
 ADC button, battery, and USB-supply reads share one mutex.
+On X4, a possible ADC button press requires two more samples.
+The median of the three samples rejects one isolated outlier.
+Idle reads do not require these extra samples.
+Zero remains a valid Right or Down reading.
 Startup checks sample directly before the task starts.
 Shutdown stops the task before GPIO configuration changes.
 GT911 touch input remains on the main loop.
 M4 touch acquisition uses a separate `BackgroundTask`.
 The main loop classifies its bounded, timestamped samples and remains the event producer.
+
+### Clock Power Modes
+
+Normal mode keeps normal input sampling and uses the existing CPU idle policy.
+Power saving mode enters deep sleep after 15 seconds without interaction.
+The timeout also applies to Clock settings.
+Held input, queued input, and active operations defer sleep.
+
+`ClockStandby` owns one checked RTC record.
+The record contains settings, appearance, the last frame, the next UTC sync deadline, and board, panel, and firmware identity.
+A valid timer wake runs before normal UI startup.
+It does not mount SD or LittleFS, initialize input tasks, or write settings on an ordinary minute update.
+A due synchronization can mount SD for saved credentials.
+Automatic connection attempts share a 15-second budget; NTP has a 10-second budget.
+
+The timer path reconstructs the previous frame in the existing framebuffer.
+SSD1677, SSD2677, and UC8279 Pro/Classic restore their reference image.
+SSD1677 loads temperature and the waveform before its first differential update after reset.
+This preparation does not drive the panel. See commands `0x1A` and `0x22` in the [SSD1677 specification](https://cursedhardware.github.io/epd-driver-ic/SSD1677.pdf).
+UC8279 Pro/Classic restores the old image in DTM1 with the 120-gate offset before differential refresh.
+This RAM write does not activate the panel. Normal startup and recovery after an error keep the full-refresh guard.
+UC8253 restores both reference planes from the previous Clock frame before differential refresh.
+This RAM write keeps the X3 row order and polarity and does not activate the panel.
+Normal startup and recovery after an error keep the full-refresh guard.
+UC8279 X3 and UC8179 Pro/Classic keep their full-refresh startup guards.
+No extra C3 framebuffer is required.
+The timer wakes at the next minute boundary from current RTC-backed UTC time.
+Clock checks the displayed minute again after it stops services.
+If the minute changes during shutdown, Clock cancels standby and returns to its controls.
+It draws the current time and uses the normal 15-second timeout before it tries standby again.
+On X3, Clock keeps GPIO13 HIGH through sleep and timer startup.
+It does not switch off this shared power control as normal shutdown does.
+
+A short Power press unlocks Clock controls without Booting or Home.
+Ordinary sleep and Clock standby preserve the pull configuration of the profile's Power pin.
+Touch and the front light stay off during standby.
+A normal reset or invalid record uses normal startup.
+A fatal wake error clears automatic resume and opens time setup or Error.
+Display initialization allows one reset and retry; a failed panel requires explicit user recovery.
 
 ## Content
 

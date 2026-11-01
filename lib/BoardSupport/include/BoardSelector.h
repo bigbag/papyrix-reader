@@ -1,5 +1,7 @@
 #pragma once
 
+#include <DisplayController.h>
+
 #include <cstdint>
 
 #include "BoardProfile.h"
@@ -46,7 +48,8 @@ BoardProbeVerdict classifyBoardProbe(const BoardProbeReport& report);
 BoardSelection resolveBoardSelection(uint8_t overrideValue, uint8_t cacheValue, BoardProbeVerdict liveVerdict);
 const char* boardSelectionSourceName(BoardSelectionSource source);
 
-void selectBoard(HardwareIdentity& identity);
+bool selectBoard(HardwareIdentity& identity, bool allowProbe);
 void selectPanel(HardwareIdentity& identity);
+bool restoreClockPanel(HardwareIdentity& identity, eink::DisplayController panel, uint8_t variant);
 
 }  // namespace papyrix::board

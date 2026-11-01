@@ -23,6 +23,8 @@ SOFTWARE.
 The X3 UC8279 driver and LUTs, the X3 stock display probe, the X3 half-refresh
 LUTs in Display.cpp, the X4 Pro UC8179 and UC8279 display paths, and the Sticky
 SSD1677 configuration and SSD2677 driver and LUTs are selective ports from FreeInk.
+The X4 post-refresh RAM sequence also follows the FreeInk SSD1677 driver.
+Source: https://github.com/Free-Ink/freeink-sdk/commit/9d92cb19a8e5f1f0da8160404cc5d5f77bb9e833
 
 The Murphy M4 SSD1677 configuration and power sequences are selective ports
 from the CrossMux FreeInk SDK. This target uses the generic SSD1677 LUT.

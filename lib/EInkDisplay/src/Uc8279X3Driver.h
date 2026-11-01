@@ -32,7 +32,7 @@ class Uc8279X3Driver {
   static_assert(static_cast<uint32_t>(WIDTH_BYTES) * HEIGHT == BUFFER_SIZE);
 
   void begin(Uc8279Bus& bus);
-  void display(Uc8279Bus& bus, const uint8_t* frame, Uc8279RefreshMode mode, bool turnOff);
+  bool display(Uc8279Bus& bus, const uint8_t* frame, Uc8279RefreshMode mode, bool turnOff);
   void requestResync();
   void setBackgroundHint(bool dark) { darkBackground_ = dark; }
   void copyGrayscaleLsb(Uc8279Bus& bus, const uint8_t* plane);
@@ -40,7 +40,7 @@ class Uc8279X3Driver {
   void displayGray(Uc8279Bus& bus, bool turnOff);
   void cleanupGrayscale(Uc8279Bus& bus, const uint8_t* bwFrame);
   void grayscaleRevert(Uc8279Bus& bus);
-  void deepSleep(Uc8279Bus& bus);
+  bool deepSleep(Uc8279Bus& bus);
 
  private:
   void sendScript(Uc8279Bus& bus, const uint8_t* script, size_t size);

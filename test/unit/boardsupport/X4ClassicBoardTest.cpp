@@ -3,6 +3,7 @@
 #include <BootHardware.h>
 #include <PowerPolicy.h>
 #include <cassert>
+#include "test_gpio_state.h"
 
 namespace {
 bool event(TestGpioEventType type, int pin, int value) {
@@ -19,7 +20,13 @@ int main() {
   using namespace papyrix::board;
   const auto& profile = bootProfile();
   testResetGpioEvents();
-  earlyInit(profile);
+  earlyInit(profile, BootPurpose::ClockTimer);
+  assert(TestUtils::heldOutputRemains(1, HIGH));
+  assert(!event(TestGpioEventType::PinMode, 6, OUTPUT));
+  prepareClockSleepPins(profile);
+  assert(!event(TestGpioEventType::DigitalWrite, 1, LOW));
+  testResetGpioEvents();
+  earlyInit(profile, BootPurpose::Interactive);
   assert(event(TestGpioEventType::DigitalWrite, 1, HIGH));
   assert(event(TestGpioEventType::DigitalWrite, 6, HIGH));
   assert(event(TestGpioEventType::HoldDisable, 10, 0));

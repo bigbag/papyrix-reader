@@ -543,7 +543,7 @@ void connectAndServe() {
   const int count = WIFI_STORE.getCount();
   for (int i = 0; i < count; i++) {
     LOG_INF(TAG, "Trying WiFi: %s", creds[i].ssid);
-    if (s_core->wifi.connect(creds[i].ssid, creds[i].password).ok()) {
+    if (s_core->wifi.connect(creds[i].ssid, creds[i].password, 15000, nullptr).ok()) {
       strncpy(state.ssid, creds[i].ssid, sizeof(state.ssid) - 1);
       state.ssid[sizeof(state.ssid) - 1] = '\0';
       if (!WIFI_STORE.promoteCredential(state.ssid)) LOG_ERR(TAG, "Could not save WiFi priority");

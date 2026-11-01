@@ -10,9 +10,9 @@
 #include <mutex>
 #include <vector>
 
-#include "hal/Input.h"
 #include "core/PapyrixSettings.h"
 #include "core/ReaderButtonDispatcher.h"
+#include "hal/Input.h"
 #include "test_utils.h"
 
 InputManager inputManager;
@@ -136,8 +136,7 @@ unsigned long runTapPhase(papyrix::hal::Input& input, papyrix::EventQueue& queue
   while (queue.pop(event)) events.push_back(event);
   const bool pressThenRelease = events.size() == 2 && events[0].type == papyrix::EventType::ButtonPress &&
                                 events[0].button == kTestButton &&
-                                events[1].type == papyrix::EventType::ButtonRelease &&
-                                events[1].button == kTestButton;
+                                events[1].type == papyrix::EventType::ButtonRelease && events[1].button == kTestButton;
   const bool silence = events.empty();
   ok = (expectTap ? pressThenRelease : silence) && !input.isPressed(kTestButton);
   return nowMs;
@@ -160,6 +159,27 @@ int main() {
     }
     return pin == (PAPYRIX_TARGET_STICKY ? 5 : 9) && backHeldNow() ? LOW : HIGH;
   });
+#if PAPYRIX_TARGET_XTEINK_C3
+  static std::array<std::array<int, 4>, 2> adc;
+  static std::array<unsigned, 2> adcOffsets;
+  testSetAnalogReadHook([](int pin) { return adc.at(pin - 1).at(adcOffsets.at(pin - 1)++); });
+  for (unsigned channel = 0; channel < 2; ++channel) {
+    for (const int spike : {0, 3880}) {
+      for (auto& values : adc) values.fill(4095);
+      adc[channel][0] = 0;
+      adc[channel][1] = spike;
+      adcOffsets.fill(0);
+      runner.expectEq(0, static_cast<int>(inputManager.getState()), "an isolated ADC spike cannot press a button");
+    }
+  }
+  for (unsigned button = 0; button < 6; ++button) {
+    const int values[] = {3512, 2694, 1493, 0, 2242, 0};
+    for (auto& channel : adc) channel.fill(4095);
+    adc[button < 4 ? 0 : 1].fill(values[button]);
+    adcOffsets.fill(0);
+    runner.expectEq(1 << button, static_cast<int>(inputManager.getState()), "valid ladder buttons include zero volts");
+  }
+#endif
   testSetAnalogReadHook([](int pin) {
     if (pin == 1 && backHeldNow()) return 3512;
     const uint8_t held = waitHeld.load();
@@ -228,9 +248,8 @@ int main() {
   inputManager.update();
   input.poll();
   Event restarted{};
-  runner.expectTrue(
-      queue.pop(restarted) && restarted.type == EventType::ButtonPress && restarted.button == kTestButton,
-      "restart does not replay stale transitions");
+  runner.expectTrue(queue.pop(restarted) && restarted.type == EventType::ButtonPress && restarted.button == kTestButton,
+                    "restart does not replay stale transitions");
   runner.expectTrue(holdBack(false), "restart hold clears through the sampler");
   {
     Event event{};
@@ -263,9 +282,11 @@ int main() {
   // Deterministic idle-gap sweep: the real sampling task runs one production
   // loop per step on a manual clock, so tap onset phases are exact.
   if (enterLockstep()) {
+    stepSampler();
     const unsigned long tickA = stepSampler();
     const unsigned long tickB = stepSampler();
     const unsigned long idleIntervalMs = tickB - tickA;
+    runner.expectEq(10UL, idleIntervalMs, "normal input sampling preserves short taps");
     if (runner.expectTrue(idleIntervalMs >= 1 && idleIntervalMs <= 100, "sampler reports a bounded idle interval")) {
       unsigned long baseMs = tickB;
       bool tapsOk = true;
@@ -404,15 +425,13 @@ int main() {
     input.setPageButtonsBlocked(false);
     drain();
     runner.expectTrue(actions.empty(), "blocked page taps cannot overflow into navigation");
-    const std::vector<Button> retainedButtons = PAPYRIX_TARGET_STICKY
-                                                   ? std::vector<Button>{Button::Power, Button::Power}
-                                                   : std::vector<Button>{Button::Back, Button::Back, Button::Power,
-                                                                         Button::Power};
+    const std::vector<Button> retainedButtons =
+        PAPYRIX_TARGET_STICKY ? std::vector<Button>{Button::Power, Button::Power}
+                              : std::vector<Button>{Button::Back, Button::Back, Button::Power, Button::Power};
     const std::vector<EventType> retainedEdges =
-        PAPYRIX_TARGET_STICKY
-            ? std::vector<EventType>{EventType::ButtonPress, EventType::ButtonRelease}
-            : std::vector<EventType>{EventType::ButtonPress, EventType::ButtonRelease, EventType::ButtonPress,
-                                     EventType::ButtonRelease};
+        PAPYRIX_TARGET_STICKY ? std::vector<EventType>{EventType::ButtonPress, EventType::ButtonRelease}
+                              : std::vector<EventType>{EventType::ButtonPress, EventType::ButtonRelease,
+                                                       EventType::ButtonPress, EventType::ButtonRelease};
     runner.expectTrue(buttons == retainedButtons && edges == retainedEdges,
                       "wrapped queue keeps available Back and Power edges during blocked taps");
 
@@ -457,9 +476,9 @@ int main() {
       }
       input.setPageButtonsBlocked(false);
       drain();
-      runner.expectTrue(actions.empty() &&
-                            buttons == std::vector<Button>{Button::Back, Button::Back, Button::Center, Button::Center},
-                        "configured page mapping keeps Back and Confirm available");
+      runner.expectTrue(
+          actions.empty() && buttons == std::vector<Button>{Button::Back, Button::Back, Button::Center, Button::Center},
+          "configured page mapping keeps Back and Confirm available");
       settle(frontNext);
       settle(0);
       settle(sideNext);

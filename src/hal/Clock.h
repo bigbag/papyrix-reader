@@ -14,6 +14,7 @@ class Clock {
   bool readRtc(board::DateTime& out);
   bool localTime(std::tm& out) const;
   bool updateFromSystem();
+  bool canRetainTime() const { return !rtcWriteFailed_; }
 
  private:
   static constexpr unsigned long RTC_POLL_MS = 10000;
@@ -23,6 +24,8 @@ class Clock {
   unsigned long lastRtcPollMs_ = 0;
   bool rtcAvailable_ = false;
   bool hasCachedRtc_ = false;
+  bool initialized_ = false;
+  bool rtcWriteFailed_ = false;
 };
 
 }  // namespace papyrix::hal

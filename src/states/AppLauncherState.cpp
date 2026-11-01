@@ -1,15 +1,23 @@
 #include "AppLauncherState.h"
 
+#include <BootHardware.h>
 #include <GfxRenderer.h>
+#include <HardwareIdentity.h>
 #include <I18n.h>
+#include <InputManager.h>
 #include <Logging.h>
+#include <PowerPolicy.h>
 
+#include "../apps/ClockApp.h"
+#include "../apps/ClockStandby.h"
 #include "../apps/MiniApp.h"
 #include "../core/Core.h"
 #include "../ui/Elements.h"
 #include "ThemeManager.h"
 
 #define TAG "APP_LAUNCHER"
+
+extern InputManager inputManager;
 
 namespace papyrix {
 
@@ -48,6 +56,14 @@ void AppLauncherState::exit(Core& core) {
   }
 }
 
+void AppLauncherState::resumeClock(Core& core, const clock_app::ResumeRecord& record) {
+  activeApp_ = APP_CLOCK;
+  mode_ = Mode::App;
+  needsRender_ = true;
+  menuView_.needsRender = false;
+  clock_app::resumeInteractive(core, &record);
+}
+
 void AppLauncherState::activateMenuItem(Core& core) {
   if (menuView_.selected >= ui::AppMenuView::EXTRA_COUNT) {
     const int appIdx = menuView_.selected - ui::AppMenuView::EXTRA_COUNT;
@@ -70,6 +86,7 @@ StateTransition AppLauncherState::update(Core& core) {
   while (core.events.pop(e)) {
     // Power long-press goes to sleep in all modes
     if (e.type == EventType::ButtonLongPress && e.button == Button::Power) {
+      if (!saveClockSettings(core)) continue;
       if (activeApp_ >= 0) {
         stopApp(core);
       }
@@ -94,6 +111,10 @@ StateTransition AppLauncherState::update(Core& core) {
     }
 
     if (e.type == EventType::Tap) {
+      if (mode_ == Mode::Overlay && activeApp_ == APP_CLOCK && clock_app::onMenuTap(core, e.touch.x, e.touch.y)) {
+        needsRender_ = true;
+        continue;
+      }
       const int action = ui::touch::semanticButtonBarIndex({e.touch.x, e.touch.y}, renderer_.getScreenWidth(),
                                                            renderer_.getScreenHeight(),
                                                            core.settings.frontButtonLayout == Settings::FrontLRBC);
@@ -132,7 +153,7 @@ StateTransition AppLauncherState::update(Core& core) {
         if (e.type == EventType::ButtonRepeat) break;
         switch (e.button) {
           case Button::Back:
-            stopApp(core);
+            if (saveClockSettings(core)) stopApp(core);
             break;
           case Button::Center:
             showOverlay();
@@ -156,6 +177,7 @@ StateTransition AppLauncherState::update(Core& core) {
         core.cpu.unthrottle();
         switch (e.button) {
           case Button::Back:
+            if (!saveClockSettings(core)) break;
             if (activeApp_ >= 0 && APPS[activeApp_].onMenuButton) {
               APPS[activeApp_].onMenuButton(core, e.button);
             }
@@ -189,6 +211,14 @@ StateTransition AppLauncherState::update(Core& core) {
     }
   }
 
+  if ((core.pendingDirectory[0] || core.pendingSync != SyncMode::None || goNetwork_) && !saveClockSettings(core)) {
+    core.pendingDirectory[0] = '\0';
+    core.pendingSync = SyncMode::None;
+    core.pendingAppId = -1;
+    goNetwork_ = false;
+    return StateTransition::stay(StateId::AppLauncher);
+  }
+
   if (core.pendingDirectory[0]) {
     return StateTransition::to(StateId::FileList);
   }
@@ -213,6 +243,39 @@ StateTransition AppLauncherState::update(Core& core) {
   if (goNetwork_) {
     goNetwork_ = false;
     return StateTransition::to(StateId::Network);
+  }
+
+  if (activeApp_ == APP_CLOCK &&
+      clock_app::standbyDue(core, millis(), needsRender_ || core.input.hasPendingInteraction())) {
+    if (!saveClockSettings(core)) return StateTransition::stay(StateId::AppLauncher);
+    auto result = clock_app::enterStandby(core);
+    core.cpu.unthrottle();
+    board::earlyInit(board::HardwareIdentity::instance().profile(), board::BootPurpose::Interactive);
+    board::releaseDeepSleepHolds();
+    inputManager.begin();
+    board::restoreRecoveryStorage(board::HardwareIdentity::instance().profile());
+    const auto restored = core.init();
+    core.input.init(core.events);
+    core.input.suppressPowerUntilRelease();
+    if (!restored.ok() && result != clock_app::StandbyResult::DisplayError)
+      result = clock_app::StandbyResult::StorageError;
+    if (result != clock_app::StandbyResult::DisplayError && core.display.recover() != hal::Display::InitResult::Ok) {
+      result = clock_app::StandbyResult::DisplayError;
+    }
+    if (result == clock_app::StandbyResult::Interactive) {
+      clock_app::resumeInteractive(core, nullptr);
+      hideOverlay();
+    } else {
+      activeApp_ = -1;
+      mode_ = Mode::Menu;
+      if (result == clock_app::StandbyResult::TimeRequired) {
+        core.pendingSync = SyncMode::NtpSync;
+        core.pendingAppId = APP_CLOCK;
+        return StateTransition::to(StateId::Network);
+      }
+      snprintf(core.buf.text, sizeof(core.buf.text), "%s", clock_app::standbyErrorMessage(result));
+      return StateTransition::to(StateId::Error);
+    }
   }
 
   return StateTransition::stay(StateId::AppLauncher);
@@ -273,6 +336,13 @@ void AppLauncherState::launchApp(Core& core) {
   mode_ = Mode::App;
   menuView_.needsRender = false;
   needsRender_ = true;
+}
+
+bool AppLauncherState::saveClockSettings(Core& core) {
+  if (activeApp_ != APP_CLOCK || clock_app::saveSettings(core)) return true;
+  core.cpu.unthrottle();
+  showOverlay();
+  return false;
 }
 
 void AppLauncherState::stopApp(Core& core) {

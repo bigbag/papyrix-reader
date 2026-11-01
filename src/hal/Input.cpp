@@ -32,6 +32,7 @@ Result<void> Input::init(EventQueue& eventQueue) {
   orientationRevision_ = board::displayOrientationRevision();
   tapClassifier_.resetAfterWake();
   homeDown_ = false;
+  touchDown_ = false;
   homeReady_ = false;
   initialized_ = true;
 
@@ -167,6 +168,11 @@ uint32_t Input::idleTimeMs() const { return millis() - lastActivityMs_; }
 
 uint32_t Input::userIdleTimeMs() const { return millis() - lastUserActivityMs_; }
 
+bool Input::hasPendingInteraction() const {
+  return initialized_ && (currButtonState_ != 0 || homeDown_ || touchDown_ || (queue_ && !queue_->empty()) ||
+                          inputManager.isDebouncePending());
+}
+
 void Input::resetIdleTimer() { lastActivityMs_ = millis(); }
 
 void Input::recordActivity(uint32_t now) {
@@ -219,6 +225,7 @@ void Input::resyncState() {
 #endif
   tapClassifier_.resetAfterWake();
   homeDown_ = false;
+  touchDown_ = false;
   homeReady_ = false;
 }
 
@@ -246,6 +253,7 @@ void Input::pollTouch() {
   const uint8_t sampleLimit = PAPYRIX_TARGET_MURPHY_M4 ? 9 : 1;
   for (uint8_t i = 0; i < sampleLimit; ++i) {
     const auto raw = touchBackend_.poll();
+    if (raw.controllerOk) touchDown_ = raw.contactCount != 0;
     if (raw.controllerOk && profile.touch.hasHomeKey) {
       if (homeReady_ && homeDown_ && !raw.homeDown) {
         queue_->push(Event::buttonPress(Button::Back));

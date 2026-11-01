@@ -20,6 +20,8 @@ enum class Face : uint8_t {
   Count = 8,
 };
 
+inline constexpr Face SELECTABLE_FACES[] = {Face::Big, Face::Analog, Face::Retro, Face::Flip, Face::DayNight};
+
 struct Context {
   GfxRenderer& renderer;
   const Theme& theme;
@@ -29,7 +31,12 @@ struct Context {
   int8_t utcOffset;
 };
 
-bool isSelectable(Face face);
+inline constexpr bool isSelectable(Face face) {
+  for (Face candidate : SELECTABLE_FACES) {
+    if (candidate == face) return true;
+  }
+  return false;
+}
 Face selectRelative(Face face, int delta);
 const char* name(Face face);
 void render(const Context& context, Face face);

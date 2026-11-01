@@ -60,11 +60,10 @@ X4 Pro and Classic keep their separate probe protocols.
 
 #### Device Verification
 
-A device test with `1.35.0-dev` confirms UC8253 detection and cache migration on X3.
-The next start uses the new cache.
-The user confirms correct display output, page changes, sleep, and wake.
-UC8279 display support passed earlier device tests.
-The new probe still needs a UC8279 device test.
+Device checks confirm UC8253 detection, cache migration, and cache reuse after restart.
+Display output, page changes, sleep, and wake have hardware confirmation.
+The UC8279 display driver has hardware confirmation.
+The stock-protocol probe has no hardware confirmation on UC8279.
 
 #### Cache Across Boot Modes
 
@@ -84,6 +83,12 @@ The firmware allocates a static buffer of `MAX_BUFFER_SIZE = 52,272` bytes. This
 ### Refresh Modes
 
 The UC8253 uses the X3 Full, Half, Turbo, Image, and Grayscale LUT sets. Fast refreshes use Turbo. Half refreshes use the Half scrub bank without a flash. Full refreshes use Image, then one no-op Turbo pass. See [X3 LUT Waveforms](x3-lut-waveforms.md) for timing data and register-level documentation.
+
+On a Clock timer wake, the UC8253 driver restores both RAM planes from the previous Clock frame.
+It preserves row order and bit polarity without a visible refresh.
+The next minute uses the Turbo differential waveform.
+A BUSY timeout rejects restoration and requires a full refresh after recovery.
+Normal startup uses a full refresh.
 
 The UC8279d uses an external GC waveform for full and half refreshes. It uses an external DU waveform for fast refreshes after it has a valid previous-frame baseline. The first two black-and-white refreshes use GC. A resynchronization refresh also uses GC.
 
@@ -157,9 +162,15 @@ The X4 reads UART0_RXD on GPIO20. The X3 uses GPIO20 for I²C SDA. The pin is HI
 
 ### SD Power and Sleep
 
-GPIO13 is the active-high SD power enable on X3. The firmware releases the GPIO hold before it drives GPIO13 HIGH. It waits 10 ms for the SD rail. It then drives SD CS on GPIO12 HIGH. The firmware probes the display after these operations. Before deep sleep, it closes SD access and drives GPIO13 LOW. It holds this level during deep sleep. The firmware also holds display RESET on GPIO5 HIGH after the controller enters deep sleep.
+GPIO13 controls the X3 power path and the SD supply. The firmware drives it HIGH before SD access or a display probe. It waits 10 ms for the supply. It then drives SD CS on GPIO12 HIGH.
 
-The power button on GPIO3 wakes the device from deep sleep.
+Normal shutdown closes SD access and holds GPIO13 LOW. Clock Power saving instead holds GPIO13 HIGH so the MCU can wake by timer. Timer startup configures the output HIGH before it releases the GPIO hold. Both X3 display controllers use this policy. The firmware holds display RESET on GPIO5 HIGH after the controller enters deep sleep.
+
+The [CrossPet X3 timer-wake implementation](https://github.com/bcrpntr/crosspet-x3/commit/c8759a0c7d81728d68e60f4cc62b28fb600df36c) also keeps GPIO13 HIGH.
+A LOW level can remove MCU power and lose the retained Clock record.
+The SD supply remains powered during Clock standby.
+
+The power button on GPIO3 starts the device after normal shutdown. During Clock standby, it wakes Clock controls.
 
 ---
 

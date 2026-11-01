@@ -22,7 +22,7 @@ The [Pin Summary](#pin-summary) below lists the X4 connections.
 ### Display Controller (SSD1677)
 
 - **Interface** — 4-wire SPI
-- **SPI Clock** — 40 MHz
+- **SPI Clock** — 10 MHz
 - **SPI Mode** — Mode 0 (CPOL=0, CPHA=0)
 - **Data Order** — MSB First
 
@@ -104,15 +104,14 @@ The X4 uses one 111-byte LUT loaded with command 0x32:
 ### Display Refresh Sequence
 
 ```
-1. Send 0x4E (Set X address) + start column
-2. Send 0x4F (Set Y address) + start/end row
-3. Send 0x24 (Write BW RAM)
-4. Send 48,000 bytes of image data
-5. Send 0x26 (Write RED RAM) [for differential refresh]
-6. Send 48,000 bytes of previous frame
-7. Send 0x20 (Master activation)
-8. Send 0x22 (Display refresh trigger)
-9. Wait for BUSY pin LOW
+1. Set the RAM area and address counters.
+2. Write the current image to BW RAM (0x24).
+3. For FULL or HALF, write the image to RED RAM (0x26).
+4. Set display update controls (0x21 and 0x22).
+5. Send master activation (0x20).
+6. Wait for BUSY LOW.
+7. After success, set the RAM area again.
+8. Write the displayed image to both BW and RED RAM.
 ```
 
 ---
@@ -144,9 +143,6 @@ retained estimate. A missing marker, an invalid range, or a raw-to-retained
 difference above 25 percentage points also resets the estimate to the raw
 value. Home, Reader, Clock, and System Info use this one filtered status.
 
-The checksum-verified packaged image reported 98% in Home, System Info at
-4122 mV, Reader, Home after Reader, and Home after sleep/wake.
-
 ### USB Detection
 
 - **Method** — UART0_RXD pin (GPIO 20)
@@ -158,12 +154,24 @@ The checksum-verified packaged image reported 98% in Home, System Info at
 - **WiFi active** — Approximately 150 mA.
 - **Battery-only sleep** — The firmware drives GPIO13 LOW and holds it for the lowest-power hardware shutdown path.
 - **USB-connected sleep** — The firmware drives and holds GPIO13 HIGH so charging continues.
-- **Wake initialization** — The firmware releases the global sleep hold, then immediately asserts GPIO13 before it initializes serial, USB, or buttons.
+- **Wake initialization** — The firmware configures GPIO13 HIGH before it releases its sleep hold or initializes serial, USB, or buttons.
 - **USB edge** — A connect or disconnect edge requests a full Home render. This replaces a stale BootView frame after the X4 power transition.
 
-The USB-connected sleep path charged the measured X4 from 3944 mV to 4170 mV
-in 30 minutes. Awake USB insertion, removal, sleep, and wake preserve Home after
-the GPIO13 latch and USB-edge repaint are applied.
+Clock provides Normal and Power saving modes.
+Normal keeps the 10 ms idle button interval and the existing CPU idle policy.
+Power saving enters deep sleep after 15 seconds without interaction.
+It wakes at the next minute boundary and updates the clock.
+GPIO13 stays HIGH during this standby; the battery shutdown path is not used.
+A short Power press on GPIO3 opens Clock controls directly.
+USB does not disable Clock standby.
+
+The SSD1677 path restores both monochrome RAM planes from the retained frame.
+It uses the existing framebuffer, not a second C3 allocation.
+Clock clears automatic resume after a fatal wake error.
+Startup disables automatic GPIO sleep switching for the X4 battery latch.
+Normal shutdown drives the latch LOW on battery.
+
+Battery percentage is a voltage estimate, not a current measurement.
 
 ---
 

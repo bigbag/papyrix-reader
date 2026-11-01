@@ -11,7 +11,7 @@ namespace papyrix::board {
 
 void releaseDeepSleepHolds() { gpio_deep_sleep_hold_dis(); }
 
-void prepareDeepSleepPins(const BoardProfile& profile, bool externalPower) {
+static void prepareSleepPins(const BoardProfile& profile, bool externalPower, bool clockStandby) {
   if (profile.family == McuFamily::Esp32S3) {
     const auto holdOutput = [](int8_t pin, bool high) {
       if (pin == kPinUnused) return;
@@ -34,7 +34,17 @@ void prepareDeepSleepPins(const BoardProfile& profile, bool externalPower) {
       }
     }
     holdOutput(profile.storage.powerPin, !profile.storage.powerActiveHigh);
-    holdOutput(profile.display.rst, true);
+    if (clockStandby && profile.display.power != kPinUnused) {
+      for (const int8_t pin : {profile.display.sclk, profile.display.mosi, profile.display.cs, profile.display.dc,
+                               profile.display.rst, profile.display.busy}) {
+        if (pin == kPinUnused) continue;
+        gpio_hold_dis(static_cast<gpio_num_t>(pin));
+        pinMode(pin, INPUT);
+        gpio_hold_en(static_cast<gpio_num_t>(pin));
+      }
+    } else {
+      holdOutput(profile.display.rst, true);
+    }
     holdOutput(profile.power.latchPin, profile.power.latchActiveHigh);
     holdOutput(profile.power.latchPin2, profile.power.latchActiveHigh);
     holdOutput(profile.power.chargeEnablePin, profile.power.chargeEnableActiveHigh);
@@ -45,25 +55,39 @@ void prepareDeepSleepPins(const BoardProfile& profile, bool externalPower) {
     return;
   }
   if (profile.storage.transport == StorageTransport::Spi && profile.storage.powerPin != kPinUnused) {
-    papyrix::sd::disableSdPower(profile.storage.powerPin, profile.storage.spiCs, profile.display.sclk,
-                                profile.storage.spiMiso, profile.display.mosi);
+    if (clockStandby && profile.id == BoardId::X3) {
+      // X3 GPIO13 must stay HIGH for MCU timer wake.
+      pinMode(profile.storage.powerPin, OUTPUT);
+      digitalWrite(profile.storage.powerPin, HIGH);
+      gpio_hold_dis(static_cast<gpio_num_t>(profile.storage.powerPin));
+    } else {
+      papyrix::sd::disableSdPower(profile.storage.powerPin, profile.storage.spiCs, profile.display.sclk,
+                                  profile.storage.spiMiso, profile.display.mosi);
+    }
     gpio_hold_en(static_cast<gpio_num_t>(profile.storage.powerPin));
   }
   if (profile.power.latchPin != kPinUnused) {
     const auto latch = static_cast<gpio_num_t>(profile.power.latchPin);
     gpio_hold_dis(latch);
     pinMode(profile.power.latchPin, OUTPUT);
-    const bool keepPowered = externalPower ? profile.power.latchActiveHigh : !profile.power.latchActiveHigh;
+    const bool keepPowered =
+        externalPower || clockStandby ? profile.power.latchActiveHigh : !profile.power.latchActiveHigh;
     digitalWrite(profile.power.latchPin, keepPowered ? HIGH : LOW);
     gpio_hold_en(latch);
   }
 
-  if (profile.id != BoardId::X3) return;
+  if (profile.id != BoardId::X3 && !clockStandby) return;
   gpio_hold_dis(static_cast<gpio_num_t>(profile.display.rst));
   pinMode(profile.display.rst, OUTPUT);
   digitalWrite(profile.display.rst, HIGH);
   gpio_hold_en(static_cast<gpio_num_t>(profile.display.rst));
 }
+
+void prepareDeepSleepPins(const BoardProfile& profile, bool externalPower) {
+  prepareSleepPins(profile, externalPower, false);
+}
+
+void prepareClockSleepPins(const BoardProfile& profile) { prepareSleepPins(profile, false, true); }
 
 void shutdownRecoveryRails(const BoardProfile& profile) {
   if (profile.display.power != kPinUnused) {
@@ -87,8 +111,21 @@ void shutdownRecoveryRails(const BoardProfile& profile) {
 void restoreRecoveryStorage(const BoardProfile& profile) {
   if (profile.storage.transport == StorageTransport::Spi) {
     papyrix::sd::prepareSdForDisplayProbe(profile.storage.powerPin, profile.storage.spiCs);
+    if (profile.display.power != kPinUnused) {
+      pinMode(profile.display.power, OUTPUT);
+      digitalWrite(profile.display.power, HIGH);
+      gpio_hold_dis(static_cast<gpio_num_t>(profile.display.power));
+      delay(50);
+    }
+    pinMode(profile.display.cs, OUTPUT);
+    digitalWrite(profile.display.cs, HIGH);
+    gpio_hold_dis(static_cast<gpio_num_t>(profile.display.cs));
+    for (const int8_t pin : {profile.display.sclk, profile.display.mosi, profile.storage.spiMiso}) {
+      if (pin != kPinUnused) gpio_hold_dis(static_cast<gpio_num_t>(pin));
+    }
     SPI.begin(profile.display.sclk, profile.storage.spiMiso, profile.display.mosi, profile.storage.spiCs);
   } else if (profile.storage.powerPin != kPinUnused) {
+    gpio_hold_dis(static_cast<gpio_num_t>(profile.storage.powerPin));
     pinMode(profile.storage.powerPin, OUTPUT);
     digitalWrite(profile.storage.powerPin, profile.storage.powerActiveHigh ? HIGH : LOW);
   }

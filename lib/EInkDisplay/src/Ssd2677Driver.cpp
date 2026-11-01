@@ -73,6 +73,13 @@ Ssd2677InitResult Ssd2677Driver::begin(Uc8279Bus& bus) {
   return Ssd2677InitResult::Ok;
 }
 
+bool Ssd2677Driver::restoreMonochromeBaseline(const uint8_t* frame) {
+  if (!initialized_ || !frame || waveform_ != 0) return fail();
+  memcpy(old_, frame, kPlaneBytes);
+  baselineValid_ = true;
+  return true;
+}
+
 bool Ssd2677Driver::latchWaveform(Uc8279Bus& bus, uint8_t code) {
   if (waveform_ != 0 && waveform_ != code && !initPanel(bus)) return false;
   bus.command(0xE0);

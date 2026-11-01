@@ -42,6 +42,8 @@
 #include "FontManager.h"
 #include "MappedInputManager.h"
 #include "ThemeManager.h"
+#include "apps/ClockStandby.h"
+#include "apps/MiniApp.h"
 #include "config.h"
 #include "content/ContentTypes.h"
 #include "hal/Power.h"
@@ -275,8 +277,8 @@ void initializeDisplayWithRecovery() {
   policy.recordSuccess();
 }
 
-void setupDisplayAndFonts(bool allReaderSizes = true) {
-  initializeDisplayWithRecovery();
+void setupDisplayAndFonts(bool allReaderSizes = true, bool initializeDisplay = true) {
+  if (initializeDisplay) initializeDisplayWithRecovery();
   renderer.begin();
   LOG_INF(TAG, "Display initialized");
   if (allReaderSizes) {
@@ -384,8 +386,8 @@ bool earlyInit() {
 #endif
 
   auto& identity = papyrix::board::HardwareIdentity::instance();
-  papyrix::board::selectBoard(identity);
-  papyrix::core.battery.init();
+  papyrix::board::selectBoard(identity, true);
+  papyrix::core.battery.init(true);
   papyrix::core.usb.init(papyrix::core.battery);
   const auto& profile = identity.profile();
 
@@ -461,7 +463,8 @@ bool earlyInit() {
 }
 
 // Initialize UI mode - full state registration, all resources
-void initUIMode() {
+void initUIMode(const papyrix::clock_app::ResumeRecord* clockResume = nullptr,
+                papyrix::clock_app::StandbyResult wakeResult = papyrix::clock_app::StandbyResult::Interactive) {
   LOG_INF(TAG, "Initializing UI mode");
   LOG_DBG(TAG, "[UI mode] Free heap: %lu, Max block: %lu", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 
@@ -471,12 +474,17 @@ void initUIMode() {
   THEME_MANAGER.createDefaultThemeFiles();
   LOG_INF(TAG, "Theme loaded: %s", THEME_MANAGER.currentThemeName());
 
-  setupDisplayAndFonts();
+  if (clockResume && wakeResult != papyrix::clock_app::StandbyResult::DisplayError &&
+      papyrix::core.display.begin() != papyrix::hal::Display::InitResult::Ok &&
+      papyrix::core.display.recover() != papyrix::hal::Display::InitResult::Ok) {
+    wakeResult = papyrix::clock_app::StandbyResult::DisplayError;
+  }
+  setupDisplayAndFonts(true, clockResume == nullptr);
   applyThemeFonts();
 
   // Show boot splash only on cold boot (not mode transition)
   const auto& preInitTransition = papyrix::getTransition();
-  if (!preInitTransition.isValid()) {
+  if (!clockResume && !preInitTransition.isValid()) {
     ui::BootView bootView;
     bootView.setStatus(tr(BOOTING));
     bootView.setDarkMode(THEME.invertedMode);
@@ -500,13 +508,36 @@ void initUIMode() {
   auto result = papyrix::core.init();
   if (!result.ok()) {
     LOG_ERR(TAG, "Init failed: %s", papyrix::errorToString(result.err));
-    showErrorScreen("Core init failed");
-    return;
+    if (!clockResume) {
+      showErrorScreen("Core init failed");
+      return;
+    }
+    if (wakeResult != papyrix::clock_app::StandbyResult::DisplayError)
+      wakeResult = papyrix::clock_app::StandbyResult::StorageError;
+    papyrix::core.input.init(papyrix::core.events);
   }
 
   LOG_INF(TAG, "State machine starting (UI mode)");
   mappedInputManager.setSettings(&papyrix::core.settings);
   ui::setFrontButtonLayout(papyrix::core.settings.frontButtonLayout);
+
+  if (clockResume) {
+    papyrix::core.input.suppressPowerUntilRelease();
+    if (wakeResult == papyrix::clock_app::StandbyResult::Interactive) {
+      stateMachine.init(papyrix::core, papyrix::StateId::AppLauncher);
+      appLauncherState.resumeClock(papyrix::core, *clockResume);
+    } else if (wakeResult == papyrix::clock_app::StandbyResult::TimeRequired) {
+      papyrix::core.pendingSync = papyrix::SyncMode::NtpSync;
+      papyrix::core.pendingAppId = papyrix::APP_CLOCK;
+      stateMachine.init(papyrix::core, papyrix::StateId::Network);
+    } else {
+      snprintf(papyrix::core.buf.text, sizeof(papyrix::core.buf.text), "%s",
+               papyrix::clock_app::standbyErrorMessage(wakeResult));
+      stateMachine.init(papyrix::core, papyrix::StateId::Error);
+    }
+    stateMachine.update(papyrix::core);
+    return;
+  }
 
   // Determine initial state - check for return from reader mode
   papyrix::StateId initialState = papyrix::StateId::Home;
@@ -594,9 +625,53 @@ void initReaderMode() {
   LOG_DBG(TAG, "[READER mode] After init - Free heap: %lu, Max block: %lu", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 }
 
+bool tryClockBoot() {
+  using namespace papyrix;
+  clock_app::ResumeRecord record;
+  const auto reset = esp_reset_reason();
+  if (reset != ESP_RST_DEEPSLEEP || !clock_app::readResume(record)) return false;
+  const auto route = clock_app::classifyWake(record, record.identity, reset, esp_sleep_get_wakeup_cause());
+  if (route == clock_app::WakeRoute::NormalBoot) return false;
+  auto& identity = board::HardwareIdentity::instance();
+  if (!board::selectBoard(identity, false) || identity.board() != record.identity.board ||
+      !board::restoreClockPanel(identity, record.identity.panel, record.identity.panelVariant))
+    return false;
+
+  board::earlyInit(identity.profile(), board::BootPurpose::ClockTimer);
+  board::releaseDeepSleepHolds();
+  auto result = clock_app::StandbyResult::Interactive;
+  if (route == clock_app::WakeRoute::Timer) result = clock_app::runTimerWake(core, record);
+  clock_app::clearResume();
+
+  board::earlyInit(identity.profile(), board::BootPurpose::Interactive);
+  inputManager.begin();
+  Serial.begin(kSerialBaudRate);
+#if defined(ENABLE_SERIAL_LOG) && ARDUINO_USB_CDC_ON_BOOT
+  logSerial.setTxTimeoutMs(kSerialTxTimeoutMs);
+#endif
+  board::restoreRecoveryStorage(identity.profile());
+  if (core.storage.init().ok()) {
+    core.settings.loadFromFile();
+    i18n::loadLocaleFromSD();
+    rtcPowerButtonDurationMs = core.settings.getPowerButtonDuration();
+  } else {
+    if (result != clock_app::StandbyResult::DisplayError) result = clock_app::StandbyResult::StorageError;
+  }
+  if (!LittleFS.begin(false) && result != clock_app::StandbyResult::DisplayError)
+    result = clock_app::StandbyResult::StorageError;
+  currentBootMode = BootMode::UI;
+  core.bootMode = currentBootMode;
+  initUIMode(&record, result);
+  return true;
+}
+
 void setup() {
+#if !PAPYRIX_X4PRO_CHARACTERIZE
+  if (tryClockBoot()) return;
+#endif
+  papyrix::clock_app::clearResume();
+  papyrix::board::earlyInit(papyrix::board::bootProfile(), papyrix::board::BootPurpose::Interactive);
   papyrix::board::releaseDeepSleepHolds();
-  papyrix::board::earlyInit(papyrix::board::bootProfile());
   // Let USB Serial/JTAG and the host enumerate before recovery checks.
   delay(kSerialEnumerationDelayMs);
   Serial.begin(kSerialBaudRate);

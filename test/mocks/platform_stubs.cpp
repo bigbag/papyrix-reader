@@ -40,6 +40,11 @@ int gpio_hold_en(int pin) {
   return 0;
 }
 
+int gpio_sleep_sel_dis(int pin) {
+  testRecordGpioEvent(TestGpioEventType::SleepSelectDisable, pin, 0);
+  return 0;
+}
+
 void gpio_deep_sleep_hold_en() { testRecordGpioEvent(TestGpioEventType::DeepSleepHold, -1, 0); }
 void gpio_deep_sleep_hold_dis() { testRecordGpioEvent(TestGpioEventType::DeepSleepHoldDisable, -1, 0); }
 

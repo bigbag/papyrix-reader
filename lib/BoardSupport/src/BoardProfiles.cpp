@@ -36,7 +36,7 @@ constexpr BoardProfile kX4Profile = {
     "xteink_x4",
     "/.papyrix/cache",
     "",
-    {800, 480, 8, 10, 21, 4, 5, 6, kPinUnused, 40000000, false},
+    {800, 480, 8, 10, 21, 4, 5, 6, kPinUnused, 10000000, false},
     {InputStyle::AdcLadder, 1, 2, kPinUnused, kPinUnused, kPinUnused, kPinUnused, kPinUnused, kPinUnused, 3, false},
     {TouchController::None, kPinUnused, kPinUnused, kPinUnused, kPinUnused, 0, kPinUnused, false, false, false, false,
      false},

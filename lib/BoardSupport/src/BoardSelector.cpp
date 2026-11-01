@@ -1,5 +1,8 @@
 #include "BoardSelector.h"
 
+#include <X3DisplayProbe.h>
+#include <X4ClassicPanelPolicy.h>
+
 #include "HardwareIdentity.h"
 #include "HardwareRecovery.h"
 
@@ -8,10 +11,8 @@
 #include <Logging.h>
 #include <Preferences.h>
 #include <Wire.h>
-#include <X3DisplayProbe.h>
 #if PAPYRIX_TARGET_X4CLASSIC
 #include <X4ClassicDisplayProbe.h>
-#include <X4ClassicPanelPolicy.h>
 #endif
 #if PAPYRIX_TARGET_STICKY
 #include <StickyDisplayProbe.h>
@@ -265,28 +266,32 @@ void logDisplayProbe(const eink::X3DisplayProbeReport& report) {
 
 }  // namespace
 
-void selectBoard(HardwareIdentity& identity) {
+bool selectBoard(HardwareIdentity& identity, bool allowProbe) {
 #if PAPYRIX_TARGET_XTEINK_C3
   const uint8_t overrideValue = readHardwareByte(kBoardOverrideKey);
   const uint8_t cacheValue = readHardwareByte(kBoardCacheKey);
   BoardProbeReport report{};
   BoardSelection selection = resolveBoardSelection(overrideValue, cacheValue, BoardProbeVerdict::Inconclusive);
   if (selection.source == BoardSelectionSource::Fallback) {
+    if (!allowProbe) return false;
     const BoardProfile* x3 = findProfile(BoardId::X3);
     if (x3 != nullptr) report = runC3Probe(*x3);
     selection = resolveBoardSelection(overrideValue, cacheValue, classifyBoardProbe(report));
   }
-  if (selection.invalidOverride) LOG_WRN("BOARD", "invalid board override: %u", overrideValue);
-  if (selection.invalidCache) LOG_WRN("BOARD", "invalid board cache: %u", cacheValue);
   identity.applyBoardSelection(selection, report);
-  const bool cached = selection.writeCache && writeHardwareByte(kBoardCacheKey, selection.storedValue);
-  LOG_INF("BOARD", "board: %s %ux%u (%s%s)", identity.profile().name,
-          static_cast<unsigned int>(identity.profile().display.width),
-          static_cast<unsigned int>(identity.profile().display.height), boardSelectionSourceName(selection.source),
-          cached                 ? ", cached"
-          : selection.writeCache ? ", cache write failed"
-                                 : "");
+  if (allowProbe) {
+    if (selection.invalidOverride) LOG_WRN("BOARD", "invalid board override: %u", overrideValue);
+    if (selection.invalidCache) LOG_WRN("BOARD", "invalid board cache: %u", cacheValue);
+    const bool cached = selection.writeCache && writeHardwareByte(kBoardCacheKey, selection.storedValue);
+    LOG_INF("BOARD", "board: %s %ux%u (%s%s)", identity.profile().name,
+            static_cast<unsigned int>(identity.profile().display.width),
+            static_cast<unsigned int>(identity.profile().display.height), boardSelectionSourceName(selection.source),
+            cached                 ? ", cached"
+            : selection.writeCache ? ", cache write failed"
+                                   : "");
+  }
 #else
+  (void)allowProbe;
   BoardSelection selection{};
   selection.board = bootProfile().id;
   selection.source = BoardSelectionSource::Fixed;
@@ -295,6 +300,7 @@ void selectBoard(HardwareIdentity& identity) {
   loadMurphyM4Batch();
 #endif
 #endif
+  return true;
 }
 
 void selectPanel(HardwareIdentity& identity) {
@@ -391,5 +397,61 @@ void selectPanel(HardwareIdentity& identity) {
 }
 
 #endif
+
+bool restoreClockPanel(HardwareIdentity& identity, eink::DisplayController panel, uint8_t variant) {
+  using eink::DisplayController;
+  if (!identity.boardSelected() || !targetSupports(identity.board())) return false;
+  bool supported = false;
+  switch (identity.board()) {
+    case BoardId::X3:
+      supported = variant == 0 && (panel == DisplayController::UC8253 || panel == DisplayController::UC8279_X3);
+#if defined(ARDUINO) && PAPYRIX_TARGET_XTEINK_C3
+      if (const auto overrideValue = readHardwareByte(kControllerOverrideKey); overrideValue != kStoredControllerAuto) {
+        const auto decision = resolveStoredX3Controller(overrideValue, kStoredControllerAuto, kControllerCacheVersion);
+        if (!decision.resolved || decision.controller != panel) return false;
+      }
+#endif
+      break;
+    case BoardId::X4:
+    case BoardId::MurphyM4:
+      supported = panel == DisplayController::SSD1677 && variant == 0;
+      break;
+    case BoardId::X4Pro: {
+#if PAPYRIX_TARGET_X4PRO
+      eink::X3DisplayProbeReport report{};
+      report.verdict = eink::X3DisplayVerdict::UC8279Confirmed;
+      report.pass2.ver[2] = variant;
+      const auto classified = eink::classifyX4ProPanel(report);
+      supported = (panel == DisplayController::SSD1677 && variant == 0) ||
+                  (panel == DisplayController::UC8179_X4PRO && classified == eink::X4ProPanelVariant::Uc8179) ||
+                  (panel == DisplayController::UC8279_X4PRO && classified == eink::X4ProPanelVariant::Uc8279);
+#endif
+      break;
+    }
+    case BoardId::X4Classic: {
+#if PAPYRIX_TARGET_X4CLASSIC
+      const auto probed = resolveClassicPanel(false, 0, true, variant);
+      supported = (probed.resolved && probed.controller == panel) ||
+                  (variant == 0 && (panel == DisplayController::UC8179_X4PRO ||
+                                    panel == DisplayController::UC8279_X4PRO || panel == DisplayController::SSD1677));
+#ifdef ARDUINO
+      Preferences factory;
+      const bool opened = factory.begin("hw_calib", true);
+      const uint8_t screenType = opened ? factory.getUChar("screenType", 0) : 0;
+      if (opened) factory.end();
+      const auto decision = resolveClassicPanel(opened, screenType, variant != 0, variant);
+      if (!decision.resolved || decision.controller != panel) return false;
+#endif
+#endif
+      break;
+    }
+    case BoardId::Sticky:
+      supported = variant == 0 && (panel == DisplayController::SSD1677 || panel == DisplayController::SSD2677);
+      break;
+  }
+  if (!supported) return false;
+  identity.setPanel(panel, PanelSelectionSource::Cache, variant);
+  return true;
+}
 
 }  // namespace papyrix::board

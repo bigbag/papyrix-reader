@@ -16,9 +16,11 @@ size_t position(TestGpioEventType type, int pin, int value) {
 int main() {
   TestUtils::TestRunner runner("SD power control");
   testResetGpioEvents();
-  papyrix::sd::prepareSdForDisplayProbe(-1, 12);
   papyrix::sd::disableSdPower(-1, 12, 8, 7, 10);
   runner.expectEq(size_t{0}, testGpioEventCount, "unassigned power remains untouched");
+  papyrix::sd::prepareSdForDisplayProbe(-1, 12);
+  runner.expectTrue(position(TestGpioEventType::DigitalWrite, 12, HIGH) < testGpioEventCount,
+                    "an always-powered SD card stays deselected during display traffic");
   for (const auto sticky : {false, true}) {
     const int8_t power = sticky ? 10 : 13;
     const int8_t cs = sticky ? 8 : 12;

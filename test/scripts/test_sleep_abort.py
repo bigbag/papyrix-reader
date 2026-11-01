@@ -14,6 +14,10 @@ MOCK = r'''
 #include <cstdio>
 #include <cstdlib>
 using esp_err_t = int;
+constexpr int ESP_OK = 0, ESP_ERR_INVALID_ARG = 2, ESP_ERR_INVALID_STATE = 3, ESP_ERR_SLEEP_REJECT = 4;
+constexpr int ESP_GPIO_WAKEUP_GPIO_HIGH = 1, ESP_EXT1_WAKEUP_ANY_HIGH = 1, ESP_SLEEP_WAKEUP_ALL = 0;
+constexpr int HIGH = 1, LOW = 0;
+inline int digitalRead(int) { return HIGH; }
 #ifndef PAPYRIX_TARGET_XTEINK_C3
 #define PAPYRIX_TARGET_XTEINK_C3 0
 #endif
@@ -36,6 +40,12 @@ inline void requireTouchStopped() {
 '''
 
 HEADERS = {
+    "esp_err.h": '#pragma once\n#include "MockPower.h"\n',
+    "BootHardware.h":
+        '#pragma once\n#include "BoardProfile.h"\nnamespace papyrix::board {\n'
+        'enum class BootPurpose { Interactive, ClockTimer };\n'
+        'inline void earlyInit(const BoardProfile&, BootPurpose) {}\n'
+        'inline void releaseDeepSleepHolds() {}\n}\n',
     "DisplayController.h": "#pragma once\nnamespace eink { enum class DisplayController { SSD1677 }; }\n",
     "SDCardManager.h":
         '#pragma once\n#include "MockPower.h"\n'
@@ -50,7 +60,7 @@ HEADERS = {
         '#pragma once\n#include "MockPower.h"\n'
         'struct InputManager { void stopSampling() { samplingStopped = true; } };\n'
         'inline InputManager inputManager;\n'
-        'inline void disableGpioPullsForSleep() {\n'
+        'inline void disableGpioPullsForSleep(int8_t) {\n'
         '  if (!samplingStopped) std::_Exit(1);\n'
         '  requireTouchStopped();\n'
         '  pullsOff = true;\n}\n',
@@ -58,6 +68,7 @@ HEADERS = {
         '#pragma once\n#include "MockPower.h"\n#include "BoardProfile.h"\n'
         "namespace papyrix::board {\n"
         "inline void prepareDeepSleepPins(const BoardProfile&, bool) { requireTouchStopped(); pinsPrepared = true; }\n"
+        "inline void prepareClockSleepPins(const BoardProfile&) { requireTouchStopped(); pinsPrepared = true; }\n"
         "inline uint64_t powerButtonWakeMask(const BoardProfile& p) { return 1ULL << p.input.power; }\n"
         "}\n",
     "HardwareIdentity.h":
@@ -79,6 +90,8 @@ HEADERS = {
         "    std::_Exit(1);\n"
         "  }\n"
         "}\n"
+        "inline esp_err_t esp_sleep_disable_wakeup_source(int) { return 0; }\n"
+        "inline esp_err_t esp_sleep_enable_timer_wakeup(uint64_t) { return 0; }\n"
         "inline esp_err_t esp_deep_sleep_enable_gpio_wakeup(uint64_t, int) { wakeC3 = true; return 0; }\n"
         "inline esp_err_t esp_sleep_enable_ext1_wakeup_io(uint64_t, int) { wakeS3 = true; return 0; }\n"
         "inline esp_err_t esp_deep_sleep_try_to_start() { requireReady(); slept = true; return 1; }\n",

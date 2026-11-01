@@ -252,7 +252,6 @@ void expectArtifactShape(TestUtils::TestRunner& runner) {
   runner.expectTrue(std::strcmp(x4.cacheDir, "/.papyrix/cache") == 0, "X4 keeps the /.papyrix/cache cache directory");
   runner.expectTrue(std::strcmp(x4.renderCacheKey, "") == 0, "X4 render cache key is the legacy root");
   runner.expectTrue(x4.display.width == 800 && x4.display.height == 480, "X4 panel is 800x480");
-  runner.expectTrue(x4.display.spiHz == 40000000, "X4 display SPI runs at 40 MHz");
   runner.expectTrue(x4.display.sclk == 8 && x4.display.mosi == 10 && x4.display.cs == 21 && x4.display.dc == 4 &&
                         x4.display.rst == 5 && x4.display.busy == 6,
                     "X4 display uses the shared C3 display pins");

@@ -11,7 +11,7 @@ class Battery {
  public:
   using Status = BatteryMonitor::Status;
 
-  void init();
+  void init(bool allowConfiguration);
   bool isInitialized() const { return initialized_; }
   bool isAvailable() const { return monitor_.has_value(); }
   Status readStatus() const;

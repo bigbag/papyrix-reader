@@ -386,7 +386,7 @@ Display::InitResult Display::begin() {
   drawGrayscale = false;
   customLutActive = false;
   ssd1677BaselineValid_ = false;
-  ssd1677RefreshSucceeded_ = false;
+  refreshSucceeded_ = false;
 #if PAPYRIX_TARGET_MURPHY_M4
   ssd1677GrayPlanes_ = 0;
 #endif
@@ -441,10 +441,15 @@ Display::InitResult Display::begin() {
     digitalWrite(config.power, HIGH);
     delay(50);
   }
+  for (const int8_t pin : {_sclk, _mosi, _cs, _dc, _rst, _busy}) {
+    if (pin != papyrix::board::kPinUnused && (!PAPYRIX_TARGET_MURPHY_M4 || pin != _rst))
+      gpio_hold_dis(static_cast<gpio_num_t>(pin));
+  }
   const auto& storage = identity.profile().storage;
   SPI.begin(_sclk, storage.transport == papyrix::board::StorageTransport::Spi ? storage.spiMiso : -1, _mosi, _cs);
   const uint32_t spiHz =
-      identity.board() == papyrix::board::BoardId::X4Classic || identity.board() == papyrix::board::BoardId::Sticky ||
+      identity.board() == papyrix::board::BoardId::X4 || identity.board() == papyrix::board::BoardId::X4Classic ||
+              identity.board() == papyrix::board::BoardId::Sticky ||
               identity.board() == papyrix::board::BoardId::MurphyM4 ||
               displayController_ == papyrix::eink::DisplayController::UC8179_X4PRO ||
               displayController_ == papyrix::eink::DisplayController::UC8279_X4PRO
@@ -457,7 +462,6 @@ Display::InitResult Display::begin() {
   pinMode(_cs, OUTPUT);
   pinMode(_dc, OUTPUT);
   if (_rst != papyrix::board::kPinUnused && !PAPYRIX_TARGET_MURPHY_M4) {
-    if (_x3Mode || PAPYRIX_TARGET_X4CLASSIC || PAPYRIX_TARGET_STICKY) gpio_hold_dis(static_cast<gpio_num_t>(_rst));
     pinMode(_rst, OUTPUT);
   }
   pinMode(_busy, INPUT);
@@ -558,31 +562,13 @@ bool Display::resetDisplay() {
   return true;
 }
 
-void Display::waitForRefresh(const char* comment) {
-  unsigned long start = millis();
-  if (!_x3Mode) {
-    while (digitalRead(_busy) == HIGH) {
-      delay(1);
-      if (millis() - start > 30000) break;
-    }
-  } else {
-    bool sawLow = false;
-    while (digitalRead(_busy) == HIGH) {
-      delay(1);
-      if (millis() - start > 1000) break;
-    }
-    if (digitalRead(_busy) == LOW) {
-      sawLow = true;
-      while (digitalRead(_busy) == LOW) {
-        delay(1);
-        if (millis() - start > 30000) break;
-      }
-    }
-    if (!sawLow) return;
-  }
-  if (comment) {
-    LOG_DBG(TAG, "Refresh done: %s (%lu ms)", comment, millis() - start);
-  }
+bool Display::waitForRefresh(const char* comment) {
+  if (waitWhileBusy(comment)) return true;
+  _x3RedRamSynced = false;
+  _x3ForceFullSyncNext = true;
+  _x3LoadedLuts = X3LutSet::NONE;
+  refreshSucceeded_ = false;
+  return false;
 }
 
 void IRAM_ATTR Display::sendCommand(uint8_t command) {
@@ -665,7 +651,7 @@ bool Display::ensureSsd1677Ready() {
   drawGrayscale = false;
   ssd1677GrayPlanes_ = 0;
   ssd1677BaselineValid_ = false;
-  ssd1677RefreshSucceeded_ = false;
+  refreshSucceeded_ = false;
   if (!resetDisplay() || !initDisplayController()) return false;
   initialized_ = true;
   return true;
@@ -682,7 +668,7 @@ bool Display::powerOffSsd1677() {
   if (!waitWhileBusy("M4 power-down")) {
     initialized_ = false;
     ssd1677BaselineValid_ = false;
-    ssd1677RefreshSucceeded_ = false;
+    refreshSucceeded_ = false;
     ssd1677GrayPlanes_ = 0;
     return false;
   }
@@ -749,7 +735,7 @@ bool Display::initDisplayController() {
 #if PAPYRIX_TARGET_MURPHY_M4
   delay(10);
 #endif
-  if (!waitWhileBusy(" CMD_SOFT_RESET") && PAPYRIX_TARGET_MURPHY_M4) return false;
+  if (!waitWhileBusy(" CMD_SOFT_RESET")) return false;
 
   // Temperature sensor control (internal)
   sendCommand(CMD_TEMP_SENSOR_CONTROL);
@@ -779,11 +765,11 @@ bool Display::initDisplayController() {
   LOG_DBG(TAG, "Clearing RAM buffers...");
   sendCommand(CMD_AUTO_WRITE_BW_RAM);  // Auto write BW RAM
   sendData(0xF7);
-  if (!waitWhileBusy(" CMD_AUTO_WRITE_BW_RAM") && PAPYRIX_TARGET_MURPHY_M4) return false;
+  if (!waitWhileBusy(" CMD_AUTO_WRITE_BW_RAM")) return false;
 
   sendCommand(CMD_AUTO_WRITE_RED_RAM);  // Auto write RED RAM
   sendData(0xF7);                       // Fill with white pattern
-  if (!waitWhileBusy(" CMD_AUTO_WRITE_RED_RAM") && PAPYRIX_TARGET_MURPHY_M4) return false;
+  if (!waitWhileBusy(" CMD_AUTO_WRITE_RED_RAM")) return false;
 
   LOG_INF(TAG, "SSD1677 controller initialized");
   return true;
@@ -921,6 +907,7 @@ void IRAM_ATTR Display::writeRamBufferInverted(uint8_t ramBuffer, const uint8_t*
 }
 
 void Display::displayBufferDriveAll(bool turnOffScreen) {
+  refreshSucceeded_ = false;
 #if PAPYRIX_TARGET_MURPHY_M4
   displayBuffer(FULL_REFRESH, turnOffScreen);
   return;
@@ -948,7 +935,8 @@ void Display::displayBufferDriveAll(bool turnOffScreen) {
   if (displayController_ == papyrix::eink::DisplayController::UC8279_X3) {
     papyrix::eink::Uc8279SpiBus bus(_cs, _dc, _rst, _busy, spiSettings);
     papyrix::eink::uc8279X3Driver().requestResync();
-    papyrix::eink::uc8279X3Driver().display(bus, frameBuffer, papyrix::eink::Uc8279RefreshMode::Fast, turnOffScreen);
+    refreshSucceeded_ = papyrix::eink::uc8279X3Driver().display(bus, frameBuffer,
+                                                                papyrix::eink::Uc8279RefreshMode::Fast, turnOffScreen);
     return;
   }
 #endif
@@ -969,9 +957,12 @@ void Display::displayBufferDriveAll(bool turnOffScreen) {
   swapBuffers();
 #endif
   refreshDisplay(FAST_REFRESH, turnOffScreen);
-  if (!ssd1677RefreshSucceeded_) return;
+  if (!refreshSucceeded_) return;
   setRamArea(0, 0, displayWidth, displayHeight);
 #ifdef EINK_DISPLAY_SINGLE_BUFFER_MODE
+#if PAPYRIX_TARGET_XTEINK_C3
+  writeRamBuffer(CMD_WRITE_RAM_BW, frameBuffer, bufferSize);
+#endif
   writeRamBuffer(CMD_WRITE_RAM_RED, frameBuffer, bufferSize);
 #else
   writeRamBuffer(CMD_WRITE_RAM_RED, frameBufferActive, bufferSize);
@@ -1255,7 +1246,7 @@ void Display::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) {
     return;
   }
 
-  if (!ssd1677RefreshSucceeded_) {
+  if (!refreshSucceeded_) {
     inGrayscaleMode = false;
     return;
   }
@@ -1272,7 +1263,55 @@ void Display::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) {
 }
 #endif
 
+Display::BaselineRestoreResult Display::restoreMonochromeBaseline() {
+  refreshSucceeded_ = false;
+  if (!initialized_ || !frameBuffer) return BaselineRestoreResult::Error;
+#if PAPYRIX_TARGET_XTEINK_C3 && defined(EINK_DISPLAY_SINGLE_BUFFER_MODE)
+  if (displayController_ == papyrix::eink::DisplayController::UC8253) {
+    _x3RedRamSynced = false;
+    papyrix::eink::Uc8279SpiBus bus(_cs, _dc, _rst, _busy, spiSettings);
+    if (!bus.waitReady("8253 baseline")) return BaselineRestoreResult::Error;
+    cleanupGrayscaleBuffers(frameBuffer);
+    _x3InitialFullSyncsRemaining = 0;
+    inGrayscaleMode = false;
+    return BaselineRestoreResult::Ready;
+  }
+#endif
+#if PAPYRIX_TARGET_STICKY
+  if (displayController_ == papyrix::eink::DisplayController::SSD2677) {
+    return papyrix::eink::ssd2677Driver().restoreMonochromeBaseline(frameBuffer) ? BaselineRestoreResult::Ready
+                                                                                 : BaselineRestoreResult::Error;
+  }
+#endif
+#if PAPYRIX_TARGET_X4PRO || PAPYRIX_TARGET_X4CLASSIC
+  if (displayController_ == papyrix::eink::DisplayController::UC8279_X4PRO) {
+    papyrix::eink::Uc8279SpiBus bus(_cs, _dc, _rst, _busy, spiSettings);
+    // Reset loses the old plane; grayscale cleanup restores it without a refresh.
+    return papyrix::eink::uc8279X4ProDriver().cleanupGrayscale(bus, frameBuffer) ? BaselineRestoreResult::Ready
+                                                                                 : BaselineRestoreResult::Error;
+  }
+#endif
+  if (displayController_ != papyrix::eink::DisplayController::SSD1677)
+    return BaselineRestoreResult::FullRefreshRequired;
+  ssd1677BaselineValid_ = false;
+  if (!waitWhileBusy("Clock baseline")) return BaselineRestoreResult::Error;
+  // Reset clears temperature; load it before the first differential waveform.
+  sendCommand(CMD_DISPLAY_UPDATE_CTRL2);
+  sendData(0xB1);
+  sendCommand(CMD_MASTER_ACTIVATION);
+  if (!waitWhileBusy("Clock temperature")) return BaselineRestoreResult::Error;
+  setRamArea(0, 0, displayWidth, displayHeight);
+  writeRamBuffer(CMD_WRITE_RAM_BW, frameBuffer, bufferSize);
+  writeRamBuffer(CMD_WRITE_RAM_RED, frameBuffer, bufferSize);
+#ifndef EINK_DISPLAY_SINGLE_BUFFER_MODE
+  memcpy(frameBufferActive, frameBuffer, bufferSize);
+#endif
+  ssd1677BaselineValid_ = true;
+  return BaselineRestoreResult::Ready;
+}
+
 void Display::displayBuffer(RefreshMode mode, const bool turnOffScreen) {
+  refreshSucceeded_ = false;
 #if PAPYRIX_TARGET_MURPHY_M4
   if (!ensureSsd1677Ready()) return;
   ssd1677GrayPlanes_ = 0;
@@ -1282,8 +1321,8 @@ void Display::displayBuffer(RefreshMode mode, const bool turnOffScreen) {
     papyrix::eink::Uc8279SpiBus bus(_cs, _dc, _rst, _busy, spiSettings, 20);
     const auto refresh =
         mode == FAST_REFRESH ? papyrix::eink::Ssd2677RefreshMode::Fast : papyrix::eink::Ssd2677RefreshMode::Full;
-    if (!papyrix::eink::ssd2677Driver().display(bus, frameBuffer, refresh, turnOffScreen))
-      LOG_ERR(TAG, "SSD2677 refresh failed");
+    refreshSucceeded_ = papyrix::eink::ssd2677Driver().display(bus, frameBuffer, refresh, turnOffScreen);
+    if (!refreshSucceeded_) LOG_ERR(TAG, "SSD2677 refresh failed");
     inGrayscaleMode = false;
     return;
   }
@@ -1294,7 +1333,8 @@ void Display::displayBuffer(RefreshMode mode, const bool turnOffScreen) {
                         : mode == HALF_REFRESH ? papyrix::eink::Uc8179RefreshMode::Half
                                                : papyrix::eink::Uc8179RefreshMode::Fast;
     papyrix::eink::Uc8279SpiBus bus(_cs, _dc, _rst, _busy, spiSettings);
-    if (papyrix::eink::uc8179X4ProDriver().display(bus, frameBuffer, ucMode, turnOffScreen)) {
+    refreshSucceeded_ = papyrix::eink::uc8179X4ProDriver().display(bus, frameBuffer, ucMode, turnOffScreen);
+    if (refreshSucceeded_) {
 #ifndef EINK_DISPLAY_SINGLE_BUFFER_MODE
       swapBuffers();
 #endif
@@ -1307,7 +1347,8 @@ void Display::displayBuffer(RefreshMode mode, const bool turnOffScreen) {
                         : mode == HALF_REFRESH ? papyrix::eink::Uc8279X4RefreshMode::Half
                                                : papyrix::eink::Uc8279X4RefreshMode::Fast;
     papyrix::eink::Uc8279SpiBus bus(_cs, _dc, _rst, _busy, spiSettings);
-    if (papyrix::eink::uc8279X4ProDriver().display(bus, frameBuffer, ucMode, turnOffScreen)) {
+    refreshSucceeded_ = papyrix::eink::uc8279X4ProDriver().display(bus, frameBuffer, ucMode, turnOffScreen);
+    if (refreshSucceeded_) {
 #ifndef EINK_DISPLAY_SINGLE_BUFFER_MODE
       swapBuffers();
 #endif
@@ -1322,7 +1363,7 @@ void Display::displayBuffer(RefreshMode mode, const bool turnOffScreen) {
                         : mode == HALF_REFRESH ? papyrix::eink::Uc8279RefreshMode::Half
                                                : papyrix::eink::Uc8279RefreshMode::Fast;
     papyrix::eink::Uc8279SpiBus bus(_cs, _dc, _rst, _busy, spiSettings);
-    papyrix::eink::uc8279X3Driver().display(bus, frameBuffer, ucMode, turnOffScreen);
+    refreshSucceeded_ = papyrix::eink::uc8279X3Driver().display(bus, frameBuffer, ucMode, turnOffScreen);
     return;
   }
 #endif
@@ -1437,17 +1478,17 @@ void Display::displayBuffer(RefreshMode mode, const bool turnOffScreen) {
     const bool wasOff = !isScreenOn;
     if (wasOff) {  // POWER_ON only after real power-off; a powered panel needs no PON
       sendCommand(0x04);
-      waitForRefresh(" X3_CMD04");
+      if (!waitForRefresh(" X3_CMD04")) return;
       isScreenOn = true;
     }
 
     LOG_DBG(TAG, "X3_OEM_TRIGGER=0x12");
     sendCommand(0x12);
-    waitForRefresh(" X3_CMD12");
+    if (!waitForRefresh(" X3_CMD12")) return;
 
     if (turnOffScreen && !doFullSync) {
       sendCommand(0x02);
-      waitForRefresh(" X3_CMD02_POWEROFF");
+      if (!waitForRefresh(" X3_CMD02_POWEROFF")) return;
       isScreenOn = false;
       _x3LoadedLuts = X3LutSet::NONE;
     }
@@ -1493,12 +1534,12 @@ void Display::displayBuffer(RefreshMode mode, const bool turnOffScreen) {
         sendCommand(0x92);
         if (!isScreenOn) {
           sendCommand(0x04);
-          waitForRefresh(" X3_CMD04");
+          if (!waitForRefresh(" X3_CMD04")) return;
           isScreenOn = true;
         }
         LOG_DBG(TAG, "X3_OEM_TRIGGER=0x12(cond)");
         sendCommand(0x12);
-        waitForRefresh(" X3_CMD12(cond)");
+        if (!waitForRefresh(" X3_CMD12(cond)")) return;
       }
     }
 
@@ -1522,10 +1563,10 @@ void Display::displayBuffer(RefreshMode mode, const bool turnOffScreen) {
       sendMirroredPlane(frameBuffer, false);
       LOG_DBG(TAG, "X3_OEM_TRIGGER=0x12(settle)");
       sendCommand(0x12);
-      waitForRefresh(" X3_CMD12(settle)");
+      if (!waitForRefresh(" X3_CMD12(settle)")) return;
       if (turnOffScreen) {
         sendCommand(0x02);
-        waitForRefresh(" X3_CMD02_POWEROFF");
+        if (!waitForRefresh(" X3_CMD02_POWEROFF")) return;
         isScreenOn = false;
         _x3LoadedLuts = X3LutSet::NONE;
       }
@@ -1536,6 +1577,7 @@ void Display::displayBuffer(RefreshMode mode, const bool turnOffScreen) {
     }
     _x3ForceFullSyncNext = false;
     _x3ForcedConditionPassesNext = 0;
+    refreshSucceeded_ = true;
     return;
   }
 
@@ -1566,11 +1608,15 @@ void Display::displayBuffer(RefreshMode mode, const bool turnOffScreen) {
 #endif
 
   refreshDisplay(mode, PAPYRIX_TARGET_MURPHY_M4 ? false : turnOffScreen);
-  if (!ssd1677RefreshSucceeded_) return;
+  if (!refreshSucceeded_) return;
 
 #ifdef EINK_DISPLAY_SINGLE_BUFFER_MODE
   if (plan.syncRedAfterRefresh) {
     setRamArea(0, 0, displayWidth, displayHeight);
+#if PAPYRIX_TARGET_XTEINK_C3
+    // X4 refresh can change BW RAM; restore both planes before a window update.
+    writeRamBuffer(CMD_WRITE_RAM_BW, frameBuffer, plan.transferBytes);
+#endif
     writeRamBuffer(CMD_WRITE_RAM_RED, frameBuffer, plan.transferBytes);
   }
 #endif
@@ -1584,6 +1630,7 @@ void Display::displayBuffer(RefreshMode mode, const bool turnOffScreen) {
 // Displays only a rectangular region of the frame buffer, preserving the rest of the screen.
 // Requirements: x and w must be byte-aligned (multiples of 8 pixels)
 void Display::displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const bool turnOffScreen) {
+  refreshSucceeded_ = false;
   LOG_DBG(TAG, "Displaying window at (%d,%d) size (%dx%d)", x, y, w, h);
 
   // Validate bounds
@@ -1666,11 +1713,14 @@ void Display::displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, cons
   sendData(papyrix::board::murphyM4HalfTemperature(papyrix::board::murphyM4Batch()));
 #endif
   refreshDisplay(FAST_REFRESH, PAPYRIX_TARGET_MURPHY_M4 ? false : turnOffScreen);
-  if (!ssd1677RefreshSucceeded_) return;
+  if (!refreshSucceeded_) return;
 
 #ifdef EINK_DISPLAY_SINGLE_BUFFER_MODE
   if (plan.syncRedAfterRefresh) {
     setRamArea(x, y, w, h);
+#if PAPYRIX_TARGET_XTEINK_C3
+    writeWindow(CMD_WRITE_RAM_BW, frameBuffer);
+#endif
     writeWindow(CMD_WRITE_RAM_RED, frameBuffer);
   }
 #endif
@@ -1683,6 +1733,7 @@ void Display::displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, cons
 }
 
 void Display::displayGrayBuffer(const bool turnOffScreen) {
+  refreshSucceeded_ = false;
 #if PAPYRIX_TARGET_MURPHY_M4
   if (!initialized_) return;
   if (ssd1677GrayPlanes_ != 3) {
@@ -1771,16 +1822,16 @@ void Display::displayGrayBuffer(const bool turnOffScreen) {
 
     if (!isScreenOn) {
       sendCommand(0x04);
-      waitForRefresh(" X3_CMD04(gray)");
+      if (!waitForRefresh(" X3_CMD04(gray)")) return;
       isScreenOn = true;
     }
 
     sendCommand(0x12);
-    waitForRefresh(" X3_CMD12(gray)");
+    if (!waitForRefresh(" X3_CMD12(gray)")) return;
 
     if (turnOffScreen) {
       sendCommand(0x02);
-      waitForRefresh(" X3_CMD02_POWEROFF(gray)");
+      if (!waitForRefresh(" X3_CMD02_POWEROFF(gray)")) return;
       isScreenOn = false;
     }
 
@@ -1806,7 +1857,7 @@ void Display::displayGrayBuffer(const bool turnOffScreen) {
     sendData(0xC0);
     sendCommand(CMD_MASTER_ACTIVATION);
     if (!waitWhileBusy("gray power-on")) {
-      ssd1677RefreshSucceeded_ = false;
+      refreshSucceeded_ = false;
       ssd1677BaselineValid_ = false;
       setCustomLUT(false);
       return;
@@ -1821,6 +1872,7 @@ void Display::displayGrayBuffer(const bool turnOffScreen) {
 }
 
 void Display::refreshDisplay(const RefreshMode mode, const bool turnOffScreen) {
+  refreshSucceeded_ = false;
 #if PAPYRIX_TARGET_MURPHY_M4
   if (!ensureSsd1677Ready()) return;
 #endif
@@ -1843,7 +1895,7 @@ void Display::refreshDisplay(const RefreshMode mode, const bool turnOffScreen) {
                         : mode == HALF_REFRESH ? papyrix::eink::Uc8279RefreshMode::Half
                                                : papyrix::eink::Uc8279RefreshMode::Fast;
     papyrix::eink::Uc8279SpiBus bus(_cs, _dc, _rst, _busy, spiSettings);
-    papyrix::eink::uc8279X3Driver().display(bus, frameBuffer, ucMode, turnOffScreen);
+    refreshSucceeded_ = papyrix::eink::uc8279X3Driver().display(bus, frameBuffer, ucMode, turnOffScreen);
     return;
   }
 #endif
@@ -1933,10 +1985,10 @@ void Display::refreshDisplay(const RefreshMode mode, const bool turnOffScreen) {
 
   // Wait for display to finish updating
   LOG_DBG(TAG, "Waiting for display refresh...");
-  ssd1677RefreshSucceeded_ = waitWhileBusy(refreshType);
-  if (!ssd1677RefreshSucceeded_) isScreenOn = false;
+  refreshSucceeded_ = waitWhileBusy(refreshType);
+  if (!refreshSucceeded_) isScreenOn = false;
 #if PAPYRIX_TARGET_MURPHY_M4
-  if (!ssd1677RefreshSucceeded_) {
+  if (!refreshSucceeded_) {
     initialized_ = false;
     ssd1677GrayPlanes_ = 0;
   } else if (turnOffScreen) {
@@ -2016,15 +2068,14 @@ bool Display::deepSleep() {
 #if !PAPYRIX_TARGET_STICKY && !PAPYRIX_TARGET_MURPHY_M4
   if (displayController_ == papyrix::eink::DisplayController::UC8279_X3) {
     papyrix::eink::Uc8279SpiBus bus(_cs, _dc, _rst, _busy, spiSettings);
-    papyrix::eink::uc8279X3Driver().deepSleep(bus);
-    return true;
+    return papyrix::eink::uc8279X3Driver().deepSleep(bus);
   }
 #endif
 
   if (_x3Mode) {
     if (isScreenOn) {
       sendCommand(0x02);
-      waitForRefresh(" X3 display power-down");
+      if (!waitForRefresh(" X3 display power-down")) return false;
       isScreenOn = false;
     }
     sendCommand(0x07);
@@ -2033,7 +2084,6 @@ bool Display::deepSleep() {
   }
 
   ssd1677BaselineValid_ = false;
-  ssd1677RefreshSucceeded_ = false;
 
   // First, power down the display properly
   // This shuts down the analog power rails and clock

@@ -967,7 +967,7 @@ void NetworkState::connectToNetwork(Core& core, const char* ssid, const char* pa
   // Render the connecting screen before blocking connect
   ui::render(renderer_, THEME, connectingView_);
 
-  auto result = core.wifi.connect(ssid, password);
+  auto result = core.wifi.connect(ssid, password, 15000, nullptr);
 
   if (result.ok()) {
     char ip[46];  // INET6_ADDRSTRLEN = 46 for IPv6 addresses
@@ -1002,7 +1002,7 @@ void NetworkState::tryAutoConnect(Core& core) {
 
     ui::render(renderer_, THEME, connectingView_);
 
-    auto result = core.wifi.connect(creds[i].ssid, creds[i].password);
+    auto result = core.wifi.connect(creds[i].ssid, creds[i].password, 15000, nullptr);
 
     if (result.ok()) {
       char ip[46];

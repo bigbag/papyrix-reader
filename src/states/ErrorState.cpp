@@ -49,6 +49,11 @@ StateTransition ErrorState::update(Core& core) {
   Event e;
   while (core.events.pop(e)) {
     if (e.type == EventType::ButtonPress) {
+      if ((!core.display.isInitialized() || !core.display.lastRefreshSucceeded()) &&
+          core.display.recover() != hal::Display::InitResult::Ok) {
+        needsRender_ = true;
+        return StateTransition::stay(StateId::Error);
+      }
       // In Reader boot mode, FileList isn't a registered state — the only way
       // back is to reboot into UI mode. Mirrors ReaderState's exit pattern.
       if (core.bootMode == BootMode::READER) {
@@ -71,6 +76,7 @@ void ErrorState::render(Core& core) {
   if (!needsRender_) {
     return;
   }
+  if (!core.display.isInitialized() || !core.display.getFrameBuffer()) return;
 
   const Theme& theme = THEME_MANAGER.current();
 

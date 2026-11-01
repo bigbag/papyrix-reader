@@ -126,6 +126,25 @@ Except on M4, the CPU policy uses 10 MHz at idle.
 It restores 160 MHz on ESP32-C3 and 240 MHz on ESP32-S3 for active work.
 M4 keeps its 240 MHz boot clock and the active input-loop delay.
 
+## Clock Power Modes
+
+Normal and Power saving modes cover X3, X4, X4 Pro, X4 v2 Classic, reTerminal Sticky, and Murphy M4.
+Normal uses each board's existing input and CPU policy.
+Power saving uses timer wake for minute updates and the profile's Power button for interaction.
+Touch and front lights stay off during standby.
+USB does not disable this mode.
+X3 Clock standby keeps GPIO13 HIGH for MCU timer wake.
+Its SD supply stays powered, but ordinary minute updates do not mount the card.
+
+SSD1677, SSD2677, UC8253 X3, and UC8279 Pro/Classic restore the previous monochrome reference image after MCU reset.
+UC8253 X3 and UC8279 Pro/Classic use differential minute updates after restoration. Normal startup and error recovery still use full refresh.
+UC8279 X3 and UC8179 Pro/Classic retain full-refresh startup guards.
+This difference affects update time and energy use.
+Host checks cover both screen geometries and all supported controller paths.
+Device checks confirm correct Clock operation on X3 (UC8253), X4, X4 Pro (UC8279), and X4 v2 Classic (UC8279).
+The remaining variants have host-test and reference-code coverage, but no hardware confirmation.
+Battery runtime has no verified rating.
+
 ## Touch Input
 
 The X4 Pro and Sticky artifacts include GT911 support.

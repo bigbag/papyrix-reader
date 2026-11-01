@@ -508,7 +508,7 @@ Open **Apps → Clock**. If the device has valid time, Clock opens without a WiF
 If time is not set, Clock opens WiFi setup. Connect to a network to synchronize the time.
 Press **Back** in WiFi setup to return to Apps without synchronization.
 
-Open **Menu** to change the clock face, time zone, time format, date format, or NTP interval.
+Open **Menu** to change the clock face, time zone, time format, date format, NTP interval, or power mode.
 The available faces are **Big**, **Analog**, **Retro**, **Flip**, and **Day & Night**.
 Each face shows the date at the top and centers the clock in the usable screen area.
 **Day & Night** shows the sun below the time from 06:00 through 17:59 local time.
@@ -518,20 +518,37 @@ Settings use a full-screen list. Each setting shows its current value on the rig
 The settings menu does not show the clock face or battery indicator.
 Press **Right** to select the next value. Press **Left** to select the previous value.
 Press **Back** to apply and save changes. Saving settings does not request synchronization.
+On touch devices, tap a setting row to select it. Tap `<` or `>` to change its value.
+Tap **Back** to save and return to the clock face.
+If a save fails, Clock keeps settings open and stops automatic standby.
+Check the SD card and press **Back** to try again. The previous saved settings remain intact.
 
 Select **Sync Now** and press **Right** to synchronize immediately, even when the NTP interval is **Off**.
 The right button shows **Sync** on this row. Other settings show `<` and `>`.
 If no WiFi network is saved, Clock opens WiFi setup. Connect to a network to complete the synchronization.
 
-Automatic synchronization pauses while the settings menu is open. An overdue attempt can run after you close the menu.
+**Mode** has two values:
+
+- **Normal** keeps fast button and touch response. This is the default mode.
+- **Power saving** saves settings and enters deep sleep after 15 seconds without input. The timeout also closes the settings menu. The clock wakes for each minute update.
+
+In Power saving standby, press **Power** briefly to return to Clock controls.
+Other buttons and touch do not wake Clock.
+Touch and the front light are off during standby. The controls restore the normal light settings.
+USB does not change the selected mode.
+Press **Back** to leave Clock. A normal restart does not reopen Clock automatically.
+
+Automatic synchronization pauses while the settings menu is open.
+In Power saving mode, a due attempt runs after the menu closes for standby.
 Clock skips automatic synchronization when no WiFi network is saved.
 The **Off** NTP interval disables periodic synchronization.
+An unattended attempt allows up to 15 seconds for all connection attempts and 10 seconds for NTP.
+Success or failure schedules the next attempt at the selected interval.
 
-The settings menu keeps panel power on between updates.
-The CPU stays at full speed while the settings menu is open.
-Clock turns off panel power after each update of the clock face.
-Clock also turns off panel power after synchronization status messages, before it waits for WiFi or NTP.
-The image remains visible. This does not change the front-light brightness.
+While controls are open, the settings menu keeps panel power on and the CPU at full speed.
+Clock turns off panel power after each face update and synchronization status message.
+The image remains visible.
+Battery runtime has no verified rating. See the [device support matrix](device-support-matrix.md#clock-power-modes) for verification coverage.
 
 ### 3.9 Printer
 

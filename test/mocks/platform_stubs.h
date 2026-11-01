@@ -165,6 +165,9 @@ enum class TestGpioEventType : uint8_t {
   HoldEnable,
   DeepSleepHold,
   DeepSleepHoldDisable,
+  SleepSelectDisable,
+  PullUpDisable,
+  PullDownDisable,
   Delay
 };
 
@@ -174,7 +177,7 @@ struct TestGpioEvent {
   int value;
 };
 
-constexpr size_t TEST_GPIO_EVENT_CAPACITY = 64;
+constexpr size_t TEST_GPIO_EVENT_CAPACITY = 128;
 extern TestGpioEvent testGpioEvents[TEST_GPIO_EVENT_CAPACITY];
 extern size_t testGpioEventCount;
 void testRecordGpioEvent(TestGpioEventType type, int pin, int value);

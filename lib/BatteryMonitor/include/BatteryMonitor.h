@@ -26,6 +26,7 @@ class BatteryMonitor {
     uint32_t freq = 400000;
     uint8_t address = 0x63;
     const uint8_t* profile = nullptr;
+    bool allowConfiguration = true;
   };
   explicit BatteryMonitor(const Cw2017Config& cfg);
 

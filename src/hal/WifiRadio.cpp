@@ -59,36 +59,33 @@ void WifiRadio::shutdown() {
   }
 }
 
-Result<void> WifiRadio::connect(const char* ssid, const char* password) {
-  if (apMode_) {
-    stopAP();
-  }
-
+Result<void> WifiRadio::connect(const char* ssid, const char* password, uint32_t timeoutMs, bool (*abort)()) {
+  const uint32_t startMs = millis();
+  const auto deadline = [&]() {
+    if (abort && abort()) return Error::InvalidOperation;
+    return millis() - startMs >= timeoutMs ? Error::Timeout : Error::None;
+  };
+  if (const auto error = deadline(); error != Error::None) return ErrVoid(error);
+  if (apMode_) stopAP();
   if (!initialized_) {
     TRY(init());
   }
+  if (const auto error = deadline(); error != Error::None) return ErrVoid(error);
 
   LOG_INF(TAG, "Connecting to %s...", ssid);
-
   WiFi.persistent(false);
   WiFi.disconnect(true, true);
-  delay(100);
+  connected_ = false;
+  delay(std::min<uint32_t>(100, timeoutMs - std::min<uint32_t>(timeoutMs, millis() - startMs)));
+  if (const auto error = deadline(); error != Error::None) return ErrVoid(error);
   WiFi.begin(ssid, password);
 
-  // Wait for connection with timeout
-  constexpr uint32_t TIMEOUT_MS = 15000;
-  uint32_t startMs = millis();
-
-  while (WiFi.status() != WL_CONNECTED) {
-    if (millis() - startMs > TIMEOUT_MS) {
-      LOG_ERR(TAG, "Connection timeout");
-      return ErrVoid(Error::Timeout);
-    }
-    delay(100);
+  for (;;) {
+    if (const auto error = deadline(); error != Error::None) return ErrVoid(error);
+    if (WiFi.status() == WL_CONNECTED) break;
+    delay(std::min<uint32_t>(20, timeoutMs - std::min<uint32_t>(timeoutMs, millis() - startMs)));
   }
-
   esp_wifi_set_ps(WIFI_PS_NONE);
-
   connected_ = true;
   LOG_INF(TAG, "Connected, IP: %s", WiFi.localIP().toString().c_str());
   return Ok();

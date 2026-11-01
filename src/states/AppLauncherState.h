@@ -8,6 +8,9 @@
 class GfxRenderer;
 
 namespace papyrix {
+namespace clock_app {
+struct ResumeRecord;
+}
 
 class AppLauncherState : public State {
  public:
@@ -19,6 +22,7 @@ class AppLauncherState : public State {
   StateTransition update(Core& core) override;
   void render(Core& core) override;
   StateId id() const override { return StateId::AppLauncher; }
+  void resumeClock(Core& core, const clock_app::ResumeRecord& record);
 
  private:
   enum class Mode : uint8_t { Menu, App, Overlay };
@@ -34,6 +38,7 @@ class AppLauncherState : public State {
   void activateMenuItem(Core& core);
   void launchApp(Core& core);
   void stopApp(Core& core);
+  bool saveClockSettings(Core& core);
   void showOverlay();
   void hideOverlay();
 };

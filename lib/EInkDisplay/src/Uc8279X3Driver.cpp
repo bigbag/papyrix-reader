@@ -151,8 +151,8 @@ void Uc8279X3Driver::begin(Uc8279Bus& bus) {
   msbValid_ = false;
 }
 
-void Uc8279X3Driver::display(Uc8279Bus& bus, const uint8_t* frame, Uc8279RefreshMode mode, bool turnOff) {
-  if (frame == nullptr) return;
+bool Uc8279X3Driver::display(Uc8279Bus& bus, const uint8_t* frame, Uc8279RefreshMode mode, bool turnOff) {
+  if (frame == nullptr) return false;
 
   const bool useGc = mode != Uc8279RefreshMode::Fast || !oldPlaneValid_ || forceFullSync_ || initialFullsRemaining_ > 0;
 
@@ -173,17 +173,17 @@ void Uc8279X3Driver::display(Uc8279Bus& bus, const uint8_t* frame, Uc8279Refresh
 
   if (!screenOn_) {
     bus.command(CMD_POWER_ON);
-    if (!bus.waitBusy("8279_PON")) {
+    if (!bus.waitBusy("8279_PON", true)) {
       invalidateAfterTimeout();
-      return;
+      return false;
     }
     screenOn_ = true;
   }
 
   bus.command(CMD_DISPLAY_REFRESH);
-  if (!bus.waitBusy("8279_DRF")) {
+  if (!bus.waitBusy("8279_DRF", true)) {
     invalidateAfterTimeout();
-    return;
+    return false;
   }
 
   bus.command(CMD_VCOM_DATA_INTERVAL);
@@ -199,12 +199,13 @@ void Uc8279X3Driver::display(Uc8279Bus& bus, const uint8_t* frame, Uc8279Refresh
 
   if (turnOff) {
     bus.command(CMD_POWER_OFF);
-    if (!bus.waitBusy("8279_POF")) {
+    if (!bus.waitBusy("8279_POF", true)) {
       recoverAfterPowerOffTimeout();
-      return;
+      return false;
     }
     screenOn_ = false;
   }
+  return true;
 }
 
 void Uc8279X3Driver::requestResync() { forceFullSync_ = true; }
@@ -293,10 +294,13 @@ void Uc8279X3Driver::grayscaleRevert(Uc8279Bus& bus) {
   forceFullSync_ = false;
 }
 
-void Uc8279X3Driver::deepSleep(Uc8279Bus& bus) {
+bool Uc8279X3Driver::deepSleep(Uc8279Bus& bus) {
   if (screenOn_) {
     bus.command(CMD_POWER_OFF);
-    bus.waitBusy("8279_power_down");
+    if (!bus.waitBusy("8279_power_down", true)) {
+      invalidateAfterTimeout();
+      return false;
+    }
   }
   bus.command(CMD_DEEP_SLEEP);
   bus.data(0xA5);
@@ -307,6 +311,7 @@ void Uc8279X3Driver::deepSleep(Uc8279Bus& bus) {
   grayscaleMode_ = false;
   lsbValid_ = false;
   msbValid_ = false;
+  return true;
 }
 
 Uc8279X3Driver& uc8279X3Driver() {

@@ -37,6 +37,31 @@ It waits while the reader sleeps.
 Opening the serial port can reset the reader.
 Stop the script with Ctrl+C.
 
+## X4 Input, Display, and Clock Checks
+
+An old Booting image does not prove that the reader restarts.
+If a button restores the current view, report this separately from a reset.
+Record whether USB is connected and whether it supplies power from a computer, hub, or charger.
+
+The X4 display uses 10 MHz SPI and restores both display RAM planes after refresh.
+The ADC filter rejects an isolated outlier but cannot identify sustained electrical interference.
+Normal Clock mode keeps the normal 10 ms idle button interval.
+Power saving mode uses deep sleep with timer wake at each minute boundary.
+
+In Clock settings, check **Mode** before a battery comparison.
+Power saving enters standby after 15 seconds without input, even with settings open or USB connected.
+Use a short Power press to return to controls. Other buttons and touch do not wake standby.
+Check several real minute updates and Clock exit before a battery comparison.
+A static clock image alone does not prove that timer wake works.
+If Clock cannot retain valid time, it opens WiFi setup instead of staying awake on an invalid clock.
+On X4 and M4, each minute wake updates the retained battery estimate.
+Awake battery reads use a five-second polling interval.
+
+Record the device, panel, face, mode, NTP interval, USB state, and start/end times.
+Record the initial and final battery percentage and voltage.
+Percentage alone does not measure current or battery capacity.
+Host checks and simulated time do not confirm device sleep or battery savings.
+
 ## X3 Display Controller Diagnostics
 
 X3 production units can use a UC8253 or UC8279d display controller. The firmware detects the controller. It stores a conclusive result.
@@ -97,6 +122,12 @@ firmware waits without rebooting.
 
 Press the Power button to restore storage power and retry display initialization.
 SPI targets restore the profile pins before the SD card remounts.
+
+Clock timer wake uses a separate bounded error path.
+A second display failure clears automatic Clock resume.
+It does not start another minute cycle or an automatic reset loop.
+The Error screen appears only if the panel is initialized.
+A button requests recovery. Invalid time opens time setup.
 
 ## Murphy M4 faults
 

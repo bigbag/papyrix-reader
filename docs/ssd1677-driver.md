@@ -29,7 +29,7 @@ See the [M4 display contract](murphy-m4-specifications.md#display-and-input-beha
 ## Hardware Configuration
 
 - **Controller** — SSD1677
-- **X4 panel** — 800×480 (100×480 = 48,000 bytes), SPI 40 MHz (spec: 20 MHz)
+- **X4 panel** — 800×480 (100×480 = 48,000 bytes), SPI 10 MHz
 - **SPI Pins** — SCLK=8, MOSI=10, CS=21, DC=4, RST=5, BUSY=6
 - **SPI Settings** — MSB First, SPI Mode 0
 
@@ -457,7 +457,10 @@ ssd1677_display_frame(bw_image, red_image);
 The release build defines `EINK_DISPLAY_SINGLE_BUFFER_MODE`.
 It uses one 48 KB host framebuffer for X4.
 The controller retains the previous image in RAM `0x26`.
-After a differential refresh, the driver copies the new frame to `0x26`.
+After a successful refresh, the X4 driver writes the image to both `0x24` and `0x26`.
+For a window update, it writes only the window to both planes.
+This follows the [FreeInk X4 RAM sequence](https://github.com/Free-Ink/freeink-sdk/commit/9d92cb19a8e5f1f0da8160404cc5d5f77bb9e833).
+The driver does not assume that BW RAM keeps its contents after activation.
 The next refresh compares the target in `0x24` with that saved image.
 
 Panel power-off stops the analog supply and clock but retains the previous frame.

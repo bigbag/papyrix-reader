@@ -235,7 +235,7 @@ void handleSerialByte(char value) {
 
 void beginX4ProCharacterization() {
   auto& identity = board::HardwareIdentity::instance();
-  board::selectBoard(identity);
+  board::selectBoard(identity, true);
   profile = &identity.profile();
   board::x4pro::prepareCharacterization(*profile);
   board::selectPanel(identity);
@@ -247,7 +247,7 @@ void beginX4ProCharacterization() {
                 profile->storage.sdmmcClk, profile->storage.sdmmcCmd, profile->storage.sdmmcDat0);
 
   const bool sdReady = SdMan.begin();
-  core.battery.init();
+  core.battery.init(true);
   core.usb.init(core.battery);
   core.clock.init();
   frontLightReady = frontLight.begin();

@@ -1103,7 +1103,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${TEST_HELPERS}
     )
   elseif(TEST_NAME STREQUAL "BmpPolarityRoundTripTest" OR TEST_NAME STREQUAL "BitmapTurnCacheTest" OR
-         TEST_NAME STREQUAL "ReaderTouchRenderingTest")
+         TEST_NAME STREQUAL "ReaderTouchRenderingTest" OR TEST_NAME STREQUAL "ClockFrameTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
       ${PROJECT_ROOT}/lib/GfxRenderer/src/GfxRenderer.cpp
@@ -1117,7 +1117,8 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/ExternalFont/src
       ${PROJECT_ROOT}/lib/ThaiShaper/src
     )
-    if(TEST_NAME STREQUAL "BitmapTurnCacheTest" OR TEST_NAME STREQUAL "ReaderTouchRenderingTest")
+    if(TEST_NAME STREQUAL "BitmapTurnCacheTest" OR TEST_NAME STREQUAL "ReaderTouchRenderingTest" OR
+       TEST_NAME STREQUAL "ClockFrameTest")
       target_sources(${TEST_NAME} PRIVATE
         ${PROJECT_ROOT}/lib/RenderTypes/src/BitmapTurnCache.cpp
         ${PROJECT_ROOT}/lib/RenderTypes/src/blocks/ImageBlock.cpp
@@ -1144,6 +1145,16 @@ foreach(TEST_SRC ${TEST_SOURCES})
         ${PROJECT_ROOT}/lib/I18n/src
         ${PROJECT_ROOT}/lib/ImageConverter/src
       )
+    endif()
+    if(TEST_NAME STREQUAL "ClockFrameTest")
+      target_sources(${TEST_NAME} PRIVATE
+        ${PROJECT_ROOT}/src/apps/ClockFrame.cpp
+        ${PROJECT_ROOT}/src/apps/ClockFaces.cpp
+        ${PROJECT_ROOT}/src/apps/ClockFacePrimitives.cpp
+        ${PROJECT_ROOT}/src/ui/Elements.cpp
+        ${PROJECT_ROOT}/src/ui/TouchLayout.cpp
+      )
+      target_include_directories(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/I18n/src)
     endif()
     if(MSVC)
       target_compile_options(${TEST_NAME} PRIVATE /Gy)
@@ -1275,6 +1286,24 @@ foreach(TEST_SRC ${TEST_SOURCES})
     target_include_directories(${TEST_NAME} PRIVATE
       ${PROJECT_ROOT}/src
     )
+  elseif(TEST_NAME STREQUAL "BatteryAdcResumeTest")
+    foreach(ADC_TARGET XTEINK_C3 MURPHY_M4)
+      set(ADC_TEST BatteryAdcResume${ADC_TARGET}Test)
+      add_executable(${ADC_TEST} ${TEST_SRC}
+        ${PROJECT_ROOT}/src/hal/Battery.cpp
+        ${PROJECT_ROOT}/src/hal/Usb.cpp
+        ${PROJECT_ROOT}/lib/BatteryMonitor/src/BatteryMonitor.cpp
+        ${PROJECT_ROOT}/lib/BatteryMonitor/src/Cw2017Backend.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
+        ${TEST_HELPERS})
+      target_compile_definitions(${ADC_TEST} PRIVATE PAPYRIX_TARGET_${ADC_TARGET}=1)
+      if(ADC_TARGET STREQUAL "MURPHY_M4")
+        target_sources(${ADC_TEST} PRIVATE ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4Batch.cpp)
+      endif()
+      set_target_properties(${ADC_TEST} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+    endforeach()
+    continue()
   elseif(TEST_NAME STREQUAL "BatteryMonitorPercentageTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
@@ -1290,11 +1319,15 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${TEST_SRC}
       ${PROJECT_ROOT}/lib/BatteryMonitor/src/BatteryMonitor.cpp
       ${PROJECT_ROOT}/lib/BatteryMonitor/src/Cw2017Backend.cpp
+      ${PROJECT_ROOT}/src/hal/Battery.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
       ${TEST_HELPERS}
     )
     target_include_directories(${TEST_NAME} PRIVATE
       ${PROJECT_ROOT}/lib/BatteryMonitor/include
     )
+    target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_XTEINK_C3=1)
   elseif(TEST_NAME STREQUAL "FsCacheInvalidationTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
@@ -1493,14 +1526,73 @@ foreach(TEST_SRC ${TEST_SOURCES})
     target_include_directories(${TEST_NAME} BEFORE PRIVATE
       ${CMAKE_CURRENT_SOURCE_DIR}/unit/navigation/mocks
     )
-  elseif(TEST_NAME STREQUAL "Ssd1677DriverTest")
-    add_executable(${TEST_NAME}
-      ${TEST_SRC}
-      ${CMAKE_CURRENT_SOURCE_DIR}/common/test_utils.cpp
-    )
+  elseif(TEST_NAME STREQUAL "ClockSleepEntryTest")
+    foreach(CLOCK_TARGET XTEINK_C3 X4PRO X4CLASSIC STICKY MURPHY_M4)
+      set(CLOCK_TEST ClockSleepEntry${CLOCK_TARGET}Test)
+      add_executable(${CLOCK_TEST} ${TEST_SRC}
+        ${PROJECT_ROOT}/src/hal/Power.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/BootHardware.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/PowerPolicy.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/BoardSelector.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/X4ClassicPanelPolicy.cpp
+        ${PROJECT_ROOT}/lib/EInkDisplay/src/X3DisplayProbeClassifier.cpp
+        ${PROJECT_ROOT}/lib/SDCardManager/src/SDPowerControl.cpp
+        ${PROJECT_ROOT}/lib/InputManager/src/InputManager.cpp
+        ${PROJECT_ROOT}/lib/AsyncTask/src/BackgroundTask.cpp
+        ${TEST_HELPERS})
+      target_include_directories(${CLOCK_TEST} BEFORE PRIVATE
+        ${PROJECT_ROOT}/lib/InputManager/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/unit/clock/mocks)
+      target_include_directories(${CLOCK_TEST} PRIVATE ${PROJECT_ROOT}/lib/SDCardManager/include)
+      target_compile_definitions(${CLOCK_TEST} PRIVATE PAPYRIX_TARGET_${CLOCK_TARGET}=1)
+      if(CLOCK_TARGET STREQUAL "MURPHY_M4")
+        target_sources(${CLOCK_TEST} PRIVATE ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4Batch.cpp)
+      endif()
+      set_target_properties(${CLOCK_TEST} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+    endforeach()
+    continue()
+  elseif(TEST_NAME STREQUAL "ClockStandbyTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/src/apps/ClockPower.cpp
+      ${PROJECT_ROOT}/src/apps/ClockStandby.cpp
+      ${PROJECT_ROOT}/lib/uzlib/src/crc32.c
+      ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/PowerPolicy.cpp
+      ${PROJECT_ROOT}/lib/SDCardManager/src/SDPowerControl.cpp
+      ${TEST_HELPERS})
+    target_include_directories(${TEST_NAME} BEFORE PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/unit/clock/mocks
+      ${PROJECT_ROOT}/lib/EInkDisplay/include
+      ${PROJECT_ROOT}/lib/GfxRenderer/src
+      ${PROJECT_ROOT}/lib/ExternalFont/src
+      ${PROJECT_ROOT}/lib/ThaiShaper/src
+      ${PROJECT_ROOT}/lib/EpdFont/src)
     target_include_directories(${TEST_NAME} PRIVATE
-      ${PROJECT_ROOT}/lib/EInkDisplay/src
-    )
+      $<TARGET_PROPERTY:ContentHandleThumbnailTest,INCLUDE_DIRECTORIES>
+      ${PROJECT_ROOT}/lib/SDCardManager/include
+      ${PROJECT_ROOT}/lib/uzlib/src)
+    target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_XTEINK_C3=1 EINK_DISPLAY_SINGLE_BUFFER_MODE=1)
+  elseif(TEST_NAME STREQUAL "ClockSettingsTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/src/apps/ClockSettings.cpp ${TEST_HELPERS})
+  elseif(TEST_NAME STREQUAL "ClockPowerTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/src/apps/ClockPower.cpp
+      ${PROJECT_ROOT}/lib/uzlib/src/crc32.c ${TEST_HELPERS})
+    target_include_directories(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/uzlib/src)
+  elseif(TEST_NAME STREQUAL "Ssd1677DriverTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/EInkDisplay/src/Display.cpp
+      ${PROJECT_ROOT}/lib/EInkDisplay/src/Uc8279X3Driver.cpp
+      ${PROJECT_ROOT}/lib/EInkDisplay/src/Uc8279SpiBus.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
+      ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
+      ${TEST_HELPERS})
+    target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_XTEINK_C3=1 EINK_DISPLAY_SINGLE_BUFFER_MODE=1)
+    target_include_directories(${TEST_NAME} BEFORE PRIVATE ${PROJECT_ROOT}/lib/EInkDisplay/include)
   elseif(TEST_NAME STREQUAL "X3StockDisplayProbeTest")
     add_executable(${TEST_NAME} ${TEST_SRC}
       ${PROJECT_ROOT}/lib/EInkDisplay/src/X3DisplayProbe.cpp

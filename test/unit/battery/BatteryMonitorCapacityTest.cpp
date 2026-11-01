@@ -9,6 +9,8 @@
 
 #include "BatteryMonitor.h"
 #include "test_utils.h"
+#include "hal/Battery.h"
+#include <HardwareIdentity.h>
 
 // Model of the X3's BQ27220, adapted from the FreeInk SDK test
 // libs/hardware/BatteryMonitor/test/host/test_bq27220_capacity.cpp (MIT; see
@@ -220,6 +222,20 @@ void run(TestUtils::TestRunner& runner, FakeGauge& fake, const unsigned long gap
 int main() {
   TestUtils::TestRunner runner("BatteryMonitorCapacityTest");
   Wire.setDeviceHooks(&hostI2cWrite, &hostI2cRead);
+
+  {
+    FakeGauge fake;
+    gauge = &fake;
+    auto& identity = papyrix::board::HardwareIdentity::instance();
+    papyrix::board::BoardSelection selection;
+    selection.board = papyrix::board::BoardId::X3;
+    identity.applyBoardSelection(selection, {});
+    papyrix::hal::Battery timerBattery;
+    timerBattery.init(false);
+    runner.expectFalse(timerBattery.serviceDesignCapacity(), "timer initialization does not start capacity loading");
+    runner.expectTrue(timerBattery.finishDesignCapacity(), "read-only initialization has no pending gauge load");
+    runner.expectTrue(fake.log.empty(), "timer initialization does not unlock or write the gauge");
+  }
 
   // Fresh gauge: both capacities load, the block stays intact, one reinit,
   // sealed and out of CONFIG UPDATE at the end.

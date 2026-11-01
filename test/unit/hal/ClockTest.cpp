@@ -123,6 +123,10 @@ int main() {
   runner.expectTrue(clock.readRtc(current), "returns cached RTC time inside poll interval");
   runner.expectTrue(sameDateTime(fakeReadValue, current), "cached RTC time matches the last successful read");
   runner.expectEq(1, fakeReadCount, "cached read does not access the RTC");
+  const auto runningTime = systemSeconds + 5;
+  systemSeconds = runningTime;
+  clock.init();
+  runner.expectEq(runningTime, systemSeconds, "interactive return cannot rewind time to the cached RTC sample");
 
   fakeReadResult = false;
   testSetManualMillis(10001);
@@ -138,6 +142,12 @@ int main() {
   runner.expectEq(1, fakeWriteCount, "writes synchronized system time to the RTC");
   runner.expectTrue(sameDateTime({2026, 10, 23, 12, 34, 56, 5}, fakeWrittenValue),
                     "synchronization saves UTC rather than local time");
+
+  fakeWriteResult = false;
+  runner.expectFalse(clock.updateFromSystem(), "a failed RTC write cannot confirm retained synchronized time");
+  runner.expectFalse(clock.canRetainTime(), "failed RTC synchronization prevents autonomous standby");
+  fakeWriteResult = true;
+  runner.expectTrue(clock.updateFromSystem() && clock.canRetainTime(), "a successful retry restores retained time");
 
   std::tm local{};
   runner.expectTrue(clock.localTime(local), "returns valid local system time");

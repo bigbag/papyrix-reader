@@ -9,7 +9,7 @@ namespace papyrix {
 
 Result<void> Core::init() {
   logMemory("Core::init start");
-  battery.init();
+  battery.init(true);
   usb.init(battery);
   logMemory("Battery and USB initialized");
   frontLight.init(settings.smoothFrontLight != 0);

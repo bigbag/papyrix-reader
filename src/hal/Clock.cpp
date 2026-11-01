@@ -21,6 +21,8 @@ bool setSystemTime(const board::DateTime& value) {
 }  // namespace
 
 void Clock::init() {
+  if (initialized_) return;
+  initialized_ = true;
   rtcAvailable_ = rtc_.begin();
   if (!rtcAvailable_) {
     LOG_INF(TAG, "RTC not available");
@@ -78,8 +80,10 @@ bool Clock::updateFromSystem() {
   cachedRtc_ = clock_policy::fromTm(utc);
   hasCachedRtc_ = true;
   lastRtcPollMs_ = millis();
-  if (rtcAvailable_ && !rtc_.write(cachedRtc_)) {
+  rtcWriteFailed_ = rtcAvailable_ && !rtc_.write(cachedRtc_);
+  if (rtcWriteFailed_) {
     LOG_WRN(TAG, "RTC write after NTP sync failed");
+    return false;
   }
   return true;
 }

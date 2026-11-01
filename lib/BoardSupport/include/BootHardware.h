@@ -4,7 +4,9 @@
 
 namespace papyrix::board {
 
-void earlyInit(const BoardProfile& profile);
+enum class BootPurpose : uint8_t { Interactive, ClockTimer };
+
+void earlyInit(const BoardProfile& profile, BootPurpose purpose);
 void preparePanelProbe(const BoardProfile& profile);
 
 }  // namespace papyrix::board

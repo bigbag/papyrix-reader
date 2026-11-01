@@ -12,10 +12,6 @@ namespace {
 
 using namespace clock_face_primitives;
 
-static constexpr Face SELECTABLE_FACES[] = {
-    Face::Big, Face::Analog, Face::Retro, Face::Flip, Face::DayNight,
-};
-
 static constexpr int16_t CLOCK_X[60] = {
     0,     107,   213,   316,  416,  512,  602,  685,  761,  828,  887,  935,  974,  1002,  1018,
     1024,  1018,  1002,  974,  935,  887,  828,  761,  685,  602,  512,  416,  316,  213,   107,
@@ -358,13 +354,6 @@ void drawDayNight(const Context& context) {
 }
 
 }  // namespace
-
-bool isSelectable(Face face) {
-  for (Face candidate : SELECTABLE_FACES) {
-    if (candidate == face) return true;
-  }
-  return false;
-}
 
 Face selectRelative(Face face, int delta) {
   constexpr int count = sizeof(SELECTABLE_FACES) / sizeof(SELECTABLE_FACES[0]);

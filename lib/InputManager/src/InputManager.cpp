@@ -3,6 +3,8 @@
 #include <AdcMutex.h>
 #include <HardwareIdentity.h>
 
+#include <algorithm>
+
 // Recorded ADC values from real devices
 // BACK CONF LEFT RGHT   UP DOWN
 // 3597 2760 1530    6 2300    6
@@ -126,21 +128,26 @@ uint8_t InputManager::getState() {
   }
 
   std::lock_guard<std::mutex> adcLock(papyrix::board::adcMutex);
-  // Discard first sample to flush SAR ADC sample-and-hold charge from
-  // the previous channel (battery monitor on GPIO0 shares ADC1).
-  (void)analogRead(BUTTON_ADC_PIN_1);
-
-  // Read GPIO1 buttons
-  const int adcValue1 = analogRead(BUTTON_ADC_PIN_1);
-  const int button1 = getButtonFromADC(adcValue1, ADC_RANGES_1, NUM_BUTTONS_1);
+  const bool filter = papyrix::board::HardwareIdentity::instance().board() == papyrix::board::BoardId::X4;
+  const auto readAdc = [filter](int pin) {
+    // Discard charge from the previous ADC channel.
+    (void)analogRead(pin);
+    int first = analogRead(pin);
+    if (filter && first <= ADC_NO_BUTTON) {
+      // Confirm a possible press without extra ADC reads at idle.
+      int second = analogRead(pin);
+      const int third = analogRead(pin);
+      if (first > second) std::swap(first, second);
+      return std::clamp(third, first, second);
+    }
+    return first;
+  };
+  const int button1 = getButtonFromADC(readAdc(BUTTON_ADC_PIN_1), ADC_RANGES_1, NUM_BUTTONS_1);
   if (button1 >= 0) {
     state |= (1 << button1);
   }
 
-  // Read GPIO2 buttons (discard first sample — same S&H crosstalk from PIN_1)
-  (void)analogRead(BUTTON_ADC_PIN_2);
-  const int adcValue2 = analogRead(BUTTON_ADC_PIN_2);
-  const int button2 = getButtonFromADC(adcValue2, ADC_RANGES_2, NUM_BUTTONS_2);
+  const int button2 = getButtonFromADC(readAdc(BUTTON_ADC_PIN_2), ADC_RANGES_2, NUM_BUTTONS_2);
   if (button2 >= 0) {
     state |= (1 << (button2 + 4));
   }

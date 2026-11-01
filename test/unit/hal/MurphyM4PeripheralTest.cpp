@@ -29,7 +29,7 @@ int main() {
   testAnalogMillivoltsHook() = adc;
   testSetDigitalReadHook(readPin);
   hal::Battery battery;
-  battery.init();
+  battery.init(true);
   auto status = battery.readStatus();
   runner.expectTrue(status.millivoltsKnown && status.millivolts == 4000 && status.chargingKnown && status.charging,
                     "ADC9 uses the existing divider while charge43-low supplies independent charging state");

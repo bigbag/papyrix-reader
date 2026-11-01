@@ -14,6 +14,7 @@ class Ssd2677Driver {
   Ssd2677Driver& operator=(const Ssd2677Driver&) = delete;
   Ssd2677InitResult begin(Uc8279Bus& bus);
   bool display(Uc8279Bus& bus, const uint8_t* frame, Ssd2677RefreshMode mode, bool turnOff);
+  bool restoreMonochromeBaseline(const uint8_t* frame);
   void requestResync();
   bool copyGrayscaleLsb(Uc8279Bus& bus, const uint8_t* plane, bool absolute);
   bool copyGrayscaleMsb(Uc8279Bus& bus, const uint8_t* plane);

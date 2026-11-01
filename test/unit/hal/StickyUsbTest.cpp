@@ -17,7 +17,7 @@ int main() {
   Wire1.setRegister16(0x55, 0x08, 4200);
   Wire1.setRegister16(0x55, 0x0C, 0);
   papyrix::hal::Battery battery;
-  battery.init();
+  battery.init(true);
   const auto full = battery.readStatus();
   runner.expectTrue(full.percentageKnown && full.percentage == 100 && full.chargingKnown && !full.charging,
                     "full gauge has no charge current");

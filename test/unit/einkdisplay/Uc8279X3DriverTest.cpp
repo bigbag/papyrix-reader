@@ -207,7 +207,8 @@ int main() {
   pofDriver.display(pofBus, frame.data(), papyrix::eink::Uc8279RefreshMode::Fast, false);
   pofBus.clear();
   pofBus.failedWait = "8279_POF";
-  pofDriver.display(pofBus, frame.data(), papyrix::eink::Uc8279RefreshMode::Fast, true);
+  runner.expectFalse(pofDriver.display(pofBus, frame.data(), papyrix::eink::Uc8279RefreshMode::Fast, true),
+                     "power-off failure prevents a confirmed standby frame");
   pofBus.clear();
   pofDriver.display(pofBus, frame.data(), papyrix::eink::Uc8279RefreshMode::Fast, false);
   runner.expectTrue(eventIndex(pofBus, "C:04") >= 0, "POF timeout retries PON");
@@ -215,6 +216,12 @@ int main() {
   dtm1 = recordsFor(pofBus, 0x10);
   runner.expectEq(1, static_cast<int>(dtm1.size()), "POF timeout preserves DTM1 baseline");
   runner.expectFalse(filledWith(*dtm1[0], 0xFF), "POF timeout does not seed DTM1 white");
+  pofBus.clear();
+  pofBus.failedWait = "8279_power_down";
+  runner.expectFalse(pofDriver.deepSleep(pofBus), "failed power-down prevents deep sleep");
+  runner.expectEq(-1, eventIndex(pofBus, "C:07"), "failed power-down sends no deep-sleep command");
+  pofBus.clear();
+  runner.expectTrue(pofDriver.deepSleep(pofBus), "deep sleep retries an incomplete power-down");
 
   Uc8279X3Driver darkDriver;
   RecordingBus darkBus;
@@ -239,20 +246,23 @@ int main() {
   timeoutDriver.begin(timeoutBus);
   timeoutBus.clear();
   timeoutBus.failedWait = "8279_DRF";
-  timeoutDriver.display(timeoutBus, frame.data(), papyrix::eink::Uc8279RefreshMode::Fast, false);
+  runner.expectFalse(timeoutDriver.display(timeoutBus, frame.data(), papyrix::eink::Uc8279RefreshMode::Fast, false),
+                     "refresh timeout is visible to the Clock owner");
   runner.expectEq(1, static_cast<int>(recordsFor(timeoutBus, 0x10).size()),
                   "DRF timeout does not sync displayed frame");
   timeoutBus.clear();
-  timeoutDriver.display(timeoutBus, frame.data(), papyrix::eink::Uc8279RefreshMode::Fast, false);
+  runner.expectTrue(timeoutDriver.display(timeoutBus, frame.data(), papyrix::eink::Uc8279RefreshMode::Fast, false),
+                    "a full refresh recovers after timeout");
   runner.expectTrue(loadedBank(timeoutBus, 0x1A), "DRF timeout forces GC on next refresh");
   timeoutBus.clear();
-  timeoutDriver.deepSleep(timeoutBus);
+  runner.expectTrue(timeoutDriver.deepSleep(timeoutBus), "the recovered panel enters deep sleep");
   runner.expectTrue(eventIndex(timeoutBus, "C:02") >= 0, "DRF timeout keeps power on for deep sleep");
 
   timeoutDriver.begin(timeoutBus);
   timeoutBus.clear();
   timeoutBus.failedWait = "8279_PON";
-  timeoutDriver.display(timeoutBus, frame.data(), papyrix::eink::Uc8279RefreshMode::Fast, false);
+  runner.expectFalse(timeoutDriver.display(timeoutBus, frame.data(), papyrix::eink::Uc8279RefreshMode::Fast, false),
+                     "power-on failure is visible to the Clock owner");
   runner.expectEq(-1, eventIndex(timeoutBus, "C:12"), "PON timeout does not start refresh");
 
   Uc8279X3Driver grayDriver;

@@ -6,6 +6,7 @@
 #include <X4ProBoard.h>
 
 #include "test_utils.h"
+#include "test_gpio_state.h"
 
 namespace {
 
@@ -27,9 +28,18 @@ int eventIndex(TestGpioEventType type, int pin, int value) {
 int main() {
   TestUtils::TestRunner runner("X4 Pro board backend");
   const auto& profile = papyrix::board::bootProfile();
+  testResetGpioEvents();
+  papyrix::board::earlyInit(profile, papyrix::board::BootPurpose::ClockTimer);
+  runner.expectTrue(TestUtils::heldOutputRemains(1, HIGH), "timer wake keeps battery power across hold release");
+  runner.expectTrue(eventIndex(TestGpioEventType::DigitalWrite, 2, LOW) < 0, "timer wake does not power touch");
+  runner.expectTrue(eventIndex(TestGpioEventType::PinMode, 5, OUTPUT) < 0, "timer wake leaves SD held off");
+  papyrix::board::prepareClockSleepPins(profile);
+  runner.expectTrue(eventIndex(TestGpioEventType::DigitalWrite, 1, LOW) < 0, "Clock standby never cuts battery power");
+  runner.expectTrue(eventIndex(TestGpioEventType::DigitalWrite, 8, LOW) >= 0 &&
+                    eventIndex(TestGpioEventType::DigitalWrite, 9, LOW) >= 0, "Clock standby disables both lights");
 
   testResetGpioEvents();
-  papyrix::board::earlyInit(profile);
+  papyrix::board::earlyInit(profile, papyrix::board::BootPurpose::Interactive);
   runner.expectTrue(eventIndex(TestGpioEventType::DigitalWrite, 1, HIGH) >= 0, "boot asserts the master latch");
   const int sdOffAtBoot = eventIndex(TestGpioEventType::DigitalWrite, 5, HIGH);
   runner.expectTrue(sdOffAtBoot > eventIndex(TestGpioEventType::DigitalWrite, 1, HIGH),

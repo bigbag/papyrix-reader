@@ -114,5 +114,24 @@ int main() {
   runner.expectTrue(driver.deepSleep(bus), "sleep retries power off after recovery");
   runner.expectTrue(bus.commandBefore(0x02, 0x07) && bus.payload(0x07) == std::vector<uint8_t>({0xA5}),
                     "sleep powers off before sending its check code");
+  Ssd2677Driver resumed;
+  bus.clear();
+  runner.expectFalse(resumed.restoreMonochromeBaseline(frame.data()), "an uninitialized panel cannot resume");
+  runner.expectTrue(resumed.begin(bus) == Ssd2677InitResult::Ok, "a new MCU session initializes the panel");
+  runner.expectTrue(resumed.restoreMonochromeBaseline(frame.data()), "the confirmed old frame restores");
+  frame[47900] = 0x80;
+  bus.clear();
+  runner.expectTrue(resumed.display(bus, frame.data(), Ssd2677RefreshMode::Fast, true), "the next minute refreshes");
+  runner.expectTrue(bus.payload(0x10).size() == 96000 && bus.payload(0x10)[0] == 0x60,
+                    "the resumed packed plane contains the previous and current pixels");
+  runner.expectTrue(bus.payload(0xE6) == std::vector<uint8_t>({0x19}), "a restored image uses the fast waveform");
+  bus.clear();
+  bus.failure = "2677_POF";
+  runner.expectFalse(resumed.display(bus, frame.data(), Ssd2677RefreshMode::Fast, true),
+                     "failed power-off cannot confirm a standby frame");
+  bus.clear();
+  runner.expectTrue(resumed.display(bus, frame.data(), Ssd2677RefreshMode::Fast, true),
+                    "the next refresh recovers after power-off failure");
+  runner.expectTrue(bus.payload(0xE6) == std::vector<uint8_t>({0xEE}), "failed standby cannot reuse a differential baseline");
   return runner.allPassed() ? 0 : 1;
 }

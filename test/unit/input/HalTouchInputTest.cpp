@@ -60,12 +60,15 @@ int main() {
   Wire.setRegister(0x5D, 0x8152, 200);
   poll(0x81);
   runner.expectFalse(queue.pop(event), "first contact after a refresh holds events until release");
+  runner.expectTrue(input.hasPendingInteraction(), "a held contact prevents Clock standby");
   poll(0);
   runner.expectFalse(queue.pop(event), "unchanged held contact emits nothing");
+  runner.expectTrue(input.hasPendingInteraction(), "an unchanged contact still prevents Clock standby");
   poll(0x80);
   runner.expectTrue(queue.pop(event) && event.type == EventType::Tap, "first post-refresh contact emits Tap");
   runner.expectEq(uint32_t{0}, input.userIdleTimeMs(), "an accepted tap records activity without consuming its action");
   runner.expectFalse(queue.pop(event), "release emits a single Tap");
+  runner.expectFalse(input.hasPendingInteraction(), "a consumed touch release permits Clock standby");
   const auto lastTapMs = static_cast<uint32_t>(millis());
   testManualMillisValue += 123;
   input.resetIdleTimer();
@@ -79,6 +82,7 @@ int main() {
   poll(0x81);
   poll(0x80);
   runner.expectFalse(queue.pop(event), "refresh during a held contact cannot create a tap");
+  runner.expectFalse(input.hasPendingInteraction(), "a canceled gesture does not block Clock after release");
   runner.expectEq(static_cast<uint32_t>(millis()) - lastTapMs, input.userIdleTimeMs(),
                   "a suppressed contact does not restore the light");
 #if PAPYRIX_TARGET_MURPHY_M4

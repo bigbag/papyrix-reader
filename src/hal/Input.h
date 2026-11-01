@@ -47,6 +47,7 @@ class Input {
 
   // Direct state queries (for hold detection)
   bool isPressed(Button btn) const;
+  bool hasPendingInteraction() const;
 
   // Re-read button state after input mapping change to prevent ghost events
   void resyncState();
@@ -62,6 +63,7 @@ class Input {
   uint8_t orientationRevision_ = 0;
   uint32_t touchSuppressionRevision_ = 0;
   bool homeDown_ = false;
+  bool touchDown_ = false;
   bool powerSuppressed_ = false;
   bool homeReady_ = false;
   static constexpr uint32_t TOUCH_POLL_INTERVAL_MS = 10;

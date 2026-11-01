@@ -86,6 +86,9 @@ bool BatteryMonitor::attemptCw2017Init_() const {
       }
     }
   }
+  if (!_cw2017.allowConfiguration) {
+    return profileMatches && mode == 0 && papyrix::battery::cw2017VersionIsRunning(version);
+  }
   if (!profileMatches) {
     for (uint8_t i = 0; i < papyrix::battery::kCw2017BatteryProfile.size(); ++i) {
       if (!write8(_cw2017, static_cast<uint8_t>(kBatInfo + i), _cw2017.profile[i])) return false;

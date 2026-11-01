@@ -30,6 +30,10 @@ class Display {
   InitResult begin();
   InitResult recover();
   bool supportsGrayscale() const;
+  enum class BaselineRestoreResult : uint8_t { Ready, FullRefreshRequired, Error };
+  BaselineRestoreResult restoreMonochromeBaseline();
+  bool lastRefreshSucceeded() const { return refreshSucceeded_; }
+  bool isInitialized() const { return initialized_; }
 
   // Legacy compile-time dimensions kept for compatibility with code that
   // still references them. Runtime callers should use the getDisplay*()
@@ -146,7 +150,7 @@ class Display {
   // State
   bool isScreenOn;
   bool ssd1677BaselineValid_ = false;
-  bool ssd1677RefreshSucceeded_ = false;
+  bool refreshSucceeded_ = false;
 #if PAPYRIX_TARGET_MURPHY_M4
   uint8_t ssd1677GrayPlanes_ = 0;
 #endif
@@ -161,7 +165,7 @@ class Display {
   void IRAM_ATTR sendData(const uint8_t* data, uint16_t length);
   void sendDataBatchBegin();
   void sendDataBatchEnd();
-  void waitForRefresh(const char* comment = nullptr);
+  bool waitForRefresh(const char* comment = nullptr);
   bool waitWhileBusy(const char* comment = nullptr);
   bool initDisplayController();
 #if PAPYRIX_TARGET_MURPHY_M4

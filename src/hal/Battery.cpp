@@ -28,7 +28,7 @@ RTC_NOINIT_ATTR papyrix::hal::battery_estimate::RetainedEstimate retainedX4Estim
 
 namespace papyrix::hal {
 
-void Battery::init() {
+void Battery::init(bool allowConfiguration) {
   if (initialized_) return;
   initialized_ = true;
 
@@ -45,16 +45,18 @@ void Battery::init() {
 #endif
 #if PAPYRIX_CAP_BATTERY_BQ27220
   if (config.backend == board::BatteryBackend::Bq27220) {
-    monitor_.emplace(BatteryMonitor::Bq27220Config{config.sda, config.scl, config.i2cHz, config.designCapacityMah,
-                                                   config.busIndex, config.busIndex == 0});
+    monitor_.emplace(BatteryMonitor::Bq27220Config{
+        config.sda, config.scl, config.i2cHz, static_cast<uint16_t>(allowConfiguration ? config.designCapacityMah : 0),
+        config.busIndex, config.busIndex == 0});
   }
 #elif PAPYRIX_CAP_BATTERY_CW2017
   if (config.backend == board::BatteryBackend::Cw2017) {
-    monitor_.emplace(
-        BatteryMonitor::Cw2017Config{config.sda, config.scl, config.i2cHz, config.i2cAddress, config.gaugeProfile});
+    monitor_.emplace(BatteryMonitor::Cw2017Config{config.sda, config.scl, config.i2cHz, config.i2cAddress,
+                                                  config.gaugeProfile, allowConfiguration});
   }
 #else
   (void)config;
+  (void)allowConfiguration;
 #endif
 }
 
@@ -79,14 +81,8 @@ Battery::Status Battery::readStatus() const {
 
 #if PAPYRIX_CAP_BATTERY_ADC
   if (adcBackend_ && status.percentageKnown) {
-    if (!adcEstimateInitialized_) {
-      if (!battery_estimate::isUsable(retainedX4Estimate, status.percentage)) {
-        retainedX4Estimate = battery_estimate::seed(status.percentage);
-      }
-      adcEstimateInitialized_ = true;
-    } else {
-      retainedX4Estimate = battery_estimate::update(retainedX4Estimate, status.percentage);
-    }
+    retainedX4Estimate = battery_estimate::update(retainedX4Estimate, status.percentage);
+    adcEstimateInitialized_ = true;
     status.percentage = battery_estimate::displayPercent(retainedX4Estimate);
     adcCachedStatus_ = status;
     lastAdcPollMs_ = now;

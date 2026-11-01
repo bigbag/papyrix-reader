@@ -21,7 +21,14 @@ int main() {
   TestUtils::TestRunner runner("M4 boot, sleep, and recovery");
   const auto& profile = bootProfile();
   testResetGpioEvents();
-  earlyInit(profile);
+  earlyInit(profile, BootPurpose::ClockTimer);
+  runner.expectFalse(wrote(45, LOW) || wrote(10, LOW), "timer wake leaves touch and SD off");
+  runner.expectFalse(wrote(7, LOW), "timer wake does not reset the shared panel line");
+  prepareClockSleepPins(profile);
+  runner.expectTrue(wrote(45, HIGH) && wrote(10, HIGH), "Clock standby removes both peripheral rails");
+  runner.expectTrue(wrote(47, LOW) && wrote(48, LOW), "Clock standby turns off both lights");
+  testResetGpioEvents();
+  earlyInit(profile, BootPurpose::Interactive);
   runner.expectTrue(wrote(10, HIGH), "boot without latch disables the active-low SD rail");
   for (int pin : {0, 1, 2})
     runner.expectTrue(event(TestGpioEventType::PinMode, pin, INPUT_PULLUP), "boot configures independent buttons");

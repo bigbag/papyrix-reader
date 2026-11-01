@@ -20,7 +20,7 @@ int main() {
   Wire1.setRegister16(0x55, 0x08, 3890);
   Wire1.setRegister16(0x55, 0x0C, 0);
   papyrix::hal::Battery battery;
-  battery.init();
+  battery.init(true);
   const auto status = battery.readStatus();
   runner.expectEq(uint16_t{73}, status.percentage, "sensor bus supplies charge level");
   runner.expectEq(uint16_t{3890}, status.millivolts, "sensor bus supplies voltage");

@@ -178,6 +178,20 @@ int main() {
     runner.expectEq(uint8_t{0x12}, Wire.getRegister(0x63, 0x10), "Classic preserves a different factory table");
   }
 
+  for (bool healthy : {true, false}) {
+    primeHealthyGauge(61);
+    auto readOnly = proConfig;
+    readOnly.allowConfiguration = false;
+    if (!healthy) Wire.setRegister(0x63, 0x10, 0x12);
+    BatteryMonitor timerGauge(readOnly);
+    const auto observed = timerGauge.readStatus();
+    runner.expectTrue(observed.percentageKnown == healthy, "timer wake accepts only a valid gauge profile");
+    if (healthy) runner.expectEq(uint16_t{61}, observed.percentage, "timer wake reads current charge");
+    bool untouched = true;
+    for (uint16_t reg = 0; reg < 0x60; ++reg) untouched &= Wire.registerWriteCount(0x63, reg) == 0;
+    runner.expectTrue(untouched, "timer wake cannot program or restart the gauge");
+  }
+
   // === Sleeping gauge after a good init: the MODE health check recovers ===
   primeHealthyGauge(75);
   BatteryMonitor sleeping(proConfig);
