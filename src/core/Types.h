@@ -64,6 +64,8 @@ enum class SyncMode : uint8_t {
 namespace BufferSize {
 constexpr size_t Path = 256;
 constexpr size_t FilePath = 1024;
+// A FAT filename has at most 255 UTF-16 units, each requiring at most three UTF-8 bytes.
+constexpr size_t Utf8Filename = 255 * 3 + 1;
 constexpr size_t TrashPath = FilePath + (sizeof("/trash") - 1) + (sizeof(" (9999)") - 1);
 constexpr size_t Text = 512;
 constexpr size_t Decompress = 8192;

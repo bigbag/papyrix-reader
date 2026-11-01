@@ -296,6 +296,8 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "30 s",                            // SEC_30
     "1 min",                           // MIN_1
     "2 min",                           // MIN_2
+    "Sleep Image",                     // SLEEP_IMAGE
+    "Random",                          // RANDOM
 };
 // clang-format on
 

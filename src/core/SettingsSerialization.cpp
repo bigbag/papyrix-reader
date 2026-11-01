@@ -54,7 +54,8 @@ bool writeSettingsFile(FsFile& file, const Settings& settings) {
          serialization::writePodChecked(file, settings.touchPageTurns) &&
          writeBytes(file, settings.pendingBookPath, sizeof(settings.pendingBookPath)) &&
          serialization::writePodChecked(file, settings.frontLightTimeout) &&
-         serialization::writePodChecked(file, settings.smoothFrontLight) && file.sync();
+         serialization::writePodChecked(file, settings.smoothFrontLight) &&
+         writeBytes(file, settings.sleepImage, sizeof(settings.sleepImage)) && file.sync();
 }
 
 SettingsReadStatus readSettingsFile(FsFile& file, const Settings& defaults, Settings& decoded) {
@@ -144,9 +145,12 @@ SettingsReadStatus readSettingsFile(FsFile& file, const Settings& defaults, Sett
   candidate.pendingBookPath[sizeof(candidate.pendingBookPath) - 1] = '\0';
   READ_SETTING(serialization::readPodValidated(file, candidate.frontLightTimeout, uint8_t(5)));
   READ_SETTING(serialization::readPodValidated(file, candidate.smoothFrontLight, uint8_t(2)));
+  READ_SETTING(readBytes(file, candidate.sleepImage, sizeof(candidate.sleepImage)));
+  candidate.sleepImage[sizeof(candidate.sleepImage) - 1] = '\0';
 
 complete:
 #undef READ_SETTING
+  if (version < 18) candidate.sleepImage[0] = '\0';
   if (version < 8) candidate.fontSize++;
   if (version < 16 && candidate.pendingTransition == 2) {
     memcpy(candidate.pendingBookPath, candidate.lastBookPath, sizeof(candidate.pendingBookPath));

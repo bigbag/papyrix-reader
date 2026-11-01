@@ -9,6 +9,8 @@
 #include <cstdint>
 #include <cstring>
 
+#include "../../core/PapyrixSettings.h"
+#include "../../core/SleepImages.h"
 #include "../Elements.h"
 
 namespace ui {
@@ -203,7 +205,8 @@ void render(const GfxRenderer& r, const Theme& t, const ReaderSettingsView& v);
 struct ScreenSettingsView {
   using SettingDef = ReaderSettingsView::SettingDef;
   using SettingType = ReaderSettingsView::SettingType;
-  static constexpr int SETTING_COUNT = 10;
+  static constexpr int SETTING_COUNT = 11;
+  static constexpr int SLEEP_IMAGE_SETTING = 10;
   static constexpr int MAX_THEMES = 16;
   static SettingDef DEFS[SETTING_COUNT];
   static void initDefs();
@@ -214,13 +217,18 @@ struct ScreenSettingsView {
   int currentThemeIndex = 0;
   uint8_t values[SETTING_COUNT] = {0};
   int8_t selected = 0;
-  int8_t visibleCount = SETTING_COUNT - 4;
+  bool frontLightAvailable = false;
+  const char* sleepImage = "";
   bool needsRender = true;
 
-  int settingIndex(int row) const { return row + (visibleCount < SETTING_COUNT && row >= 1 ? 4 : 0); }
+  int visibleCount() const {
+    return SETTING_COUNT - (frontLightAvailable ? 0 : 4) - (values[9] == papyrix::Settings::SleepCustom ? 0 : 1);
+  }
+  int settingIndex(int row) const { return row + (!frontLightAvailable && row >= 1 ? 4 : 0); }
+  bool sleepImageSelected() const { return settingIndex(selected) == SLEEP_IMAGE_SETTING; }
   int rowHeight(const Theme& theme, int screenHeight) const {
     const int available = screenHeight - SettingsListHit::LIST_START_Y - SettingsListHit::LIST_BOTTOM_MARGIN;
-    return std::max(1, std::min(theme.itemHeight + theme.itemSpacing, available / visibleCount));
+    return std::max(1, std::min(theme.itemHeight + theme.itemSpacing, available / visibleCount()));
   }
   bool lightSelected() const {
     const int index = settingIndex(selected);
@@ -230,18 +238,18 @@ struct ScreenSettingsView {
     return static_cast<uint8_t>(std::clamp(values[settingIndex(selected)] + delta * 5, 0, 100));
   }
   void moveUp() {
-    selected = (selected == 0) ? visibleCount - 1 : selected - 1;
+    selected = (selected == 0) ? visibleCount() - 1 : selected - 1;
     needsRender = true;
   }
   void moveDown() {
-    selected = (selected + 1) % visibleCount;
+    selected = (selected + 1) % visibleCount();
     needsRender = true;
   }
   void cycleValue(int delta) {
     const int index = settingIndex(selected);
     if (index == 0) {
       if (themeCount > 0) currentThemeIndex = (currentThemeIndex + themeCount + delta) % themeCount;
-    } else if (!lightSelected()) {
+    } else if (!lightSelected() && !sleepImageSelected()) {
       const auto& def = DEFS[index];
       if (def.type == SettingType::Toggle) {
         values[index] = values[index] ? 0 : 1;
@@ -256,6 +264,7 @@ struct ScreenSettingsView {
   }
   const char* getCurrentValueStr(int index) const {
     if (index == 0) return getCurrentThemeName();
+    if (index == SLEEP_IMAGE_SETTING) return sleepImage[0] ? sleepImage : tr(RANDOM);
     const auto& def = DEFS[index];
     if (def.type == SettingType::Toggle) return values[index] ? tr(ON) : tr(OFF);
     if (def.enumCount == 0 || values[index] >= def.enumCount) {
@@ -266,6 +275,20 @@ struct ScreenSettingsView {
 };
 
 void render(const GfxRenderer& r, const Theme& t, const ScreenSettingsView& v);
+
+struct SleepImageView {
+  papyrix::sleep_images::Page page;
+  size_t selected = 0;
+  const char* savedName = "";
+
+  int rowHeight(const Theme& theme, int screenHeight) const {
+    const int available = screenHeight - SettingsListHit::LIST_START_Y - SettingsListHit::LIST_BOTTOM_MARGIN - 24;
+    return std::max(1, std::min(theme.itemHeight + theme.itemSpacing,
+                                available / static_cast<int>(papyrix::sleep_images::PAGE_SIZE)));
+  }
+};
+
+void render(const GfxRenderer& r, const Theme& t, const SleepImageView& v);
 
 // ============================================================================
 // DeviceSettingsView - Device configuration

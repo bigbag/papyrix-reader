@@ -19,6 +19,7 @@ enum class SettingsScreen : uint8_t {
   SystemInfo,
   ConfirmDialog,
   FirmwareUpdate,
+  SleepImages,
 };
 
 class SettingsState : public State {
@@ -56,6 +57,7 @@ class SettingsState : public State {
   ui::SettingsMenuView menuView_;
   ui::ReaderSettingsView readerView_;
   ui::ScreenSettingsView screenView_;
+  ui::SleepImageView sleepImageView_;
   ui::DeviceSettingsView deviceView_;
   ui::CleanupMenuView cleanupView_;
   ui::SystemInfoView infoView_;
@@ -71,6 +73,9 @@ class SettingsState : public State {
   void handleConfirm(Core& core);
   void handleLeftRight(int delta);
 
+  void openSleepImages();
+  void moveSleepImage(int delta, bool page);
+  void selectSleepImage(Core& core);
   void handleTap(Core& core, const Event& event);
   // Settings binding
   void loadReaderSettings();

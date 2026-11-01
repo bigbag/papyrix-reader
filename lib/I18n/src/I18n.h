@@ -297,6 +297,8 @@ enum class StrId : uint16_t {
   STR_SEC_30,
   STR_MIN_1,
   STR_MIN_2,
+  STR_SLEEP_IMAGE,
+  STR_RANDOM,
   STR__COUNT
 };
 

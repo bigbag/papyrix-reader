@@ -272,6 +272,8 @@ static constexpr KeyMapping KEY_MAP[] = {
     {"SEC_30", StrId::STR_SEC_30},
     {"MIN_1", StrId::STR_MIN_1},
     {"MIN_2", StrId::STR_MIN_2},
+    {"SLEEP_IMAGE", StrId::STR_SLEEP_IMAGE},
+    {"RANDOM", StrId::STR_RANDOM},
 };
 // clang-format on
 

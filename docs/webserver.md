@@ -205,7 +205,7 @@ The Sleep tab manages custom sleep screen images in the `/sleep` directory.
 
 **Note:** Only `.bmp` files are accepted. Use the [sleep screen converter](../README.md) (`make sleep-screen`) to convert images to the correct format.
 
-**Note:** Set the **Sleep Screen** setting to **Custom** on the device to use uploaded images. A random image is shown each time the device sleeps. See the [User Guide](user_guide.md#37-sleep-screen) for more data.
+**Note:** Set **Sleep Screen** to **Custom** on the device to use uploaded images. **Random** selects an image each time the device sleeps. To use one image, open **Settings → Screen → Sleep Image** on the device and select its filename. See the [User Guide](user_guide.md#37-sleep-screen) for selection and fallback behavior.
 
 ### Fonts Tab
 

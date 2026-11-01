@@ -319,6 +319,11 @@ X3, X4, X4 v2 Classic, and Sticky hide all four front-light settings.
   - Options: Dark, Light, Custom, Cover, Keep Page
   - Which image to show when the device sleeps
 
+- **Sleep Image** (default: Random; Custom mode only)
+  - Open a full-screen list of valid BMP files in `/sleep/`.
+  - Select a filename to use the same image each time the device sleeps.
+  - Select **Random** to choose an image each time.
+
 #### Device
 
 Controls and device behavior, in menu order:
@@ -474,11 +479,26 @@ You can change the sleep screen. Put custom images in specified locations on the
 
 - **Single Image:** Put a file named `sleep.bmp` in the root directory.
 - **Multiple Images:** Make a `sleep` directory in the root of the SD card and put `.bmp` images
-  in it. If images are in this directory, they have priority over the `sleep.bmp` file. One is
-  selected randomly each time the device sleeps.
+  in it. Valid images in this directory have priority over the `sleep.bmp` file.
+  The default **Random** option selects an image each time the device sleeps.
 
 > [!NOTE]
 > You must set the **Sleep Screen** setting to **Custom** to use these images.
+
+To select an image without Wi-Fi:
+
+1. Open **Settings → Screen → Sleep Image**.
+2. Use Up and Down to move between entries. Use Left and Right to change pages.
+3. Press **Select**, or tap a filename, to save the choice and return.
+
+The list shows eight entries per page. The first entry is **Random**.
+An asterisk marks the saved choice. **Back** returns without changing it.
+The list uses directory order. It excludes hidden files, subdirectories, and invalid BMP files.
+All valid images remain available across pages. Large directories can take longer to load.
+
+The device saves the filename across restarts. If the selected file is missing or invalid,
+the device selects a random valid image from `/sleep/`. If none is available, it tries
+`/sleep.bmp`, then shows the default sleep screen.
 
 #### Image Parameters
 

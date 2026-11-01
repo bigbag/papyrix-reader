@@ -190,6 +190,10 @@ class SDCardManager {
     auto directory = directories_.find(path);
     if (directory != directories_.end()) {
       file.setDirectory(directory->second);
+      file.setDirectoryOpener([this, parent = std::string(path)](const std::string& name) {
+        const std::string child = parent + (parent.back() == '/' ? "" : "/") + name;
+        return open(child.c_str(), O_RDONLY);
+      });
       return file;
     }
 

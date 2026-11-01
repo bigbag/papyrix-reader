@@ -175,6 +175,7 @@ int main() {
     expected.touchPageTurns = 0;
     expected.frontLightTimeout = 4;
     expected.smoothFrontLight = 1;
+    strcpy(expected.sleepImage, "sunset.bmp");
 
     FsFile file;
     file.setBuffer("");
@@ -214,6 +215,78 @@ int main() {
     runner.expectTrue(
         memcmp(decoded.fileListSelectedName, expected.fileListSelectedName, sizeof(expected.fileListSelectedName)) == 0,
         "full_settings_selected_name_roundtrip");
+    runner.expectEqual("sunset.bmp", decoded.sleepImage, "sleep_image_filename_roundtrip");
+  }
+
+  for (const auto* character : {u8"Ж", u8"ก"}) {
+    std::string filename;
+    const int letters = strlen(character) == 2 ? 126 : 251;
+    for (int i = 0; i < letters; ++i) filename += character;
+    filename += ".bmp";
+    Settings saved;
+    snprintf(saved.sleepImage, sizeof(saved.sleepImage), "%s", filename.c_str());
+    FsFile file;
+    file.setBuffer("");
+    runner.expectTrue(writeSettingsFile(file, saved), "long_utf8_sleep_image_write");
+    file.seek(0);
+    Settings decoded;
+    expectStatus(runner, SettingsReadStatus::Ok, readSettingsFile(file, Settings{}, decoded),
+                 "long_utf8_sleep_image_read");
+    runner.expectEqual(filename.c_str(), decoded.sleepImage, "long_utf8_sleep_image_roundtrip");
+  }
+
+  {
+    Settings previous;
+    previous.sleepScreen = Settings::SleepCustom;
+    previous.frontLightTimeout = 3;
+    strcpy(previous.sleepImage, "not-in-v17.bmp");
+    FsFile file;
+    file.setBuffer("");
+    runner.expectTrue(writeSettingsFile(file, previous), "v17_fixture_write");
+    file.seek(sizeof(kSettingsMagic));
+    serialization::writePod(file, uint8_t(17));
+    serialization::writePod(file, uint8_t(32));
+    const auto data = file.getBuffer();
+    file.setBuffer(data.substr(0, data.size() - sizeof(previous.sleepImage)));
+
+    Settings defaults;
+    strcpy(defaults.sleepImage, "previous-choice.bmp");
+    Settings decoded;
+    expectStatus(runner, SettingsReadStatus::Ok, readSettingsFile(file, defaults, decoded), "v17_file_accepted");
+    runner.expectEq<uint8_t>(Settings::SleepCustom, decoded.sleepScreen, "v17_sleep_mode_preserved");
+    runner.expectEq<uint8_t>(3, decoded.frontLightTimeout, "v17_front_light_preserved");
+    runner.expectEqual("", decoded.sleepImage, "v17_sleep_image_defaults_to_random");
+  }
+
+  {
+    Settings saved;
+    memset(saved.sleepImage, 'x', sizeof(saved.sleepImage));
+    FsFile file;
+    file.setBuffer("");
+    runner.expectTrue(writeSettingsFile(file, saved), "unterminated_sleep_image_fixture_write");
+    file.seek(0);
+    Settings decoded;
+    expectStatus(runner, SettingsReadStatus::Ok, readSettingsFile(file, Settings{}, decoded),
+                 "unterminated_sleep_image_accepted");
+    runner.expectEq<char>('\0', decoded.sleepImage[sizeof(decoded.sleepImage) - 1],
+                          "unterminated_sleep_image_is_terminated");
+    runner.expectTrue(memcmp(decoded.sleepImage, saved.sleepImage, sizeof(saved.sleepImage) - 1) == 0,
+                      "unterminated_sleep_image_prefix_preserved");
+  }
+
+  for (const size_t drop : {size_t(1), sizeof(Settings{}.sleepImage)}) {
+    Settings saved;
+    strcpy(saved.sleepImage, "sunset.bmp");
+    FsFile file;
+    file.setBuffer("");
+    runner.expectTrue(writeSettingsFile(file, saved), "sleep_image_truncation_fixture_write");
+    const auto data = file.getBuffer();
+    file.setBuffer(data.substr(0, data.size() - drop));
+    Settings decoded;
+    strcpy(decoded.sleepImage, "preserved.bmp");
+    expectStatus(runner, SettingsReadStatus::Truncated, readSettingsFile(file, Settings{}, decoded),
+                 "sleep_image_truncated_" + std::to_string(drop));
+    runner.expectEqual("preserved.bmp", decoded.sleepImage, "sleep_image_truncation_preserves_output");
   }
 
   {
@@ -263,7 +336,7 @@ int main() {
     file.setBuffer("");
     writeSettingsFile(file, pending);
     const auto data = file.getBuffer();
-    file.setBuffer(data.substr(0, data.size() - 1));
+    file.setBuffer(data.substr(0, data.size() - sizeof(pending.sleepImage) - 3));
     Settings decoded;
     strcpy(decoded.lastBookPath, "/good.epub");
     expectStatus(runner, SettingsReadStatus::Truncated, readSettingsFile(file, Settings{}, decoded),
@@ -344,7 +417,7 @@ int main() {
     serialization::writePod(file, uint8_t(16));
     serialization::writePod(file, uint8_t(30));
     const auto data = file.getBuffer();
-    file.setBuffer(data.substr(0, data.size() - 2));
+    file.setBuffer(data.substr(0, data.size() - sizeof(previous.sleepImage) - 2));
     Settings decoded;
     expectStatus(runner, SettingsReadStatus::Ok, readSettingsFile(file, Settings{}, decoded), "v16_file_accepted");
     runner.expectEq<uint8_t>(0, decoded.frontLightTimeout, "v16_front_light_timeout_defaults_off");
@@ -377,7 +450,7 @@ int main() {
     file.setBuffer("");
     runner.expectTrue(writeSettingsFile(file, complete), "front_light_truncation_write");
     const auto data = file.getBuffer();
-    file.setBuffer(data.substr(0, data.size() - drop));
+    file.setBuffer(data.substr(0, data.size() - sizeof(complete.sleepImage) - drop));
     Settings decoded;
     decoded.orientation = 77;
     expectStatus(runner, SettingsReadStatus::Truncated, readSettingsFile(file, Settings{}, decoded),

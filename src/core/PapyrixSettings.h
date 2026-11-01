@@ -93,6 +93,7 @@ struct Settings {
   char pendingBookPath[BufferSize::FilePath] = "";
   uint8_t frontLightTimeout = 0;
   uint8_t smoothFrontLight = 0;
+  char sleepImage[BufferSize::Utf8Filename] = "";
 
   // Persistence (using hal::Storage wrapper)
   Result<void> load(hal::Storage& storage);

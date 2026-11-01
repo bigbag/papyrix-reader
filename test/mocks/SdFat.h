@@ -83,11 +83,14 @@ class FsFile : public Print {
     sharedBuffer_.reset();
     directoryEntries_ = entries;
     directoryIndex_ = 0;
+    directoryOpener_ = {};
     name_.clear();
     pos_ = 0;
     isOpen_ = true;
     isDirectory_ = true;
   }
+
+  void setDirectoryOpener(std::function<FsFile(const std::string&)> opener) { directoryOpener_ = std::move(opener); }
 
   void setDirectoryEntry(const MockDirectoryEntry& entry) {
     buffer_.clear();
@@ -166,6 +169,7 @@ class FsFile : public Print {
     sharedBuffer_.reset();
     directoryEntries_.clear();
     directoryIndex_ = 0;
+    directoryOpener_ = {};
     name_.clear();
     isOpen_ = false;
     isDirectory_ = false;
@@ -188,7 +192,10 @@ class FsFile : public Print {
   FsFile openNextFile(int = O_RDONLY) {
     FsFile entry;
     if (!isOpen_ || !isDirectory_ || directoryIndex_ >= directoryEntries_.size()) return entry;
-    entry.setDirectoryEntry(directoryEntries_[directoryIndex_++]);
+    const auto& info = directoryEntries_[directoryIndex_++];
+    if (directoryOpener_) entry = directoryOpener_(info.name);
+    if (!entry) entry.setDirectoryEntry(info);
+    entry.name_ = info.name;
     return entry;
   }
 
@@ -310,6 +317,7 @@ class FsFile : public Print {
   std::string buffer_;
   std::shared_ptr<std::string> sharedBuffer_;
   std::vector<MockDirectoryEntry> directoryEntries_;
+  std::function<FsFile(const std::string&)> directoryOpener_;
   std::string name_;
   size_t directoryIndex_ = 0;
   size_t pos_ = 0;

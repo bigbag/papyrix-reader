@@ -86,6 +86,7 @@ void ScreenSettingsView::initDefs() {
   DEFS[7] = {tr(PAGES_PER_REFRESH), SettingType::Enum, pagesRefreshValues, 6};
   DEFS[8] = {tr(SUNLIGHT_FADING_FIX), SettingType::Toggle, nullptr, 0};
   DEFS[9] = {tr(SLEEP_SCREEN), SettingType::Enum, sleepScreenValues, 5};
+  DEFS[SLEEP_IMAGE_SETTING] = {tr(SLEEP_IMAGE), SettingType::Enum, nullptr, 0};
 }
 
 // DeviceSettingsView runtime initialization
@@ -216,7 +217,7 @@ void render(const GfxRenderer& r, const Theme& t, const ScreenSettingsView& v) {
   const int startY = SettingsListHit::LIST_START_Y;
   const int rowHeight = v.rowHeight(t, r.getScreenHeight());
   const int itemHeight = std::min<int>(t.itemHeight, rowHeight);
-  for (int i = 0; i < v.visibleCount; i++) {
+  for (int i = 0; i < v.visibleCount(); i++) {
     const int index = v.settingIndex(i);
     const int y = startY + i * rowHeight;
     const auto& def = ScreenSettingsView::DEFS[index];
@@ -224,12 +225,41 @@ void render(const GfxRenderer& r, const Theme& t, const ScreenSettingsView& v) {
       char value[8];
       snprintf(value, sizeof(value), "%u%%", static_cast<unsigned>(v.values[index]));
       enumValue(r, t, y, def.label, value, i == v.selected, itemHeight);
+    } else if (index == ScreenSettingsView::SLEEP_IMAGE_SETTING) {
+      const int width = r.getScreenWidth() - 2 * t.screenMarginSide - t.itemPaddingX - t.itemValuePadding -
+                        r.getTextWidth(t.uiFontId, def.label) - 20;
+      const auto value = r.truncatedText(t.uiFontId, v.getCurrentValueStr(index), std::max(0, width));
+      enumValue(r, t, y, def.label, value.c_str(), i == v.selected, itemHeight);
     } else {
       enumValue(r, t, y, def.label, v.getCurrentValueStr(index), i == v.selected, itemHeight);
     }
   }
-  ButtonBar btns{tr(BACK), "", "<", ">"};
+  const bool picker = v.sleepImageSelected();
+  ButtonBar btns{tr(BACK), picker ? tr(OPEN) : "", picker ? "" : "<", picker ? "" : ">"};
   buttonBar(r, t, btns);
+  r.displayBuffer();
+}
+
+void render(const GfxRenderer& r, const Theme& t, const SleepImageView& v) {
+  r.clearScreen(t.backgroundColor);
+  title(r, t, t.screenMarginTop, tr(SLEEP_IMAGE));
+  const int rowHeight = v.rowHeight(t, r.getScreenHeight());
+  const int itemHeight = std::min<int>(t.itemHeight, rowHeight);
+  const int width = r.getScreenWidth() - 2 * t.screenMarginSide - t.itemPaddingX - t.itemValuePadding - 24;
+  for (size_t i = 0; i < v.page.count; ++i) {
+    const char* name = v.page.names[i];
+    const auto label = r.truncatedText(t.uiFontId, name[0] ? name : tr(RANDOM), width);
+    const bool saved = strcmp(name, v.savedName) == 0;
+    enumValue(r, t, SettingsListHit::LIST_START_Y + static_cast<int>(i) * rowHeight, label.c_str(), saved ? "*" : "",
+              i == v.selected, itemHeight);
+  }
+  char pageNumber[48];
+  snprintf(pageNumber, sizeof(pageNumber), "%zu / %zu", v.page.offset / papyrix::sleep_images::PAGE_SIZE + 1,
+           (v.page.total - 1) / papyrix::sleep_images::PAGE_SIZE + 1);
+  r.drawCenteredText(t.uiFontId, r.getScreenHeight() - SettingsListHit::LIST_BOTTOM_MARGIN - 22, pageNumber,
+                     t.secondaryTextBlack);
+  buttonBar(r, t, tr(BACK), tr(SELECT), v.page.offset ? "<" : "",
+            v.page.offset + v.page.count < v.page.total ? ">" : "");
   r.displayBuffer();
 }
 

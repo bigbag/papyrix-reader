@@ -23,11 +23,11 @@
 
 #include <cstring>
 #include <string>
-#include <vector>
 
 #include "../ThemeManager.h"
 #include "../config.h"
 #include "../core/Core.h"
+#include "../core/SleepImages.h"
 #include "../hal/Power.h"
 #include "../images/PapyrixLogo.h"
 #include "../ui/views/BootSleepViews.h"
@@ -163,70 +163,16 @@ void SleepState::renderDefaultSleepScreen(uint8_t sleepMode) const {
 }
 
 void SleepState::renderCustomSleepScreen(const Core& core) const {
-  // Check if we have a /sleep directory
-  auto dir = SdMan.open("/sleep");
-  if (dir && dir.isDirectory()) {
-    std::vector<std::string> files;
-    char name[256];  // FAT32 LFN max is 255 chars; reduced from 500 to save stack
-    // collect all valid BMP files
-    for (auto file = dir.openNextFile(); file; file = dir.openNextFile()) {
-      if (file.isDirectory()) {
-        file.close();
-        continue;
-      }
-      file.getName(name, sizeof(name));
-      auto filename = std::string(name);
-      if (filename[0] == '.') {
-        file.close();
-        continue;
-      }
-
-      if (!FsHelpers::isBmpFile(filename)) {
-        LOG_DBG(TAG, "Skipping non-.bmp file name: %s", name);
-        file.close();
-        continue;
-      }
-      Bitmap bitmap(file);
-      if (bitmap.parseHeaders() != BmpReaderError::Ok) {
-        LOG_DBG(TAG, "Skipping invalid BMP file: %s", name);
-        file.close();
-        continue;
-      }
-      files.emplace_back(filename);
-      file.close();
-    }
-    const auto numFiles = files.size();
-    if (numFiles > 0) {
-      // Generate a random number between 0 and numFiles-1
-      const auto randomFileIndex = random(numFiles);
-      const auto filename = "/sleep/" + files[randomFileIndex];
-      FsFile file;
-      if (SdMan.openFileForRead("SLP", filename, file)) {
-        LOG_INF(TAG, "Randomly loading: /sleep/%s", files[randomFileIndex].c_str());
-        delay(100);
-        Bitmap bitmap(file, true);
-        if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-          renderBitmapSleepScreen(bitmap);
-          dir.close();
-          return;
-        }
-      }
-    }
-  }
-  if (dir) dir.close();
-
-  // Look for sleep.bmp on the root of the sd card to determine if we should
-  // render a custom sleep screen instead of the default.
   FsFile file;
-  if (SdMan.openFileForRead("SLP", "/sleep.bmp", file)) {
+  if (sleep_images::openCustomImage(core.settings.sleepImage, file)) {
     Bitmap bitmap(file, true);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-      LOG_INF(TAG, "Loading: /sleep.bmp");
       renderBitmapSleepScreen(bitmap);
+      file.close();
       return;
     }
+    file.close();
   }
-
   renderDefaultSleepScreen(core.settings.sleepScreen);
 }
 

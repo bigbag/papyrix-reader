@@ -1095,6 +1095,15 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/GfxRenderer/src/BitmapHelpers.cpp
       ${TEST_HELPERS}
     )
+  elseif(TEST_NAME STREQUAL "SleepImagesTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/src/core/SleepImages.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/Bitmap.cpp
+      ${PROJECT_ROOT}/lib/GfxRenderer/src/BitmapHelpers.cpp
+      ${PROJECT_ROOT}/lib/FsHelpers/src/FsHelpers.cpp
+      ${TEST_HELPERS}
+    )
   elseif(TEST_NAME STREQUAL "BitmapRowAccessTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
@@ -1835,13 +1844,18 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${TEST_HELPERS}
     )
     target_include_directories(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/SDCardManager/include)
-  elseif(TEST_NAME STREQUAL "MurphyM4BatchSettingsTest")
-    foreach(BATCH_UI_TARGET MurphyM4BatchSettingsTest MurphyM4BatchSettingsNonM4Test)
+  elseif(TEST_NAME STREQUAL "MurphyM4BatchSettingsTest" OR TEST_NAME STREQUAL "SleepImageSettingsTest")
+    set(SETTINGS_UI_TARGETS ${TEST_NAME})
+    if(TEST_NAME STREQUAL "MurphyM4BatchSettingsTest")
+      list(APPEND SETTINGS_UI_TARGETS MurphyM4BatchSettingsNonM4Test)
+    endif()
+    foreach(BATCH_UI_TARGET ${SETTINGS_UI_TARGETS})
       add_executable(${BATCH_UI_TARGET} ${TEST_SRC}
         ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4Batch.cpp
         ${PROJECT_ROOT}/src/states/SettingsState.cpp
         ${PROJECT_ROOT}/src/core/PapyrixSettings.cpp
         ${PROJECT_ROOT}/src/core/SettingsSerialization.cpp
+        ${PROJECT_ROOT}/src/core/SleepImages.cpp
         ${PROJECT_ROOT}/src/hal/Storage.cpp
         ${PROJECT_ROOT}/src/ui/views/SettingsViews.cpp
         ${PROJECT_ROOT}/src/ui/Elements.cpp
@@ -1853,6 +1867,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
         ${PROJECT_ROOT}/lib/GfxRenderer/src/GfxRenderer.cpp
         ${PROJECT_ROOT}/lib/GfxRenderer/src/Bitmap.cpp
         ${PROJECT_ROOT}/lib/GfxRenderer/src/BitmapHelpers.cpp
+        ${PROJECT_ROOT}/lib/FsHelpers/src/FsHelpers.cpp
         ${PROJECT_ROOT}/lib/EpdFont/src/EpdFont.cpp
         ${PROJECT_ROOT}/lib/EpdFont/src/EpdFontFamily.cpp
         ${PROJECT_ROOT}/lib/EpdFont/src/StreamingEpdFont.cpp
@@ -1877,12 +1892,16 @@ foreach(TEST_SRC ${TEST_SOURCES})
       target_link_options(${BATCH_UI_TARGET} PRIVATE -Wl,--gc-sections)
       set_target_properties(${BATCH_UI_TARGET} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
     endforeach()
-    target_compile_definitions(MurphyM4BatchSettingsTest PRIVATE PAPYRIX_TARGET_MURPHY_M4=1)
-    target_sources(MurphyM4BatchSettingsTest PRIVATE
-      ${PROJECT_ROOT}/lib/BoardSupport/src/Ft6336uBackend.cpp
-      ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4I2c.cpp
-      ${PROJECT_ROOT}/lib/AsyncTask/src/BackgroundTask.cpp)
-    target_compile_definitions(MurphyM4BatchSettingsNonM4Test PRIVATE PAPYRIX_TARGET_XTEINK_C3=1)
+    if(TEST_NAME STREQUAL "MurphyM4BatchSettingsTest")
+      target_compile_definitions(MurphyM4BatchSettingsTest PRIVATE PAPYRIX_TARGET_MURPHY_M4=1)
+      target_sources(MurphyM4BatchSettingsTest PRIVATE
+        ${PROJECT_ROOT}/lib/BoardSupport/src/Ft6336uBackend.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4I2c.cpp
+        ${PROJECT_ROOT}/lib/AsyncTask/src/BackgroundTask.cpp)
+      target_compile_definitions(MurphyM4BatchSettingsNonM4Test PRIVATE PAPYRIX_TARGET_XTEINK_C3=1)
+    else()
+      target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_XTEINK_C3=1)
+    endif()
     continue()
   elseif(TEST_NAME STREQUAL "SdFreeSpaceTest")
     add_executable(${TEST_NAME}

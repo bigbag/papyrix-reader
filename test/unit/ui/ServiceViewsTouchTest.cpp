@@ -17,7 +17,7 @@ int main() {
                "settings next value action");
 
   ui::ScreenSettingsView light;
-  light.visibleCount = ui::ScreenSettingsView::SETTING_COUNT;
+  light.frontLightAvailable = true;
   light.selected = 1;
   r.expectEq(uint8_t{0}, light.adjustedLightValue(-1), "brightness cannot wrap below off");
   light.values[1] = 98;
@@ -36,36 +36,39 @@ int main() {
   screen.moveUp();
   r.expectEq(9, screen.settingIndex(screen.selected), "screen wraps to sleep screen");
   ui::ScreenSettingsView lit;
-  lit.visibleCount = ui::ScreenSettingsView::SETTING_COUNT;
+  lit.frontLightAvailable = true;
   lit.selected = 3;
   r.expectEq(3, lit.settingIndex(lit.selected), "front light timeout follows warmth");
   r.expectTrue(!lit.lightSelected(), "front light timeout is not a percent control");
   lit.selected = 4;
   r.expectEq(4, lit.settingIndex(lit.selected), "smooth front light follows timeout");
-  lit.selected = 9;
-  r.expectEq(9, lit.settingIndex(lit.selected), "sleep screen remains the last screen setting");
-  lit.moveDown();
-  r.expectEq(0, lit.settingIndex(lit.selected), "screen wraps from sleep screen to theme");
-  const auto lastRow = ui::settingsListHitTest({20, 335}, 800, 480, 30, ui::ScreenSettingsView::SETTING_COUNT);
-  r.expectTrue(lastRow.type == ui::SettingsListHit::Type::Row && lastRow.index == 9,
-               "tenth screen row accepts touch in landscape");
-  r.expectTrue(ui::settingsListHitTest({20, 365}, 800, 480, 30, ui::ScreenSettingsView::SETTING_COUNT).type ==
-                   ui::SettingsListHit::Type::None,
-               "screen rejects touch beyond the tenth row");
-  for (const int height : {480, 800}) {
-    Theme theme = getBuiltinLightTheme();
-    theme.itemHeight = 75;
-    const int rowHeight = lit.rowHeight(theme, height);
-    const auto bottom = static_cast<int16_t>(ui::SettingsListHit::LIST_START_Y + lit.visibleCount * rowHeight - 1);
-    const auto hit = ui::settingsListHitTest({20, bottom}, 480, height, rowHeight, lit.visibleCount);
-    r.expectTrue(hit.type == ui::SettingsListHit::Type::Row && hit.index == 9,
-                 "large theme rows keep the last Screen setting touchable");
-    r.expectTrue(bottom < height - ui::SettingsListHit::LIST_BOTTOM_MARGIN,
-                 "large theme rows do not overlap the button bar");
-    theme.itemHeight = 30;
-    theme.itemSpacing = 50;
-    r.expectTrue(lit.rowHeight(theme, height) >= theme.itemHeight,
-                 "Screen reduces excess spacing before reducing row height");
+  for (const bool frontLight : {false, true}) {
+    lit.frontLightAvailable = frontLight;
+    for (const auto sleepMode : {papyrix::Settings::SleepDark, papyrix::Settings::SleepCustom}) {
+      lit.values[9] = sleepMode;
+      lit.selected = 0;
+      lit.moveUp();
+      r.expectTrue(lit.sleepImageSelected() == (sleepMode == papyrix::Settings::SleepCustom),
+                   "image picker is reachable only in Custom mode");
+      lit.moveDown();
+      r.expectEq(int8_t{0}, lit.selected, "screen wraps from its last visible setting");
+      for (const int height : {480, 800}) {
+        Theme theme = getBuiltinLightTheme();
+        theme.itemHeight = 75;
+        const int rowHeight = lit.rowHeight(theme, height);
+        const auto bottom =
+            static_cast<int16_t>(ui::SettingsListHit::LIST_START_Y + lit.visibleCount() * rowHeight - 1);
+        const auto hit = ui::settingsListHitTest({20, bottom}, 480, height, rowHeight, lit.visibleCount());
+        r.expectTrue(hit.type == ui::SettingsListHit::Type::Row && hit.index == lit.visibleCount() - 1,
+                     "last Screen setting remains touchable with conditional rows");
+        r.expectTrue(bottom < height - ui::SettingsListHit::LIST_BOTTOM_MARGIN,
+                     "large theme rows do not overlap the button bar");
+        r.expectTrue(
+            ui::settingsListHitTest({20, static_cast<int16_t>(bottom + 1)}, 480, height, rowHeight, lit.visibleCount())
+                    .type == ui::SettingsListHit::Type::None,
+            "Screen rejects touches below visible settings");
+      }
+    }
   }
   ui::ReaderSettingsView reader;
   reader.selected = 6;

@@ -101,9 +101,28 @@ void SettingsState::handleTap(Core& core, const Event& event) {
   int rowCount = 0;
   if (currentScreen_ == SettingsScreen::Menu) rowCount = ui::SettingsMenuView::ITEM_COUNT;
   if (currentScreen_ == SettingsScreen::Reader) rowCount = readerView_.visibleCount;
-  if (currentScreen_ == SettingsScreen::Screen) rowCount = screenView_.visibleCount;
+  if (currentScreen_ == SettingsScreen::Screen) rowCount = screenView_.visibleCount();
   if (currentScreen_ == SettingsScreen::Device) rowCount = deviceView_.visibleCount;
   if (currentScreen_ == SettingsScreen::Cleanup) rowCount = ui::CleanupMenuView::ITEM_COUNT;
+
+  if (currentScreen_ == SettingsScreen::SleepImages) {
+    const auto hit =
+        ui::settingsListHitTest({event.touch.x, event.touch.y}, width, height, sleepImageView_.rowHeight(THEME, height),
+                                static_cast<int>(sleepImageView_.page.count), frontLrbc);
+    if (hit.type == ui::SettingsListHit::Type::Row) {
+      sleepImageView_.selected = static_cast<size_t>(hit.index);
+      selectSleepImage(core);
+    } else if (hit.type == ui::SettingsListHit::Type::Open) {
+      selectSleepImage(core);
+    } else if (hit.type == ui::SettingsListHit::Type::Previous) {
+      moveSleepImage(-1, true);
+    } else if (hit.type == ui::SettingsListHit::Type::Next) {
+      moveSleepImage(1, true);
+    } else if (hit.type == ui::SettingsListHit::Type::Back) {
+      goBack(core);
+    }
+    return;
+  }
 
   if (currentScreen_ == SettingsScreen::ConfirmDialog) {
     const auto layout = ui::confirmDialogBounds(renderer_, THEME, confirmView_);
@@ -132,7 +151,8 @@ void SettingsState::handleTap(Core& core, const Event& event) {
     if (currentScreen_ == SettingsScreen::Cleanup) cleanupView_.selected = static_cast<int8_t>(hit.index);
     needsRender_ = true;
     if (currentScreen_ == SettingsScreen::Menu || currentScreen_ == SettingsScreen::Cleanup ||
-        (currentScreen_ == SettingsScreen::Device && deviceView_.selected == 0))
+        (currentScreen_ == SettingsScreen::Device && deviceView_.selected == 0) ||
+        (currentScreen_ == SettingsScreen::Screen && screenView_.sleepImageSelected()))
       handleConfirm(core);
   } else if (hit.type == ui::SettingsListHit::Type::Previous &&
              (currentScreen_ == SettingsScreen::Reader || currentScreen_ == SettingsScreen::Screen ||
@@ -145,7 +165,8 @@ void SettingsState::handleTap(Core& core, const Event& event) {
   } else if (hit.type == ui::SettingsListHit::Type::Open &&
              (currentScreen_ == SettingsScreen::Menu || currentScreen_ == SettingsScreen::Cleanup ||
               currentScreen_ == SettingsScreen::FirmwareUpdate ||
-              (currentScreen_ == SettingsScreen::Device && deviceView_.selected == 0))) {
+              (currentScreen_ == SettingsScreen::Device && deviceView_.selected == 0) ||
+              (currentScreen_ == SettingsScreen::Screen && screenView_.sleepImageSelected()))) {
     handleConfirm(core);
   } else if (hit.type == ui::SettingsListHit::Type::Back) {
     if (currentScreen_ == SettingsScreen::Menu) {
@@ -181,6 +202,9 @@ StateTransition SettingsState::update(Core& core) {
               case SettingsScreen::Screen:
                 screenView_.moveUp();
                 break;
+              case SettingsScreen::SleepImages:
+                moveSleepImage(-1, false);
+                break;
               case SettingsScreen::Device:
                 deviceView_.moveUp();
                 break;
@@ -207,6 +231,9 @@ StateTransition SettingsState::update(Core& core) {
               case SettingsScreen::Screen:
                 screenView_.moveDown();
                 break;
+              case SettingsScreen::SleepImages:
+                moveSleepImage(1, false);
+                break;
               case SettingsScreen::Device:
                 deviceView_.moveDown();
                 break;
@@ -230,6 +257,9 @@ StateTransition SettingsState::update(Core& core) {
               case SettingsScreen::Screen:
                 if (screenView_.buttons.isActive(2)) handleLeftRight(-1);
                 break;
+              case SettingsScreen::SleepImages:
+                moveSleepImage(-1, true);
+                break;
               case SettingsScreen::Device:
                 if (deviceView_.buttons.isActive(2)) handleLeftRight(-1);
                 break;
@@ -247,6 +277,9 @@ StateTransition SettingsState::update(Core& core) {
                 break;
               case SettingsScreen::Screen:
                 if (screenView_.buttons.isActive(3)) handleLeftRight(+1);
+                break;
+              case SettingsScreen::SleepImages:
+                moveSleepImage(1, true);
                 break;
               case SettingsScreen::Device:
                 if (deviceView_.buttons.isActive(3)) handleLeftRight(+1);
@@ -369,6 +402,8 @@ void SettingsState::render(Core& core) {
       case SettingsScreen::Screen:
         viewNeedsRender = screenView_.needsRender;
         break;
+      case SettingsScreen::SleepImages:
+        break;
       case SettingsScreen::Device:
         viewNeedsRender = deviceView_.needsRender;
         break;
@@ -402,6 +437,9 @@ void SettingsState::render(Core& core) {
     case SettingsScreen::Screen:
       ui::render(renderer_, THEME, screenView_);
       screenView_.needsRender = false;
+      break;
+    case SettingsScreen::SleepImages:
+      ui::render(renderer_, THEME, sleepImageView_);
       break;
     case SettingsScreen::Device:
       ui::render(renderer_, THEME, deviceView_);
@@ -483,6 +521,10 @@ void SettingsState::openSelected() {
 
 void SettingsState::goBack(Core& core) {
   switch (currentScreen_) {
+    case SettingsScreen::SleepImages:
+      currentScreen_ = SettingsScreen::Screen;
+      screenView_.needsRender = true;
+      break;
     case SettingsScreen::Reader:
       saveReaderSettings();
       currentScreen_ = SettingsScreen::Menu;
@@ -571,7 +613,14 @@ void SettingsState::handleConfirm(Core& core) {
       }
       break;
     case SettingsScreen::Screen:
-      handleLeftRight(1);
+      if (screenView_.sleepImageSelected()) {
+        openSleepImages();
+      } else {
+        handleLeftRight(1);
+      }
+      break;
+    case SettingsScreen::SleepImages:
+      selectSleepImage(core);
       break;
 
     case SettingsScreen::Cleanup:
@@ -717,6 +766,7 @@ void SettingsState::handleConfirm(Core& core) {
 }
 
 void SettingsState::handleLeftRight(int delta) {
+  if (currentScreen_ == SettingsScreen::Screen && screenView_.sleepImageSelected()) return;
   if (currentScreen_ == SettingsScreen::Screen && screenView_.lightSelected()) {
     const uint8_t value = screenView_.adjustedLightValue(delta);
     const bool brightness = screenView_.settingIndex(screenView_.selected) == 1;
@@ -748,6 +798,66 @@ void SettingsState::handleLeftRight(int delta) {
     saveDeviceSettings();
     needsRender_ = true;
   }
+}
+
+void SettingsState::openSleepImages() {
+  sleep_images::loadPage(sleepImageView_.page, 0);
+  sleepImageView_.selected = 0;
+  sleepImageView_.savedName = core_->settings.sleepImage;
+  currentScreen_ = SettingsScreen::SleepImages;
+  needsRender_ = true;
+}
+
+void SettingsState::moveSleepImage(int delta, bool page) {
+  auto& view = sleepImageView_;
+  const size_t current = view.page.offset + view.selected;
+  size_t target;
+  if (page) {
+    if (delta < 0) {
+      if (view.page.offset == 0) return;
+      target = view.page.offset - sleep_images::PAGE_SIZE;
+    } else {
+      if (view.page.offset + view.page.count >= view.page.total) return;
+      target = view.page.offset + sleep_images::PAGE_SIZE;
+    }
+  } else if (delta < 0) {
+    target = current == 0 ? view.page.total - 1 : current - 1;
+  } else {
+    target = current + 1 == view.page.total ? 0 : current + 1;
+  }
+  const size_t offset = target / sleep_images::PAGE_SIZE * sleep_images::PAGE_SIZE;
+  if (offset != view.page.offset) sleep_images::loadPage(view.page, offset);
+  view.selected = std::min(target - view.page.offset, view.page.count - 1);
+  needsRender_ = true;
+}
+
+void SettingsState::selectSleepImage(Core& core) {
+  auto& view = sleepImageView_;
+  if (view.selected >= view.page.count) return;
+  const char* name = view.page.names[view.selected];
+  if (name[0]) {
+    FsFile file;
+    if (!sleep_images::openImage(name, file)) {
+      ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(IMAGE_OPEN_FAILED));
+      vTaskDelay(1000 / portTICK_PERIOD_MS);
+      sleep_images::loadPage(view.page, view.page.offset);
+      view.selected = std::min(view.selected, view.page.count - 1);
+      needsRender_ = true;
+      return;
+    }
+    file.close();
+  }
+  char previous[sizeof(core.settings.sleepImage)];
+  memcpy(previous, core.settings.sleepImage, sizeof(previous));
+  snprintf(core.settings.sleepImage, sizeof(core.settings.sleepImage), "%s", name);
+  if (!core.settings.save(core.storage).ok()) {
+    memcpy(core.settings.sleepImage, previous, sizeof(previous));
+    ui::centeredMessage(renderer_, THEME, THEME.uiFontId, tr(SAVE_FAILED));
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    needsRender_ = true;
+    return;
+  }
+  goBack(core);
 }
 
 void SettingsState::loadReaderSettings() {
@@ -791,7 +901,8 @@ void SettingsState::loadScreenSettings() {
     if (themes[i] == settings.themeName) screenView_.currentThemeIndex = static_cast<int>(i);
     screenView_.themeCount++;
   }
-  screenView_.visibleCount = ui::ScreenSettingsView::SETTING_COUNT - (core_->frontLight.isAvailable() ? 0 : 4);
+  screenView_.frontLightAvailable = core_->frontLight.isAvailable();
+  screenView_.sleepImage = settings.sleepImage;
   screenView_.values[1] = core_->frontLight.brightness();
   screenView_.values[2] = core_->frontLight.warmth();
   screenView_.values[3] = settings.frontLightTimeout;

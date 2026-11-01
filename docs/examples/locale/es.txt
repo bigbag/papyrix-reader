@@ -293,3 +293,5 @@ SMOOTH_FRONT_LIGHT=Luz gradual
 SEC_30=30 s
 MIN_1=1 min
 MIN_2=2 min
+SLEEP_IMAGE=Imagen de reposo
+RANDOM=Aleatoria
