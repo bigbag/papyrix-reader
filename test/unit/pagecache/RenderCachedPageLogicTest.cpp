@@ -140,8 +140,7 @@ class MockPageCache {
 };
 
 // ============================================================================
-// Simulates the two key logic patterns from ReaderState::renderCachedPage()
-// that were added in the recent diff:
+// Simulates two key logic patterns from ReaderState::renderCachedPage():
 //   1. Parser reset when background task left parser in inconsistent state
 //   2. Backward navigation: loop createOrExtendCache until chapter is fully cached
 // ============================================================================
@@ -192,7 +191,7 @@ struct ReaderCacheState {
     return pageCache && !pageCache->isPartial() && pageCache->pageCount() == 0;
   }
 
-  // Simulates the parser reset logic from the diff (lines 562-566)
+  // Simulates the parser reset logic in ReaderState::renderCachedPage().
   void resetParserIfInconsistent() {
     if (!pageCache && parser && parserSpineIndex == currentSpineIndex) {
       parser.reset();
@@ -200,7 +199,7 @@ struct ReaderCacheState {
     }
   }
 
-  // Simulates ensurePageCached() from ReaderState (lines 665-699)
+  // Simulates ensurePageCached() from ReaderState.
   bool ensurePageCached(uint16_t pageNum) {
     if (!pageCache) return false;
 
@@ -223,7 +222,7 @@ struct ReaderCacheState {
     return pageNum < pageCount;
   }
 
-  // Simulates backgroundCacheImpl failure recovery (lines 509-518)
+  // Simulates backgroundCacheImpl failure recovery.
   void handleCacheFailure(bool needsExtend) {
     if (needsExtend) {
       pageCache.reset(new MockPageCache());
@@ -235,7 +234,7 @@ struct ReaderCacheState {
     }
   }
 
-  // Simulates the backward navigation loop from the diff (lines 584-593)
+  // Simulates the backward navigation loop in ReaderState::renderCachedPage().
   void cacheEntireChapterForBackwardNav() {
     if (currentSectionPage == INT16_MAX) {
       while (pageCache && pageCache->isPartial()) {

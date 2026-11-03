@@ -139,7 +139,7 @@ class FontManager {
   /**
    * Log current memory status for profiling.
    * Logs free heap size and largest free block.
-   * @param context Description of when this is called (e.g., "before font load")
+   * @param context Label for the log message (e.g., "before font load")
    */
   void logMemoryStatus(const char* context) const;
 

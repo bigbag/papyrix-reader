@@ -29,7 +29,7 @@ struct MarkdownProvider {
   void close();
 
   uint32_t pageCount() const;
-  uint16_t tocCount() const { return 0; }  // Markdown has no TOC (for now)
+  uint16_t tocCount() const { return 0; }  // Markdown has no TOC
   Result<TocEntry> getTocEntry(uint16_t index) const { return Err<TocEntry>(Error::InvalidState); }
 
   // Direct access

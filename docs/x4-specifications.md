@@ -1,10 +1,6 @@
 # Xteink X4 Specifications
 
-These specifications describe the original ESP32-C3 Xteink X4.
-They do not apply to the ESP32-S3 X4 v2 Classic.
-See the [Classic specifications](x4-classic-specifications.md) for its connections and support limits.
-See [Device Specifications](device-specifications.md) for firmware selection and device services.
-The [Pin Summary](#pin-summary) below lists the X4 connections.
+These specifications describe the original ESP32-C3 Xteink X4. They do not apply to the ESP32-S3 X4 v2 Classic. See the [Classic specifications](x4-classic-specifications.md) for its connections and support limits. See [Device Specifications](device-specifications.md) for firmware selection and device services. The [Pin Summary](#pin-summary) below lists the X4 connections.
 
 ---
 
@@ -25,6 +21,8 @@ The [Pin Summary](#pin-summary) below lists the X4 connections.
 - **SPI Clock** — 10 MHz
 - **SPI Mode** — Mode 0 (CPOL=0, CPHA=0)
 - **Data Order** — MSB First
+
+The X4 board profile sets the display SPI clock in [`BoardProfiles.cpp`](../lib/BoardSupport/src/BoardProfiles.cpp). The display driver uses that value in [`Display.cpp`](../lib/EInkDisplay/src/Display.cpp).
 
 See [SSD1677 Driver Guide](ssd1677-driver.md) for the full command reference and LUT documentation.
 
@@ -61,7 +59,7 @@ See [SSD1677 Driver Guide](ssd1677-driver.md) for the full command reference and
 - **CS** — GPIO 21 — Output — Chip Select (active LOW)
 - **DC** — GPIO 4 — Output — Data/Command select
 - **RST** — GPIO 5 — Output — Hardware reset (active LOW)
-- **BUSY** — GPIO 6 — Input — Busy status (LOW = busy)
+- **BUSY** — GPIO 6 — Input — Busy status (HIGH = busy; see [`Display.cpp`](../lib/EInkDisplay/src/Display.cpp))
 
 ### LUT Table Structure (111 bytes)
 
@@ -135,12 +133,8 @@ percentage = -144.9390*V^3 + 1655.8629*V^2 - 6158.8520*V + 7501.3202
 ```
 V is battery voltage (limited to the 0-100% range).
 
-Each status read derives voltage and raw percentage from one ADC sample. The
-X4 HAL limits samples to one every five seconds and applies a 9:1 exponential
-moving average in tenths of a percent. It keeps the filtered estimate in RTC
-memory across UI, Reader, and deep-sleep restarts. A true power-on discards the
-retained estimate. A missing marker, an invalid range, or a raw-to-retained
-difference above 25 percentage points also resets the estimate to the raw
+Each status read derives voltage and raw percentage from one ADC sample. The X4 HAL limits samples to one every five seconds and applies a 9:1 exponential moving average in tenths of a percent. It keeps the filtered estimate in RTC memory across UI, Reader, and deep-sleep restarts. A true power-on discards the retained estimate. A missing marker, an invalid range, or a raw-to-retained difference above 25 percentage points also resets the estimate to the raw
+
 value. Home, Reader, Clock, and System Info use this one filtered status.
 
 ### USB Detection
@@ -157,19 +151,11 @@ value. Home, Reader, Clock, and System Info use this one filtered status.
 - **Wake initialization** — The firmware configures GPIO13 HIGH before it releases its sleep hold or initializes serial, USB, or buttons.
 - **USB edge** — A connect or disconnect edge requests a full Home render. This replaces a stale BootView frame after the X4 power transition.
 
-Clock provides Normal and Power saving modes.
-Normal keeps the 10 ms idle button interval and the existing CPU idle policy.
-Power saving enters deep sleep after 15 seconds without interaction.
-It wakes at the next minute boundary and updates the clock.
-GPIO13 stays HIGH during this standby; the battery shutdown path is not used.
-A short Power press on GPIO3 opens Clock controls directly.
-USB does not disable Clock standby.
+Clock provides Normal and Power saving modes. Normal keeps the 10 ms idle button interval and the existing CPU idle policy. Power saving enters deep sleep after 15 seconds without interaction. It wakes at the next minute boundary and updates the clock. GPIO13 stays HIGH during this standby; the battery shutdown path is not used.
 
-The SSD1677 path restores both monochrome RAM planes from the retained frame.
-It uses the existing framebuffer, not a second C3 allocation.
-Clock clears automatic resume after a fatal wake error.
-Startup disables automatic GPIO sleep switching for the X4 battery latch.
-Normal shutdown drives the latch LOW on battery.
+A short Power press on GPIO3 opens Clock controls directly. USB does not disable Clock standby.
+
+The SSD1677 path restores both monochrome RAM planes from the retained frame. It uses the existing framebuffer, not a second C3 allocation. Clock clears automatic resume after a fatal wake error. Startup disables automatic GPIO sleep switching for the X4 battery latch. Normal shutdown drives the latch LOW on battery.
 
 Battery percentage is a voltage estimate, not a current measurement.
 
@@ -196,6 +182,4 @@ Battery percentage is a voltage estimate, not a current measurement.
 
 ## Sunlight Fading
 
-Enable **Settings > Screen > Sunlight Fading Fix** if the screen fades in sunlight.
-The setting powers down the controller after each refresh.
-See [Sunlight Fading](ssd1677-driver.md#sunlight-fading).
+Enable **Settings > Screen > Sunlight Fading Fix** if the screen fades in sunlight. The setting powers down the controller after each refresh. See [Sunlight Fading](ssd1677-driver.md#sunlight-fading).

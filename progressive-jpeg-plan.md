@@ -98,7 +98,9 @@ Result decode(FsFile& file, const ImageInfo& info, const DecodeOptions& options,
 }
 ```
 
-`probe` restores the original input position on every exit. `decode` consumes a whole file beginning at offset zero and also restores its entry position. A failed restoration returns `IoError`. The caller owns the file and workspace. `decode` compares every indexed frame field against `info` before writing coefficient memory. This avoids a second probe while retaining geometry validation. `workspaceBytes` validates its input fields and returns zero for invalid geometry.
+`probe` restores the original input position on every exit. `decode` consumes a whole file beginning at offset zero and also restores its entry position. A failed restoration returns `IoError`. The caller owns the file and workspace. `decode` compares every indexed frame field against `info` before writing coefficient memory. This avoids a second probe while retaining geometry validation.
+
+`workspaceBytes` validates its input fields and returns zero for invalid geometry.
 
 The converter's interface is:
 
@@ -529,27 +531,39 @@ Do not put benchmark logs, patch history, design choices, or unfinished behavior
 - [ ] Record unavailable hardware checks as unverified. Do not infer them from host timings, heap shims, or the nominal PSRAM size. Do not mark device acceptance complete without device evidence.
 - [ ] Commit only the factory integration, regression checks, target checker changes, and current-state documentation after the required checks. Suggested subject: `Enable progressive JPEG conversion on S3 readers`.
 
-Verification: all 226 host suites pass. The decoder passes 59 checks under AddressSanitizer and UndefinedBehaviorSanitizer. Cancellation checks stop after the first decoded band and inside stuffed-byte and marker-fill sequences. Fourteen real-file conversions pass. All three release firmware builds and target-symbol checks pass. C3 decoder objects contain no code or data. Formatting passes. Static analysis passes with one medium and 40 low findings in unchanged code. Compiler warnings remain in unchanged files.
+Verification: all 226 host suites pass. The decoder passes 59 checks under AddressSanitizer and UndefinedBehaviorSanitizer. Cancellation checks stop after the first decoded band and inside stuffed-byte and marker-fill sequences. Fourteen real-file conversions pass. All three release firmware builds and target-symbol checks pass. C3 decoder objects contain no code or data.
 
-Classic firmware is flashed through `release_x4c`; the uploader verifies its hash. The chip reports 8 MB embedded PSRAM. The independent test book and three images are uploaded to `/jpeg-test-931d62ez`; downloaded sizes and SHA-256 hashes match. The user confirms that EPUB images 1–6 and 8 display. Image 7 is deliberately truncated. The serial log confirms its rejection and successful conversion of image 8 afterward. It also confirms progressive cover conversion and thumbnail publication. The two maximum-image chapters complete cache generation in 5950 ms and 5459 ms; these are not isolated decoder timings.
+Formatting passes. Static analysis passes with one medium and 40 low findings in unchanged code. Compiler warnings remain in unchanged files.
+
+Classic firmware is flashed through `release_x4c`; the uploader verifies its hash. The chip reports 8 MB embedded PSRAM. The independent test book and three images are uploaded to `/jpeg-test-931d62ez`; downloaded sizes and SHA-256 hashes match. The user confirms that EPUB images 1–6 and 8 display. Image 7 is deliberately truncated. The serial log confirms its rejection and successful conversion of image 8 afterward.
+
+It also confirms progressive cover conversion and thumbnail publication. The two maximum-image chapters complete cache generation in 5950 ms and 5459 ms; these are not isolated decoder timings.
 
 The user also confirms correct standalone display of `color-420.jpg` and `gray-maximum.jpg`. The serial log confirms that both files convert to BMP and enter the standalone image cache.
 
 The user skips the remaining Classic checks: cover and thumbnail appearance, forced repeated conversion, memory release, free PSRAM, largest free block, stack use, isolated conversion time, and hardware cancellation response. These checks are unverified, not passed.
 
-Pro firmware is flashed through `release_x4pro`; the uploader verifies its hash. The chip reports 8 MB embedded PSRAM. The same independent fixtures are uploaded to `/jpeg-test-yxk_j3cd`; downloaded sizes and SHA-256 hashes match. The user confirms that EPUB images 1–6 and 8 display. The serial log confirms rejection of the deliberately truncated image 7 and successful conversion of image 8 afterward. It also confirms progressive cover conversion and thumbnail publication. The two maximum-image chapters complete cache generation in 6403 ms and 5764 ms; these are not isolated decoder timings.
+Pro firmware is flashed through `release_x4pro`; the uploader verifies its hash. The chip reports 8 MB embedded PSRAM. The same independent fixtures are uploaded to `/jpeg-test-yxk_j3cd`; downloaded sizes and SHA-256 hashes match. The user confirms that EPUB images 1–6 and 8 display. The serial log confirms rejection of the deliberately truncated image 7 and successful conversion of image 8 afterward. It also confirms progressive cover conversion and thumbnail publication.
+
+The two maximum-image chapters complete cache generation in 6403 ms and 5764 ms; these are not isolated decoder timings.
 
 The user confirms correct standalone display of `color-420.jpg` and `gray-maximum.jpg` and confirms that Back works. The serial log confirms conversion and caching of both progressive files and the baseline JPEG.
 
-A temporary Pro boot-time diagnostic runs the production factory ten times on the 2048 by 3072 grayscale fixture. Eight conversions complete with alternating 1-bit and 2-bit output and required dithering. Two conversions stop after a separate timer requests cancellation one second after conversion starts. Both requests occur after 50 decoded bands. The factory returns after 8600 and 9531 microseconds, including temporary-file cleanup. Cancellation preserves the existing output hash and size in one case and leaves no completed output in the other. Later conversions succeed. Heap integrity checks pass after all ten runs.
+A temporary Pro boot-time diagnostic runs the production factory ten times on the 2048 by 3072 grayscale fixture. Eight conversions complete with alternating 1-bit and 2-bit output and required dithering. Two conversions stop after a separate timer requests cancellation one second after conversion starts. Both requests occur after 50 decoded bands. The factory returns after 8600 and 9531 microseconds, including temporary-file cleanup. Cancellation preserves the existing output hash and size in one case and leaves no completed output in the other.
 
-The diagnostic reports 8388608 bytes of PSRAM and a 63320-byte decoder workspace. Free PSRAM returns to 8384784 bytes after every run. Its largest free block remains 8257524 bytes. Free internal RAM returns to 206900 bytes, with a 147444-byte largest block. Samples taken every 10 ms record a minimum of 8321292 free PSRAM bytes and 199192 free internal RAM bytes. The lowest recorded free stack is 11572 bytes on `loopTask`; this is the task lifetime high-water mark, not isolated decoder stack use. Successful factory calls take 7.434436 to 7.574981 seconds with instrumentation. These boot-time measurements do not represent normal reader-task timing or stack depth. One serial memory line is truncated; its on-device memory equality check passes.
+Later conversions succeed. Heap integrity checks pass after all ten runs.
+
+The diagnostic reports 8388608 bytes of PSRAM and a 63320-byte decoder workspace. Free PSRAM returns to 8384784 bytes after every run. Its largest free block remains 8257524 bytes. Free internal RAM returns to 206900 bytes, with a 147444-byte largest block. Samples taken every 10 ms record a minimum of 8321292 free PSRAM bytes and 199192 free internal RAM bytes. The lowest recorded free stack is 11572 bytes on `loopTask`; this is the task lifetime high-water mark, not isolated decoder stack use.
+
+Successful factory calls take 7.434436 to 7.574981 seconds with instrumentation. These boot-time measurements do not represent normal reader-task timing or stack depth. One serial memory line is truncated; its on-device memory equality check passes.
 
 The temporary diagnostic code is removed. Both source files match their pre-diagnostic bytes. All 226 host suites pass again. The Pro release is restored, its SHA-256 matches the original verified release, and normal reader startup succeeds. The user confirms correct appearance of the Pro test book cover and Home thumbnail. The user skips the remaining Classic checks.
 
 Normal Pro reading uses a fresh independent book at `/jpeg-reader-x57qs0pa/reader-load.epub`. Temporary converter logging records nine calls through the actual `loopTask` and `PageCache` paths. Seven conversions succeed. A reader stop request cancels the background maximum-size image after 36 decoded bands; the foreground path then converts the same image successfully. The deliberately damaged image fails, and the following valid image succeeds. The user completes the workload and returns Home.
 
-The normal-reader samples record at least 8114076 free PSRAM bytes, a 7995380-byte largest PSRAM block, 156612 free internal RAM bytes, and a 114676-byte largest internal block. The task lifetime free-stack minimum is 11564 bytes on `loopTask` and 11864 bytes on `PageCache`. The converter samples after buffer allocation and at decoded-band boundaries, with at least 10 ms between periodic samples. Eight calls have complete before-and-after heap records; all four heap values return to their starting values. The ninth record is truncated, and its available fields match. Other missing serial fields remain unverified. The maximum-size foreground converter calls take 5.722052 to 6.510040 seconds with instrumentation, excluding factory synchronization and publication.
+The normal-reader samples record at least 8114076 free PSRAM bytes, a 7995380-byte largest PSRAM block, 156612 free internal RAM bytes, and a 114676-byte largest internal block. The task lifetime free-stack minimum is 11564 bytes on `loopTask` and 11864 bytes on `PageCache`. The converter samples after buffer allocation and at decoded-band boundaries, with at least 10 ms between periodic samples. Eight calls have complete before-and-after heap records; all four heap values return to their starting values. The ninth record is truncated, and its available fields match. Other missing serial fields remain unverified.
+
+The maximum-size foreground converter calls take 5.722052 to 6.510040 seconds with instrumentation, excluding factory synchronization and publication.
 
 The normal-reader logging is removed, and the converter matches its pre-test bytes. All 226 host suites pass again. The release image matches SHA-256 `828b8a9c82307d5af05c20cd10842b078723200c877f8a6ef3c71067d56e4e9a`. The uploader verifies its writes, and normal reader startup succeeds after restoration. Serial capture is stopped.
 

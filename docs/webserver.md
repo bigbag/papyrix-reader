@@ -137,19 +137,11 @@ The Books tab is the default view. It shows files and folders on the SD card roo
 
 **Note:** Files with uppercase extensions (for example, `Book.EPUB`) are changed to lowercase on upload. Unsupported file types are rejected.
 
-The server writes each received multipart block to a temporary file in
-`/.papyrix`. It does not allocate a second upload buffer. A failed write, failed
-sync, or cancelled transfer removes only that temporary file. The existing
-destination stays unchanged until the complete upload is ready. This rule also
-applies to locale and firmware uploads.
+The server writes each received multipart block to a temporary file in `/.papyrix`. It does not allocate a second upload buffer. A failed write, failed sync, or cancelled transfer removes only that temporary file. The existing destination stays unchanged until the complete upload is ready. This rule also applies to locale and firmware uploads.
 
-The server keeps a backup while it replaces an existing destination. If
-replacement fails, it tries to restore the backup. A rename can report failure
-after it moves a file, so the server checks the file paths during recovery. If
-the original stays at the backup path, the error response gives that path.
-Recover that file with an SD card reader. A power loss during replacement can
-leave `.upload-*.tmp` or `.upload-*.bak` files in `/.papyrix`. Replacement is not
-power-loss atomic.
+The server keeps a backup while it replaces an existing destination. If replacement fails, it tries to restore the backup. A rename can report failure after it moves a file, so the server checks the file paths during recovery. If the original stays at the backup path, the error response gives that path. Recover that file with an SD card reader.
+
+A power loss during replacement can leave `.upload-*.tmp` or `.upload-*.bak` files in `/.papyrix`. Replacement is not power-loss atomic.
 
 #### Creating Folders
 
@@ -166,11 +158,9 @@ This is useful to organize your ebooks by genre, author, or series.
 1. Click the trash icon adjacent to a file or folder.
 2. Confirm the deletion in the popup dialog.
 
-**Warning:** Web File Manager deletion is permanent. You cannot reverse it. The **Recycle bin** setting of the device only
-has an effect on deletion from the Files screen on the device.
+**Warning:** Web File Manager deletion is permanent. You cannot reverse it. The **Recycle bin** setting of the device only has an effect on deletion from the Files screen on the device.
 
-**Note:** Web File Manager folders must be empty before you can delete them. Use the Files screen on the device to delete
-a folder that is not empty.
+**Note:** Web File Manager folders must be empty before you can delete them. Use the Files screen on the device to delete a folder that is not empty.
 
 ### Unicode filenames
 

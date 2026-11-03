@@ -32,7 +32,7 @@ Result<void> HtmlProvider::open(const char* path, const char* cacheDir) {
   strncpy(meta.coverPath, coverPath.c_str(), sizeof(meta.coverPath) - 1);
   meta.coverPath[sizeof(meta.coverPath) - 1] = '\0';
 
-  meta.totalPages = 1;  // Will be updated by reader
+  meta.totalPages = 1;  // The reader updates this value
   meta.currentPage = 0;
   meta.progressPercent = 0;
 

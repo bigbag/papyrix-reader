@@ -20,7 +20,6 @@ StateTransition StartupState::update(Core& core) {
   if (!initialized_) {
     initialized_ = true;
     // First frame - just entered
-    // In future: show boot animation
     return StateTransition::stay(StateId::Startup);
   }
 

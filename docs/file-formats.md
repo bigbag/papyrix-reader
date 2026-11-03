@@ -2,12 +2,9 @@
 
 PapyriX stores EPUB, TXT, Markdown, FB2, and HTML page caches in binary files.
 
-`<device-cache>` is the device-specific cache directory listed in
-[Device Specifications](device-specifications.md#storage).
+`<device-cache>` is the device-specific cache directory listed in [Device Specifications](device-specifications.md#storage).
 
-Cover conversion keeps the aspect ratio. It reduces covers to 528×792 on X3
-or 480×800 on X4, X4 Pro, X4 v2 Classic, and Sticky.
-It does not enlarge smaller covers.
+Cover conversion keeps the aspect ratio. It reduces covers to 528×792 on X3 or 480×800 on X4, X4 Pro, X4 v2 Classic, and Sticky. It does not enlarge smaller covers.
 
 ## Reading History
 
@@ -19,8 +16,7 @@ The stores check temporary-file writes and synchronization before replacement. R
 
 ## Reading Progress
 
-`ProgressManager` saves `progress.bin` for all supported content types.
-Current records use 14 bytes with little-endian integers.
+`ProgressManager` saves `progress.bin` for all supported content types. Current records use 14 bytes with little-endian integers.
 
 | Offset | Size | Field |
 |---|---|---|
@@ -30,11 +26,7 @@ Current records use 14 bytes with little-endian integers.
 | `0x06` | 4 bytes | Signed spine or section index |
 | `0x0A` | 4 bytes | Unsigned page number |
 
-EPUB and FB2 use the index and a page within that section.
-XTC uses a flat page number.
-TXT, Markdown, and HTML use the page number without the index.
-The loader also accepts legacy 4-byte records.
-New saves use the current format.
+EPUB and FB2 use the index and a page within that section. XTC uses a flat page number. TXT, Markdown, and HTML use the page number without the index. The loader also accepts legacy 4-byte records. New saves use the current format.
 
 ## TXT Cache Files
 
@@ -225,8 +217,7 @@ The image is converted to 1-bit dithered BMP format for display.
 
 ## EPUB Cache Files
 
-EPUB files use a more complex cache format in `<device-cache>/epub_<hash>/`.
-The metadata builder accepts up to 500 spine items. It rejects an extra item before TOC processing and does not publish a metadata cache for the unsupported book.
+EPUB files use a more complex cache format in `<device-cache>/epub_<hash>/`. The metadata builder accepts up to 500 spine items. It rejects an extra item before TOC processing and does not publish a metadata cache for the unsupported book.
 
 ### Image Cache (`images/` subdirectory)
 
@@ -236,14 +227,9 @@ Inline images are converted to BMP and cached:
 
 ### Prepared Chapters (`chapters/` subdirectory)
 
-EPUB chapters larger than 64 KiB use complete normalized XHTML files on the SD card.
-The file name is `<sourceFingerprint>_<spineIndex>.xhtml`.
-The parser reads the file in blocks.
-It does not load the complete chapter into RAM.
-Preparation writes temporary files and checks all reads, writes, and synchronization before it publishes the result.
-Cancellation or a detected failure removes the temporary output.
-A zero source fingerprint disables reuse.
-Old virtual-section files and indexes are not used.
+EPUB chapters larger than 64 KiB use complete normalized XHTML files on the SD card. The file name is `<sourceFingerprint>_<spineIndex>.xhtml`. The parser reads the file in blocks. It does not load the complete chapter into RAM. Preparation writes temporary files and checks all reads, writes, and synchronization before it publishes the result. Cancellation or a detected failure removes the temporary output.
+
+A zero source fingerprint disables reuse. Old virtual-section files and indexes are not used.
 
 ## `styles.bin`
 
@@ -270,16 +256,15 @@ Length units are `0` for pixels, `1` for `em`, `2` for `rem`, `3` for points, an
 
 A zero-rule cache is valid. A zero source fingerprint disables persistent rule reuse and publication. A missing, outdated, or corrupt cache requires source preparation. The loader rejects truncated records, invalid field values, duplicate selectors, extra bytes, and checksum errors. Each source CSS file remains limited to 64 KiB.
 
-Preparation writes `styles.bin.tmp`, checks each write, synchronizes and closes the file, then publishes only if every step succeeds. Failure before publication keeps the previous cache. Replacement removes the previous file before rename. A publication failure can leave no cache; the next preparation builds it again. A CSS preparation failure does not publish new pages with incomplete styles. Failure to save complete rules can leave those rules usable in memory. Reading progress and bookmarks use separate files and do not change.
+Preparation writes `styles.bin.tmp`, checks each write, synchronizes and closes the file, then publishes only if every step succeeds. Failure before publication keeps the previous cache. Replacement removes the previous file before rename. A publication failure can leave no cache; the next preparation builds it again.
+
+A CSS preparation failure does not publish new pages with incomplete styles. Failure to save complete rules can leave those rules usable in memory. Reading progress and bookmarks use separate files and do not change.
 
 ## `book.bin`
 
 ### Version 8
 
-This version stores the original EPUB spine order.
-PapyriX rebuilds older metadata without a migration step.
-It keeps the source book, settings, progress, and bookmarks.
-Page numbers can change after the layout rebuild.
+This version stores the original EPUB spine order. PapyriX rebuilds older metadata without a migration step. It keeps the source book, settings, progress, and bookmarks. Page numbers can change after the layout rebuild.
 
 ImHex Pattern:
 

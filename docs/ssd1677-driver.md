@@ -1,13 +1,8 @@
 # SSD1677 E-Ink Display Driver Guide
 
-The SSD1677 controls the GDEQ0426T82 800 × 480 panel on Xteink X4.
-This reference uses the GxEPD2_426_GDEQ0426T82 driver implementation.
-X3 uses different controllers.
-See [X3 LUT Waveforms](x3-lut-waveforms.md) and the [UC8279d reference](x3-uc8279-driver-reference.md).
-The pin and command examples below describe the original X4 path.
-Do not apply them unchanged to Sticky or M4.
-M4 uses 20 MHz SPI, batch-specific HALF temperature, shared-reset ownership, and its own booster/border/gray/power policy.
-See the [M4 display contract](murphy-m4-specifications.md#display-and-input-behavior).
+The SSD1677 controls the GDEQ0426T82 800 × 480 panel on Xteink X4. This reference uses the GxEPD2_426_GDEQ0426T82 driver implementation. X3 uses different controllers. See [X3 LUT Waveforms](x3-lut-waveforms.md) and the [UC8279d reference](x3-uc8279-driver-reference.md).
+
+The pin and command examples below describe the original X4 path. Do not apply them unchanged to Sticky or M4. M4 uses 20 MHz SPI, batch-specific HALF temperature, shared-reset ownership, and its own booster/border/gray/power policy. See the [M4 display contract](murphy-m4-specifications.md#display-and-input-behavior).
 
 ---
 
@@ -60,6 +55,8 @@ CS=LOW -> Transfer(byte1) -> Transfer(byte2) -> ... -> CS=HIGH
 RST=HIGH -> delay(20ms) -> RST=LOW -> delay(2ms) -> RST=HIGH -> delay(20ms)
 ```
 
+The original X4 reset sequence is configured in [`Display.cpp`](../lib/EInkDisplay/src/Display.cpp).
+
 ---
 
 ## Initialization
@@ -100,8 +97,7 @@ After reset:
 
 ### RAM Area Configuration
 
-This sets the window for later RAM writes.
-The hardware reverses Y coordinates.
+This sets the window for later RAM writes. The hardware reverses Y coordinates.
 
 **Important:** X addresses are specified in **pixels**, not bytes. The controller does the byte conversion.
 
@@ -258,7 +254,7 @@ From driver implementation analysis:
 
 ## Custom LUT Guide
 
-### What is a LUT?
+### LUT Purpose
 
 The SSD1677 uses a **Look-Up Table (LUT)** to control **pixel waveform driving** during updates. Each pixel (BW/RED) needs a sequence of voltage phases to change states correctly.
 
@@ -283,9 +279,9 @@ A LUT controls:
 - **Byte 109** — VCOM voltage - sent through 0x2C
 - **Byte 110** — Reserved
 
-**Note:** Bytes 105-109 are sent with separate voltage control commands after the primary LUT is loaded.
+**Note:** After loading the primary LUT, send bytes 105-109 with separate voltage control commands.
 
-### How to Build a Custom LUT
+### Build a Custom LUT
 
 **Step 1 — Define Source Voltage Waveform (WS0-WS7)**
 
@@ -315,9 +311,9 @@ These adjust:
 - Red pigment extra driving
 - Cleanup phases
 
-### How to Load a Custom LUT
+### Load a Custom LUT
 
-A custom LUT is written with **Command 0x32**:
+Send a custom LUT with **Command 0x32**:
 
 ```
 CMD 0x32
@@ -327,7 +323,7 @@ DATA WS1
 DATA WS33
 ```
 
-The first **105 bytes** are written to the LUT register (0x32). Then separate voltage control commands follow.
+Write the first **105 bytes** to the LUT register (0x32). Then send separate voltage control commands.
 
 ```c
 // Load LUT (111-byte format with voltage controls)
@@ -351,7 +347,7 @@ void ssd1677_load_lut_extended(const uint8_t* lut) {
 }
 ```
 
-### How to Apply (Use) the Custom LUT
+### Apply the Custom LUT
 
 After you load the LUT, tell the display to **use it**.
 
@@ -442,7 +438,7 @@ Key characteristics:
 7. Write to previous: Command 0x26 + same image bytes
 ```
 
-**Why write two times?** Partial updates compare the current buffer with the previous buffer. If you write to the two buffers after refresh, you prevent ghosting on the next update.
+Partial updates compare the current buffer with the previous buffer. Write to both buffers after refresh to prevent ghosting on the next update.
 
 ### Minimal Usage Example
 
@@ -454,24 +450,13 @@ ssd1677_display_frame(bw_image, red_image);
 
 ### Single-Buffer and Double-Buffer Operation
 
-The release build defines `EINK_DISPLAY_SINGLE_BUFFER_MODE`.
-It uses one 48 KB host framebuffer for X4.
-The controller retains the previous image in RAM `0x26`.
-After a successful refresh, the X4 driver writes the image to both `0x24` and `0x26`.
-For a window update, it writes only the window to both planes.
-This follows the [FreeInk X4 RAM sequence](https://github.com/Free-Ink/freeink-sdk/commit/9d92cb19a8e5f1f0da8160404cc5d5f77bb9e833).
-The driver does not assume that BW RAM keeps its contents after activation.
-The next refresh compares the target in `0x24` with that saved image.
+The release build defines `EINK_DISPLAY_SINGLE_BUFFER_MODE`. It uses one 48 KB host framebuffer for X4. The controller retains the previous image in RAM `0x26`. After a successful refresh, the X4 driver writes the image to both `0x24` and `0x26`. For a window update, it writes only the window to both planes. This follows the [FreeInk X4 RAM sequence](https://github.com/Free-Ink/freeink-sdk/commit/9d92cb19a8e5f1f0da8160404cc5d5f77bb9e833).
 
-Panel power-off stops the analog supply and clock but retains the previous frame.
-A later FAST refresh powers the panel on and uses that frame.
-The driver rejects the saved frame after initialization, deep sleep, or a BUSY timeout.
-A FAST or window request uses HALF while the saved frame is invalid.
-Grayscale cleanup restores the comparison frame only after a successful refresh.
+The driver does not assume that BW RAM keeps its contents after activation. The next refresh compares the target in `0x24` with that saved image.
 
-Without this define, the driver uses two host framebuffers.
-It writes the previous host buffer to `0x26` before refresh and swaps the host buffers.
-Both modes support this API:
+Panel power-off stops the analog supply and clock but retains the previous frame. A later FAST refresh powers the panel on and uses that frame. The driver rejects the saved frame after initialization, deep sleep, or a BUSY timeout. A FAST or window request uses HALF while the saved frame is invalid. Grayscale cleanup restores the comparison frame only after a successful refresh.
+
+Without this define, the driver uses two host framebuffers. It writes the previous host buffer to `0x26` before refresh and swaps the host buffers. Both modes support this API:
 
 ```cpp
 // Initialize display
@@ -491,8 +476,7 @@ display.displayBuffer(FAST_REFRESH);
 display.displayBuffer(FAST_REFRESH);
 ```
 
-Full and half refreshes can initialize controller RAM before activation.
-The update plan controls this operation separately from differential synchronization.
+Full and half refreshes can initialize controller RAM before activation. The update plan controls this operation separately from differential synchronization.
 
 ### Auto-Write Commands for Fast Clear
 
@@ -510,7 +494,7 @@ sendData(0xF7);     // Fill pattern
 waitWhileBusy();
 ```
 
-This is much faster than a write of 48,000 bytes during initialization.
+These commands fill controller RAM without a 48,000-byte host transfer for each buffer.
 
 ---
 
@@ -547,7 +531,7 @@ This is much faster than a write of 48,000 bytes during initialization.
 
 ### Timing Specifications
 
-- **Reset pulse** — 10ms low duration
+- **Reset pulse** — 2ms low duration on the original X4 (see [`Display.cpp`](../lib/EInkDisplay/src/Display.cpp))
 - **Power on** — approximately 100ms BUSY signal duration
 - **Power off** — approximately 200ms BUSY signal duration
 - **Full refresh** — approximately 1600ms usual mode, wait for BUSY
@@ -580,11 +564,7 @@ This is much faster than a write of 48,000 bytes during initialization.
 
 ## Sunlight Fading
 
-Enable **Settings > Screen > Sunlight Fading Fix** if the X4 screen fades in sunlight.
-The setting adds analog and clock shutdown to each refresh sequence.
-The next refresh powers the controller on again.
-This adds a power-on cycle to each page turn.
-The crosspoint-reader community supplies this workaround.
+Enable **Settings > Screen > Sunlight Fading Fix** if the X4 screen fades in sunlight. The setting adds analog and clock shutdown to each refresh sequence. The next refresh powers the controller on again. This adds a power-on cycle to each page turn. The crosspoint-reader community supplies this workaround.
 
 ---
 

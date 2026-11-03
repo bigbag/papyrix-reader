@@ -11,8 +11,6 @@ Calibre Wireless Device lets you:
 - Delete books from your device from Calibre
 - Sync your library with no cables and no web browsers
 
-This is the fastest method to send books if you already use Calibre for ebook management.
-
 ## Prerequisites
 
 - **Calibre** installed on your computer ([download here](https://calibre-ebook.com/download))

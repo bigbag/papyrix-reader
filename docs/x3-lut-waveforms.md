@@ -130,7 +130,7 @@ Value `0x09` sets the internal oscillator frequency. This sets the duration of e
 
 ### SPI Speed
 
-The UC8253 X3 uses 10 MHz SPI (20 MHz caused pixel damage in testing). The UC8279d X3 uses 20 MHz. X4 operates at 40 MHz. Each 52KB frame transfer takes approximately 42ms on a UC8253 X3, 21ms on a UC8279d X3, and approximately 12ms on X4.
+The UC8253 X3 uses 10 MHz SPI (20 MHz caused pixel damage in testing). The UC8279d X3 uses 20 MHz. The original X4 uses 10 MHz. Each 52KB frame transfer takes approximately 42ms on a UC8253 X3 and 21ms on a UC8279d X3. The X4 board profile sets its display SPI clock in [`BoardProfiles.cpp`](../lib/BoardSupport/src/BoardProfiles.cpp), and [`Display.cpp`](../lib/EInkDisplay/src/Display.cpp) selects it.
 
 ---
 

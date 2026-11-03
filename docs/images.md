@@ -31,16 +31,13 @@ Valid cached covers and thumbnails remain available. A temporary cover read, wri
 - **PNG** (`.png`) — Transparency shown as opaque
 - **BMP** (`.bmp`) — Direct display. No conversion is necessary.
 
-The converter detects the format from the file contents.
+The converter detects the format from the file contents. Filename extension case does not select the decoder.
 
 ### JPEG Encoding Support
 
 All devices support baseline DCT (SOF0) and extended sequential DCT (SOF1).
 
-X4 Pro, X4 v2 Classic, and Sticky also support progressive DCT (SOF2).
-Progressive images must use 8-bit grayscale or YCbCr samples.
-The compressed file must not exceed 512 KiB.
-Conversion requires sufficient PSRAM.
+X4 Pro, X4 v2 Classic, and Sticky also support progressive DCT (SOF2). Progressive images must use 8-bit grayscale or YCbCr samples. The compressed file must not exceed 512 KiB. Conversion requires sufficient PSRAM.
 
 X3 and original X4 show a placeholder for progressive JPEGs. All devices reject arithmetic-coded JPEGs. Unsupported or damaged images show a placeholder.
 
@@ -105,12 +102,7 @@ Some EPUBs put images in as base64 data URIs:
 <img src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD..." />
 ```
 
-`DataUriStripper` removes image data URIs before XML parsing.
-It replaces each matching `src` value with `#`.
-It accepts single quotes and double quotes.
-It matches the prefix without case sensitivity.
-It handles values that cross input buffer boundaries.
-The XML parser does not allocate the embedded image data.
+`DataUriStripper` removes image data URIs before XML parsing. It replaces each matching `src` value with `#`. It accepts single quotes and double quotes. It matches the prefix without case sensitivity. It handles values that cross input buffer boundaries. The XML parser does not allocate the embedded image data.
 
 ### Key Files
 
@@ -122,8 +114,7 @@ The XML parser does not allocate the embedded image data.
 
 ### Cache Location
 
-Images use `<device-cache>/epub_<hash>/images/` on the SD card.
-The [device cache root](device-specifications.md#storage) depends on the device.
+Images use `<device-cache>/epub_<hash>/images/` on the SD card. The [device cache root](device-specifications.md#storage) depends on the device.
 
 ```
 <device-cache>/
@@ -140,17 +131,15 @@ Cache filenames use an FNV-1a hash of the resolved image path:
 - Input: Full path in the EPUB (for example, `OEBPS/images/cover.jpg`)
 - Output: 8-character hex hash (for example, `a1b2c3d4.bmp`)
 
-This makes sure:
-- The same image that is referred to more than one time is cached one time
-- No path character escaping is necessary
-- Filenames have a fixed length
+The cache:
+
+- Reuses one BMP for repeated references to the same resolved image path.
+- Uses filenames that need no path escaping.
+- Uses fixed-length filenames.
 
 ### Failed Conversion Markers
 
-When image conversion fails, a `.failed` marker file is created:
-- Prevents a new conversion try on later loads
-- Contains no data (empty file)
-- Cleared when the book cache is cleared
+The image cache records a conversion error in an empty `.failed` marker. The marker prevents another conversion attempt on later loads. Clearing the book cache removes the marker.
 
 ---
 
@@ -161,8 +150,6 @@ To prevent a damaged EPUB from causing long delays, image processing uses a fail
 - **Threshold**: 3 failures one after the other
 - **Scope**: For each chapter (resets when you go to a new spine item)
 - **Behavior**: After the threshold, remaining images in the chapter show as placeholders
-
-This makes sure that some damaged images do not prevent you from reading the remainder of the chapter.
 
 ---
 

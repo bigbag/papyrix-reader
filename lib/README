@@ -1,7 +1,5 @@
 # Firmware libraries
 
-This directory contains local firmware libraries and third-party dependencies.
-Each local library keeps its source files in a `src/` directory.
-`library.json` supplies library metadata and build settings.
+This directory contains local firmware libraries and third-party dependencies. Each local library keeps its source files in a `src/` directory. `library.json` supplies library metadata and build settings.
 
-See the library README files for API and usage details.
+See library README files for summaries and public headers for API details.

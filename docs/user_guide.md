@@ -1,7 +1,6 @@
 # PapyriX User Guide
 
-This guide describes controls, navigation, and reading features for supported
-PapyriX devices.
+This guide describes controls, navigation, and reading features for supported PapyriX devices.
 
 ## 1. Hardware Overview
 
@@ -13,29 +12,19 @@ Use the firmware file for the device:
 - Sticky: `papyrix-sticky.bin` for app updates
 - Murphy M4: `papyrix-murphy-m4.bin` for app updates
 
-X3, the original X4, and X4 v2 Classic have no touch input.
-X4 Pro, Sticky, and Murphy M4 have touch input.
-X4 Pro and M4 have a front light.
-Pro, Classic, Sticky, and M4 firmware images are not interchangeable.
-Sticky and M4 support is implemented, not device-tested.
-Use the [complete Sticky install bundle](sticky-specifications.md#installation) for first installation.
-Use the [complete M4 install bundle](murphy-m4-specifications.md#installation) for M4 first installation.
+X3, the original X4, and X4 v2 Classic have no touch input. X4 Pro, Sticky, and Murphy M4 have touch input. X4 Pro and M4 have a front light. Pro, Classic, Sticky, and M4 firmware images are not interchangeable.
+
+Sticky and M4 support is implemented, not device-tested. Use the [complete Sticky install bundle](sticky-specifications.md#installation) for first installation. Use the [complete M4 install bundle](murphy-m4-specifications.md#installation) for M4 first installation.
 
 ### Button and Touch Layout
 
-X3/X4 bottom buttons are Back, Confirm, Left, and Right. The side controls are
-Power, Up, and Down.
-X4 v2 Classic has the same seven button actions.
-X4 Pro has three physical buttons: Up (GPIO0), Down (GPIO7), and Power (GPIO3).
-X4 Pro has no physical Back, Confirm, Left, or Right buttons.
-Its capacitive Home key sends Back when released.
-Sticky has Up (GPIO5), Down (GPIO6), and Power/AI (GPIO4) buttons.
-It has no capacitive Home key.
-GT911 touch supplies the other controls on Pro and Sticky.
-The Sticky Power/AI button uses the existing Power-button preferences.
-M4 has Up1, Down2, and Power0 buttons with no physical Confirm or Home key.
-Its FT6336U-compatible touch controller supplies menu and keyboard actions.
-The M4 Power button also uses the existing Power-button preferences.
+X3/X4 bottom buttons are Back, Confirm, Left, and Right. The side controls are Power, Up, and Down. X4 v2 Classic has the same seven button actions.
+
+X4 Pro has three physical buttons: Up, Down, and Power. X4 Pro has no physical Back, Confirm, Left, or Right buttons. Its capacitive Home key sends Back when released.
+
+Sticky has Up, Down, and Power/AI buttons. It has no capacitive Home key. Touch supplies the other controls on Pro and Sticky. The Sticky Power/AI button uses the existing Power-button preferences.
+
+M4 has Up1, Down2, and Power0 buttons with no physical Confirm or Home key. Its touch screen supplies menu and keyboard actions. The M4 Power button also uses the existing Power-button preferences.
 
 X4 Pro, Sticky, and Murphy M4 use the same five active regions on the reading page:
 
@@ -47,18 +36,9 @@ X4 Pro, Sticky, and Murphy M4 use the same five active regions on the reading pa
 - **Confirm:** Tap the bottom-right corner to open Reader Menu.
 - **Bottom center:** A tap has no action while the reading page is visible.
 
-Each side region uses 24 percent of the screen width. The center uses 52 percent.
-The bottom strip is 50 pixels high in each screen orientation.
-Four small edge tabs show the page-turn and bottom-corner controls.
-Each tab is 4 pixels wide with rounded inner corners.
-The tabs do not change the page layout or touch regions.
-The colored regions and labels appear only in this guide.
-The regions stay in the same positions when the status bar is hidden.
+Four small edge tabs show the page-turn and bottom-corner controls. The tabs do not change the page layout or touch regions. The colored regions and labels appear only in this guide. The regions stay in the same positions when the status bar is hidden.
 
-The side-button preference reverses Previous and Next only.
-Menus, lists, dialogs, the keyboard, and reader overlays accept direct taps.
-Full-screen reader overlays keep their own visible button bars.
-Swipe gestures work only on the 2048 game board. Reader and Settings use taps.
+The side-button preference reverses Previous and Next only. Menus, lists, dialogs, the keyboard, and reader overlays accept direct taps. Full-screen reader overlays keep their own visible button bars. Swipe gestures work only on the 2048 game board. Reader and Settings use taps.
 
 ---
 
@@ -132,16 +112,41 @@ The Books screen keeps a maximum of ten books that you opened before. It shows a
 
 The Files screen is a folder and file browser.
 
-* **Navigate List:** Use **Left** (or **Volume Up**), or **Right** (or **Volume Down**) to move the selection cursor up
-  and down through folders and books.
-* **Open Selection:** Press **Confirm** to open a folder or read a selected book.
-* **Delete Item:** Press **Right** on an item and confirm the action. Folders are always deleted permanently with all their contents. Files move to the recycle bin (`/trash`) by default. Set **Recycle bin** to off in **Settings → Device** to delete files permanently.
+- **Navigate:** Use **Up** and **Down** to move through folders and files.
+- **Open:** Press **Confirm** to open the selected folder or book.
 
-> **Note:** The recycle bin is a regular folder named `trash` at the root of the SD card. It copies the initial folder structure of trashed books. Open its folders and press **Confirm** on a book to put it back in its initial folder (or the root if that folder cannot be created again). Press **Right** to delete it permanently. You cannot delete the `trash` folder from the file browser. Use **Empty Trash** in the Cleanup menu to clear it.
+**Delete a file or folder**
 
-> **Note:** EPUB (.epub), FB2 (.fb2), HTML (.html, .htm), XTC (.xtc, .xtch), Markdown (.md, .markdown), and plain text (.txt, .text) file formats are supported. EPUB 2 and EPUB 3 formats are fully supported. FB2 files support metadata, TOC navigation, and text formatting (no inline images). HTML files show as standalone documents with formatting. Markdown files show with basic formatting (headers, bold, italic, lists). The device supports SD cards with FAT32 format and exFAT format.
+Deleting a folder permanently removes all its contents. Files move to `/trash` by default. When **Settings → Device → Recycle bin** is off, file deletion is permanent. The browser protects the active book and folders that contain it.
 
-> **Tip:** The Web UI supports folder names and file names in Latin (including Vietnamese), Cyrillic, Greek, Thai, and Arabic. Names have a limit of 255 UTF-8 bytes. Full paths have a limit of 1023 bytes. CJK filenames are not supported in the device file browser. For deep folder trees with supported non-Latin names, use exFAT. Make a backup of the SD card before you format it again.
+1. Select the item.
+2. Press **Right**.
+3. Confirm the deletion.
+
+**Restore a book**
+
+The recycle bin keeps the book's original folder structure.
+
+1. Open the book's folder inside `/trash`.
+2. Select the book.
+3. Press **Confirm**.
+4. Confirm the restore action.
+
+The device restores the book to its original folder. If it cannot recreate that folder, it restores the book to the SD card root.
+
+**Delete a trashed book permanently**
+
+You cannot restore the book after deletion.
+
+1. Select the book inside `/trash`.
+2. Press **Right**.
+3. Confirm the deletion.
+
+The browser protects the root `trash` folder. **Empty Trash** in the Cleanup menu permanently deletes its contents.
+
+The reader supports FAT32 and exFAT SD cards. See [format behavior](#format-behavior) for supported file formats and limits.
+
+> **Tip:** The device file browser does not support CJK filenames. Use exFAT for deep folder trees with supported non-Latin names. Back up the SD card before formatting it. See [Unicode filenames](webserver.md#unicode-filenames) for naming rules.
 
 > **Note:** These folders are hidden from the file browser:
 > - `System Volume Information`, `LOST.DIR`, `$RECYCLE.BIN` — OS system folders
@@ -152,7 +157,6 @@ The Files screen is a folder and file browser.
 
 > **Note:** Each folder can show a maximum of 1000 items. Put large libraries into subfolders if you go above this limit.
 
-> **Note:** You cannot delete the book that is open. Close the book first, then delete it.
 
 ### 3.3 Reading Screen
 
@@ -186,17 +190,13 @@ When you go into the screen, the device asks you to select a network mode:
 
 ![On-screen Keyboard](images/keyboard.jpg)
 
-After the connection, your X4 starts a web server. See the [webserver docs](webserver.md) for
-how to connect and upload files.
+After the connection, your X4 starts a web server. See the [webserver docs](webserver.md) for how to connect and upload files.
 
 > **Note:** When you exit File Transfer, the device restarts to get memory back that WiFi used.
 
 ### 3.5 Settings
 
-The Settings screen has six categories in the same order on all supported devices.
-Reader, Screen, and Device are separate entries on the same level.
-Missing translations use the English fallback. Use the
-[locale examples](examples/locale/) for translated labels.
+The Settings screen has six categories in the same order on all supported devices. Reader, Screen, and Device are separate entries on the same level. Missing translations use the English fallback. Use the [locale examples](examples/locale/) for translated labels.
 
 #### Reader
 
@@ -227,9 +227,10 @@ Text and reading settings, in menu order:
   - Text alignment for paragraphs (headers stay centered)
 
 - **Hyphenation** (default: ON)
-  - Break long words at soft hyphen positions in EPUB content
-  - Words that are too wide for the line are split with character-level hyphenation
-  - Decreases large gaps in justified text and prevents words from going past the line
+  - The reader uses Liang-pattern hyphenation for German, English, Spanish, French, Italian, Russian, and Ukrainian.
+  - EPUB metadata selects the language.
+  - The reader also uses soft hyphens in EPUB content.
+  - It splits words that are too wide for a line at character boundaries.
 
 - **Show Images** (default: ON)
   - Show inline images in EPUB content and book covers
@@ -293,8 +294,7 @@ Display settings, in menu order:
   - Warmth changes remain immediate when no fade is active.
   - Very low brightness can change in steps.
 
-These options apply in both Reader mode and UI mode.
-X3, X4, X4 v2 Classic, and Sticky hide all four front-light settings.
+These options apply in both Reader mode and UI mode. X3, X4, X4 v2 Classic, and Sticky hide all four front-light settings.
 
 - **Reading Orientation** (default: Portrait)
   - Options: Portrait, Landscape CW, Inverted, Landscape CCW
@@ -393,26 +393,24 @@ Maintenance actions for the device:
 
 #### Firmware Update
 
-Use an SD card for normal app updates.
+Use this procedure only to update an existing compatible PapyriX installation. Select the app image for the correct board and partition layout.
 
-Use the app image for the correct board.
-The validator rejects malformed, duplicate, and incompatible PapyriX board tags before flash erase.
-Compatible third-party and older images do not need a PapyriX tag.
-See [update compatibility](device-support-matrix.md#firmware-update-compatibility) for the limits.
+For first installation, use the [Sticky bundle](sticky-specifications.md#installation) or [M4 bundle](murphy-m4-specifications.md#installation), as applicable. See [update compatibility](device-support-matrix.md#firmware-update-compatibility) for validation limits.
 
-- Copy the firmware binary as `/firmware.bin` to the root of your SD card
-- Select **Firmware Update** from the Settings menu and press **Run**
-- The device flashes the firmware and restarts
-- **Do not power off or remove the SD card during the update**
+> **Do not switch off the device during an update.**
+> **Do not remove the SD card during an update.**
 
-For emergency recovery, copy the firmware as `/force_update.bin` to the SD card.
-On the next start, the device shows **Firmware update in progress** and **Do not
-power off**, applies the update, and restarts. If the display is unavailable,
-the update continues without changing the previous e-ink frame. Do not remove
-power or the SD card before the restart.
+You can use the **Firmware** tab in the [web server](webserver.md) instead of copying the image to the card.
 
+1. Copy the correct app image to the SD card root as `/firmware.bin`.
+2. Put the SD card in the device if you removed it.
+3. Open **Settings → Firmware Update**.
+4. Press **Run**.
+5. Wait for the update to finish.
 
-You can also upload firmware binaries through the [web server](webserver.md). Use the **Firmware** tab to upload a `.bin` file, then run the update from the device.
+The device restarts after a successful update.
+
+For a device that cannot open the UI, see [emergency recovery](troubleshooting.md#firmware-recovery). Do not remove power or the SD card during recovery.
 
 #### System Info
 
@@ -420,7 +418,7 @@ See device data: firmware version, uptime, WiFi status, MAC address, free memory
 
 ### 3.6 Calibre Wireless
 
-Calibre Wireless lets you send books from **Calibre** (ebook management software) to your PapyriX Reader through WiFi. This is the fastest method to send books if you already use Calibre.
+Calibre Wireless lets you send books from **Calibre** (ebook management software) to your PapyriX Reader through WiFi.
 
 #### Prerequisites
 
@@ -478,9 +476,7 @@ For the full procedure, see the [Calibre Wireless Guide](calibre.md).
 You can change the sleep screen. Put custom images in specified locations on the SD card:
 
 - **Single Image:** Put a file named `sleep.bmp` in the root directory.
-- **Multiple Images:** Make a `sleep` directory in the root of the SD card and put `.bmp` images
-  in it. Valid images in this directory have priority over the `sleep.bmp` file.
-  The default **Random** option selects an image each time the device sleeps.
+- **Multiple Images:** Make a `sleep` directory in the root of the SD card and put `.bmp` images in it. Valid images in this directory have priority over the `sleep.bmp` file. The default **Random** option selects an image each time the device sleeps.
 
 > [!NOTE]
 > You must set the **Sleep Screen** setting to **Custom** to use these images.
@@ -491,20 +487,18 @@ To select an image without Wi-Fi:
 2. Use Up and Down to move between entries. Use Left and Right to change pages.
 3. Press **Select**, or tap a filename, to save the choice and return.
 
-The list shows eight entries per page. The first entry is **Random**.
-An asterisk marks the saved choice. **Back** returns without changing it.
-The list uses directory order. It excludes hidden files, subdirectories, and invalid BMP files.
+The list shows eight entries per page. The first entry is **Random**. An asterisk marks the saved choice. **Back** returns without changing it. The list uses directory order. It excludes hidden files, subdirectories, and invalid BMP files.
+
 All valid images remain available across pages. Large directories can take longer to load.
 
-The device saves the filename across restarts. If the selected file is missing or invalid,
-the device selects a random valid image from `/sleep/`. If none is available, it tries
-`/sleep.bmp`, then shows the default sleep screen.
+The device saves the filename across restarts. If the selected file is missing or invalid, the device selects a random valid image from `/sleep/`. If none is available, it tries `/sleep.bmp`, then shows the default sleep screen.
 
 #### Image Parameters
 
 - **Resolution:** 480 × 800 pixels for X4, 528 × 792 pixels for X3 (portrait mode)
-- **Color depth:** 8-bit grayscale or 24-bit color
-- **Format:** BMP, uncompressed (BI_RGB)
+- **Color depth:** 1-bit monochrome; 2- or 8-bit indexed color; 24- or 32-bit color
+- **Format:** Uncompressed BMP (`BI_RGB`). The 32-bit format also accepts `BI_BITFIELDS`.
+- **Unsupported:** 4-bit BMP
 - **Display levels:** 4 grayscale (black, dark gray, light gray, white)
 
 > [!TIP]
@@ -524,76 +518,48 @@ Cover mode:
 
 ### 3.8 Clock
 
-Open **Apps → Clock**. If the device has valid time, Clock opens without a WiFi connection.
-If time is not set, Clock opens WiFi setup. Connect to a network to synchronize the time.
-Press **Back** in WiFi setup to return to Apps without synchronization.
+Open **Apps → Clock**. If the device has valid time, Clock opens without a WiFi connection. If time is not set, Clock opens WiFi setup. Connect to a network to synchronize the time. Press **Back** in WiFi setup to return to Apps without synchronization.
 
-Open **Menu** to change the clock face, time zone, time format, date format, NTP interval, or power mode.
-The available faces are **Big**, **Analog**, **Retro**, **Flip**, and **Day & Night**.
-Each face shows the date at the top and centers the clock in the usable screen area.
-**Day & Night** shows the sun below the time from 06:00 through 17:59 local time.
-At night, it shows the current lunar phase below the time and the phase name below the moon.
+Open **Menu** to change the clock face, time zone, time format, date format, NTP interval, or power mode. The available faces are **Big**, **Analog**, **Retro**, **Flip**, and **Day & Night**. Each face shows the date at the top and centers the clock in the usable screen area. **Day & Night** shows the sun below the time from 06:00 through 17:59 local time. At night, it shows the current lunar phase below the time and the phase name below the moon.
+
 New installations use **Big**. Existing Clock settings keep **Retro** until you select another face.
-Settings use a full-screen list. Each setting shows its current value on the right.
-The settings menu does not show the clock face or battery indicator.
-Press **Right** to select the next value. Press **Left** to select the previous value.
-Press **Back** to apply and save changes. Saving settings does not request synchronization.
-On touch devices, tap a setting row to select it. Tap `<` or `>` to change its value.
-Tap **Back** to save and return to the clock face.
-If a save fails, Clock keeps settings open and stops automatic standby.
-Check the SD card and press **Back** to try again. The previous saved settings remain intact.
 
-Select **Sync Now** and press **Right** to synchronize immediately, even when the NTP interval is **Off**.
-The right button shows **Sync** on this row. Other settings show `<` and `>`.
-If no WiFi network is saved, Clock opens WiFi setup. Connect to a network to complete the synchronization.
+Settings use a full-screen list. Each setting shows its current value on the right. The settings menu does not show the clock face or battery indicator. Press **Right** to select the next value. Press **Left** to select the previous value. Press **Back** to apply and save changes.
+
+Saving settings does not request synchronization.
+
+On touch devices, tap a setting row to select it. Tap `<` or `>` to change its value. Tap **Back** to save and return to the clock face. If a save fails, Clock keeps settings open and stops automatic standby. Check the SD card and press **Back** to try again. The previous saved settings remain intact.
+
+Select **Sync Now** and press **Right** to synchronize immediately, even when the NTP interval is **Off**. The right button shows **Sync** on this row. Other settings show `<` and `>`. If no WiFi network is saved, Clock opens WiFi setup. Connect to a network to complete the synchronization.
 
 **Mode** has two values:
 
 - **Normal** keeps fast button and touch response. This is the default mode.
 - **Power saving** saves settings and enters deep sleep after 15 seconds without input. The timeout also closes the settings menu. The clock wakes for each minute update.
 
-In Power saving standby, press **Power** briefly to return to Clock controls.
-Other buttons and touch do not wake Clock.
-Touch and the front light are off during standby. The controls restore the normal light settings.
-USB does not change the selected mode.
+In Power saving standby, press **Power** briefly to return to Clock controls. Other buttons and touch do not wake Clock. Touch and the front light are off during standby. The controls restore the normal light settings. USB does not change the selected mode.
+
 Press **Back** to leave Clock. A normal restart does not reopen Clock automatically.
 
-Automatic synchronization pauses while the settings menu is open.
-In Power saving mode, a due attempt runs after the menu closes for standby.
-Clock skips automatic synchronization when no WiFi network is saved.
-The **Off** NTP interval disables periodic synchronization.
-An unattended attempt allows up to 15 seconds for all connection attempts and 10 seconds for NTP.
-Success or failure schedules the next attempt at the selected interval.
+Automatic synchronization pauses while the settings menu is open. In Power saving mode, a due attempt runs after the menu closes for standby. Clock skips automatic synchronization when no WiFi network is saved. The **Off** NTP interval disables periodic synchronization. An unattended attempt allows up to 15 seconds for all connection attempts and 10 seconds for NTP. Success or failure schedules the next attempt at the selected interval.
 
-While controls are open, the settings menu keeps panel power on and the CPU at full speed.
-Clock turns off panel power after each face update and synchronization status message.
-The image remains visible.
-Battery runtime has no verified rating. See the [device support matrix](device-support-matrix.md#clock-power-modes) for verification coverage.
+While controls are open, the settings menu keeps panel power on and the CPU at full speed. Clock turns off panel power after each face update and synchronization status message. The image remains visible. Battery runtime has no verified rating. See the [device support matrix](device-support-matrix.md#clock-power-modes) for verification coverage.
 
 ### 3.9 Printer
 
 Open **Apps → Printer**. The device becomes a driverless network printer.
 
-If a WiFi network is saved, the app connects without asking.
-If no network is saved, or every saved network fails, the app opens the WiFi
-picker. The picker shows saved networks, a scan for new networks, and the
-hotspot option. The hotspot starts a WiFi access point named **PapyriX**.
+If a WiFi network is saved, the app connects without asking. If no network is saved, or every saved network fails, the app opens the WiFi picker. The picker shows saved networks, a scan for new networks, and the hotspot option. The hotspot starts a WiFi access point named **PapyriX**.
 
-After the app connects, the waiting screen shows the network name, the IP
-address, and the printer URI. Print from a computer or phone on the same
-network:
+After the app connects, the waiting screen shows the network name, the IP address, and the printer URI. Print from a computer or phone on the same network:
 
 - **macOS**: Select **PapyriX** in the print dialog. You do not need a driver.
 - **Windows 10/11**: Add the printer in **Settings → Printers & scanners**.
-- **Linux**: The printer appears in CUPS. Add it manually with
-  `lpadmin -p PapyriX -E -v ipp://<device-ip>:631/ipp/print -m everywhere`.
+- **Linux**: The printer appears in CUPS. Add it manually with `lpadmin -p PapyriX -E -v ipp://<device-ip>:631/ipp/print -m everywhere`.
 - **iPhone/iPad**: The printer appears in the print share sheet.
 - **Android**: Use a print service that supports IPP Everywhere, for example the Mopria Print Service.
 
-Each printed page saves to the `/printouts` directory on the SD card.
-Browse earlier printouts with **Left** and **Right** on the waiting screen.
-Printouts also appear in the **Image Viewer** app.
-One page prints per job. The maximum job size is 8 MB.
+Each printed page saves to the `/printouts` directory on the SD card. Browse earlier printouts with **Left** and **Right** on the waiting screen. Printouts also appear in the **Image Viewer** app. One page prints per job. The maximum job size is 8 MB.
 
 Press **Back** to stop the printer and shut the WiFi down.
 
@@ -601,17 +567,14 @@ Press **Back** to stop the printer and shut the WiFi down.
 
 Open **Apps → LocalSend**. The device becomes a LocalSend receiver.
 
-The WiFi picker behaves like the printer app. The waiting screen shows the
-network name and the IP address.
+The WiFi picker behaves like the printer app. The waiting screen shows the network name and the IP address.
 
 Send files or books from the LocalSend app on your computer or phone:
 
-- Turn **Encryption** off in the LocalSend settings on the sender. The device
-  uses plain HTTP.
+- Turn **Encryption** off in the LocalSend settings on the sender. The device uses plain HTTP.
 - Select the device named **PapyriX** in the LocalSend app and send.
 
-Received files save to the `/received` directory on the SD card. If a file
-with the same name exists, the new file gets a number suffix.
+Received files save to the `/received` directory on the SD card. If a file with the same name exists, the new file gets a number suffix.
 
 Press **Back** to stop the receiver and shut the WiFi down.
 
@@ -633,47 +596,21 @@ Press **Back** to leave the app. The device discards the current timer. The time
 
 ### 3.12 2048
 
-Open **Apps → 2048**. Merge equal tiles on the 4 by 4 board to reach 2048.
-Each move adds one tile only when the board changes.
-The score increases by the value of each merged tile.
-Select **Continue** at 2048 to keep playing.
+Open **Apps → 2048**. Merge equal tiles on the 4 by 4 board to reach 2048. Each move adds one tile only when the board changes. The score increases by the value of each merged tile. Select **Continue** at 2048 to keep playing.
 
-On X3, X4, and X4 v2 Classic, press the direction buttons to move.
-On X4 Pro, Sticky, and Murphy M4, swipe from inside the board or tap an arrow below it.
-Available physical direction buttons also work.
-A held direction button does not repeat a move.
-Use one finger and release it to make one move.
-Start the swipe inside the board.
-Swipes that start outside the board do not move tiles or leave the game.
-Wait for the screen update to finish before the next swipe.
+On X3, X4, and X4 v2 Classic, press the direction buttons to move. On X4 Pro, Sticky, and Murphy M4, swipe from inside the board or tap an arrow below it. Available physical direction buttons also work. A held direction button does not repeat a move.
 
-**Back** leaves the game and returns to Apps.
-**Menu** opens **Resume** and **New game**.
-Press Up or Down to select a row, then Confirm to open it.
-Touch devices also accept row taps.
-Back closes the menu.
-New game requires confirmation before it replaces the current game.
+Use one finger and release it to make one move. Start the swipe inside the board. Swipes that start outside the board do not move tiles or leave the game. Wait for the screen update to finish before the next swipe.
 
-The game requests a full screen refresh when it opens.
-Moves and New game use fast refresh requests.
-The game does not request a full refresh after a fixed number of moves.
-If old tile outlines remain visible, leave the game with Back and open it again.
+**Back** leaves the game and returns to Apps. **Menu** opens **Resume** and **New game**. Press Up or Down to select a row, then Confirm to open it. Touch devices also accept row taps. Back closes the menu. New game requires confirmation before it replaces the current game.
 
-The device keeps one unfinished game.
-It saves the board and score when you leave the app or when the device sleeps.
-Moves and menu changes do not write to the SD card.
-Opening 2048 restores the saved game.
-New game and game over remove the old save.
-The game uses the configured Auto Sleep timeout.
-It does not change the startup screen.
-On touch devices, the game keeps the CPU active while the board is open to detect short swipes.
+The game requests a full screen refresh when it opens. Moves and New game use fast refresh requests. The game does not request a full refresh after a fixed number of moves. If old tile outlines remain visible, leave the game with Back and open it again.
 
-If a save fails, the game stays open.
-**Retry** tries again and completes the requested exit or sleep.
-**Cancel** keeps the current game open.
-**Discard changes** leaves without saving the latest moves.
-An old save can remain if a write or removal fails.
-A sudden power loss can lose all moves since the last exit or sleep.
+The device keeps one unfinished game. It saves the board and score when you leave the app or when the device sleeps. Moves and menu changes do not write to the SD card. Opening 2048 restores the saved game. New game and game over remove the old save.
+
+The game uses the configured Auto Sleep timeout. It does not change the startup screen. On touch devices, the game keeps the CPU active while the board is open to detect short swipes.
+
+If a save fails, the game stays open. **Retry** tries again and completes the requested exit or sleep. **Cancel** keeps the current game open. **Discard changes** leaves without saving the latest moves. An old save can remain if a write or removal fails. A sudden power loss can lose all moves since the last exit or sleep.
 
 ---
 
@@ -710,10 +647,7 @@ When **Settings → Reader → Status Bar** is not **None**, the bottom of the r
 
 EPUB chapters cache one chapter at a time, so `~` usually clears when the current chapter cache completes. TXT / Markdown / FB2 / HTML cache the full book in chunks, so `~` can stay until you read through (or go past) the full book.
 
-On touch devices, the left corner includes the battery and acts as **Back**.
-The right corner includes the page number and acts as **Confirm**.
-The center of the bottom strip has no action while reading.
-Hiding the status bar does not change these regions or the four control marks.
+On touch devices, the left corner includes the battery and acts as **Back**. The right corner includes the page number and acts as **Confirm**. The center of the bottom strip has no action while reading. Hiding the status bar does not change these regions or the four control marks.
 
 ### 4.1 Reader Menu
 
@@ -726,12 +660,8 @@ On button devices, press **Confirm** to open Reader Menu. On touch devices, tap 
 
 Book Stats stays available here when **Show Recents** is off. On button devices, use **Up/Down** to highlight an item and **Confirm** to select it. On touch devices, tap the item or use the bottom-right **Confirm** corner to select the highlighted item.
 
-The physical **Back** button closes the menu and returns to reading.
-The X4 Pro Home key does the same.
-On all touch devices, the bottom-left **Back** corner closes the menu.
-Tap another point outside the popup to return to reading, except the **Confirm** corner.
-These dismissal actions do not turn the page or close the book.
-To close the book, tap **Back** when the reading page is visible.
+The physical **Back** button closes the menu and returns to reading. The X4 Pro Home key does the same. On all touch devices, the bottom-left **Back** corner closes the menu. Tap another point outside the popup to return to reading, except the **Confirm** corner. These dismissal actions do not turn the page or close the book. To close the book, tap **Back** when the reading page is visible.
+
 Back does not mean previous page, and Confirm does not mean next page.
 
 X4 Pro and Murphy M4 show front-light controls above the navigation items:
@@ -739,8 +669,7 @@ X4 Pro and Murphy M4 show front-light controls above the navigation items:
 - Tap the **Brightness** or **Warmth** bar to select a level from 0 to 100 percent. Tap **−** or **+** to change the level by 5 percentage points. Dragging is not supported.
 - Brightness zero turns the light off. A warmth change does not turn an off light on.
 
-Light changes keep the menu open.
-The timeout and smooth on/off options in **Settings > Screen** also apply here.
+Light changes keep the menu open. The timeout and smooth on/off options in **Settings > Screen** also apply here.
 
 ### 4.2 Bookmarks
 
@@ -784,6 +713,19 @@ Available from the Reader Menu if you select **Chapters**. The screen header sho
 ---
 
 ## 6. Unsupported Content
+
+### Format behavior
+
+- EPUB 2 and EPUB 3 files (`.epub`) use `nav.xhtml` for navigation, with NCX as a fallback.
+- The reader parses CSS `text-align`, `font-style`, `font-weight`, `text-indent`, margins, and `direction`. It does not support all CSS.
+- The reader shows `<pre>`, `<code>`, `<tt>`, `<kbd>`, and `<samp>` in italic. The firmware has no monospace font.
+- FB2 (`.fb2`) supports metadata, table of contents navigation, and text formatting, but not inline images.
+- HTML (`.html`, `.htm`) shows standalone documents.
+- Markdown (`.md`, `.markdown`) supports headings, bold, italic, and lists.
+- Plain text uses `.txt` or `.text` files.
+- XTC (`.xtc`) and XTCH (`.xtch`) contain pre-rendered pages.
+- CJK fonts support book text only, not the UI. See [CJK fonts](fonts.md#cjk-fonts-chinesejapanesekorean).
+- See [image formats and limits](images.md#supported-formats) for image restrictions.
 
 * **Tables:** The reader shows a `[Table omitted]` placeholder for HTML tables.
 * **Image formats:** EPUB supports JPEG, PNG, and BMP images. GIF, SVG, and WebP images show a placeholder.

@@ -1,19 +1,17 @@
 # Fonts
 
-PapyriX Reader supports custom fonts for reading. Fonts are converted to a proprietary `.epdfont` format that is made for e-paper displays.
+PapyriX Reader supports custom fonts for reading. Convert fonts to the proprietary `.epdfont` format for e-paper displays.
 
 ## How Fonts Work
 
 ### Streaming Font System
 
-Custom fonts use a streaming system that uses little memory. The system loads glyph bitmaps from the SD card when they are necessary. It does not keep the full font in RAM. This saves approximately **50KB of RAM for each font**.
+Custom fonts stream glyph bitmaps from the SD card when needed. The device does not keep the full font in RAM. This saves approximately **50KB of RAM for each font**.
 
-- **Glyph metadata** (character metrics, positions) is loaded into RAM
-- **Glyph bitmaps** (the pixels) come from SD when they are necessary
-- An **LRU cache** keeps glyphs that were used recently in memory for fast access
-- Usual RAM use: approximately 25KB for each font (compared to approximately 70KB for fonts that are fully loaded)
-
-The user does not see this difference. Fonts operate the same way. They only use less memory.
+- The device loads **glyph metadata** (character metrics, positions) into RAM.
+- It reads **glyph bitmaps** (the pixels) from the SD card when needed.
+- An **LRU cache** keeps recently used glyphs in memory.
+- Usual RAM use is approximately 25KB for each font, compared to approximately 70KB for fonts that are fully loaded.
 
 ### Supported Styles
 
@@ -25,13 +23,7 @@ Custom `.epdfont` fonts support **regular** and **bold** styles:
 
 ### Fallback Behavior
 
-PapyriX makes sure that you can always read your books, even if a custom font fails:
-
-1. **Font load failure** → The built-in font is used
-2. **Individual glyph failure** → The character is skipped (no crash)
-3. **SD card read error** → Affected characters are skipped. Reading continues.
-
-If you see missing characters, try a different font in Settings. The built-in font is always available as a reliable fallback.
+If a custom font fails to load, the device uses the built-in font. If an individual glyph fails or an SD card read error affects it, the device skips that character and continues reading. If characters are missing, try a different font in Settings. The built-in font remains available.
 
 ### Built-in Font Coverage
 
@@ -132,8 +124,7 @@ For CJK texts, PapyriX uses external `.bin` format fonts. These fonts stream fro
 
 #### Quick Start with gen_cjk_theme.sh
 
-`gen_cjk_theme.sh` creates a `.bin` font and a matching `.theme` file.
-The script downloads `fontconvert-bin` if no local build exists:
+`gen_cjk_theme.sh` creates a `.bin` font and a matching `.theme` file. The script downloads `fontconvert-bin` if no local build exists:
 
 ```bash
 # CJK font renders everything (Latin + CJK)
@@ -209,9 +200,7 @@ See the [Customization Guide](customization.md#custom-fonts) for the full proced
 
 ## Regenerating built-in fonts
 
-Obtain static TTF files and place them at the paths below before you run these commands.
-After you regenerate a header, update its `*_FONT_ID` hash in `src/config.h`.
-Use the command in the comment above that hash.
+Obtain static TTF files and place them at the paths below before you run these commands. After you regenerate a header, update its `*_FONT_ID` hash in `src/config.h`. Use the command in the comment above that hash.
 
 Use these fallback files:
 

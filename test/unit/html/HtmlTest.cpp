@@ -9,7 +9,7 @@
 // Pure functions extracted from Html.cpp for testing
 // ============================================
 
-// Extract title from filepath (logic from Html constructor, lines 18-31)
+// Extract title from filepath (logic from Html constructor)
 static std::string extractTitle(const std::string& filepath) {
   size_t lastSlash = filepath.find_last_of('/');
   size_t lastDot = filepath.find_last_of('.');
@@ -27,12 +27,12 @@ static std::string extractTitle(const std::string& filepath) {
   }
 }
 
-// Generate cache path (logic from Html constructor, line 15)
+// Generate cache path (logic from Html constructor)
 static std::string generateCachePath(const std::string& cacheDir, const std::string& filepath) {
   return cacheDir + "/html_" + std::to_string(std::hash<std::string>{}(filepath));
 }
 
-// Extract <title> tag content from HTML buffer (logic from Html::load(), lines 59-87)
+// Extract <title> tag content from HTML buffer (logic from Html::load())
 static std::string extractTitleFromHtml(const char* buf, size_t len) {
   auto* lower = new char[len + 1];
   for (size_t i = 0; i < len; i++) {
@@ -65,7 +65,7 @@ static std::string extractTitleFromHtml(const char* buf, size_t len) {
   return result;
 }
 
-// Extract directory from filepath (logic from Html::findCoverImage(), lines 132-134)
+// Extract directory from filepath (logic from Html::findCoverImage())
 static std::string extractDirectory(const std::string& filepath) {
   size_t lastSlash = filepath.find_last_of('/');
   std::string dirPath = (lastSlash == std::string::npos) ? "/" : filepath.substr(0, lastSlash);
@@ -73,7 +73,7 @@ static std::string extractDirectory(const std::string& filepath) {
   return dirPath;
 }
 
-// FsHelpers::isHtmlFile reimplemented for testing (from FsHelpers.h, lines 57-58)
+// FsHelpers::isHtmlFile reimplemented for testing
 static bool isHtmlFile(const char* path) {
   if (!path) return false;
   const char* ext = strrchr(path, '.');

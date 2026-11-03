@@ -35,7 +35,7 @@ Result<void> MarkdownProvider::open(const char* path, const char* cacheDir) {
   meta.coverPath[sizeof(meta.coverPath) - 1] = '\0';
 
   // Markdown uses file size, not pages
-  meta.totalPages = 1;  // Will be updated by reader
+  meta.totalPages = 1;  // The reader updates this value
   meta.currentPage = 0;
   meta.progressPercent = 0;
 

@@ -300,11 +300,14 @@ bool calibre_is_connected(const calibre_conn_t* conn);
 /**
  * @brief Process incoming data (call in main loop)
  *
- * Non-blocking function that processes any pending data from Calibre.
- * Should be called regularly to handle protocol messages.
+ * Call regularly to handle discovery and protocol messages.
+ * timeout_ms controls the initial TCP readiness wait, not the total call.
+ * After readiness, message reception may wait. A zero timeout uses
+ * CALIBRE_RECV_TIMEOUT_MS (30000 ms) for reception.
+ * Discovery, connection, and handlers may also do work during the call.
  *
  * @param conn Connection handle
- * @param timeout_ms Maximum time to wait for data (0 for non-blocking)
+ * @param timeout_ms Initial TCP readiness wait in milliseconds (0 to poll)
  * @return CALIBRE_OK on success, error code otherwise
  */
 calibre_err_t calibre_process(calibre_conn_t* conn, uint32_t timeout_ms);

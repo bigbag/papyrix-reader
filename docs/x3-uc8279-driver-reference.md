@@ -33,12 +33,7 @@ MTP layout (first 48 bytes):
 
 ### Identification Responses
 
-The X3 probe uses the stock V6.3.15 protocol from FreeInk SDK.
-It reads only the first three VER bytes.
-The third byte `0x66` identifies UC8279d.
-The third byte `0xFF` selects UC8253.
-Other values are inconclusive.
-The probe does not use FLG or MTP responses.
+The X3 probe uses the stock V6.3.15 protocol from FreeInk SDK. It reads only the first three VER bytes. The third byte `0x66` identifies UC8279d. The third byte `0xFF` selects UC8253. Other values are inconclusive. The probe does not use FLG or MTP responses.
 
 ### Probe Timing
 
@@ -119,7 +114,9 @@ The stock firmware functions are `FUN_42015108` (planes) and `FUN_42013be0` (LUT
 6. CDI (`0x97` first, `0xD7` later)
 7. PON, DRF, wait BUSY
 
-This is the stock firmware sequence. The PapyriX driver keeps the window open until the refresh completes. The gray planes overwrite DTM1 and DTM2. The next B/W refresh seeds DTM1 white and uses GC. The FreeInk driver adds an optional pre-conditioning pass before the gray frame. The pass uses `XTF_PRE_BW_MID` with CCSET (`0xE0`) = `0x02` and TSSET (`0xE5`) = `0x5A` (stock function `FUN_42015944`). PapyriX does not implement this pass. `XTH4` is an alternative built-in 4-gray table set.
+This is the stock firmware sequence. The PapyriX driver keeps the window open until the refresh completes. The gray planes overwrite DTM1 and DTM2. The next B/W refresh seeds DTM1 white and uses GC.
+
+The FreeInk driver adds an optional pre-conditioning pass before the gray frame. The pass uses `XTF_PRE_BW_MID` with CCSET (`0xE0`) = `0x02` and TSSET (`0xE5`) = `0x5A` (stock function `FUN_42015944`). PapyriX does not implement this pass. `XTH4` is an alternative built-in 4-gray table set.
 
 ### Deep Sleep
 

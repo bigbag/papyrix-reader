@@ -1,9 +1,19 @@
 ## Summary
 
-* **What is the goal of this PR?** (e.g., Fixes a bug in the user authentication module, Implements the new feature for 
-  file uploading.)
-* **What changes are included?**
+- State the goal.
+- List the changes.
 
-## Additional Context
+## Verification
 
-* Add any other information that might be helpful for the reviewer (e.g., performance implications, potential risks, specific areas to focus on).
+- List the commands you run and their results.
+- State which checks are unavailable.
+
+## Documentation
+
+- [ ] Documentation groups related sentences into paragraphs and uses short, active sentences with precise technical terms.
+- [ ] Claims match the source. Safety conditions appear before the affected action.
+- [ ] Changed links and heading references resolve.
+
+## Risks
+
+- State effects on supported devices, saved data, and security.

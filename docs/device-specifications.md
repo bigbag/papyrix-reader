@@ -39,8 +39,7 @@
   - Front light: cool/warm PWM
   - Status: **Implemented, not device-tested**
 
-See the [device support matrix](device-support-matrix.md) for build targets and hardware services.
-Classic uses a separate board profile from the original X4 and X4 Pro.
+See the [device support matrix](device-support-matrix.md) for build targets and hardware services. Classic uses a separate board profile from the original X4 and X4 Pro.
 
 ## Firmware
 
@@ -50,62 +49,37 @@ Classic uses a separate board profile from the original X4 and X4 Pro.
 - `papyrix-sticky.bin` uses the fixed Sticky board profile.
 - `papyrix-murphy-m4.bin` uses the fixed M4 profile.
 
-The standard partition table starts app0 at `0x10000`.
-The partition layout uses 16 MB.
-Sticky has 32 MB of physical flash.
-The Xteink targets have 16 MB of physical flash.
-Sticky first installation requires the [complete install bundle](sticky-specifications.md#installation).
-M4 first installation requires its [complete install bundle](murphy-m4-specifications.md#installation).
-Its app-only image does not migrate stock partitions.
+The standard partition table starts app0 at `0x10000`. The partition layout uses 16 MB. Sticky has 32 MB of physical flash. The Xteink targets have 16 MB of physical flash. Sticky first installation requires the [complete install bundle](sticky-specifications.md#installation).
 
-Do not install an artifact for a different MCU or board.
-An incorrect image can drive the wrong GPIOs and damage hardware.
+M4 first installation requires its [complete install bundle](murphy-m4-specifications.md#installation). Its app-only image does not migrate stock partitions.
+
+Do not install an artifact for a different MCU or board. An incorrect image can drive the wrong GPIOs and damage hardware.
 
 ## Hardware Selection
 
-`lib/BoardSupport` owns board profiles, hardware identity, and selection policy.
-The C3 artifact checks the manual override before the saved board selection.
-It probes X3 I2C devices when no saved selection applies.
-Board detection and display-controller detection are separate operations.
-See [X3 controller detection](x3-specifications.md#controller-detection).
-Each probe pass checks the BQ27220, DS3231, and QMI8658.
-Two or more detected devices in both passes select X3.
-Zero detected devices in both passes select X4.
-The firmware saves either conclusive result in NVS.
-Other results select X4 for that boot without saving a detection result.
+`lib/BoardSupport` owns board profiles, hardware identity, and selection policy. The C3 artifact checks the manual override before the saved board selection. It probes X3 I2C devices when no saved selection applies. Board detection and display-controller detection are separate operations. See [X3 controller detection](x3-specifications.md#controller-detection).
 
-C3 board and panel selections use the `papyrix_hw` NVS namespace.
-The C3 keys are `dev_ovr`, `dev_det`, `epd_ovr`, `epd_det`, and `epd_ver`.
-Classic reads the factory panel identity from `hw_calib/screenType` without changing it.
-A missing or invalid identity starts a bounded display probe.
-An unknown response leaves the display disabled.
+Each probe pass checks the BQ27220, DS3231, and QMI8658. Two or more detected devices in both passes select X3. Zero detected devices in both passes select X4. The firmware saves either conclusive result in NVS. Other results select X4 for that boot without saving a detection result.
+
+C3 board and panel selections use the `papyrix_hw` NVS namespace. The C3 keys are `dev_ovr`, `dev_det`, `epd_ovr`, `epd_det`, and `epd_ver`. Classic reads the factory panel identity from `hw_calib/screenType` without changing it. A missing or invalid identity starts a bounded display probe. An unknown response leaves the display disabled.
+
 Headless SD recovery remains available.
 
-Sticky uses a fixed board profile and probes its display controller.
-An unresolved Sticky panel blocks display initialization.
-See the [Sticky specifications](sticky-specifications.md#display-behavior) for the probe limits.
+Sticky uses a fixed board profile and probes its display controller. An unresolved Sticky panel blocks display initialization. See the [Sticky specifications](sticky-specifications.md#display-behavior) for the probe limits.
 
-M4 selects SSD1677 directly.
-One saved hardware batch selects both touch calibration and the HALF-refresh temperature.
-See the [M4 batch contract](murphy-m4-specifications.md#hardware-batches).
+M4 selects SSD1677 directly. One saved hardware batch selects both touch calibration and the HALF-refresh temperature. See the [M4 batch contract](murphy-m4-specifications.md#hardware-batches).
 
 ## Power
 
-Except on M4, the CPU policy uses 10 MHz at idle.
-Active work uses 160 MHz on ESP32-C3 and 240 MHz on ESP32-S3.
-M4 keeps the 240 MHz boot clock.
-Xteink devices use GPIO3 for the Power button.
-Sticky uses GPIO4.
+Except on M4, the CPU policy uses 10 MHz at idle. Active work uses 160 MHz on ESP32-C3 and 240 MHz on ESP32-S3. M4 keeps the 240 MHz boot clock. Xteink devices use GPIO3 for the Power button. Sticky uses GPIO4.
+
 M4 uses GPIO0 and has no assigned power latch.
 
-The firmware powers the SD rail before storage access.
-It completes the display power-off sequence before deep sleep.
-Board-specific backends set the required rail and GPIO hold states.
+The firmware powers the SD rail before storage access. It completes the display power-off sequence before deep sleep. Board-specific backends set the required rail and GPIO hold states.
 
 ## Storage
 
-PapyriX supports FAT32 and exFAT SD cards.
-Page caches use device-specific folders:
+PapyriX supports FAT32 and exFAT SD cards. Page caches use device-specific folders:
 
 ```text
 /.papyrix/cache/          X4
@@ -116,9 +90,7 @@ Page caches use device-specific folders:
 /.papyrix/cache/murphy_m4/ Murphy M4
 ```
 
-Moving an SD card between devices does not reuse incompatible page layouts.
-See [file formats](file-formats.md) for cache records.
-See the [user guide](user_guide.md) for supported book formats.
+Moving an SD card between devices does not reuse incompatible page layouts. See [file formats](file-formats.md) for cache records. See the [user guide](user_guide.md) for supported book formats.
 
 ## Hardware Libraries
 

@@ -1,26 +1,16 @@
 # EInkDisplay
 
-EInkDisplay provides controller access for Xteink X3, X4, and X4 Pro.
-`papyrix::hal::Display` selects the driver from the active hardware profile.
-`GfxRenderer` provides text, image, shape, and orientation handling.
+EInkDisplay provides controller access for supported PapyriX hardware profiles. See the [device support matrix](../../docs/device-support-matrix.md). `papyrix::hal::Display` selects the driver from the active hardware profile. `GfxRenderer` provides text, image, shape, and orientation handling.
 
 ## Frame Buffers
 
-`getFrameBuffer()` returns the active frame buffer.
-A zero bit represents black.
-A one bit represents white.
-Use the active profile dimensions for all buffer access.
+`getFrameBuffer()` returns the active frame buffer. A zero bit represents black. A one bit represents white. Use the active profile dimensions for all buffer access.
 
-`displayBuffer()` sends a black-and-white frame.
-The controller driver implements full, half, and fast refresh requests.
-The grayscale methods send the two bit planes and apply the controller waveform.
-See the [rendering pipeline](../../docs/rendering-pipeline.md).
+`displayBuffer()` sends a black-and-white frame. The controller driver implements full, half, and fast refresh requests. The grayscale methods send the two bit planes and apply the controller waveform. See the [rendering pipeline](../../docs/rendering-pipeline.md).
 
 ## Power
 
-Call `deepSleep()` before device sleep.
-The driver completes the controller power-off sequence before deep sleep.
-Do not remove panel power during a refresh.
+Call `deepSleep()` before device sleep. The driver completes the controller power-off sequence before deep sleep. Do not remove panel power during a refresh.
 
 ## Controller References
 

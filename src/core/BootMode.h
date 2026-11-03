@@ -46,7 +46,7 @@ void saveTransition(BootMode mode, const char* bookPath = nullptr, ReturnTo retu
 void clearTransition();
 
 // Show a notification message on display before restart
-// The e-ink display will retain this message during the reboot
+// The e-ink display retains this message during the reboot.
 void showTransitionNotification(const char* message);
 
 }  // namespace papyrix

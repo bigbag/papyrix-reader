@@ -4,8 +4,7 @@
 
 ## Custom Themes
 
-Themes control colors, layout, and fonts.
-The device reads theme files from the SD card.
+Themes control colors, layout, and fonts. The device reads theme files from the SD card.
 
 ### Theme File Location
 
@@ -374,7 +373,9 @@ uv run scripts/fontconvert.py noto-sans-arabic -r NotoSansArabic-Regular.ttf -b 
 
 ### CJK Fonts
 
-The ESP32-C3 has limited RAM (approximately 380KB). CJK fonts need the external `.bin` format, which streams glyphs from the SD card. CJK fonts are supported for book text (reading view) only. UI elements (home screen, status bar, book title overlay) use built-in fonts with no CJK glyphs. Pre-converted CJK fonts are in the `docs/examples/fonts/` directory. To convert your CJK fonts, use `scripts/gen_cjk_theme.sh` (downloads the converter binary). See the [Fonts Guide: CJK section](fonts.md#cjk-fonts-chinesejapanesekorean) for more data.
+The ESP32-C3 has limited RAM (approximately 380KB). CJK fonts need the external `.bin` format, which streams glyphs from the SD card. CJK fonts are supported for book text (reading view) only. UI elements (home screen, status bar, book title overlay) use built-in fonts with no CJK glyphs. Pre-converted CJK fonts are in the `docs/examples/fonts/` directory.
+
+To convert your CJK fonts, use `scripts/gen_cjk_theme.sh` (downloads the converter binary). See the [Fonts Guide: CJK section](fonts.md#cjk-fonts-chinesejapanesekorean) for more data.
 
 ### Fallback Behavior
 
@@ -396,30 +397,43 @@ Built-in fonts are always available:
 
 ---
 
+## Custom Sleep Screens
+
+Run these commands from the repository root. Install the script dependencies first:
+
+```bash
+npm --prefix scripts install
+```
+
+Set `--bits` to `2` or `8` for firmware-compatible output. The script defaults to 4-bit BMP, which the firmware rejects.
+
+```bash
+make sleep-screen INPUT=photo.jpg OUTPUT=sleep.bmp ARGS='--bits 8'
+make sleep-screen INPUT=photo.jpg OUTPUT=sleep.bmp ARGS='--dither --bits 8'
+```
+
+Conversion options:
+
+- `--orientation portrait|landscape`: Output orientation. Default: `portrait`.
+- `--bits 2|4|8`: Script output depth. Use `2` or `8` for the reader.
+- `--dither`: Apply Floyd–Steinberg dithering.
+- `--fit contain|cover|stretch`: Resize method. Default: `contain`.
+
+To use the script directly:
+
+```bash
+node scripts/create-sleep-screen.mjs photo.jpg sleep.bmp --dither --bits 8
+```
+
+See [sleep screen setup](user_guide.md#37-sleep-screen) for SD locations, image selection, and device settings.
+
 ## Firmware Updates
 
-Copy the correct release artifact to the SD card root as `firmware.bin`.
-Open **Settings > Firmware Update** and press **Run**.
-
-The on-device validator checks MCU, image integrity, and slot size before flash erase.
-It checks PapyriX board tags when present and permits compatible images without them.
-See [update compatibility](device-support-matrix.md#firmware-update-compatibility) for the limits.
-For Sticky first installation, use the [complete install bundle](sticky-specifications.md#installation).
-
-The device:
-
-1. Reads the firmware binary from the SD card.
-2. Writes it to the inactive partition.
-3. Restarts.
+Use the correct app image for the board and partition layout. Do not remove power or the SD card during the update. See the [normal update procedure](user_guide.md#firmware-update) and [update compatibility](device-support-matrix.md#firmware-update-compatibility). For first installation, use the [Sticky bundle](sticky-specifications.md#installation) or [M4 bundle](murphy-m4-specifications.md#installation), as applicable.
 
 ### Emergency Recovery
 
-If the device does not start as usual, rename the firmware file to
-`force_update.bin` on the SD card root. On the next start, the device applies
-it before the UI starts. When the display is available, it shows **Firmware
-update in progress** and **Do not power off**. If display initialization fails,
-the update continues without a notification. Wait for the device to restart.
-The boot path removes the file after the attempt. Copy it again before a retry.
+Do not remove power or the SD card during recovery. See [firmware recovery](troubleshooting.md#firmware-recovery) for prerequisites and instructions.
 
 ---
 

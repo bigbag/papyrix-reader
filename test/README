@@ -1,8 +1,5 @@
 # Host tests
 
-Host tests use CMake and hardware mocks.
-The `unit/` directory contains test sources.
-The `mocks/` directory contains hardware mocks.
-`CMakeLists.txt` defines the test targets.
+Host tests use CMake and hardware mocks. The `unit/` directory contains test sources. The `mocks/` directory contains hardware mocks. `CMakeLists.txt` defines the test targets.
 
 Run `make test` from the repository root to build and run the host tests.

@@ -2,8 +2,7 @@
 
 See [Device Specifications](device-specifications.md) for shared hardware information.
 
-The C3 firmware supports both X3 and X4. Startup selection uses the policy below.
-See [Hardware Selection](device-specifications.md#hardware-selection).
+The C3 firmware supports both X3 and X4. Startup selection uses the policy below. See [Hardware Selection](device-specifications.md#hardware-selection).
 
 ---
 
@@ -40,14 +39,9 @@ The keys use the `papyrix_hw` NVS namespace. The `epd_ovr` values are `0` for au
 
 #### Live Probe
 
-The probe uses the stock X3 V6.3.15 protocol from FreeInk SDK.
-It resets the controller with RST HIGH for 10 ms, LOW for 50 ms, then HIGH for 50 ms.
-It waits up to 300 ms for BUSY to become HIGH.
-A timeout does not prevent the VER read.
+The probe uses the stock X3 V6.3.15 protocol from FreeInk SDK. It resets the controller with RST HIGH for 10 ms, LOW for 50 ms, then HIGH for 50 ms. It waits up to 300 ms for BUSY to become HIGH. A timeout does not prevent the VER read.
 
-The probe sends `VER` (0x70) and reads three bytes.
-It releases SDA without a pull-up and samples each bit after SCLK becomes HIGH.
-It does not read `FLG` or `RMTP`.
+The probe sends `VER` (0x70) and reads three bytes. It releases SDA without a pull-up and samples each bit after SCLK becomes HIGH. It does not read `FLG` or `RMTP`.
 
 The third VER byte selects the controller:
 
@@ -55,22 +49,17 @@ The third VER byte selects the controller:
 - `0xFF` selects UC8253.
 - Any other value is inconclusive.
 
-The firmware logs the three VER bytes, the BUSY timeout status, and the verdict with the `BOARD` tag.
-X4 Pro and Classic keep their separate probe protocols.
+The firmware logs the three VER bytes, the BUSY timeout status, and the verdict with the `BOARD` tag. X4 Pro and Classic keep their separate probe protocols.
 
 #### Device Verification
 
-Device checks confirm UC8253 detection, cache migration, and cache reuse after restart.
-Display output, page changes, sleep, and wake have hardware confirmation.
-The UC8279 display driver has hardware confirmation.
-The stock-protocol probe has no hardware confirmation on UC8279.
+Device checks confirm UC8253 detection, cache migration, and cache reuse after restart. Display output, page changes, sleep, and wake have hardware confirmation. The UC8279 display driver has hardware confirmation. The stock-protocol probe has no hardware confirmation on UC8279.
 
 #### Cache Across Boot Modes
 
-The firmware stores a conclusive result in `epd_det`. It stores the cache format in `epd_ver`. It does not store an inconclusive result. It uses UC8253 for that start.
-Cache version 2 invalidates results from the previous X3 probe.
-The next automatic selection runs the new protocol.
-Service overrides remain valid.
+The firmware stores a conclusive result in `epd_det`. It stores the cache format in `epd_ver`. It does not store an inconclusive result. It uses UC8253 for that start. Cache version 2 invalidates results from the previous X3 probe.
+
+The next automatic selection runs the new protocol. Service overrides remain valid.
 
 PapyriX restarts when it changes between UI mode and Reader mode. A valid cache prevents a new probe after these restarts. The firmware runs a new probe when no valid cache exists. An inconclusive probe runs again at each start. The `epd_ovr` override does not change the automatic cache.
 
@@ -84,11 +73,7 @@ The firmware allocates a static buffer of `MAX_BUFFER_SIZE = 52,272` bytes. This
 
 The UC8253 uses the X3 Full, Half, Turbo, Image, and Grayscale LUT sets. Fast refreshes use Turbo. Half refreshes use the Half scrub bank without a flash. Full refreshes use Image, then one no-op Turbo pass. See [X3 LUT Waveforms](x3-lut-waveforms.md) for timing data and register-level documentation.
 
-On a Clock timer wake, the UC8253 driver restores both RAM planes from the previous Clock frame.
-It preserves row order and bit polarity without a visible refresh.
-The next minute uses the Turbo differential waveform.
-A BUSY timeout rejects restoration and requires a full refresh after recovery.
-Normal startup uses a full refresh.
+On a Clock timer wake, the UC8253 driver restores both RAM planes from the previous Clock frame. It preserves row order and bit polarity without a visible refresh. The next minute uses the Turbo differential waveform. A BUSY timeout rejects restoration and requires a full refresh after recovery. Normal startup uses a full refresh.
 
 The UC8279d uses an external GC waveform for full and half refreshes. It uses an external DU waveform for fast refreshes after it has a valid previous-frame baseline. The first two black-and-white refreshes use GC. A resynchronization refresh also uses GC.
 
@@ -166,9 +151,7 @@ GPIO13 controls the X3 power path and the SD supply. The firmware drives it HIGH
 
 Normal shutdown closes SD access and holds GPIO13 LOW. Clock Power saving instead holds GPIO13 HIGH so the MCU can wake by timer. Timer startup configures the output HIGH before it releases the GPIO hold. Both X3 display controllers use this policy. The firmware holds display RESET on GPIO5 HIGH after the controller enters deep sleep.
 
-The [CrossPet X3 timer-wake implementation](https://github.com/bcrpntr/crosspet-x3/commit/c8759a0c7d81728d68e60f4cc62b28fb600df36c) also keeps GPIO13 HIGH.
-A LOW level can remove MCU power and lose the retained Clock record.
-The SD supply remains powered during Clock standby.
+The [CrossPet X3 timer-wake implementation](https://github.com/bcrpntr/crosspet-x3/commit/c8759a0c7d81728d68e60f4cc62b28fb600df36c) also keeps GPIO13 HIGH. A LOW level can remove MCU power and lose the retained Clock record. The SD supply remains powered during Clock standby.
 
 The power button on GPIO3 starts the device after normal shutdown. During Clock standby, it wakes Clock controls.
 
