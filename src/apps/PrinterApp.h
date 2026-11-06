@@ -2,14 +2,10 @@
 
 #include "MiniApp.h"
 
-namespace papyrix {
-namespace printer_app {
-
+namespace papyrix::printer_app {
 void enter(Core& core);
 bool update(Core& core);
-void onButton(Core& core, Button btn);
-bool render(Core& core);
+miniapps::Action handleEvent(Core& core, const Event& event, bool menuOpen);
+miniapps::Frame render(Core& core, bool menuOpen);
 void exit(Core& core);
-
-}  // namespace printer_app
-}  // namespace papyrix
+}  // namespace papyrix::printer_app

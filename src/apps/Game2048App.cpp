@@ -16,6 +16,8 @@
 extern GfxRenderer renderer;
 
 namespace papyrix::game2048_app {
+using miniapps::Action;
+static void cancelGameInput(Core& core);
 namespace {
 enum class Prompt : uint8_t { None, Restart, Win, Over, LoadError, RestartError, ClearError, ExitError };
 struct State {
@@ -179,7 +181,7 @@ Action back(Core& core, bool menuOpen) {
 }
 }  // namespace
 
-void cancelGameInput(Core& core) {
+static void cancelGameInput(Core& core) {
   core.input.cancelTouchGesture();
   const size_t count = core.events.size();
   for (size_t i = 0; i < count; ++i) {
@@ -214,21 +216,19 @@ bool update(Core& core) {
   return false;
 }
 
-bool render(Core&) {
-  if (state.prompt != Prompt::None && state.prompt != Prompt::Restart)
+miniapps::Frame render(Core&, bool menuOpen) {
+  if (menuOpen) {
     drawOptions();
-  else {
+    if (state.prompt == Prompt::Restart) ui::dialog(renderer, THEME, "2048", tr(GAME_RESTART), state.selected);
+  } else if (state.prompt != Prompt::None && state.prompt != Prompt::Restart) {
+    drawOptions();
+  } else {
     ui::renderGame2048(renderer, THEME, state.game, hasTouch());
     if (state.prompt == Prompt::Restart) ui::dialog(renderer, THEME, "2048", tr(GAME_RESTART), state.selected);
   }
-  renderer.displayBuffer(state.fullRefresh ? hal::Display::FULL_REFRESH : hal::Display::FAST_REFRESH, true);
+  const auto refresh = state.fullRefresh ? miniapps::Refresh::Full : miniapps::Refresh::Fast;
   state.fullRefresh = false;
-  return true;
-}
-
-void renderMenu(Core&) {
-  drawOptions();
-  if (state.prompt == Prompt::Restart) ui::dialog(renderer, THEME, "2048", tr(GAME_RESTART), state.selected);
+  return {refresh, true};
 }
 
 void exit(Core& core) {
@@ -237,25 +237,21 @@ void exit(Core& core) {
   core.cpu.unthrottle();
 }
 
-bool prepareExit(Core& core) {
+miniapps::ExitResult prepareExit(Core& core, miniapps::ExitTarget target) {
+  if (target == miniapps::ExitTarget::Menu) return miniapps::ExitResult::Ready;
   const bool saved = state.clearPending ? game2048::clear(core.storage)
                                         : !state.hasGame || !state.dirty || game2048::save(core.storage, state.game);
   if (saved) {
     state.dirty = false;
     state.clearPending = false;
-    return true;
+    return miniapps::ExitResult::Ready;
   }
   if (state.prompt != Prompt::ExitError) state.previousPrompt = state.prompt;
   prompt(core, Prompt::ExitError, 1);
-  return false;
+  return miniapps::ExitResult::Blocked;
 }
 
-void cancelExitPrompt() {
-  state.prompt = state.previousPrompt;
-  state.selected = state.prompt == Prompt::Restart ? 1 : 0;
-}
-
-Action handleEvent(Core& core, const Event& event, bool menuOpen) {
+static Action handleGameEvent(Core& core, const Event& event, bool menuOpen) {
   const bool modal = state.prompt != Prompt::None;
   Button button = Button::Count;
   int choice = -1;
@@ -332,5 +328,18 @@ Action handleEvent(Core& core, const Event& event, bool menuOpen) {
   } else if (game2048::isWon(state.game) && !state.game.wonAcknowledged)
     prompt(core, Prompt::Win);
   return Action::Redraw;
+}
+
+miniapps::Action handleEvent(Core& core, const Event& event, bool menuOpen) {
+  const auto action = handleGameEvent(core, event, menuOpen);
+  if (action == Action::OpenMenu || action == Action::CloseMenu || action == Action::CancelExit) {
+    if (action == Action::CancelExit) {
+      state.prompt = state.previousPrompt;
+      state.selected = state.prompt == Prompt::Restart ? 1 : 0;
+      core.input.resetIdleTimer();
+    }
+    cancelGameInput(core);
+  }
+  return action;
 }
 }  // namespace papyrix::game2048_app

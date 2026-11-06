@@ -1,23 +1,15 @@
 #pragma once
 
-#include <cstdint>
+#include <MiniApps.h>
 
-#include "../core/Types.h"
+#include <cstdint>
 
 namespace papyrix {
 
 struct Core;
+struct Event;
 
-struct MiniApp {
-  const char* name;
-  void (*enter)(Core& core);
-  bool (*update)(Core& core);
-  void (*onButton)(Core& core, Button btn);
-  bool (*render)(Core& core);  // Returns true if app handled display itself
-  void (*exit)(Core& core);
-  void (*renderMenu)(Core& core);
-  void (*onMenuButton)(Core& core, Button btn);
-};
+using MiniApp = miniapps::App<Core, Event>;
 
 // App registry - defined in AppRegistry.cpp
 extern const MiniApp APPS[];

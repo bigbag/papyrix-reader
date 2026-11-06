@@ -10,12 +10,10 @@ namespace clock_app {
 
 void enter(Core& core);
 bool update(Core& core);
-bool render(Core& core);
+miniapps::Frame render(Core& core, bool menuOpen);
+miniapps::Action handleEvent(Core& core, const Event& event, bool menuOpen);
+miniapps::ExitResult prepareExit(Core& core, miniapps::ExitTarget target);
 void exit(Core& core);
-void renderMenu(Core& core);
-void onMenuButton(Core& core, Button btn);
-bool saveSettings(Core& core);
-bool onMenuTap(Core& core, int16_t x, int16_t y);
 ClockFrame captureFrame(Core& core, int64_t utcSeconds, bool interactive);
 void renderFrame(GfxRenderer& renderer, const ClockFrame& frame);
 enum class SyncResult : uint8_t { Success, Unavailable, Failed, Cancelled, TimeError };

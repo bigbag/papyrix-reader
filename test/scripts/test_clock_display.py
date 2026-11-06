@@ -28,6 +28,7 @@ INCLUDES = [
     "lib/BatteryMonitor/include",
     "lib/EpdFont/src",
     "src",
+    "lib/MiniApps/src",
 ]
 TARGETS = {
     "PAPYRIX_TARGET_XTEINK_C3": ("ssd1677", "uc8253", "uc8279-x3"),
@@ -43,6 +44,7 @@ HARNESS = r'''
 #include <SPI.h>
 #include <EpdFontFamily.h>
 #include <apps/MiniApp.h>
+#include <core/EventQueue.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -178,6 +180,7 @@ struct Core {
   struct Clock {
     bool localTime(std::tm&) const { return false; }
     bool updateFromSystem() { return true; }
+    bool canRetainTime() const { return true; }
   } clock;
   SyncMode pendingSync = SyncMode::None;
   int pendingAppId = -1;
@@ -227,6 +230,7 @@ void render(GfxRenderer&, const decltype(theme)&, AppMenuView&, const MiniApp*) 
 namespace clock_app {
 GfxRenderer* clockRenderer = nullptr;
 #define renderer (*clockRenderer)
+enum class PowerMode { Normal, PowerSaving };
 struct ClockSettings { int utcOffset = 0, ntpSyncSetting = 0; char ntpServers[128]{}; };
 constexpr uint32_t NTP_SYNC_SECONDS[] = {10800, 21600, 86400, 0};
 constexpr int64_t kValidTime = 946684800;
@@ -235,6 +239,7 @@ constexpr int64_t kValidTime = 946684800;
 @NTP_CONSTANTS@
 struct : ClockSettings {
   int lastRenderedMin, menuSelected;
+  PowerMode powerMode = PowerMode::Normal;
   int64_t nextNtpUtc = 0;
   uint32_t interactionStartedMs = 0;
 } state;
@@ -270,84 +275,91 @@ void configTime(long, int, const char*, const char*, const char*) {
 @SYNCHRONIZE@
 @CLOCK_ENTER@
 bool update(Core&) { return false; }
-bool render(Core& core) { return renderApp(core); }
+miniapps::Action handleEvent(Core&, const Event& event, bool menuOpen) {
+  if (event.type != EventType::ButtonPress) return miniapps::Action::None;
+  if (event.button == Button::Back) return menuOpen ? miniapps::Action::CloseMenu : miniapps::Action::Exit;
+  if (event.button == Button::Center) return menuOpen ? miniapps::Action::None : miniapps::Action::OpenMenu;
+  return menuOpen ? miniapps::Action::Redraw : miniapps::Action::None;
+}
+Core* captureFrame(Core& core, int64_t, bool) { return &core; }
+void renderFrame(GfxRenderer&, Core* core) { paint(*core); }
+static void renderMenu(Core& core) {
+  paint(core);
+  ui::confirmHint.clear();
+}
+@CLOCK_RENDER@
+miniapps::ExitResult prepareExit(Core&, miniapps::ExitTarget) { return miniapps::ExitResult::Ready; }
 void exit(Core&) {}
-void renderMenu(Core& core) { paint(core); }
-void onMenuButton(Core&, Button) {}
-bool saveSettings(Core&) { return true; }
 #undef renderer
 }
 namespace imageviewer_app {
 void enter(Core&) {}
 bool update(Core&) { return false; }
-void onButton(Core&, Button) {}
-bool render(Core& core) { return renderApp(core); }
+miniapps::Action handleEvent(Core&, const Event& event, bool menuOpen) {
+  if (event.type != EventType::ButtonPress) return miniapps::Action::None;
+  if (event.button == Button::Center && !menuOpen) return miniapps::Action::OpenMenu;
+  if (event.button == Button::Back) return menuOpen ? miniapps::Action::CloseMenu : miniapps::Action::Exit;
+  return miniapps::Action::Redraw;
+}
+static bool renderImage() { return renderApp(*statusCore); }
+static void renderMenu(Core& core) {
+  paint(core);
+  ui::confirmHint = "Confirm";
+}
+@IMAGE_RENDER@
 void exit(Core&) {}
-void renderMenu(Core& core) { paint(core); }
-void onMenuButton(Core&, Button) {}
 }
 namespace printer_app {
 void enter(Core&) {}
 bool update(Core&) { return false; }
-void onButton(Core&, Button) {}
-bool render(Core& core) { return renderApp(core); }
+miniapps::Action handleEvent(Core&, const Event&, bool) { return miniapps::Action::None; }
+miniapps::Frame render(Core& core, bool) {
+  return {renderApp(core) ? miniapps::Refresh::None : miniapps::Refresh::Fast, false};
+}
 void exit(Core&) {}
 }
 namespace localsend_app {
 void enter(Core&) {}
 bool update(Core&) { return false; }
-void onButton(Core&, Button) {}
-bool render(Core& core) { return renderApp(core); }
+miniapps::Action handleEvent(Core&, const Event&, bool) { return miniapps::Action::None; }
+miniapps::Frame render(Core& core, bool) {
+  return {renderApp(core) ? miniapps::Refresh::None : miniapps::Refresh::Fast, false};
+}
 void exit(Core&) {}
 }
 namespace pomodoro_app {
 void enter(Core&) {}
 bool update(Core&) { return false; }
-void onButton(Core&, Button) {}
-bool render(Core& core) { return renderApp(core); }
+miniapps::Action handleEvent(Core&, const Event&, bool) { return miniapps::Action::None; }
+miniapps::Frame render(Core& core, bool) {
+  return {renderApp(core) ? miniapps::Refresh::None : miniapps::Refresh::Fast, true};
+}
+miniapps::ExitResult prepareExit(Core&, miniapps::ExitTarget) { return miniapps::ExitResult::Ready; }
 void exit(Core&) {}
-void renderMenu(Core& core) { paint(core); }
-void onMenuButton(Core&, Button) {}
 }
 namespace game2048_app {
 void enter(Core&) { std::abort(); }
 bool update(Core&) { std::abort(); }
-bool render(Core&) { std::abort(); }
+miniapps::Action handleEvent(Core&, const Event&, bool) { std::abort(); }
+miniapps::Frame render(Core&, bool) { std::abort(); }
+miniapps::ExitResult prepareExit(Core&, miniapps::ExitTarget) { std::abort(); }
 void exit(Core&) { std::abort(); }
-void renderMenu(Core&) { std::abort(); }
 }
 @REGISTRY@
 
 class AppLauncherState {
  public:
-  enum class Mode { Menu, App, Overlay };
-  enum class PendingExit { None, Apps, Sleep };
   GfxRenderer& renderer_;
-  PendingExit pendingExit_ = PendingExit::None;
-  Mode mode_ = Mode::App;
-  int8_t activeApp_ = APP_CLOCK;
-  bool needsRender_ = true;
+  miniapps::Host<Core, Event> app_;
+  bool goNetwork_ = false;
   ui::AppMenuView menuView_;
   void render(Core& core);
-  void stopApp(Core& core);
-  bool saveClockSettings(Core& core);
-  void showOverlay();
-  void hideOverlay();
   void press(Core& core, Button button, bool repeat = false) {
-    enum class EventType { ButtonPress, ButtonRepeat };
-    struct { Button button; EventType type; } e{button, repeat ? EventType::ButtonRepeat : EventType::ButtonPress};
-    switch (mode_) {
-@KEY_DISPATCH@
-      default: break;
-    }
+    app_.handleEvent(core, repeat ? Event::buttonRepeat(button) : Event::buttonPress(button));
   }
 };
 
 @LAUNCHER_RENDER@
-@STOP_APP@
-@SAVE_GUARD@
-@SHOW_OVERLAY@
-@HIDE_OVERLAY@
 }
 
 std::vector<uint8_t> unpackPlane(const std::vector<uint8_t>& packed, bool old) {
@@ -663,13 +675,14 @@ int main(int argc, char** argv) {
       check(!core.wifi.connected, "Clock consumes inherited and acquired radio ownership");
     } else {
     check(scenario == "app" || scenario == "overlay" || scenario == "keys", "unsupported render scenario");
-    launcher.mode_ = scenario == "overlay" ? AppLauncherState::Mode::Overlay : AppLauncherState::Mode::App;
+    launcher.app_.restore(APPS[APP_CLOCK]);
+    if (scenario == "overlay") launcher.press(core, Button::Center);
     for (int frame = 0; frame < 6; ++frame) {
       renderer.darkBackground_ = frame >= 3;
       theme.backgroundColor = renderer.darkBackground_ ? 0x00 : 0xFF;
       core.seed = static_cast<uint8_t>(17 + frame * 37);
       commands.clear();
-      launcher.needsRender_ = true;
+      launcher.app_.invalidate();
       launcher.render(core);
       checkFrame(core, scenario != "overlay", frame == 0);
       commands.clear();
@@ -684,9 +697,9 @@ int main(int argc, char** argv) {
         check(commands.empty(), "unsupported Clock key must not submit a frame");
       }
       launcher.press(core, Button::Center, true);
-      check(launcher.mode_ == AppLauncherState::Mode::App, "repeat must not open the menu");
+      check(!launcher.app_.menuOpen(), "repeat must not open the menu");
       launcher.press(core, Button::Center);
-      check(launcher.mode_ == AppLauncherState::Mode::Overlay, "Center opens the Clock menu");
+      check(launcher.app_.menuOpen(), "Center opens the Clock menu");
       commands.clear();
       launcher.render(core);
       checkFrame(core, false, false);
@@ -700,21 +713,21 @@ int main(int argc, char** argv) {
       launcher.render(core);
       checkFrame(core, false, false);
       launcher.press(core, Button::Back);
-      check(launcher.mode_ == AppLauncherState::Mode::App, "Back closes the Clock menu");
+      check(!launcher.app_.menuOpen(), "Back closes the Clock menu");
       commands.clear();
       launcher.render(core);
       checkFrame(core, true, false);
       launcher.press(core, Button::Back);
-      check(launcher.mode_ == AppLauncherState::Mode::Menu && launcher.activeApp_ < 0,
+      check(!launcher.app_.active(),
             "Back leaves the Clock face");
     }
-    launcher.activeApp_ = APP_IMAGEVIEWER;
-    launcher.mode_ = AppLauncherState::Mode::App;
+    if (launcher.app_.active()) launcher.app_.stop(core);
+    launcher.app_.restore(APPS[APP_IMAGEVIEWER]);
     for (int frame = 0; frame < 3; ++frame) {
-      if (frame == 2) launcher.mode_ = AppLauncherState::Mode::Overlay;
+      if (frame == 2) launcher.press(core, Button::Center);
       ++core.seed;
       commands.clear();
-      launcher.needsRender_ = true;
+      launcher.app_.invalidate();
       launcher.render(core);
       checkFrame(core, false, false);
       if (frame == 2) check(!ui::confirmHint.empty(), "Image Viewer retains its Confirm action");
@@ -722,11 +735,11 @@ int main(int argc, char** argv) {
         check(lastData(0x21) == std::vector<uint8_t>{0x00}, "powered-on SSD1677 resumes differential refresh");
       }
     }
-    launcher.mode_ = AppLauncherState::Mode::App;
+    launcher.app_.closeMenu();
     core.ownsDisplay = true;
     ++core.seed;
     commands.clear();
-    launcher.needsRender_ = true;
+    launcher.app_.invalidate();
     launcher.render(core);
     checkFrame(core, false, false);
     }
@@ -748,6 +761,7 @@ def main():
     gfx = (ROOT / "lib/GfxRenderer/src/GfxRenderer.cpp").read_text()
     clock = (ROOT / "src/apps/ClockApp.cpp").read_text()
     registry = (ROOT / "src/apps/AppRegistry.cpp").read_text()
+    image = (ROOT / "src/apps/ImageViewerApp.cpp").read_text()
     wifi = (ROOT / "src/hal/WifiRadio.h").read_text()
     clock_header = (ROOT / "src/apps/ClockApp.h").read_text()
     power = (ROOT / "src/apps/ClockPower.cpp").read_text()
@@ -762,12 +776,9 @@ def main():
         "SYNC_RESULT": block(clock_header, "enum class SyncResult"),
         "NTP_CONSTANTS": clock[clock.index("static constexpr int NTP_SERVER_MAX"):clock.index("static struct")],
         "CLOCK_ENTER": block(clock, "void enter("),
+        "CLOCK_RENDER": block(clock, "miniapps::Frame render("),
+        "IMAGE_RENDER": block(image, "miniapps::Frame render("),
         "REGISTRY": registry[registry.index("const MiniApp APPS[]"):registry.rindex("\n}")],
-        "KEY_DISPATCH": launcher[launcher.index("case Mode::App:"):launcher.index("\n    }\n  }")],
-        "STOP_APP": block(launcher, "void AppLauncherState::stopApp("),
-        "SAVE_GUARD": block(launcher, "bool AppLauncherState::saveClockSettings("),
-        "SHOW_OVERLAY": block(launcher, "void AppLauncherState::showOverlay("),
-        "HIDE_OVERLAY": block(launcher, "void AppLauncherState::hideOverlay("),
     }
     for marker, code in replacements.items():
         harness = harness.replace(f"@{marker}@", code)

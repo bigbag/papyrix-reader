@@ -29,6 +29,13 @@ int main() {
     runner.expectEq(int(LoadResult::Loaded), int(load(storage, loaded)), "old game survives failed publication");
     runner.expectEq(original.score, loaded.score, "failed publication preserves old score");
   }
+  for (const auto fault : {Failure::Write, Failure::Sync, Failure::Close, Failure::Publish, Failure::PublishAfter}) {
+    reset();
+    failure = fault;
+    runner.expectFalse(save(storage, original), "failed first save reports failure");
+    failure = Failure::None;
+    runner.expectEq(int(LoadResult::Missing), int(load(storage, loaded)), "failed first save does not publish a game");
+  }
   for (int corruption = 0; corruption < 7; ++corruption) {
     reset();
     std::string broken = record;

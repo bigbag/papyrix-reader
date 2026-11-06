@@ -17,7 +17,7 @@ std::map<std::string, std::shared_ptr<std::string>> files;
 enum class Failure { None, Write, Sync, Close, Preserve, Publish, Rollback, Read, PreserveAfter, PublishAfter };
 Failure failure = Failure::None;
 void put(const char* path, const std::string& value) { files[path] = std::make_shared<std::string>(value); }
-}
+}  // namespace
 
 namespace papyrix::hal {
 Result<bool> Storage::exists(const char* path) { return Ok(files.count(path) != 0); }
@@ -35,21 +35,21 @@ Result<void> Storage::openRead(const char* path, FsFile& out) {
   out.setBuffer(*files.at(path));
   return Ok();
 }
-Result<void> Storage::remove(const char* path) {
-  return files.erase(path) ? Ok() : ErrVoid(Error::FileNotFound);
-}
+Result<void> Storage::remove(const char* path) { return files.erase(path) ? Ok() : ErrVoid(Error::FileNotFound); }
 Result<void> Storage::rename(const char* from, const char* to) {
   if (!files.count(from) || files.count(to)) return ErrVoid(Error::IOError);
   if ((failure == Failure::Preserve && std::strcmp(from, finalPath) == 0) ||
       ((failure == Failure::Publish || failure == Failure::Rollback) && std::strcmp(from, tempPath) == 0) ||
-      (failure == Failure::Rollback && std::strcmp(from, backupPath) == 0)) return ErrVoid(Error::IOError);
+      (failure == Failure::Rollback && std::strcmp(from, backupPath) == 0))
+    return ErrVoid(Error::IOError);
   files[to] = files.at(from);
   files.erase(from);
   if ((failure == Failure::PreserveAfter && std::strcmp(from, finalPath) == 0) ||
-      (failure == Failure::PublishAfter && std::strcmp(from, tempPath) == 0)) return ErrVoid(Error::IOError);
+      (failure == Failure::PublishAfter && std::strcmp(from, tempPath) == 0))
+    return ErrVoid(Error::IOError);
   return Ok();
 }
-}
+}  // namespace papyrix::hal
 
 int main() {
   using namespace papyrix::clock_app;
@@ -86,8 +86,8 @@ int main() {
   runner.expectEq(int(PowerMode::PowerSaving), int(loaded.powerMode), "saved mode survives reopening");
   runner.expectEq(7, int(loaded.utcOffset), "saved zone survives reopening");
 
-  for (const auto fault : {Failure::Write, Failure::Sync, Failure::Close, Failure::Preserve,
-                          Failure::Publish, Failure::Rollback, Failure::PreserveAfter, Failure::PublishAfter}) {
+  for (const auto fault : {Failure::Write, Failure::Sync, Failure::Close, Failure::Preserve, Failure::Publish,
+                           Failure::Rollback, Failure::PreserveAfter, Failure::PublishAfter}) {
     files.clear();
     put(finalPath, legacy);
     failure = fault;
@@ -96,6 +96,15 @@ int main() {
     runner.expectTrue(loadSettings(storage, loaded), "settings_replace_failure: previous settings remain readable");
     runner.expectEq(int(PowerMode::Normal), int(loaded.powerMode), "settings_replace_failure: retain previous mode");
     runner.expectEq(7, int(loaded.utcOffset), "settings_replace_failure: retain previous zone");
+  }
+  for (const auto fault : {Failure::Write, Failure::Sync, Failure::Close, Failure::Publish, Failure::PublishAfter}) {
+    files.clear();
+    failure = fault;
+    runner.expectFalse(saveSettings(storage, value), "failed first settings save reports failure");
+    failure = Failure::None;
+    runner.expectTrue(loadSettings(storage, loaded), "failed first settings save leaves usable defaults");
+    runner.expectEq(int(PowerMode::Normal), int(loaded.powerMode), "failed first save does not publish settings");
+    runner.expectEq(int(Face::Big), int(loaded.face), "failed first save keeps the default face");
   }
   for (bool published : {false, true}) {
     files.clear();

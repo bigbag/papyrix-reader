@@ -44,18 +44,16 @@ bool update(Core&) {
   assert(false);
   return false;
 }
-bool render(Core&) {
+miniapps::Frame render(Core&, bool) {
   assert(false);
-  return false;
+  return {};
 }
+miniapps::Action handleEvent(Core&, const Event&, bool) {
+  assert(false);
+  return miniapps::Action::None;
+}
+miniapps::ExitResult prepareExit(Core&, miniapps::ExitTarget) { return miniapps::ExitResult::Ready; }
 void exit(Core&) { assert(false); }
-void renderMenu(Core&) { assert(false); }
-void onMenuButton(Core&, Button) { assert(false); }
-bool saveSettings(Core&) { return true; }
-bool onMenuTap(Core&, int16_t, int16_t) {
-  assert(false);
-  return false;
-}
 bool standbyDue(Core&, uint32_t, bool) { return false; }
 void resumeInteractive(Core&, const ResumeRecord*) { assert(false); }
 StandbyResult enterStandby(Core&) {
@@ -67,21 +65,26 @@ const char* standbyErrorMessage(StandbyResult) {
   return "";
 }
 }  // namespace clock_app
-#define INACTIVE_APP(name)                            \
-  namespace name {                                    \
-  void enter(Core&) { assert(false); }                \
-  bool update(Core&) {                                \
-    assert(false);                                    \
-    return false;                                     \
-  }                                                   \
-  void onButton(Core&, Button) { assert(false); }     \
-  bool render(Core&) {                                \
-    assert(false);                                    \
-    return false;                                     \
-  }                                                   \
-  void exit(Core&) { assert(false); }                 \
-  void renderMenu(Core&) { assert(false); }           \
-  void onMenuButton(Core&, Button) { assert(false); } \
+#define INACTIVE_APP(name)                                        \
+  namespace name {                                                \
+  void enter(Core&) { assert(false); }                            \
+  bool update(Core&) {                                            \
+    assert(false);                                                \
+    return false;                                                 \
+  }                                                               \
+  miniapps::Action handleEvent(Core&, const Event&, bool) {       \
+    assert(false);                                                \
+    return miniapps::Action::None;                                \
+  }                                                               \
+  miniapps::Frame render(Core&, bool) {                           \
+    assert(false);                                                \
+    return {};                                                    \
+  }                                                               \
+  miniapps::ExitResult prepareExit(Core&, miniapps::ExitTarget) { \
+    assert(false);                                                \
+    return miniapps::ExitResult::Ready;                           \
+  }                                                               \
+  void exit(Core&) { assert(false); }                             \
   }
 INACTIVE_APP(imageviewer_app)
 INACTIVE_APP(printer_app)

@@ -6,11 +6,8 @@
 
 #include <cstdint>
 
+#include "../../apps/MiniApp.h"
 #include "../Elements.h"
-
-namespace papyrix {
-struct MiniApp;
-}
 
 namespace ui {
 

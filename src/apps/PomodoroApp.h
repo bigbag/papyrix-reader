@@ -1,17 +1,12 @@
 #pragma once
 
-#include "../core/Types.h"
+#include "MiniApp.h"
 
-namespace papyrix {
-struct Core;
-
-namespace pomodoro_app {
+namespace papyrix::pomodoro_app {
 void enter(Core& core);
 bool update(Core& core);
-void onButton(Core& core, Button btn);
-bool render(Core& core);
+miniapps::Action handleEvent(Core& core, const Event& event, bool menuOpen);
+miniapps::Frame render(Core& core, bool menuOpen);
 void exit(Core& core);
-void renderMenu(Core& core);
-void onMenuButton(Core& core, Button btn);
-}  // namespace pomodoro_app
-}  // namespace papyrix
+miniapps::ExitResult prepareExit(Core& core, miniapps::ExitTarget target);
+}  // namespace papyrix::pomodoro_app

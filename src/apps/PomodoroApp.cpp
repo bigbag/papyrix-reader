@@ -12,6 +12,7 @@
 #include "../ui/Elements.h"
 #include "../ui/views/SettingsViews.h"
 #include "ClockFacePrimitives.h"
+#include "MiniAppInput.h"
 #include "PomodoroTimer.h"
 #include "ThemeManager.h"
 
@@ -83,7 +84,7 @@ bool update(Core& core) {
   return changed;
 }
 
-void onButton(Core& core, Button btn) {
+static void onButton(Core& core, Button btn) {
   const uint32_t now = millis();
   if (btn == Button::Left) {
     if (state.timer.run == pomodoro::RunState::Running && state.timer.period != pomodoro::Period::Focus) {
@@ -101,7 +102,13 @@ void onButton(Core& core, Button btn) {
   (void)core;
 }
 
-bool render(Core& core) {
+static void renderMenu(Core& core);
+
+miniapps::Frame render(Core& core, bool menuOpen) {
+  if (menuOpen) {
+    renderMenu(core);
+    return {miniapps::Refresh::Fast, true};
+  }
   (void)core;
   const Theme& theme = THEME;
   renderer.clearScreen(theme.backgroundColor);
@@ -128,7 +135,7 @@ bool render(Core& core) {
                             theme.secondaryTextBlack);
   ui::ButtonBar buttons("Back", "Menu", pomodoro::thirdButtonLabel(state.timer), "Reset");
   ui::buttonBar(renderer, theme, buttons);
-  return false;
+  return {miniapps::Refresh::Fast, true};
 }
 
 void exit(Core& core) {
@@ -136,8 +143,9 @@ void exit(Core& core) {
   saveSettings(core);
 }
 
-void renderMenu(Core&) {
+static void renderMenu(Core&) {
   const Theme& theme = THEME;
+  renderer.clearScreen(theme.backgroundColor);
   ui::title(renderer, theme, theme.screenMarginTop, "Pomodoro");
   ui::enumValue(renderer, theme, ui::SettingsListHit::LIST_START_Y, "Start mode",
                 state.timer.startMode == pomodoro::StartMode::Auto ? "Auto" : "Manual", true, theme.itemHeight);
@@ -145,12 +153,26 @@ void renderMenu(Core&) {
   ui::buttonBar(renderer, theme, buttons);
 }
 
-void onMenuButton(Core& core, Button btn) {
+static void onMenuButton(Core&, Button btn) {
   if (btn == Button::Left || btn == Button::Right) {
     state.timer.startMode =
         state.timer.startMode == pomodoro::StartMode::Auto ? pomodoro::StartMode::Manual : pomodoro::StartMode::Auto;
     state.settingsChanged = true;
   }
-  if (btn == Button::Back) saveSettings(core);
+}
+
+miniapps::Action handleEvent(Core& core, const Event& event, bool menuOpen) {
+  if (menuOpen) {
+    Button button;
+    if (!miniAppButton(core, event, button) ||
+        (button != Button::Back && button != Button::Left && button != Button::Right))
+      return miniapps::Action::None;
+  }
+  return handleAppButtons(core, event, menuOpen, onButton, onMenuButton);
+}
+
+miniapps::ExitResult prepareExit(Core& core, miniapps::ExitTarget target) {
+  if (target == miniapps::ExitTarget::Menu) saveSettings(core);
+  return miniapps::ExitResult::Ready;
 }
 }  // namespace papyrix::pomodoro_app

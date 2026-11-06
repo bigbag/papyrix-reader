@@ -43,7 +43,8 @@ HARNESS = r'''
 #include <ui/TouchLayout.h>
 #include <core/EventQueue.h>
 #include <states/State.h>
-#include <apps/Game2048App.h>
+#include <MiniApps.h>
+#include <CheckedFile.h>
 using papyrix::Button;
 using papyrix::Event;
 using papyrix::EventType;
@@ -372,16 +373,11 @@ void buttonBar(Renderer& r, const Theme& t, const ButtonBar& buttons) {
 @SETTINGS_HIT@;
 @SETTINGS_HIT_TEST@
 }
+@MINI_APP_BUTTON@
+@HANDLE_APP_BUTTONS@
 constexpr int APP_CLOCK = 0;
 constexpr int APP_POMODORO = 1;
 constexpr int APP_2048 = 2;
-namespace game2048_app {
-using Action = papyrix::game2048_app::Action;
-Action handleEvent(Core&, const Event&, bool) { assert(false); return Action::None; }
-void cancelGameInput(Core&) { assert(false); }
-bool prepareExit(Core&) { assert(false); return false; }
-void cancelExitPrompt() { assert(false); }
-}
 namespace clock_faces {
 enum class Face : uint8_t {
   Big = 0,
@@ -464,73 +460,74 @@ void clearResume() {}
 @UPDATE@
 @CAPTURE_FRAME@
 @RENDER_FRAME@
+static void renderMenu(Core&);
 @RENDER@
 @RENDER_MENU@
 @MENU_TAP@
 @MENU@
+@HANDLE_EVENT@
+@PREPARE_EXIT@
 @EXIT@
 @STANDBY_RESULT@;
 StandbyResult enterStandby(Core&) { return StandbyResult::TimeRequired; }
 const char* standbyErrorMessage(StandbyResult) { return "Clock error"; }
 }
-struct App {
-  bool (*update)(Core&);
-  void (*onMenuButton)(Core&, Button);
-  void (*onButton)(Core&, Button) = nullptr;
-  void (*renderMenu)(Core&) = clock_app::renderMenu;
-  void (*exit)(Core&) = clock_app::exit;
-  const char* name = "Clock";
-} APPS[] = {{clock_app::update, clock_app::onMenuButton}};
+const miniapps::App<Core, Event> APPS[] = {
+    {"Clock", clock_app::enter, clock_app::update, clock_app::handleEvent, clock_app::render,
+     clock_app::exit, clock_app::prepareExit},
+};
 constexpr int APP_COUNT = 1;
+Core* harnessCore;
 class AppLauncherState {
  public:
-  enum class Mode { Menu, App, Overlay };
-  enum class PendingExit { None, Apps, Sleep };
-  PendingExit pendingExit_ = PendingExit::None;
-  bool requestSleep(Core&) { assert(activeApp_ != APP_2048); return true; }
-  Mode mode_ = Mode::Overlay;
-  int activeApp_ = APP_CLOCK;
-  bool needsRender_ = false, goNetwork_ = false, launched = false;
   Renderer& renderer_ = renderer;
+  miniapps::Host<Core, Event> app_;
+  bool goNetwork_ = false;
   ui::AppMenuView menuView_;
-  AppLauncherState() { menuView_.selected = ui::AppMenuView::EXTRA_COUNT; }
-  void launchApp(Core& core) { launched = true; clock_app::enter(core); }
-  void hideOverlay();
-  bool saveClockSettings(Core& core);
-  void showOverlay();
-  void stopApp(Core&);
+  explicit AppLauncherState(bool open = true) {
+    menuView_.selected = ui::AppMenuView::EXTRA_COUNT;
+    if (open) {
+      app_.restore(APPS[APP_CLOCK]);
+      app_.handleEvent(*harnessCore, Event::buttonPress(Button::Center));
+      app_.render(*harnessCore);
+    }
+  }
+  void launchApp(Core&, int8_t);
+  bool requestSleep(Core&);
   void resumeClock(Core&, const clock_app::ResumeRecord&);
   StateTransition update(Core& core);
   StateTransition dispatchEvents(Core& core) {
-    Event e;
-    @EVENT_LOOP@
+    Event event;
+    while (core.events.pop(event)) app_.handleEvent(core, event);
     return StateTransition::stay(StateId::AppLauncher);
   }
   void enter(Core& core);
+  void exit(Core& core);
   void activateMenuItem(Core& core);
-  void poll(Core& core) { @POLL@ }
+  void poll(Core& core) {
+    app_.update(core);
+    if (app_.needsRender()) core.cpu.unthrottle();
+  }
   bool needsNetwork(Core& core) {
-    enum class StateId { Network };
-    struct StateTransition { static bool to(StateId) { return true; } };
-    @NETWORK_ROUTE@
-    return false;
+    return core.pendingSync == SyncMode::NtpSync || core.pendingSync == SyncMode::WifiSetup ||
+           core.pendingSync == SyncMode::PrinterSetup || core.pendingSync == SyncMode::LocalsendSetup;
   }
   void press(Core& core, Button button) {
-    struct { Button button; } e{button};
-    do { @OVERLAY@ } while (false);
+    app_.handleEvent(core, Event::buttonPress(button));
+    core.cpu.unthrottle();
   }
 };
 @ACTIVATE@
 @LAUNCHER_ENTER@
+@LAUNCHER_EXIT@
 @RESUME_CLOCK@
-@SHOW_OVERLAY@
-@HIDE_OVERLAY@
-@SAVE_GUARD@
-@STOP_APP@
+@LAUNCH_APP@
+@REQUEST_SLEEP@
 @LAUNCHER_UPDATE@
 int main(int argc, char** argv) {
   assert(argc == 2);
   Core core;
+  harnessCore = &core;
   using namespace clock_app;
   state.nextNtpUtc = nextSyncUtc(std::time(nullptr), NTP_SYNC_SECONDS[state.ntpSyncSetting]);
   const std::string scenario = argv[1];
@@ -547,11 +544,13 @@ int main(int argc, char** argv) {
     app.update(core);
     assert(syncs == 1 && !core.clock.canRetainTime());
     renderMenu(core);
-    app.needsRender_ = false;
+    app.app_.render(core);
     nowMs += 15000;
     assert(app.update(core).next == StateId::Network);
     assert(core.pendingSync == SyncMode::NtpSync && core.pendingAppId == APP_CLOCK);
     assert(settingsFile.find("powerMode=1\n") != std::string::npos);
+    app.exit(core);
+    assert(!app.app_.active());
     return 0;
   }
   if (scenario == "save-failure") {
@@ -567,15 +566,15 @@ int main(int argc, char** argv) {
       failSettingsWrite = true;
       core.events.push(Event::tap({50, 770}));
       assert(app.update(core).next == StateId::AppLauncher);
-      assert(app.mode_ == AppLauncherState::Mode::Overlay && settingsFile == original);
+      assert(app.app_.menuOpen() && settingsFile == original);
       renderMenu(core);
-      app.needsRender_ = false;
+      app.app_.render(core);
       nowMs += 60000;
       assert(app.update(core).next == StateId::AppLauncher);
-      assert(app.mode_ == AppLauncherState::Mode::Overlay);
+      assert(app.app_.menuOpen());
       core.events.push(Event::buttonLongPress(Button::Power));
       assert(app.update(core).next == StateId::AppLauncher);
-      assert(app.mode_ == AppLauncherState::Mode::Overlay && settingsFile == original);
+      assert(app.app_.menuOpen() && settingsFile == original);
       core.events.push(Event::buttonPress(Button::Down));
       core.events.push(Event::buttonPress(Button::Right));
       assert(app.update(core).next == StateId::AppLauncher);
@@ -584,7 +583,7 @@ int main(int argc, char** argv) {
       failSettingsWrite = false;
       core.events.push(Event::buttonPress(Button::Back));
       assert(app.update(core).next == StateId::AppLauncher);
-      assert(app.mode_ == AppLauncherState::Mode::App);
+      assert(app.app_.active() && !app.app_.menuOpen());
       assert(settingsFile.find(initiallySaving ? "powerMode=0\n" : "powerMode=1\n") != std::string::npos);
     }
     return 0;
@@ -600,7 +599,7 @@ int main(int argc, char** argv) {
         state.settingsChanged = false;
         state.menuSelected = 0;
         AppLauncherState app;
-        app.mode_ = AppLauncherState::Mode::App;
+        app.app_.closeMenu();
         const auto tap = [&](int x, int y) {
           core.input.lastActivityMs = millis();
           assert(core.events.push(Event::tap({static_cast<int16_t>(x), static_cast<int16_t>(y)})));
@@ -614,9 +613,9 @@ int main(int argc, char** argv) {
           tap(item->x + item->w / 2, item->y + item->h / 2);
         };
         const auto selectMode = [&] {
-          clock_app::render(core);
+          clock_app::render(core, false);
           tapText("Menu");
-          assert(app.mode_ == AppLauncherState::Mode::Overlay);
+          assert(app.app_.menuOpen());
           renderer.clearScreen(THEME.backgroundColor);
           renderMenu(core);
           tap(width / 2, 20);
@@ -626,7 +625,7 @@ int main(int argc, char** argv) {
           nowMs += 14900;
           tapText("Mode");
           assert(state.menuSelected == static_cast<int8_t>(MenuItem::PowerMode));
-          assert(app.needsRender_);
+          assert(app.app_.needsRender());
           renderer.clearScreen(THEME.backgroundColor);
           renderMenu(core);
           assert(std::any_of(renderer.draws.begin(), renderer.draws.end(), [](const auto& draw) {
@@ -646,7 +645,7 @@ int main(int argc, char** argv) {
         assert(state.powerMode == PowerMode::PowerSaving);
         assert(!standbyDue(core, millis(), false));
         tapText("Back");
-        assert(app.mode_ == AppLauncherState::Mode::App);
+        assert(app.app_.active() && !app.app_.menuOpen());
         assert(settingsFile.find("powerMode=1\n") != std::string::npos);
 
         ResumeRecord retained;
@@ -655,13 +654,14 @@ int main(int argc, char** argv) {
         retained.lastFrame = captureFrame(core, std::time(nullptr), false);
         state.powerMode = PowerMode::Normal;
         nowMs = 0;
+        app.app_.stop(core);
         app.resumeClock(core, retained);
-        assert(app.mode_ == AppLauncherState::Mode::App && state.powerMode == PowerMode::PowerSaving);
+        assert(app.app_.active() && !app.app_.menuOpen() && state.powerMode == PowerMode::PowerSaving);
         selectMode();
         tapText(">");
         assert(state.powerMode == PowerMode::Normal);
         tapText("Back");
-        assert(app.mode_ == AppLauncherState::Mode::App);
+        assert(app.app_.active() && !app.app_.menuOpen());
         assert(settingsFile.find("powerMode=0\n") != std::string::npos);
         assert(syncs == syncsBefore);
       }
@@ -672,13 +672,13 @@ int main(int argc, char** argv) {
     AppLauncherState app;
     state.lastRenderedMin = -1;
     app.poll(core);
-    assert(!app.needsRender_);
+    assert(!app.app_.needsRender());
     assert(!core.cpu.throttled);
     core.cpu.throttle();
-    app.needsRender_ = true;
+    app.app_.invalidate();
     app.poll(core);
     assert(!core.cpu.throttled);
-    app.needsRender_ = false;
+    app.app_.render(core);
     app.poll(core);
     assert(!core.cpu.throttled);
     app.press(core, Button::Down);
@@ -698,13 +698,13 @@ int main(int argc, char** argv) {
     state.menuSelected = static_cast<int8_t>(MenuItem::UtcOffset);
     for (int i = 0; i < 3; ++i) app.press(core, Button::Right);
     assert(writes == 0 && syncs == 0);
-    app.needsRender_ = false;
+    app.app_.render(core);
     nowMs += 60000;
     for (int i = 0; i < 3; ++i) app.poll(core);
-    assert(!app.needsRender_);
+    assert(!app.app_.needsRender());
     nowMs = NTP_SYNC_SECONDS[0] * 1000;
     app.poll(core);
-    assert(syncs == 0 && !app.needsRender_);
+    assert(syncs == 0 && !app.app_.needsRender());
     app.press(core, Button::Back);
     assert(writes == 1 && settingsFile.find("utcOffset=3\n") != std::string::npos);
     assert(syncs == 0 && core.wifi.connects == 0);
@@ -713,15 +713,15 @@ int main(int argc, char** argv) {
     core.clock.localTime(after);
     assert(after.tm_hour == (before.tm_hour + 3) % 24);
     state.menuSelected = static_cast<int8_t>(MenuItem::UtcOffset);
-    app.mode_ = AppLauncherState::Mode::Overlay;
+    app.press(core, Button::Center);
     app.press(core, Button::Left);
     clock_app::exit(core);
     assert(writes == 2 && settingsFile.find("utcOffset=2\n") != std::string::npos);
   } else if (scenario == "startup") {
     seedCredential("home", "secret");
-    AppLauncherState app;
+    AppLauncherState app(false);
     app.activateMenuItem(core);
-    assert(app.launched && !app.goNetwork_ && syncs == 0);
+    assert(app.app_.active() && !app.goNetwork_ && syncs == 0);
     assert(!core.wifi.isConnected() && !core.wifi.isInitialized());
     assert(core.wifi.connects == 0);
     assert(core.cpu.performanceLocks == 0);
@@ -734,35 +734,38 @@ int main(int argc, char** argv) {
     clock_app::update(core);
     assert(syncs == 1);
     core.clock.valid = false;
-    AppLauncherState unsynced;
+    AppLauncherState unsynced(false);
     unsynced.activateMenuItem(core);
-    assert(!unsynced.launched && unsynced.goNetwork_);
+    assert(!unsynced.app_.active() && unsynced.goNetwork_);
     assert(core.pendingSync == SyncMode::NtpSync && core.pendingAppId == APP_CLOCK);
     core.wifi.connected_ = true;
     core.wifi.initialized_ = true;
     unsynced.enter(core);
-    assert(unsynced.launched && syncs == 2 && core.wifi.connects == 1);
+    assert(unsynced.app_.active() && syncs == 2 && core.wifi.connects == 1);
     assert(!core.wifi.isConnected() && !core.wifi.isInitialized());
     assert(core.cpu.performanceLocks == 0);
   } else if (scenario == "startup-cancel" || scenario == "manual-wifi-cancel") {
     core.clock.valid = scenario == "manual-wifi-cancel";
-    AppLauncherState app;
+    AppLauncherState app(core.clock.valid);
     if (core.clock.valid) {
       for (int i = 0; i < static_cast<int>(MenuItem::SyncNow); ++i) app.press(core, Button::Down);
       app.press(core, Button::Right);
     } else {
       app.activateMenuItem(core);
     }
-    assert(!app.launched && (app.goNetwork_ || app.needsNetwork(core)));
+    assert((app.goNetwork_ || app.needsNetwork(core)));
+    assert(syncs == 0 && core.wifi.connects == 0 && statusFrames == 0);
+    app.exit(core);
+    assert(!app.app_.active());
     bool goBack_ = true;
     constexpr int returnState_ = 0;
     struct StateTransition { static void to(int) {} };
     auto leaveNetwork = [&] { @NETWORK_BACK@ };
     leaveNetwork();
     app.enter(core);
-    assert(!app.launched && app.mode_ == AppLauncherState::Mode::Menu);
+    assert(!app.app_.active());
     assert(core.pendingSync == SyncMode::None);
-    assert(syncs == 0 && core.wifi.connects == 0 && statusFrames == 0);
+    assert(syncs == 0 && core.wifi.connects == 0);
   } else if (scenario == "timeout" || scenario == "sync-failure") {
     seedCredential("home", "secret");
     state.utcOffset = 3;
@@ -771,10 +774,10 @@ int main(int argc, char** argv) {
     std::tm before{};
     core.clock.localTime(before);
     state.menuSelected = static_cast<int8_t>(MenuItem::UtcOffset);
-    onMenuButton(core, Button::Right);
+    handleEvent(core, Event::buttonPress(Button::Right), true);
     ntpSynced = scenario != "timeout";
     core.clock.updateSucceeds = scenario != "sync-failure";
-    onMenuButton(core, Button::Back);
+    prepareExit(core, miniapps::ExitTarget::Menu);
     clock_app::update(core);
     std::tm after{};
     core.clock.localTime(after);
@@ -849,7 +852,7 @@ int main(int argc, char** argv) {
       for (const bool valid : {false, true}) {
         core.clock.valid = valid;
         renderer.clearScreen(THEME.backgroundColor);
-        clock_app::render(core);
+        clock_app::render(core, false);
         assert(std::any_of(renderer.draws.begin(), renderer.draws.end(), [&](const auto& draw) {
           return draw.kind == 'R' && draw.x == width - 53 && draw.y == 22 && draw.w == 30 && draw.h == 14;
         }));
@@ -877,7 +880,7 @@ int main(int argc, char** argv) {
   } else if (scenario == "power-mode") {
     state.menuSelected = static_cast<int8_t>(MenuItem::PowerMode);
     assert(state.powerMode == PowerMode::Normal);
-    onMenuButton(core, Button::Right);
+    handleEvent(core, Event::buttonPress(Button::Right), true);
     assert(state.powerMode == PowerMode::PowerSaving);
     state.interactionStartedMs = 0;
     nowMs = 14999;
@@ -888,13 +891,13 @@ int main(int argc, char** argv) {
     core.input.lastActivityMs = 1;
     assert(!standbyDue(core, millis(), false));
     core.input.lastActivityMs = 0;
-    onMenuButton(core, Button::Back);
+    prepareExit(core, miniapps::ExitTarget::Menu);
     assert(settingsFile.find("powerMode=1\n") != std::string::npos);
-    onMenuButton(core, Button::Left);
+    handleEvent(core, Event::buttonPress(Button::Left), true);
     assert(state.powerMode == PowerMode::Normal);
     nowMs += 15000;
     assert(!standbyDue(core, millis(), false));
-    onMenuButton(core, Button::Back);
+    prepareExit(core, miniapps::ExitTarget::Menu);
     assert(settingsFile.find("powerMode=0\n") != std::string::npos);
   } else if (scenario == "settings-menu") {
     AppLauncherState app;
@@ -903,9 +906,9 @@ int main(int argc, char** argv) {
       const bool syncRow = i == static_cast<int>(MenuItem::SyncNow);
       assert(ui::leftHint == (syncRow ? "" : "<"));
       assert(ui::rightHint == (syncRow ? "Sync" : ">"));
-      app.needsRender_ = false;
+      app.app_.render(core);
       app.press(core, Button::Center);
-      assert(!app.needsRender_);
+      assert(!app.app_.needsRender());
       app.press(core, Button::Down);
     }
     app.press(core, Button::Back);
@@ -925,10 +928,12 @@ int main(int argc, char** argv) {
       assert(core.pendingSync == SyncMode::NtpSync && core.pendingAppId == APP_CLOCK);
       assert(app.needsNetwork(core));
       assert(syncs == 0 && statusFrames == 0);
+      app.exit(core);
+      assert(!app.app_.active());
       core.wifi.connected_ = true;
       core.wifi.initialized_ = true;
       app.enter(core);
-      assert(app.launched && core.wifi.connects == 0);
+      assert(app.app_.active() && core.wifi.connects == 0);
     }
     assert(syncs == 1 && core.pendingSync == SyncMode::None);
     assert(!core.wifi.isInitialized() && core.cpu.performanceLocks == 0);
@@ -940,8 +945,8 @@ int main(int argc, char** argv) {
     applyTimezone(0);
     state.ntpSyncSetting = NTP_SYNC_COUNT - 1;
     state.menuSelected = static_cast<int8_t>(MenuItem::DateFormat);
-    onMenuButton(core, Button::Right);
-    onMenuButton(core, Button::Back);
+    handleEvent(core, Event::buttonPress(Button::Right), true);
+    prepareExit(core, miniapps::ExitTarget::Menu);
     assert(writes == 1);
     assert(settingsFile.find("dateFmt=1\n") != std::string::npos);
     assert(settingsFile.find("ntpSync=3\n") != std::string::npos);
@@ -955,8 +960,8 @@ int main(int argc, char** argv) {
     core.clock.localTime(before);
     const std::time_t epochBefore = 1780000000 + nowMs / 1000;
     state.menuSelected = static_cast<int8_t>(MenuItem::UtcOffset);
-    onMenuButton(core, Button::Right);
-    onMenuButton(core, Button::Back);
+    handleEvent(core, Event::buttonPress(Button::Right), true);
+    prepareExit(core, miniapps::ExitTarget::Menu);
     assert(writes == 1 && settingsFile.find("utcOffset=1\n") != std::string::npos);
     assert(core.wifi.connects == 0 && syncs == 0);
     assert(!core.wifi.isConnected());
@@ -971,15 +976,15 @@ int main(int argc, char** argv) {
     core.clock.valid = false;
     systemEpoch = 0;
     ntpSynced = false;
-    AppLauncherState app;
-    app.launchApp(core);
+    AppLauncherState app(false);
+    app.launchApp(core, APP_CLOCK);
     assert(syncs == 1 && core.wifi.connects == 1);
     int frames = 0;
     for (int i = 0; i < (10800000 + 60000) / 50; ++i) {
       nowMs += 50;
       if (clock_app::update(core)) {
         ++frames;
-        clock_app::render(core);
+        clock_app::render(core, false);
       }
     }
     assert(syncs == 2 && frames == 1);
@@ -994,24 +999,24 @@ int main(int argc, char** argv) {
   } else if (scenario == "validity-transition") {
     seedCredential("home", "secret");
     core.clock.valid = false;
-    AppLauncherState app;
-    app.launchApp(core);
+    AppLauncherState app(false);
+    app.launchApp(core, APP_CLOCK);
     assert(syncs == 1);
-    clock_app::render(core);
+    clock_app::render(core, false);
     for (int i = 0; i < 300; ++i) {
       nowMs += 50;
       assert(!clock_app::update(core));
     }
     core.clock.valid = true;
     assert(clock_app::update(core));
-    clock_app::render(core);
+    clock_app::render(core, false);
     assert(!clock_app::update(core));
     nowMs += 60000;
     assert(clock_app::update(core));
-    clock_app::render(core);
+    clock_app::render(core, false);
     core.clock.valid = false;
     assert(clock_app::update(core));
-    clock_app::render(core);
+    clock_app::render(core, false);
     for (int i = 0; i < 300; ++i) {
       nowMs += 50;
       assert(!clock_app::update(core));
@@ -1190,12 +1195,12 @@ int main(int argc, char** argv) {
         clock_faces::Face::Big,
     };
     for (clock_faces::Face face : expected) {
-      onMenuButton(core, Button::Right);
+      handleEvent(core, Event::buttonPress(Button::Right), true);
       assert(state.face == face);
     }
-    onMenuButton(core, Button::Left);
+    handleEvent(core, Event::buttonPress(Button::Left), true);
     assert(state.face == clock_faces::Face::DayNight);
-    onMenuButton(core, Button::Back);
+    prepareExit(core, miniapps::ExitTarget::Menu);
     assert(settingsFile.find("face=7\n") != std::string::npos);
   } else if (scenario == "face-render") {
     core.battery.reads = 0;
@@ -1203,7 +1208,7 @@ int main(int argc, char** argv) {
     state.face = clock_faces::Face::Flip;
     state.use24h = false;
     state.dateFormat = 3;
-    render(core);
+    render(core, false);
     assert(clock_faces::renderCalls == 1);
     assert(clock_faces::lastFace == clock_faces::Face::Flip);
     assert(!clock_faces::lastUse24h && clock_faces::lastDateFormat == 3);
@@ -1227,6 +1232,7 @@ def main():
     power_source = (ROOT / "src/apps/ClockPower.cpp").read_text()
     clock_header = (ROOT / "src/apps/ClockApp.h").read_text()
     elements = (ROOT / "src/ui/Elements.cpp").read_text()
+    app_input = (ROOT / "src/apps/MiniAppInput.cpp").read_text()
     state = clock[clock.index("static constexpr int NTP_SYNC_COUNT"):
                   clock.index("static void applyTimezone")]
     settings_header = (ROOT / "src/apps/ClockSettings.h").read_text()
@@ -1239,14 +1245,13 @@ def main():
         "APP_MENU_VIEW": block(app_menu_view, "struct AppMenuView"),
         "SETTINGS_HIT": block(settings_view, "struct SettingsListHit"),
         "SETTINGS_HIT_TEST": block(settings_view, "inline SettingsListHit settingsListHitTest("),
-        "EVENT_LOOP": block(launcher, "while (core.events.pop(e))"),
         "RESUME_CLOCK": block(launcher, "void AppLauncherState::resumeClock("),
         "LAUNCHER_UPDATE": block(launcher, "StateTransition AppLauncherState::update("),
         "STANDBY_RESULT": block(power_header, "enum class StandbyResult"),
-        "SHOW_OVERLAY": block(launcher, "void AppLauncherState::showOverlay("),
-        "HIDE_OVERLAY": block(launcher, "void AppLauncherState::hideOverlay("),
-        "STOP_APP": block(launcher, "void AppLauncherState::stopApp("),
-        "SAVE_GUARD": block(launcher, "bool AppLauncherState::saveClockSettings("),
+        "LAUNCH_APP": block(launcher, "void AppLauncherState::launchApp("),
+        "REQUEST_SLEEP": block(launcher, "bool AppLauncherState::requestSleep("),
+        "MINI_APP_BUTTON": block(app_input, "bool miniAppButton("),
+        "HANDLE_APP_BUTTONS": block(app_input, "miniapps::Action handleAppButtons("),
         "SETTINGS_MODEL": settings_header.split("namespace papyrix::clock_app {", 1)[1].rsplit("}", 1)[0],
         "SETTINGS_STORAGE": settings_source.split("namespace papyrix::clock_app {", 1)[1].rsplit("}", 1)[0],
         "FRAME_MODEL": "struct ClockAppearance" + power_header.split("struct ClockAppearance", 1)[1].split("struct ResumeIdentity", 1)[0],
@@ -1277,20 +1282,17 @@ def main():
         "SYNCHRONIZE": block(clock, "SyncResult synchronize("),
         "ENTER": block(clock, "void enter("),
         "UPDATE": block(clock, "bool update("),
-        "RENDER": block(clock, "bool render("),
-        "RENDER_MENU": block(clock, "void renderMenu("),
+        "RENDER": block(clock, "miniapps::Frame render("),
+        "RENDER_MENU": block(clock, "static void renderMenu(Core& core) {"),
         "MENU_TAP": block(clock, "bool onMenuTap("),
         "MENU": block(clock, "void onMenuButton("),
+        "HANDLE_EVENT": block(clock, "miniapps::Action handleEvent("),
+        "PREPARE_EXIT": block(clock, "miniapps::ExitResult prepareExit("),
         "EXIT": block(clock, "void exit("),
-        "POLL": block(launcher, "if ((mode_ == Mode::App"),
-        "OVERLAY": launcher[launcher.index("case Mode::Overlay:"):].split(
-            "if (e.type == EventType::ButtonRepeat) break;", 1
-        )[1].split("\n        break;", 1)[0],
         "ACTIVATE": block(launcher, "void AppLauncherState::activateMenuItem("),
         "LAUNCHER_ENTER": block(launcher, "void AppLauncherState::enter("),
+        "LAUNCHER_EXIT": block(launcher, "void AppLauncherState::exit("),
         "NETWORK_BACK": block(network, "if (goBack_)"),
-        "NETWORK_ROUTE": launcher[launcher.index("  if (core.pendingSync == SyncMode::WifiSetup)"):
-                                  launcher.index("  if (goNetwork_)")],
     }
     harness = HARNESS
     for marker, code in replacements.items():
@@ -1304,6 +1306,7 @@ def main():
         subprocess.run([
             os.environ.get("CXX", "c++"), "-std=c++17", f"-I{path}",
             f"-I{ROOT / 'lib/EpdFont/src'}", f"-I{ROOT / 'lib/Utf8/src'}", f"-I{ROOT / 'src'}",
+            f"-I{ROOT / 'lib/MiniApps/src'}",
             str(source), str(ROOT / "lib/EpdFont/src/EpdFont.cpp"), str(ROOT / "lib/Utf8/src/Utf8.cpp"),
             str(ROOT / "src/ui/TouchLayout.cpp"), "-o", str(binary),
         ], check=True)

@@ -21,6 +21,7 @@
 #include "ClockSettings.h"
 #include "ClockStandby.h"
 #include "MiniApp.h"
+#include "MiniAppInput.h"
 #include "ThemeManager.h"
 
 #define TAG "CLOCK_APP"
@@ -87,7 +88,7 @@ static void loadSettings(Core& core) {
   }
 }
 
-bool saveSettings(Core& core) {
+static bool saveSettings(Core& core) {
   if (!state.settingsChanged) return true;
   state.saveFailed = !saveSettings(core.storage, state);
   if (state.saveFailed) {
@@ -267,13 +268,19 @@ ClockFrame captureFrame(Core& core, int64_t utcSeconds, bool interactive) {
   return frame;
 }
 
-bool render(Core& core) {
+static void renderMenu(Core& core);
+
+miniapps::Frame render(Core& core, bool menuOpen) {
+  if (menuOpen) {
+    renderMenu(core);
+    return {miniapps::Refresh::Fast, false};
+  }
   std::tm timeinfo{};
   const bool valid =
       core.clock.localTime(timeinfo) && (state.powerMode == PowerMode::Normal || core.clock.canRetainTime());
   state.lastRenderedMin = valid ? timeinfo.tm_min : -1;
   renderFrame(renderer, captureFrame(core, valid ? std::time(nullptr) : 0, true));
-  return false;
+  return {miniapps::Refresh::Fast, true};
 }
 
 void exit(Core& core) {
@@ -285,8 +292,9 @@ void exit(Core& core) {
   LOG_INF(TAG, "Clock app exit");
 }
 
-void renderMenu(Core& core) {
+static void renderMenu(Core& core) {
   const Theme& theme = THEME;
+  renderer.clearScreen(theme.backgroundColor);
   ui::title(renderer, theme, theme.screenMarginTop, "Clock Settings");
 
   char timezone[8];
@@ -316,7 +324,7 @@ void renderMenu(Core& core) {
   ui::buttonBar(renderer, theme, buttons);
 }
 
-bool onMenuTap(Core& core, int16_t x, int16_t y) {
+static bool onMenuTap(Core& core, int16_t x, int16_t y) {
   const auto hit = ui::settingsListHitTest({x, y}, renderer.getScreenWidth(), renderer.getScreenHeight(),
                                            THEME.itemHeight + THEME.itemSpacing, MENU_ITEM_COUNT,
                                            core.settings.frontButtonLayout == Settings::FrontLRBC);
@@ -326,12 +334,9 @@ bool onMenuTap(Core& core, int16_t x, int16_t y) {
   return true;
 }
 
-void onMenuButton(Core& core, Button btn) {
+static void onMenuButton(Core& core, Button btn) {
   state.interactionStartedMs = millis();
   switch (btn) {
-    case Button::Back:
-      saveSettings(core);
-      break;
     case Button::Up:
       state.menuSelected = (state.menuSelected == 0) ? MENU_ITEM_COUNT - 1 : state.menuSelected - 1;
       break;
@@ -379,6 +384,22 @@ void onMenuButton(Core& core, Button btn) {
     default:
       break;
   }
+}
+
+miniapps::Action handleEvent(Core& core, const Event& event, bool menuOpen) {
+  if (menuOpen && event.type == EventType::Tap && onMenuTap(core, event.touch.x, event.touch.y))
+    return miniapps::Action::Redraw;
+  if (menuOpen) {
+    Button button;
+    if (miniAppButton(core, event, button) && button == Button::Center) return miniapps::Action::None;
+  }
+  return handleAppButtons(core, event, menuOpen, nullptr, onMenuButton);
+}
+
+miniapps::ExitResult prepareExit(Core& core, miniapps::ExitTarget target) {
+  if (!saveSettings(core)) return miniapps::ExitResult::OpenMenu;
+  if (target == miniapps::ExitTarget::Menu) state.interactionStartedMs = millis();
+  return miniapps::ExitResult::Ready;
 }
 
 }  // namespace clock_app

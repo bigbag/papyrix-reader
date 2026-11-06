@@ -25,6 +25,7 @@
 #include "../network/WifiCredentialStore.h"
 #include "../ui/Elements.h"
 #include "MiniApp.h"
+#include "MiniAppInput.h"
 #include "ThemeManager.h"
 
 #define TAG "PRINTER_APP"
@@ -624,7 +625,7 @@ bool update(Core& core) {
   return state.needsRender;
 }
 
-void onButton(Core& core, Button btn) {
+static void onButton(Core& core, Button btn) {
   if (state.screen == Screen::Waiting && btn == Button::Right) {
     // Open the printout directory in the file manager. Back stops the app.
     SdMan.ensureDirectoryExists(QUEUE_DIR);
@@ -645,11 +646,15 @@ void onButton(Core& core, Button btn) {
   }
 }
 
-bool render(Core& core) {
+miniapps::Action handleEvent(Core& core, const Event& event, bool menuOpen) {
+  return handleAppButtons(core, event, menuOpen, onButton, nullptr);
+}
+
+miniapps::Frame render(Core& core, bool) {
   state.needsRender = false;
   if (state.screen == Screen::PageShowing) {
     // The page is drawn straight into the framebuffer as rows decode.
-    return true;
+    return {};
   }
 
   renderer.clearScreen(THEME.backgroundColor);
@@ -657,7 +662,7 @@ bool render(Core& core) {
   if (state.screen == Screen::Connecting) {
     renderer.drawCenteredText(THEME.uiFontId, renderer.getScreenHeight() / 2, "Connecting...", ink);
     renderer.displayBuffer(papyrix::hal::Display::FAST_REFRESH);
-    return true;
+    return {};
   }
   if (state.screen == Screen::Failed) {
     renderer.drawCenteredText(THEME.uiFontId, renderer.getScreenHeight() / 2,
@@ -665,7 +670,7 @@ bool render(Core& core) {
     ui::ButtonBar buttons("Back", "", "", "");
     ui::buttonBar(renderer, THEME, buttons);
     renderer.displayBuffer(papyrix::hal::Display::FAST_REFRESH);
-    return true;
+    return {};
   }
 
   ui::title(renderer, THEME, THEME.screenMarginTop, "Printer");
@@ -700,7 +705,7 @@ bool render(Core& core) {
   ui::ButtonBar buttons("Exit", "", state.queue.empty() ? "" : "<", "Files");
   ui::buttonBar(renderer, THEME, buttons);
   renderer.displayBuffer(papyrix::hal::Display::FAST_REFRESH);
-  return true;
+  return {};
 }
 
 void exit(Core& core) {

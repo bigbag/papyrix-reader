@@ -32,6 +32,7 @@ include_directories(
   ${PROJECT_ROOT}/lib/Utf8/src
   ${PROJECT_ROOT}/lib/Serialization/src
   ${PROJECT_ROOT}/lib/AsyncTask/src
+  ${PROJECT_ROOT}/lib/MiniApps/src
   ${PROJECT_ROOT}/lib/EInkDisplay/include
   ${PROJECT_ROOT}/lib/Memory/src
   ${PROJECT_ROOT}/lib/RenderTypes/src
@@ -1617,6 +1618,8 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/SDCardManager/include
       ${PROJECT_ROOT}/lib/uzlib/src)
     target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_XTEINK_C3=1 EINK_DISPLAY_SINGLE_BUFFER_MODE=1)
+  elseif(TEST_NAME STREQUAL "MiniAppHostTest")
+    add_executable(${TEST_NAME} ${TEST_SRC})
   elseif(TEST_NAME STREQUAL "Game2048Test")
     add_executable(${TEST_NAME} ${TEST_SRC}
       ${PROJECT_ROOT}/src/apps/Game2048.cpp ${TEST_HELPERS})

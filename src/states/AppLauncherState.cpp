@@ -10,7 +10,6 @@
 
 #include "../apps/ClockApp.h"
 #include "../apps/ClockStandby.h"
-#include "../apps/Game2048App.h"
 #include "../apps/MiniApp.h"
 #include "../core/Core.h"
 #include "../ui/Elements.h"
@@ -22,18 +21,14 @@ extern InputManager inputManager;
 
 namespace papyrix {
 
-AppLauncherState::AppLauncherState(GfxRenderer& renderer)
-    : renderer_(renderer), mode_(Mode::Menu), activeApp_(-1), needsRender_(true), goNetwork_(false), menuView_{} {}
+AppLauncherState::AppLauncherState(GfxRenderer& renderer) : renderer_(renderer), goNetwork_(false), menuView_{} {}
 
 AppLauncherState::~AppLauncherState() = default;
 
 void AppLauncherState::enter(Core& core) {
   LOG_INF(TAG, "Entering");
-  mode_ = Mode::Menu;
-  activeApp_ = -1;
-  needsRender_ = true;
+  app_.stop(core);
   goNetwork_ = false;
-  pendingExit_ = PendingExit::None;
 
   menuView_.appCount = APP_COUNT;
   menuView_.itemCount = APP_COUNT + ui::AppMenuView::EXTRA_COUNT;
@@ -43,9 +38,9 @@ void AppLauncherState::enter(Core& core) {
   menuView_.needsRender = true;
 
   if (core.pendingAppId >= 0 && static_cast<unsigned>(core.pendingAppId) < APP_COUNT) {
-    activeApp_ = core.pendingAppId;
+    const auto appId = core.pendingAppId;
     core.pendingAppId = -1;
-    launchApp(core);
+    launchApp(core, appId);
     core.pendingSync = SyncMode::None;
     return;
   }
@@ -53,15 +48,11 @@ void AppLauncherState::enter(Core& core) {
 
 void AppLauncherState::exit(Core& core) {
   LOG_INF(TAG, "Exiting");
-  if (activeApp_ >= 0) {
-    stopApp(core);
-  }
+  app_.stop(core);
 }
 
 void AppLauncherState::resumeClock(Core& core, const clock_app::ResumeRecord& record) {
-  activeApp_ = APP_CLOCK;
-  mode_ = Mode::App;
-  needsRender_ = true;
+  app_.restore(APPS[APP_CLOCK]);
   menuView_.needsRender = false;
   clock_app::resumeInteractive(core, &record);
 }
@@ -75,7 +66,7 @@ void AppLauncherState::activateMenuItem(Core& core) {
       core.pendingAppId = APP_CLOCK;
       goNetwork_ = true;
     } else {
-      launchApp(core);
+      launchApp(core, appIdx);
     }
     return;
   }
@@ -86,17 +77,25 @@ void AppLauncherState::activateMenuItem(Core& core) {
 StateTransition AppLauncherState::update(Core& core) {
   Event e;
   while (core.events.pop(e)) {
-    // Power long-press goes to sleep in all modes
     if (e.type == EventType::ButtonLongPress && e.button == Button::Power) {
-      if (!saveClockSettings(core)) continue;
       if (!requestSleep(core)) continue;
-      if (activeApp_ >= 0) {
-        stopApp(core);
-      }
       return StateTransition::to(StateId::Sleep);
     }
 
-    if (e.type == EventType::Tap && mode_ == Mode::Menu) {
+    if (app_.active()) {
+      core.cpu.unthrottle();
+      const bool hadPendingExit = app_.pendingExit() != miniapps::ExitTarget::None;
+      const auto destination = app_.handleEvent(core, e);
+      if (destination == miniapps::ExitTarget::Sleep) return StateTransition::to(StateId::Sleep);
+      if (!app_.active()) {
+        menuView_.needsRender = true;
+      } else if (hadPendingExit && app_.pendingExit() == miniapps::ExitTarget::None) {
+        core.input.resetIdleTimer();
+      }
+      continue;
+    }
+
+    if (e.type == EventType::Tap) {
       const auto hit = menuView_.hitTest({e.touch.x, e.touch.y}, renderer_.getScreenWidth(),
                                          renderer_.getScreenHeight(), THEME.itemHeight + THEME.itemSpacing,
                                          core.settings.frontButtonLayout == Settings::FrontLRBC);
@@ -106,142 +105,43 @@ StateTransition AppLauncherState::update(Core& core) {
         activateMenuItem(core);
       } else if (hit.type == ui::AppMenuView::Hit::Type::Open) {
         activateMenuItem(core);
-      } else if (hit.type == ui::AppMenuView::Hit::Type::Back) {
-        // A pending directory request routes to the file manager after the loop
+      } else if (hit.type == ui::AppMenuView::Hit::Type::Back && !core.pendingDirectory[0]) {
+        return StateTransition::to(StateId::Home);
+      }
+      continue;
+    }
+
+    if (e.type != EventType::ButtonPress && e.type != EventType::ButtonRepeat) continue;
+    switch (e.button) {
+      case Button::Up:
+        menuView_.moveUp();
+        break;
+      case Button::Down:
+        menuView_.moveDown();
+        break;
+      case Button::Center:
+        activateMenuItem(core);
+        break;
+      case Button::Back:
         if (!core.pendingDirectory[0]) return StateTransition::to(StateId::Home);
-      }
-      continue;
-    }
-    if (activeApp_ == APP_2048) {
-      using game2048_app::Action;
-      const auto action = game2048_app::handleEvent(core, e, mode_ == Mode::Overlay);
-      if (action == Action::None) continue;
-      needsRender_ = true;
-      core.cpu.unthrottle();
-      if (action == Action::OpenMenu || action == Action::CloseMenu) {
-        game2048_app::cancelGameInput(core);
-        if (action == Action::OpenMenu)
-          showOverlay();
-        else
-          hideOverlay();
-      } else if (action == Action::Exit || action == Action::RetryExit || action == Action::DiscardExit) {
-        if (action == Action::Exit) pendingExit_ = PendingExit::Apps;
-        if (pendingExit_ != PendingExit::None && (action == Action::DiscardExit || game2048_app::prepareExit(core))) {
-          const auto destination = pendingExit_;
-          pendingExit_ = PendingExit::None;
-          stopApp(core);
-          if (destination == PendingExit::Sleep) return StateTransition::to(StateId::Sleep);
-        }
-      } else if (action == Action::CancelExit) {
-        pendingExit_ = PendingExit::None;
-        game2048_app::cancelExitPrompt();
-        game2048_app::cancelGameInput(core);
-        core.input.resetIdleTimer();
-      }
-      continue;
-    }
-
-    if (e.type == EventType::Tap) {
-      if (mode_ == Mode::Overlay && activeApp_ == APP_CLOCK && clock_app::onMenuTap(core, e.touch.x, e.touch.y)) {
-        needsRender_ = true;
-        continue;
-      }
-      const int action = ui::touch::semanticButtonBarIndex({e.touch.x, e.touch.y}, renderer_.getScreenWidth(),
-                                                           renderer_.getScreenHeight(),
-                                                           core.settings.frontButtonLayout == Settings::FrontLRBC);
-      if (action < 0) continue;
-      static constexpr Button buttons[] = {Button::Back, Button::Center, Button::Left, Button::Right};
-      e = Event::buttonPress(buttons[action]);
-    }
-
-    if (e.type != EventType::ButtonPress && e.type != EventType::ButtonRepeat) {
-      continue;
-    }
-
-    switch (mode_) {
-      case Mode::Menu:
-        switch (e.button) {
-          case Button::Up:
-            menuView_.moveUp();
-            needsRender_ = true;
-            break;
-          case Button::Down:
-            menuView_.moveDown();
-            needsRender_ = true;
-            break;
-          case Button::Center:
-            activateMenuItem(core);
-            break;
-          case Button::Back:
-            if (!core.pendingDirectory[0]) return StateTransition::to(StateId::Home);
-            break;
-          default:
-            break;
-        }
         break;
-
-      case Mode::App:
-        if (e.type == EventType::ButtonRepeat) break;
-        switch (e.button) {
-          case Button::Back:
-            if (saveClockSettings(core)) stopApp(core);
-            break;
-          case Button::Center:
-            showOverlay();
-            break;
-          default:
-            if (activeApp_ >= 0 && APPS[activeApp_].onButton) {
-              APPS[activeApp_].onButton(core, e.button);
-              needsRender_ = true;
-            }
-            break;
-        }
-        break;
-
-      case Mode::Overlay:
-        if (e.type == EventType::ButtonRepeat) break;
-        if (activeApp_ == APP_CLOCK && e.button == Button::Center) break;
-        if (activeApp_ == APP_POMODORO && e.button != Button::Back && e.button != Button::Left &&
-            e.button != Button::Right) {
-          break;
-        }
-        core.cpu.unthrottle();
-        switch (e.button) {
-          case Button::Back:
-            if (!saveClockSettings(core)) break;
-            if (activeApp_ >= 0 && APPS[activeApp_].onMenuButton) {
-              APPS[activeApp_].onMenuButton(core, e.button);
-            }
-            hideOverlay();
-            break;
-          default:
-            if (activeApp_ >= 0 && APPS[activeApp_].onMenuButton) {
-              APPS[activeApp_].onMenuButton(core, e.button);
-              needsRender_ = true;
-            }
-            break;
-        }
+      default:
         break;
     }
   }
 
-  // Call app update for timer-based logic (once per frame)
-  if ((mode_ == Mode::App || mode_ == Mode::Overlay) && activeApp_ >= 0) {
-    if (activeApp_ != APP_2048 || pendingExit_ != PendingExit::None) core.input.resetIdleTimer();
-
-    if (mode_ == Mode::App && APPS[activeApp_].update && APPS[activeApp_].update(core)) {
-      needsRender_ = true;
-    }
-
-    // Ensure full CPU speed for responsive display I/O when rendering
-    if (needsRender_) {
+  if (app_.active()) {
+    if (app_.keepAwake()) core.input.resetIdleTimer();
+    app_.update(core);
+    if (app_.needsRender()) {
       core.cpu.unthrottle();
-    } else if (mode_ == Mode::Overlay && (activeApp_ == APP_POMODORO || activeApp_ == APP_2048)) {
+    } else if (app_.throttleInMenu()) {
       core.cpu.throttle();
     }
   }
 
-  if ((core.pendingDirectory[0] || core.pendingSync != SyncMode::None || goNetwork_) && !saveClockSettings(core)) {
+  if ((core.pendingDirectory[0] || core.pendingSync != SyncMode::None || goNetwork_) &&
+      !app_.prepareExit(core, miniapps::ExitTarget::Navigation)) {
     core.pendingDirectory[0] = '\0';
     core.pendingSync = SyncMode::None;
     core.pendingAppId = -1;
@@ -249,35 +149,23 @@ StateTransition AppLauncherState::update(Core& core) {
     return StateTransition::stay(StateId::AppLauncher);
   }
 
-  if (core.pendingDirectory[0]) {
-    return StateTransition::to(StateId::FileList);
-  }
-
+  if (core.pendingDirectory[0]) return StateTransition::to(StateId::FileList);
   if (core.pendingSync == SyncMode::WifiSetup) {
     core.pendingSync = SyncMode::None;
     return StateTransition::to(StateId::Network);
   }
-
-  if (core.pendingSync == SyncMode::NtpSync) {
+  if (core.pendingSync == SyncMode::NtpSync || core.pendingSync == SyncMode::PrinterSetup ||
+      core.pendingSync == SyncMode::LocalsendSetup) {
     return StateTransition::to(StateId::Network);
   }
-
-  if (core.pendingSync == SyncMode::PrinterSetup) {
-    return StateTransition::to(StateId::Network);
-  }
-
-  if (core.pendingSync == SyncMode::LocalsendSetup) {
-    return StateTransition::to(StateId::Network);
-  }
-
   if (goNetwork_) {
     goNetwork_ = false;
     return StateTransition::to(StateId::Network);
   }
 
-  if (activeApp_ == APP_CLOCK &&
-      clock_app::standbyDue(core, millis(), needsRender_ || core.input.hasPendingInteraction())) {
-    if (!saveClockSettings(core)) return StateTransition::stay(StateId::AppLauncher);
+  if (app_.active() == &APPS[APP_CLOCK] &&
+      clock_app::standbyDue(core, millis(), app_.needsRender() || core.input.hasPendingInteraction())) {
+    if (!app_.prepareExit(core, miniapps::ExitTarget::Navigation)) return StateTransition::stay(StateId::AppLauncher);
     auto result = clock_app::enterStandby(core);
     core.cpu.unthrottle();
     board::earlyInit(board::HardwareIdentity::instance().profile(), board::BootPurpose::Interactive);
@@ -294,10 +182,10 @@ StateTransition AppLauncherState::update(Core& core) {
     }
     if (result == clock_app::StandbyResult::Interactive) {
       clock_app::resumeInteractive(core, nullptr);
-      hideOverlay();
+      app_.closeMenu();
     } else {
-      activeApp_ = -1;
-      mode_ = Mode::Menu;
+      app_.abandon();
+      menuView_.needsRender = true;
       if (result == clock_app::StandbyResult::TimeRequired) {
         core.pendingSync = SyncMode::NtpSync;
         core.pendingAppId = APP_CLOCK;
@@ -307,110 +195,39 @@ StateTransition AppLauncherState::update(Core& core) {
       return StateTransition::to(StateId::Error);
     }
   }
-
   return StateTransition::stay(StateId::AppLauncher);
 }
 
 void AppLauncherState::render(Core& core) {
-  if (!needsRender_ && !menuView_.needsRender) {
-    return;
+  if (app_.active()) {
+    if (!app_.needsRender()) return;
+    hal::Cpu::PerformanceLock performance(core.cpu);
+    const auto frame = app_.render(core);
+    if (frame.refresh != miniapps::Refresh::None) {
+      renderer_.displayBuffer(
+          frame.refresh == miniapps::Refresh::Full ? hal::Display::FULL_REFRESH : hal::Display::FAST_REFRESH,
+          frame.turnOffScreen);
+    }
+  } else if (menuView_.needsRender) {
+    hal::Cpu::PerformanceLock performance(core.cpu);
+    ui::render(renderer_, THEME, menuView_, APPS);
+    menuView_.needsRender = false;
   }
-
-  switch (mode_) {
-    case Mode::Menu:
-      ui::render(renderer_, THEME, menuView_, APPS);
-      menuView_.needsRender = false;
-      break;
-
-    case Mode::App:
-      if (activeApp_ >= 0 && APPS[activeApp_].render) {
-        if (!APPS[activeApp_].render(core)) {
-          renderer_.displayBuffer(papyrix::hal::Display::FAST_REFRESH,
-                                  activeApp_ == APP_CLOCK || activeApp_ == APP_POMODORO);
-        }
-      }
-      break;
-
-    case Mode::Overlay:
-      if (activeApp_ >= 0) {
-        renderer_.clearScreen(THEME.backgroundColor);
-        if (APPS[activeApp_].renderMenu) {
-          APPS[activeApp_].renderMenu(core);
-        }
-        if (activeApp_ != APP_CLOCK && activeApp_ != APP_POMODORO && activeApp_ != APP_2048) {
-          const int btnY = renderer_.getScreenHeight() - 50;
-          renderer_.clearArea(0, btnY, renderer_.getScreenWidth(), 50, THEME.backgroundColor);
-          ui::ButtonBar buttons(tr(BACK), tr(CONFIRM), "<", ">");
-          ui::buttonBar(renderer_, THEME, buttons);
-        }
-        renderer_.displayBuffer(papyrix::hal::Display::FAST_REFRESH,
-                                activeApp_ == APP_POMODORO || activeApp_ == APP_2048);
-      }
-      break;
-  }
-
-  needsRender_ = false;
 }
 
-void AppLauncherState::launchApp(Core& core) {
-  if (APP_COUNT == 0) return;
-
-  if (activeApp_ < 0) {
-    activeApp_ = menuView_.selected - ui::AppMenuView::EXTRA_COUNT;
-  }
-  LOG_INF(TAG, "Launching app: %s", APPS[activeApp_].name);
-
-  if (APPS[activeApp_].enter) {
-    APPS[activeApp_].enter(core);
-  }
-
-  mode_ = Mode::App;
-  menuView_.needsRender = false;
-  needsRender_ = true;
+void AppLauncherState::launchApp(Core& core, int8_t appId) {
+  if (appId < 0 || static_cast<unsigned>(appId) >= APP_COUNT) return;
+  LOG_INF(TAG, "Launching app: %s", APPS[appId].name);
+  if (app_.start(core, APPS[appId])) menuView_.needsRender = false;
 }
 
 bool AppLauncherState::requestSleep(Core& core) {
-  if (activeApp_ != APP_2048) return true;
-  if (pendingExit_ == PendingExit::None && game2048_app::prepareExit(core)) return true;
-  if (pendingExit_ == PendingExit::None) pendingExit_ = PendingExit::Sleep;
-  needsRender_ = true;
+  if (app_.pendingExit() == miniapps::ExitTarget::None && app_.prepareExit(core, miniapps::ExitTarget::Sleep))
+    return true;
+  core.cpu.unthrottle();
   core.input.resetIdleTimer();
   core.input.suppressPowerUntilRelease();
   return false;
-}
-
-bool AppLauncherState::saveClockSettings(Core& core) {
-  if (activeApp_ != APP_CLOCK || clock_app::saveSettings(core)) return true;
-  core.cpu.unthrottle();
-  showOverlay();
-  return false;
-}
-
-void AppLauncherState::stopApp(Core& core) {
-  pendingExit_ = PendingExit::None;
-  if (activeApp_ >= 0) {
-    LOG_INF(TAG, "Stopping app: %s", APPS[activeApp_].name);
-    if (APPS[activeApp_].exit) {
-      APPS[activeApp_].exit(core);
-    }
-    activeApp_ = -1;
-  }
-
-  mode_ = Mode::Menu;
-  menuView_.needsRender = true;
-  needsRender_ = true;
-}
-
-void AppLauncherState::showOverlay() {
-  if (activeApp_ >= 0 && APPS[activeApp_].renderMenu) {
-    mode_ = Mode::Overlay;
-    needsRender_ = true;
-  }
-}
-
-void AppLauncherState::hideOverlay() {
-  mode_ = Mode::App;
-  needsRender_ = true;
 }
 
 }  // namespace papyrix

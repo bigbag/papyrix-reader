@@ -1,5 +1,6 @@
 #include "ClockSettings.h"
 
+#include <CheckedFile.h>
 #include <SdFat.h>
 
 #include <algorithm>
@@ -114,27 +115,9 @@ bool saveSettings(hal::Storage& storage, const ClockSettings& value) {
   } else if (final.value && backup.value && !storage.remove(kBackupPath).ok()) {
     return false;
   }
-  FsFile file;
-  if (!storage.openWrite(kTemporaryPath, file).ok()) return false;
-  const bool written = file.write(reinterpret_cast<const uint8_t*>(buffer), length) == length;
-  const bool synced = written && file.sync();
-  const bool closed = file.close();
-  if (!synced || !closed) {
-    storage.remove(kTemporaryPath);
-    return false;
-  }
-  if (final.value && !storage.rename(kPath, kBackupPath).ok()) {
-    storage.remove(kTemporaryPath);
-    return false;
-  }
-  if (!storage.rename(kTemporaryPath, kPath).ok()) {
-    storage.remove(kPath);
-    if (final.value) storage.rename(kBackupPath, kPath);
-    storage.remove(kTemporaryPath);
-    return false;
-  }
-  if (final.value) storage.remove(kBackupPath);
-  return true;
+  return miniapps::publishCheckedFile<FsFile>(
+      storage, kPath, kTemporaryPath, kBackupPath, final.value,
+      [&](FsFile& file) { return file.write(reinterpret_cast<const uint8_t*>(buffer), length) == length; });
 }
 
 }  // namespace papyrix::clock_app

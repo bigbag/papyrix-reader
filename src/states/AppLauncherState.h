@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+#include "../apps/MiniApp.h"
 #include "../ui/views/AppLauncherViews.h"
 #include "State.h"
 
@@ -26,24 +27,14 @@ class AppLauncherState : public State {
   bool requestSleep(Core& core);
 
  private:
-  enum class Mode : uint8_t { Menu, App, Overlay };
-  enum class PendingExit : uint8_t { None, Apps, Sleep };
-  PendingExit pendingExit_ = PendingExit::None;
-
   GfxRenderer& renderer_;
-  Mode mode_;
-  int8_t activeApp_;
-  bool needsRender_;
+  miniapps::Host<Core, Event> app_;
   bool goNetwork_;
 
   ui::AppMenuView menuView_;
 
   void activateMenuItem(Core& core);
-  void launchApp(Core& core);
-  void stopApp(Core& core);
-  bool saveClockSettings(Core& core);
-  void showOverlay();
-  void hideOverlay();
+  void launchApp(Core& core, int8_t appId);
 };
 
 }  // namespace papyrix

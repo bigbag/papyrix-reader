@@ -98,6 +98,24 @@ Image converters decode supported images and scale them to the viewport. The cac
 
 `src/ui/Elements.h` provides buttons, menus, keyboards, and shared geometry. `src/ui/views/` contains state-specific view functions. States dispatch physical-button and touch actions. Touch hit testing uses the same logical geometry as rendering.
 
+### Mini-apps
+
+`lib/MiniApps` provides the shared app host. It has no firmware dependencies and does not allocate memory. `src/apps/MiniApp.h` binds its typed callbacks to `Core` and `Event`.
+
+The host manages app and menu state, redraw requests, and checked exits. All six apps use this interface. The app descriptor remains valid while the app runs. Add an app through `src/apps/AppRegistry.cpp`.
+
+Apps return a `Frame` with the refresh mode and panel power-off policy. Return `Refresh::None` when the app already refreshes the panel. The launcher uses the existing renderer and a CPU performance lock.
+
+The launcher restores active CPU speed before app event handling. An exit action can write files before the host returns.
+
+`MiniAppInput` maps physical button presses and touch footer actions. Apps keep their special input rules. Touch is optional. The 2048 app also accepts swipes inside its game board.
+
+`prepareExit` checks an exit before cleanup. `Blocked` retains the exit destination for retry or discard. `OpenMenu` opens editable settings and cancels that destination. A pending exit prevents idle sleep.
+
+`CheckedFile.h` checks temporary writes, sync, and close before publication. It retains the previous file through a backup rename. Clock and 2048 keep their own file formats, validation, and load rules.
+
+Clock keeps board-specific standby and recovery in the firmware. After hardware recovery invalidates an app context, `Host::abandon` clears host state without calling the app exit callback.
+
 ## Background Work
 
 `lib/AsyncTask` provides cooperative cancellation and scoped mutex handling. Background tasks stop themselves. Do not force-delete a task. Stop the cache task before the main thread accesses its parser or page cache. Do not hold a mutex during file I/O or other blocking work.

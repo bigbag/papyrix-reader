@@ -17,6 +17,7 @@
 #include "../core/Core.h"
 #include "../ui/Elements.h"
 #include "../ui/ImageFileView.h"
+#include "MiniAppInput.h"
 #include "ThemeManager.h"
 
 #define TAG "IMG_VIEWER"
@@ -178,7 +179,7 @@ bool update(Core& core) {
   return false;
 }
 
-void onButton(Core& core, Button btn) {
+static void onButton(Core& core, Button btn) {
   (void)core;
 
   if (state.files.empty()) return;
@@ -201,9 +202,14 @@ void onButton(Core& core, Button btn) {
   }
 }
 
-bool render(Core& core) {
-  (void)core;
-  return renderImage();
+static void renderMenu(Core& core);
+
+miniapps::Frame render(Core& core, bool menuOpen) {
+  if (menuOpen) {
+    renderMenu(core);
+    return {miniapps::Refresh::Fast, false};
+  }
+  return {renderImage() ? miniapps::Refresh::None : miniapps::Refresh::Fast, false};
 }
 
 void exit(Core& core) {
@@ -213,17 +219,20 @@ void exit(Core& core) {
   state.files.shrink_to_fit();
 }
 
-void renderMenu(Core& core) {
+static void renderMenu(Core& core) {
   (void)core;
-
+  renderer.clearScreen(THEME.backgroundColor);
   char label[32];
   snprintf(label, sizeof(label), "Slideshow: %s", SLIDESHOW_LABELS[state.slideshowSetting]);
 
   const char* items[] = {label};
   ui::popupMenu(renderer, THEME, "Image Viewer", items, 1, state.menuSelected);
+  const int btnY = renderer.getScreenHeight() - 50;
+  renderer.clearArea(0, btnY, renderer.getScreenWidth(), 50, THEME.backgroundColor);
+  ui::buttonBar(renderer, THEME, ui::ButtonBar(tr(BACK), tr(CONFIRM), "<", ">"));
 }
 
-void onMenuButton(Core& core, Button btn) {
+static void onMenuButton(Core& core, Button btn) {
   switch (btn) {
     case Button::Left:
     case Button::Right: {
@@ -237,6 +246,10 @@ void onMenuButton(Core& core, Button btn) {
     default:
       break;
   }
+}
+
+miniapps::Action handleEvent(Core& core, const Event& event, bool menuOpen) {
+  return handleAppButtons(core, event, menuOpen, onButton, onMenuButton);
 }
 
 }  // namespace imageviewer_app

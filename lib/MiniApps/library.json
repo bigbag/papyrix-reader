@@ -1,0 +1,9 @@
+{
+  "name": "MiniApps",
+  "version": "1.0.0",
+  "description": "Mini-app lifecycle and checked file publication",
+  "build": {
+    "srcDir": "src",
+    "includeDir": "src"
+  }
+}

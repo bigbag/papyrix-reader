@@ -1,5 +1,6 @@
 #include "Game2048Store.h"
 
+#include <CheckedFile.h>
 #include <SdFat.h>
 
 #include <cstring>
@@ -89,26 +90,8 @@ bool save(hal::Storage& storage, const Game& game) {
   std::memcpy(record + 5, game.cells, sizeof(game.cells));
   for (unsigned i = 0; i < 4; ++i) record[21 + i] = static_cast<uint8_t>(game.score >> (8 * i));
   record[25] = game.wonAcknowledged ? 1 : 0;
-  FsFile file;
-  if (!storage.openWrite(kTemporaryPath, file).ok()) return false;
-  const bool written = file.write(record, sizeof(record)) == sizeof(record);
-  const bool synced = written && file.sync();
-  const bool closed = file.close();
-  if (!synced || !closed) {
-    storage.remove(kTemporaryPath);
-    return false;
-  }
-  if (final == LoadResult::Loaded && !storage.rename(kPath, kBackupPath).ok()) {
-    storage.remove(kTemporaryPath);
-    return false;
-  }
-  if (!storage.rename(kTemporaryPath, kPath).ok()) {
-    removeIfPresent(storage, kPath);
-    if (final == LoadResult::Loaded) storage.rename(kBackupPath, kPath);
-    storage.remove(kTemporaryPath);
-    return false;
-  }
-  removeIfPresent(storage, kBackupPath);
-  return true;
+  return miniapps::publishCheckedFile<FsFile>(
+      storage, kPath, kTemporaryPath, kBackupPath, final == LoadResult::Loaded,
+      [&](FsFile& file) { return file.write(record, sizeof(record)) == sizeof(record); });
 }
 }  // namespace papyrix::game2048
