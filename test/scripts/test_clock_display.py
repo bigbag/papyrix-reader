@@ -345,6 +345,14 @@ miniapps::Frame render(Core&, bool) { std::abort(); }
 miniapps::ExitResult prepareExit(Core&, miniapps::ExitTarget) { std::abort(); }
 void exit(Core&) { std::abort(); }
 }
+namespace go_app {
+void enter(Core&) { std::abort(); }
+bool update(Core&) { std::abort(); }
+miniapps::Action handleEvent(Core&, const Event&, bool) { std::abort(); }
+miniapps::Frame render(Core&, bool) { std::abort(); }
+miniapps::ExitResult prepareExit(Core&, miniapps::ExitTarget) { std::abort(); }
+void exit(Core&) { std::abort(); }
+}
 @REGISTRY@
 
 class AppLauncherState {

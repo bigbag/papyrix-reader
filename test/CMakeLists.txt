@@ -33,6 +33,7 @@ include_directories(
   ${PROJECT_ROOT}/lib/Serialization/src
   ${PROJECT_ROOT}/lib/AsyncTask/src
   ${PROJECT_ROOT}/lib/MiniApps/src
+  ${PROJECT_ROOT}/lib/GoGame/src
   ${PROJECT_ROOT}/lib/EInkDisplay/include
   ${PROJECT_ROOT}/lib/Memory/src
   ${PROJECT_ROOT}/lib/RenderTypes/src
@@ -613,7 +614,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/src/core/ExitToUiTransition.cpp
       ${TEST_HELPERS}
     )
-  elseif(TEST_NAME STREQUAL "CoreNavigationTouchTest")
+  elseif(TEST_NAME STREQUAL "CoreNavigationTouchTest" OR TEST_NAME STREQUAL "AppMenuViewTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
       ${PROJECT_ROOT}/src/ui/TouchLayout.cpp
@@ -1114,7 +1115,8 @@ foreach(TEST_SRC ${TEST_SOURCES})
     )
   elseif(TEST_NAME STREQUAL "BmpPolarityRoundTripTest" OR TEST_NAME STREQUAL "BitmapTurnCacheTest" OR
          TEST_NAME STREQUAL "ReaderTouchRenderingTest" OR TEST_NAME STREQUAL "ClockFrameTest" OR
-         TEST_NAME STREQUAL "Game2048ViewTest" OR TEST_NAME STREQUAL "Game2048AppTest")
+         TEST_NAME STREQUAL "Game2048ViewTest" OR TEST_NAME STREQUAL "Game2048AppTest" OR
+         TEST_NAME STREQUAL "GoAppTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
       ${PROJECT_ROOT}/lib/GfxRenderer/src/GfxRenderer.cpp
@@ -1130,7 +1132,7 @@ foreach(TEST_SRC ${TEST_SOURCES})
     )
     if(TEST_NAME STREQUAL "BitmapTurnCacheTest" OR TEST_NAME STREQUAL "ReaderTouchRenderingTest" OR
        TEST_NAME STREQUAL "ClockFrameTest" OR TEST_NAME STREQUAL "Game2048ViewTest" OR
-       TEST_NAME STREQUAL "Game2048AppTest")
+       TEST_NAME STREQUAL "Game2048AppTest" OR TEST_NAME STREQUAL "GoAppTest")
       target_sources(${TEST_NAME} PRIVATE
         ${PROJECT_ROOT}/lib/RenderTypes/src/BitmapTurnCache.cpp
         ${PROJECT_ROOT}/lib/RenderTypes/src/blocks/ImageBlock.cpp
@@ -1168,13 +1170,16 @@ foreach(TEST_SRC ${TEST_SOURCES})
       )
       target_include_directories(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/I18n/src)
     endif()
-    if(TEST_NAME STREQUAL "Game2048ViewTest" OR TEST_NAME STREQUAL "Game2048AppTest")
+    if(TEST_NAME STREQUAL "Game2048ViewTest" OR TEST_NAME STREQUAL "Game2048AppTest" OR
+       TEST_NAME STREQUAL "GoAppTest")
       target_sources(${TEST_NAME} PRIVATE
-        ${PROJECT_ROOT}/src/ui/views/Game2048View.cpp
         ${PROJECT_ROOT}/src/ui/Elements.cpp
         ${PROJECT_ROOT}/src/ui/TouchLayout.cpp
         ${PROJECT_ROOT}/lib/I18n/src/I18n.cpp)
       target_include_directories(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/I18n/src)
+    endif()
+    if(TEST_NAME STREQUAL "Game2048ViewTest" OR TEST_NAME STREQUAL "Game2048AppTest")
+      target_sources(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/src/ui/views/Game2048View.cpp)
     endif()
     if(TEST_NAME STREQUAL "Game2048AppTest")
       target_compile_definitions(${TEST_NAME} PRIVATE F_CPU=240000000L)
@@ -1196,6 +1201,35 @@ foreach(TEST_SRC ${TEST_SOURCES})
         ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
         ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp)
       target_include_directories(${TEST_NAME} PRIVATE
+        ${PROJECT_ROOT}/lib/InputManager/include
+        $<TARGET_PROPERTY:ContentHandleThumbnailTest,INCLUDE_DIRECTORIES>)
+    endif()
+    if(TEST_NAME STREQUAL "GoAppTest")
+      target_compile_definitions(${TEST_NAME} PRIVATE TEST_GO_APP=1 F_CPU=240000000L)
+      target_sources(${TEST_NAME} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/common/game2048_platform.cpp
+        ${PROJECT_ROOT}/src/apps/AppRegistry.cpp
+        ${PROJECT_ROOT}/src/apps/MiniAppInput.cpp
+        ${PROJECT_ROOT}/src/apps/GoApp.cpp
+        ${PROJECT_ROOT}/src/apps/GoStore.cpp
+        ${PROJECT_ROOT}/lib/GoGame/src/GoGame.cpp
+        ${PROJECT_ROOT}/lib/GoGame/src/GoSearch.cpp
+        ${PROJECT_ROOT}/src/ui/views/GoView.cpp
+        ${PROJECT_ROOT}/src/apps/ClockFacePrimitives.cpp
+        ${PROJECT_ROOT}/src/states/AppLauncherState.cpp
+        ${PROJECT_ROOT}/src/ui/views/AppLauncherViews.cpp
+        ${PROJECT_ROOT}/src/ui/WrappedText.cpp
+        ${PROJECT_ROOT}/src/hal/Input.cpp
+        ${PROJECT_ROOT}/src/hal/Cpu.cpp
+        ${PROJECT_ROOT}/src/MappedInputManager.cpp
+        ${PROJECT_ROOT}/lib/InputManager/src/InputManager.cpp
+        ${PROJECT_ROOT}/lib/AsyncTask/src/BackgroundTask.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/X4ProBoard.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp
+        ${PROJECT_ROOT}/lib/uzlib/src/crc32.c)
+      target_include_directories(${TEST_NAME} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/unit/go
         ${PROJECT_ROOT}/lib/InputManager/include
         $<TARGET_PROPERTY:ContentHandleThumbnailTest,INCLUDE_DIRECTORIES>)
     endif()
@@ -1618,6 +1652,32 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${PROJECT_ROOT}/lib/SDCardManager/include
       ${PROJECT_ROOT}/lib/uzlib/src)
     target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_XTEINK_C3=1 EINK_DISPLAY_SINGLE_BUFFER_MODE=1)
+  elseif(TEST_NAME STREQUAL "GoGameTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/GoGame/src/GoGame.cpp ${TEST_HELPERS})
+  elseif(TEST_NAME STREQUAL "GoSearchTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/GoGame/src/GoGame.cpp
+      ${PROJECT_ROOT}/lib/GoGame/src/GoSearch.cpp ${TEST_HELPERS})
+  elseif(TEST_NAME STREQUAL "GoStoreTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/GoGame/src/GoGame.cpp
+      ${PROJECT_ROOT}/src/apps/GoStore.cpp
+      ${PROJECT_ROOT}/lib/uzlib/src/crc32.c ${TEST_HELPERS})
+    target_include_directories(${TEST_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit/go)
+  elseif(TEST_NAME STREQUAL "GoViewTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/lib/GoGame/src/GoGame.cpp
+      ${PROJECT_ROOT}/src/ui/views/GoView.cpp
+      ${PROJECT_ROOT}/src/apps/ClockFacePrimitives.cpp
+      ${PROJECT_ROOT}/src/ui/Elements.cpp
+      ${PROJECT_ROOT}/src/ui/TouchLayout.cpp
+      ${PROJECT_ROOT}/src/ui/WrappedText.cpp
+      ${PROJECT_ROOT}/lib/EpdFont/src/EpdFontFamily.cpp
+      ${PROJECT_ROOT}/lib/EpdFont/src/EpdFont.cpp
+      ${PROJECT_ROOT}/lib/Utf8/src/Utf8.cpp
+      ${PROJECT_ROOT}/lib/I18n/src/I18n.cpp ${TEST_HELPERS})
+    target_include_directories(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/I18n/src)
   elseif(TEST_NAME STREQUAL "MiniAppHostTest")
     add_executable(${TEST_NAME} ${TEST_SRC})
   elseif(TEST_NAME STREQUAL "Game2048Test")
@@ -1985,6 +2045,19 @@ foreach(TEST_SRC ${TEST_SOURCES})
           ${PROJECT_ROOT}/lib/BoardSupport/src/MurphyM4Batch.cpp)
       endif()
       set_target_properties(${GAME_TEST} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build/bin)
+    endforeach()
+  endif()
+  if(TEST_NAME STREQUAL "GoAppTest")
+    get_target_property(GO_APP_SOURCES ${TEST_NAME} SOURCES)
+    foreach(GO_TARGET XTEINK_C3 X4CLASSIC)
+      set(GO_TEST GoApp${GO_TARGET}Test)
+      add_executable(${GO_TEST} ${GO_APP_SOURCES})
+      target_compile_definitions(${GO_TEST} PRIVATE PAPYRIX_TARGET_${GO_TARGET}=1 TEST_GO_APP=1 F_CPU=240000000L)
+      target_include_directories(${GO_TEST} BEFORE PRIVATE $<TARGET_PROPERTY:${TEST_NAME},INCLUDE_DIRECTORIES>)
+      target_compile_options(${GO_TEST} PRIVATE $<TARGET_PROPERTY:${TEST_NAME},COMPILE_OPTIONS>)
+      target_link_options(${GO_TEST} PRIVATE $<TARGET_PROPERTY:${TEST_NAME},LINK_OPTIONS>)
+      target_link_libraries(${GO_TEST} PRIVATE $<TARGET_PROPERTY:${TEST_NAME},LINK_LIBRARIES>)
+      set_target_properties(${GO_TEST} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build/bin)
     endforeach()
   endif()
   if(TEST_NAME MATCHES "^(ParserScratch|StreamingEpdFontS3|BitmapTurnCache)Test$")

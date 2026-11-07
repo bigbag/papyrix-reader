@@ -158,6 +158,7 @@ test-run: ## Run C/C++ unit tests (builds if needed)
 
 test-tools: ## Host-tool tests (packaging, HTML, clock simulators)
 	@python3 test/scripts/LocaleExamplesTest.py
+	@python3 test/scripts/test_locale_examples.py
 	@python3 test/scripts/WebUiFilenameValidationTest.py
 	@python3 test/scripts/test_target_features.py
 	@python3 test/scripts/test_sdmmc_lifecycle.py

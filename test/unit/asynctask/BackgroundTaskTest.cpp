@@ -450,8 +450,13 @@ int main() {
                     "Timed-out stop does not force-delete the worker");
     runner.expectTrue(task.getState() == BackgroundTask::State::STOPPING,
                       "Timed-out worker remains in STOPPING state");
+    runner.expectTrue(task.isRunning(), "Timed-out worker remains running until completion is published");
 
     releaseWorker.store(true);
+    getTaskRegistry().back()->thread.join();
+    runner.expectFalse(task.isRunning(), "Exited worker is no longer running before another stop");
+    runner.expectTrue(task.getState() == BackgroundTask::State::COMPLETE,
+                      "Exited worker reports COMPLETE before another stop");
     runner.expectTrue(task.stop(1000), "Stop succeeds after the timed-out worker exits");
   }
 

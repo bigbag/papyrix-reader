@@ -724,11 +724,13 @@ void GfxRenderer::displayWindow(int x, int y, int width, int height, bool turnOf
 
 std::string GfxRenderer::truncatedText(const int fontId, const char* text, const int maxWidth,
                                        const EpdFontFamily::Style style) const {
+  if (maxWidth <= 0) return {};
   std::string item = text;
   const int itemWidth = getTextWidth(fontId, item.c_str(), style);
-  if (itemWidth <= maxWidth || item.length() <= 8) {
+  if (itemWidth <= maxWidth) {
     return item;
   }
+  if (getTextWidth(fontId, "...", style) > maxWidth) return {};
 
   std::vector<size_t> boundaries;
   utf8PrefixBoundaries(item, boundaries);

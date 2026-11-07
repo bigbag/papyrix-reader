@@ -543,3 +543,49 @@ Firmware that supports a maximum of 20 bookmarks loads only the first 20 entries
 ### `bookmarks.txt`
 
 Human-readable companion file exported with `bookmarks.bin`. Contains one line for each bookmark with the label and page position. This file is for user reference only. The firmware does not read it again.
+
+## Go Game
+
+`/.papyrix/apps/go.bin` stores one 9 by 9 game and its full position history.
+All multi-byte integers use little-endian order.
+The file contains a 24-byte header and one 22-byte record per turn.
+
+| Offset | Bytes | Field |
+|---|---|---|
+| 0 | 4 | Magic: `PXGO` |
+| 4 | 1 | Format version: `1` |
+| 5 | 1 | Board side: `9` |
+| 6 | 1 | Rules: `1`, Tromp–Taylor with positional superko |
+| 7 | 1 | Komi in half-points: `15` |
+| 8 | 4 | Opponent seed |
+| 12 | 4 | Turn count |
+| 16 | 1 | Outcome: `0` playing, `1` scored, `2` Black resigns, `3` White resigns |
+| 17 | 3 | Reserved: zero |
+| 20 | 4 | CRC32 |
+
+Each turn record starts with a move byte.
+Values `0` through `80` identify intersections in row-major order.
+Value `81` identifies a pass.
+The next 21 bytes contain the resulting board key.
+Resignation changes the header outcome without adding a turn record.
+
+The key uses two bits per intersection.
+Intersection `i` occupies bits `2 * (i % 4)` in byte `i / 4`.
+Values are `0` empty, `1` Black, and `2` White.
+Value `3` is invalid.
+The unused upper six bits of the last byte are zero.
+
+CRC32 starts at `0xffffffff`.
+It covers header bytes 0 through 19, then every turn record.
+The stored value is the complement of the result.
+The CRC field does not participate in the calculation.
+
+Loading replays every turn and checks its stored key.
+It checks positional superko against the full history, including the initial empty board.
+File size must equal `24 + turn count * 22`.
+
+Writes use `go.bin.tmp` and `go.bin.bak` through `CheckedFile.h`.
+The temporary file must pass write, sync, and close checks before publication.
+A failed publication retains the previous complete game.
+Loading can recover a valid backup when the main file is invalid or absent.
+Replacement does not guarantee recovery from a physical power loss during SD writes.

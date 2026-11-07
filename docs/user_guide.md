@@ -90,6 +90,18 @@ Four buttons at the bottom of the screen:
 * Use **Left/Right** or **Volume Up/Down** to move between buttons
 * Press **Confirm** to select
 
+#### Apps
+
+Apps lists three groups in this order:
+
+1. File transfer: **WiFi Transfer**, **Calibre Sync**, **LocalSend**, **Printer**.
+2. Common apps: **Image Viewer**, **Pomodoro**, **Clock**.
+3. Games: **2048**, **Go**.
+
+Two dashed lines separate the groups. Direction buttons select apps, not separator lines. Taps on the separator lines do nothing.
+
+The menu reduces row height and spacing as needed to fit above the bottom actions.
+
 ### 3.2 Books (Recent) & File Selection
 
 From the Home screen, press **Books** to open the Books screen.
@@ -427,7 +439,7 @@ Calibre Wireless lets you send books from **Calibre** (ebook management software
 
 #### Connecting to Calibre
 
-1. From the Home screen, open **Apps** and select **Calibre Wireless**
+1. From the Home screen, open **Apps** and select **Calibre Sync**
 2. Connect to your WiFi network (the same as your computer)
 3. The device shows its IP address and port (for example, `192.168.1.42:9090`)
 4. The screen shows "Waiting for Calibre..."
@@ -611,6 +623,34 @@ The device keeps one unfinished game. It saves the board and score when you leav
 The game uses the configured Auto Sleep timeout. It does not change the startup screen. On touch devices, the game keeps the CPU active while the board is open to detect short swipes.
 
 If a save fails, the game stays open. **Retry** tries again and completes the requested exit or sleep. **Cancel** keeps the current game open. **Discard changes** leaves without saving the latest moves. An old save can remain if a write or removal fails. A sudden power loss can lose all moves since the last exit or sleep.
+
+### 3.13 Go
+
+Open **Apps → Go**. You play Black on a 9 by 9 board. The device plays White. White receives 7.5 points of komi.
+
+In the dark theme, a white outline marks Black stones.
+
+On button-only devices, use the four direction buttons to select an intersection. Press and release **Confirm** to place a stone. Hold Confirm to open the menu without placing a stone. Press **Back** to return to Apps. A held direction button moves the cursor.
+
+On touch devices, tap an intersection to select it. Tap **Place** to commit the move. Tap **Menu** to open the menu. Tap **Back** to return to Apps.
+
+The menu provides **Resume**, **Pass**, **Resign**, **New game**, and **Save and exit**. Pass is available only on your turn. New game and Resign require confirmation. After a result, Confirm also opens the New game confirmation. Back returns to Apps from the result screen.
+
+The game uses Tromp–Taylor play-out rules. A move captures opposing groups without a liberty. Suicide is permitted only when the resulting board does not repeat an earlier position. The repetition check includes the full saved game and the initial empty board.
+
+Two consecutive passes end the game. Capture disputed stones before you pass. Each stone counts as one point. Each empty intersection reached by only one color also counts for that color. Captured stones do not add points. The device does not estimate or remove dead stones.
+
+The app requires a writable SD card. It saves each completed move and pass with the full position history. Opening Go restores that game. If White has the turn, the device starts the opponent again. Opening the menu or entering sleep stops the current search.
+
+Go requests fast screen refreshes, including on entry. The display driver can require a stronger refresh after startup or display recovery.
+
+The opponent checks a five-second search budget between complete simulations. SD history reads, the last simulation, saving, and screen refresh can make a reply take longer. Slower devices analyze fewer continuations.
+
+If a move cannot be saved, **Retry** tries the same move again. **Cancel** retains the previous complete position. An invalid save does not start a new game without confirmation. Select New game to replace it.
+
+If the opponent cannot start, select **Retry**. Go keeps the saved position. You can also press **Back** to leave Go or put the device to sleep.
+
+If a stop takes too long, **Cancel** keeps the game open. When the board is active, Go resumes White's turn after the old task stops.
 
 ---
 

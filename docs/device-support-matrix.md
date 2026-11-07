@@ -188,6 +188,6 @@ See the [Sticky specifications](sticky-specifications.md) for pins, waveforms, i
 
 ## Murphy M4
 
-M4 retains the shared reader and all five applications. It adds a fixed profile, SSD1677 batch policy, FT acquisition, RX8010, four-bit SDMMC, and front-light persistence. The full install bundle validates the 16 MiB flash bound and exact PapyriX partition layout. Before a future install, verify model/batch, flash/layout, security restrictions, and private flash/SD backups. Physical operation and stock restoration remain unverified.
+M4 retains the shared reader and app registry. It adds a fixed profile, SSD1677 batch policy, FT acquisition, RX8010, four-bit SDMMC, and front-light persistence. The full install bundle validates the 16 MiB flash bound and exact PapyriX partition layout. Before a future install, verify model/batch, flash/layout, security restrictions, and private flash/SD backups. Physical operation and stock restoration remain unverified.
 
 See the [M4 specifications](murphy-m4-specifications.md) for the complete contract and limits.

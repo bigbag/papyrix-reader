@@ -1,0 +1,9 @@
+{
+  "name": "GoGame",
+  "version": "1.0.0",
+  "description": "Go rules and bounded opponent search",
+  "build": {
+    "srcDir": "src",
+    "includeDir": "src"
+  }
+}

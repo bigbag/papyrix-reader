@@ -24,6 +24,14 @@ python3 scripts/capture_serial.py USB_SERIAL_NUMBER serial.log
 
 Replace `USB_SERIAL_NUMBER` with the number that `pio device list` shows for the connected reader. The script reconnects when USB lists the device again. It waits while the reader sleeps. Opening the serial port can reset the reader. Stop the script with Ctrl+C.
 
+## Go Opponent
+
+If Thinking continues, capture the serial log from app entry through a reply or a failed stop. Include the device model and firmware version.
+
+With debug logging enabled, the `[GO] Opponent:` line reports completed simulations, elapsed opponent time, and minimum free task stack. The elapsed time excludes move publication and the following display refresh.
+
+See [Go controls and recovery](user_guide.md#313-go) for the search budget, Retry, Cancel, and exit actions.
+
 ## X4 Input, Display, and Clock Checks
 
 An old Booting image does not prove that the reader restarts. If a button restores the current view, report this separately from a reset. Record whether USB is connected and whether it supplies power from a computer, hub, or charger.

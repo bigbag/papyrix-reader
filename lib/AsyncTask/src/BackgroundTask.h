@@ -23,7 +23,7 @@
  *       doSomeWork(task.getAbortCallback());
  *     }
  *   }, 1);
- *   task.stop();  // Always waits for self-delete, never force-kills
+ *   task.stop();  // Wait for worker completion without a forced delete.
  *
  * KEY RULES:
  * 1. Check shouldStop() frequently (every 100ms max)
@@ -63,11 +63,12 @@ class BackgroundTask {
   bool start(const char* name, uint32_t stackSize, TaskFunction func, int priority);
 
   /**
-   * Request task to stop and wait for self-deletion.
-   * Uses event-based signaling (efficient, no polling).
-   * NEVER force-deletes - always waits for cooperative exit.
+   * Request a cooperative stop and wait for worker completion.
+   * Use an exit event and a completion generation.
+   * The method never force-deletes a task.
    * @param maxWaitMs Maximum wait time (0 = wait forever)
-   * @return true if stopped cleanly, false if timeout (task still running)
+   * @return true when the method confirms completion.
+   * The method returns false on a timeout or a synchronization failure.
    */
   bool stop(uint32_t maxWaitMs = 10000);
 
@@ -82,7 +83,7 @@ class BackgroundTask {
   /** Check if task is currently running. */
   bool isRunning() const;
 
-  /** Get current task state. */
+  /** Get current task state, including completion after a stop timeout. */
   State getState() const;
 
   /** Get task handle (for advanced FreeRTOS operations). */

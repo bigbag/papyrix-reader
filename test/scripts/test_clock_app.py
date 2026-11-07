@@ -378,6 +378,9 @@ void buttonBar(Renderer& r, const Theme& t, const ButtonBar& buttons) {
 constexpr int APP_CLOCK = 0;
 constexpr int APP_POMODORO = 1;
 constexpr int APP_2048 = 2;
+namespace ui {
+int appIdForMenuItem(int) { return APP_CLOCK; }
+}
 namespace clock_faces {
 enum class Face : uint8_t {
   Big = 0,

@@ -307,3 +307,4 @@ GAME_LOAD_ERROR=Гру не відкрити
 GAME_CLEAR_ERROR=Не стерто
 GAME_DISCARD=Відкинути зміни
 GAME_KEEP_SAVE=Стара гра може лишитись
+GO_PASS=Пас

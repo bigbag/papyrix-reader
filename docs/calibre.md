@@ -21,7 +21,7 @@ Calibre Wireless Device lets you:
 
 ## Step 1: Enable Wireless Device in PapyriX
 
-1. From the Home screen, open **Apps** and select **Calibre Wireless**.
+1. From the Home screen, open **Apps** and select **Calibre Sync**.
 2. Connect to your WiFi network when the device tells you.
 3. After the connection, the screen shows:
    - **IP Address and Port** (for example, `192.168.1.42:9090`)

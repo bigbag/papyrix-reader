@@ -30,9 +30,10 @@ LOADING=Chargement...
 - The loader reserves keys that start with `_` for metadata.
 - Comments: lines that start with `#` or `;`.
 - UTF-8 encoding.
-- Maximum line length: 255 characters. The loader cuts longer lines.
+- Maximum line length: 255 UTF-8 bytes for the full `KEY=value` line, without its line ending. The loader cuts longer lines.
 - Override buffer: 4608 bytes for all translated strings.
-- Keep the UTF-8 byte total of all non-metadata values at 4608 bytes or less. Values that do not fit keep their English defaults without a message.
+- Count the UTF-8 bytes of all non-metadata values and one terminating null byte per value. Keep this total at 4608 bytes or less. Values that do not fit keep their English defaults without a message.
+- Standard button-bar labels have 94 pixels for text. Their width depends on the font, not only the character count. Check the rendered labels.
 
 ### Metadata keys
 
@@ -58,7 +59,17 @@ The translation table excludes keys that start with `_`.
 
 The web interface shows the language name and file size. Delete the locale file to restore English.
 
-See `docs/examples/locale/` for complete examples (en, de, fr, es, uk).
+See `docs/examples/locale/` for examples (en, de, fr, es, uk).
+The English, German, Spanish, and French examples include every key.
+The Ukrainian example omits 19 `GO_*` keys to stay within the override buffer.
+These keys use the compiled English text.
+
+Run `make test-tools` to check the examples.
+The validator requires every key in the English example.
+Other examples can omit `GO_*` keys.
+It rejects unknown keys and data above the override buffer limit.
+It also requires different labels for the two landscape orientations.
+It does not check the 255-byte line limit or rendered label width.
 
 ## String keys reference
 

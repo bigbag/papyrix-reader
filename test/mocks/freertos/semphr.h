@@ -1,13 +1,13 @@
 #pragma once
 
-#include "FreeRTOS.h"
-
 #include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <mutex>
 #include <thread>
 #include <vector>
+
+#include "FreeRTOS.h"
 
 // Mock semaphore structure
 struct MockSemaphore {
@@ -16,6 +16,7 @@ struct MockSemaphore {
   std::atomic<int> takeCount{0};
   std::atomic<int> giveCount{0};
 };
+inline std::atomic<bool> testMutexCreateFailure{false};
 
 // Global semaphore registry
 inline std::vector<MockSemaphore*>& getSemaphoreRegistry() {
@@ -24,6 +25,7 @@ inline std::vector<MockSemaphore*>& getSemaphoreRegistry() {
 }
 
 inline SemaphoreHandle_t xSemaphoreCreateMutex() {
+  if (testMutexCreateFailure.load()) return nullptr;
   MockSemaphore* sem = new MockSemaphore();
   getSemaphoreRegistry().push_back(sem);
   return static_cast<SemaphoreHandle_t>(sem);

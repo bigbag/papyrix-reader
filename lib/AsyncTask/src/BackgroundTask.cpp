@@ -103,7 +103,7 @@ bool BackgroundTask::start(const char* name, uint32_t stackSize, TaskFunction fu
 
 BackgroundTask::State BackgroundTask::getState() const {
   const State state = state_.load(std::memory_order_acquire);
-  if (state == State::STARTING || state == State::RUNNING) {
+  if (state == State::STARTING || state == State::RUNNING || state == State::STOPPING) {
     const uint32_t generation = generation_.load(std::memory_order_acquire);
     if (generation != 0 && exitedGeneration_.load(std::memory_order_acquire) == generation) {
       return State::COMPLETE;

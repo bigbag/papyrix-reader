@@ -115,6 +115,8 @@ Optional metadata for the theme:
 - **item_spacing** - Vertical space between items in pixels
   - Default: `0`
 
+The [Apps menu](user_guide.md#apps) reduces row height and spacing when needed to fit above the bottom actions.
+
 Set the front and side button layouts in **Settings > Device**.
 
 #### Fonts Section

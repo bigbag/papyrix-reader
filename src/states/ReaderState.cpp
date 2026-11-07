@@ -2015,11 +2015,7 @@ void ReaderState::startBackgroundCaching(Core& core) {
     }
   }
 
-  // BackgroundTask rejects an unpublished prior generation without blocking.
-  if (cacheTask_.isRunning()) {
-    LOG_ERR(TAG, "Warning: Previous cache task still running, stopping first");
-    if (!stopBackgroundCaching()) return;
-  }
+  if (!stopBackgroundCaching()) return;
 
   LOG_INF(TAG, "Starting background page cache task");
   coreForCacheTask_ = &core;

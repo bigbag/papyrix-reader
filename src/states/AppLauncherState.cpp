@@ -59,7 +59,7 @@ void AppLauncherState::resumeClock(Core& core, const clock_app::ResumeRecord& re
 
 void AppLauncherState::activateMenuItem(Core& core) {
   if (menuView_.selected >= ui::AppMenuView::EXTRA_COUNT) {
-    const int appIdx = menuView_.selected - ui::AppMenuView::EXTRA_COUNT;
+    const int appIdx = ui::appIdForMenuItem(menuView_.selected);
     std::tm timeinfo{};
     if (appIdx == APP_CLOCK && !core.clock.localTime(timeinfo)) {
       core.pendingSync = SyncMode::NtpSync;

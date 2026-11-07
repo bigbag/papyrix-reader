@@ -310,6 +310,26 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "Cannot clear save",               // GAME_CLEAR_ERROR
     "Discard changes",                 // GAME_DISCARD
     "Old save may remain",             // GAME_KEEP_SAVE
+    "Place",                           // GO_PLACE
+    "Pass",                            // GO_PASS
+    "Resign",                          // GO_RESIGN
+    "Resign?",                         // GO_RESIGN_CONFIRM
+    "Point occupied",                  // GO_OCCUPIED
+    "Repeated position",               // GO_REPETITION
+    "Cannot choose a move",            // GO_THINK_ERROR
+    "Not enough memory",               // GO_MEMORY_ERROR
+    "Stopping",                        // GO_STOPPING
+    "Save and exit",                   // GO_SAVE_EXIT
+    "Black",                           // GO_BLACK
+    "White",                           // GO_WHITE
+    "Turn",                            // GO_TURN
+    "Thinking",                        // GO_THINKING
+    "Last move: pass",                 // GO_LAST_PASS
+    "Tap a point, then Place",         // GO_TOUCH_HINT
+    "Hold Confirm for menu",           // GO_BUTTON_HINT
+    "Komi",                            // GO_KOMI
+    "wins",                            // GO_WINS
+    "Draw",                            // GO_DRAW
 };
 // clang-format on
 

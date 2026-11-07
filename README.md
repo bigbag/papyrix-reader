@@ -111,6 +111,9 @@ See [Customization](docs/customization.md), [sleep screens](docs/user_guide.md#3
 - Clock with multiple faces
 - Pomodoro timer
 - [2048](docs/user_guide.md#312-2048) with button and touch controls, and saved games
+- [Go 9×9](docs/user_guide.md#313-go) against an offline opponent, with button and touch controls
+
+The [Apps menu](docs/user_guide.md#apps) groups file transfer, common apps, and games.
 
 ### Network & Connectivity
 

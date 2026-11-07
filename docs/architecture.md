@@ -70,6 +70,8 @@ The timer wakes at the next minute boundary from current RTC-backed UTC time. Cl
 
 A short Power press unlocks Clock controls without Booting or Home. Ordinary sleep and Clock standby preserve the pull configuration of the profile's Power pin. Touch and the front light stay off during standby. A normal reset or invalid record uses normal startup. A fatal wake error clears automatic resume and opens time setup or Error. Display initialization allows one reset and retry; a failed panel requires explicit user recovery.
 
+S3 sleep configures the Power pin's RTC pull before it enables EXT1 wake. Digital GPIO pulls do not control the S3 RTC input. The SDK holds the RTC pull through deep sleep without keeping the RTC peripheral domain on. A wake-setup error prevents sleep. Ordinary sleep restarts after teardown; Clock standby returns the error.
+
 ## Content
 
 `src/content/` provides format-specific content handles. The handles expose metadata, navigation, and reading progress. EPUB, FB2, HTML, Markdown, and TXT require text layout. XTC and XTCH contain pre-rendered pages.
@@ -102,7 +104,9 @@ Image converters decode supported images and scale them to the viewport. The cac
 
 `lib/MiniApps` provides the shared app host. It has no firmware dependencies and does not allocate memory. `src/apps/MiniApp.h` binds its typed callbacks to `Core` and `Event`.
 
-The host manages app and menu state, redraw requests, and checked exits. All six apps use this interface. The app descriptor remains valid while the app runs. Add an app through `src/apps/AppRegistry.cpp`.
+The host manages app and menu state, redraw requests, and checked exits. All registered apps use this interface. The app descriptor remains valid while the app runs. Add an app through `src/apps/AppRegistry.cpp`.
+
+App IDs follow the registry order. `appIdForMenuItem()` in `src/ui/views/AppLauncherViews.h` sets the menu order separately. Update this mapping when you add an app. `AppMenuView::rowPitch()` limits rows to the space above the footer. Rendering and touch input use this pitch with `rowY()`. Separator gaps do not accept input.
 
 Apps return a `Frame` with the refresh mode and panel power-off policy. Return `Refresh::None` when the app already refreshes the panel. The launcher uses the existing renderer and a CPU performance lock.
 
@@ -112,13 +116,17 @@ The launcher restores active CPU speed before app event handling. An exit action
 
 `prepareExit` checks an exit before cleanup. `Blocked` retains the exit destination for retry or discard. `OpenMenu` opens editable settings and cancels that destination. A pending exit prevents idle sleep.
 
-`CheckedFile.h` checks temporary writes, sync, and close before publication. It retains the previous file through a backup rename. Clock and 2048 keep their own file formats, validation, and load rules.
+`CheckedFile.h` checks temporary writes, sync, and close before publication. It retains the previous file through a backup rename. Clock, 2048, and Go keep their own file formats, validation, and load rules.
 
 Clock keeps board-specific standby and recovery in the firmware. After hardware recovery invalidates an app context, `Host::abandon` clears host state without calling the app exit callback.
+
+`lib/GoGame` provides the 9 by 9 Tromp–Taylor rules and a bounded Monte Carlo opponent. `GoStore` keeps the full position history on the SD card. `GoApp` runs the opponent through `lib/AsyncTask`. The task reads an immutable position. Only the main thread commits a move.
 
 ## Background Work
 
 `lib/AsyncTask` provides cooperative cancellation and scoped mutex handling. Background tasks stop themselves. Do not force-delete a task. Stop the cache task before the main thread accesses its parser or page cache. Do not hold a mutex during file I/O or other blocking work.
+
+`BackgroundTask::getState()` reports `COMPLETE` after the worker publishes its exit generation, including after a stop timeout. Call `stop()` before reuse to finish the lifecycle transition.
 
 ## Network
 

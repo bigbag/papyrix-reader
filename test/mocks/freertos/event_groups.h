@@ -1,7 +1,5 @@
 #pragma once
 
-#include "FreeRTOS.h"
-
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -10,6 +8,8 @@
 #include <thread>
 #include <vector>
 
+#include "FreeRTOS.h"
+
 // Mock event group structure
 struct MockEventGroup {
   std::mutex mtx;
@@ -17,6 +17,7 @@ struct MockEventGroup {
   std::atomic<EventBits_t> bits{0};
 };
 inline std::atomic<bool> testEventWaitFailure{false};
+inline std::atomic<bool> testEventCreateFailure{false};
 
 // Global event group registry
 inline std::vector<MockEventGroup*>& getEventGroupRegistry() {
@@ -94,6 +95,7 @@ inline void releaseEventSetReturnGate() {
 }
 
 inline EventGroupHandle_t xEventGroupCreate() {
+  if (testEventCreateFailure.load()) return nullptr;
   MockEventGroup* eg = new MockEventGroup();
   getEventGroupRegistry().push_back(eg);
   return static_cast<EventGroupHandle_t>(eg);
