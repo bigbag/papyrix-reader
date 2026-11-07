@@ -12,9 +12,28 @@
 #include <driver/gpio.h>
 #include <esp_sleep.h>
 #include <esp_system.h>
+#if !PAPYRIX_TARGET_XTEINK_C3
+#include <driver/rtc_io.h>
+#endif
 extern InputManager inputManager;
 
 namespace papyrix::hal {
+
+static esp_err_t enablePowerButtonWakeup(const board::BoardProfile& profile, uint64_t wakeMask) {
+#if PAPYRIX_TARGET_XTEINK_C3
+  return esp_deep_sleep_enable_gpio_wakeup(
+      wakeMask, profile.input.activeHigh ? ESP_GPIO_WAKEUP_GPIO_HIGH : ESP_GPIO_WAKEUP_GPIO_LOW);
+#else
+  // EXT1 uses separate RTC pulls; the SDK holds them through deep sleep.
+  const auto pin = static_cast<gpio_num_t>(profile.input.power);
+  auto error = profile.input.activeHigh ? rtc_gpio_pullup_dis(pin) : rtc_gpio_pulldown_dis(pin);
+  if (error == ESP_OK) error = profile.input.activeHigh ? rtc_gpio_pulldown_en(pin) : rtc_gpio_pullup_en(pin);
+  if (error == ESP_OK)
+    error = esp_sleep_enable_ext1_wakeup_io(
+        wakeMask, profile.input.activeHigh ? ESP_EXT1_WAKEUP_ANY_HIGH : ESP_EXT1_WAKEUP_ANY_LOW);
+  return error;
+#endif
+}
 
 [[noreturn]] void enterDeepSleepWithHardwareShutdown(bool externalPower) {
   inputManager.stopSampling();
@@ -29,12 +48,10 @@ namespace papyrix::hal {
   const auto& profile = board::HardwareIdentity::instance().profile();
   disableGpioPullsForSleep(profile.input.power);
   const uint64_t wakeMask = board::powerButtonWakeMask(profile);
-  if (wakeMask != 0) {
-#if PAPYRIX_TARGET_XTEINK_C3
-    esp_deep_sleep_enable_gpio_wakeup(wakeMask, ESP_GPIO_WAKEUP_GPIO_LOW);
-#else
-    esp_sleep_enable_ext1_wakeup_io(wakeMask, ESP_EXT1_WAKEUP_ANY_LOW);
-#endif
+  const auto error = wakeMask != 0 ? enablePowerButtonWakeup(profile, wakeMask) : ESP_ERR_INVALID_ARG;
+  if (error != ESP_OK) {
+    LOG_ERR("POWER", "Power wake setup failed (%d); restarting", error);
+    esp_restart();
   }
   board::prepareDeepSleepPins(profile, externalPower);
   gpio_deep_sleep_hold_en();
@@ -53,15 +70,7 @@ esp_err_t enterClockDeepSleep(uint64_t delayUs) {
 
   auto error = esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
   if (error == ESP_OK) error = esp_sleep_enable_timer_wakeup(delayUs);
-  if (error == ESP_OK) {
-#if PAPYRIX_TARGET_XTEINK_C3
-    error = esp_deep_sleep_enable_gpio_wakeup(
-        wakeMask, profile.input.activeHigh ? ESP_GPIO_WAKEUP_GPIO_HIGH : ESP_GPIO_WAKEUP_GPIO_LOW);
-#else
-    error = esp_sleep_enable_ext1_wakeup_io(
-        wakeMask, profile.input.activeHigh ? ESP_EXT1_WAKEUP_ANY_HIGH : ESP_EXT1_WAKEUP_ANY_LOW);
-#endif
-  }
+  if (error == ESP_OK) error = enablePowerButtonWakeup(profile, wakeMask);
   bool pinsPrepared = false;
   if (error == ESP_OK) {
     inputManager.stopSampling();

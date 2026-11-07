@@ -14,6 +14,7 @@ MOCK = r'''
 #include <cstdio>
 #include <cstdlib>
 using esp_err_t = int;
+using gpio_num_t = int;
 constexpr int ESP_OK = 0, ESP_ERR_INVALID_ARG = 2, ESP_ERR_INVALID_STATE = 3, ESP_ERR_SLEEP_REJECT = 4;
 constexpr int ESP_GPIO_WAKEUP_GPIO_HIGH = 1, ESP_EXT1_WAKEUP_ANY_HIGH = 1, ESP_SLEEP_WAKEUP_ALL = 0;
 constexpr int HIGH = 1, LOW = 0;
@@ -26,6 +27,9 @@ inline int digitalRead(int) { return HIGH; }
 #endif
 #ifndef TEST_TOUCH_STOP_FAIL
 #define TEST_TOUCH_STOP_FAIL 0
+#endif
+#ifndef TEST_WAKE_SETUP_FAIL
+#define TEST_WAKE_SETUP_FAIL 0
 #endif
 constexpr int ESP_GPIO_WAKEUP_GPIO_LOW = 0, ESP_EXT1_WAKEUP_ANY_LOW = 2;
 inline bool slept = false;
@@ -80,6 +84,12 @@ HEADERS = {
         "    static BoardProfile p{}; p.input.power = 3; return p;\n}\n};\n}\n",
     "driver/gpio.h":
         '#pragma once\n#include "MockPower.h"\ninline void gpio_deep_sleep_hold_en() { holdEnabled = true; }\n',
+    "driver/rtc_io.h":
+        '#pragma once\n#include "MockPower.h"\n'
+        'inline esp_err_t rtc_gpio_pullup_en(gpio_num_t) { return TEST_WAKE_SETUP_FAIL ? ESP_ERR_INVALID_ARG : ESP_OK; }\n'
+        'inline esp_err_t rtc_gpio_pullup_dis(gpio_num_t) { return TEST_WAKE_SETUP_FAIL ? ESP_ERR_INVALID_ARG : ESP_OK; }\n'
+        'inline esp_err_t rtc_gpio_pulldown_en(gpio_num_t) { return TEST_WAKE_SETUP_FAIL ? ESP_ERR_INVALID_ARG : ESP_OK; }\n'
+        'inline esp_err_t rtc_gpio_pulldown_dis(gpio_num_t) { return TEST_WAKE_SETUP_FAIL ? ESP_ERR_INVALID_ARG : ESP_OK; }\n',
     "esp_sleep.h":
         '#pragma once\n#include "MockPower.h"\n'
         "inline void requireReady() {\n"
@@ -106,6 +116,11 @@ HEADERS = {
     "esp_system.h":
         '#pragma once\n#include "MockPower.h"\n'
         "[[noreturn]] inline void esp_restart() {\n"
+        "  if (TEST_WAKE_SETUP_FAIL) {\n"
+        "    if (!samplingStopped || !sdEnded || !spiEnded || pinsPrepared || holdEnabled || wakeC3 || wakeS3 || slept)\n"
+        "      std::_Exit(1);\n"
+        "    std::_Exit(44);\n"
+        "  }\n"
         "  if (TEST_TOUCH_STOP_FAIL) {\n"
         "    if (!touchStopAttempted || !samplingStopped || sdEnded || spiEnded || pullsOff || pinsPrepared ||\n"
         "        holdEnabled || wakeC3 || wakeS3 || slept) std::_Exit(1);\n"
@@ -126,6 +141,7 @@ int main() {
 TARGETS = [("C3", ["-DPAPYRIX_TARGET_XTEINK_C3=1"]),
            ("S3", ["-DPAPYRIX_TARGET_X4PRO=1", "-DPAPYRIX_TARGET_XTEINK_C3=0"]),
            ("Classic", ["-DPAPYRIX_TARGET_X4CLASSIC=1", "-DPAPYRIX_TARGET_XTEINK_C3=0"]),
+           ("S3WakeBlocked", ["-DPAPYRIX_TARGET_X4CLASSIC=1", "-DTEST_WAKE_SETUP_FAIL=1"]),
            ("M4", ["-DPAPYRIX_TARGET_MURPHY_M4=1"]),
            ("M4Blocked", ["-DPAPYRIX_TARGET_MURPHY_M4=1", "-DTEST_TOUCH_STOP_FAIL=1"])]
 
@@ -148,10 +164,10 @@ def main():
                 result = subprocess.run([str(path / "sleep")], timeout=10)
             except subprocess.TimeoutExpired:
                 raise SystemExit(f"FAIL: {name}: sleep path hung instead of restarting")
-            expected = 43 if name == "M4Blocked" else 42
+            expected = {"M4Blocked": 43, "S3WakeBlocked": 44}.get(name, 42)
             if result.returncode != expected:
                 raise SystemExit(f"{name}: expected esp_restart exit {expected}, got {result.returncode}")
-    print("PASS: Power.cpp stops touch before shutdown and restarts after rejected sleep")
+    print("PASS: Power.cpp stops touch before shutdown and restarts after failed wake setup or rejected sleep")
 
 
 if __name__ == "__main__":

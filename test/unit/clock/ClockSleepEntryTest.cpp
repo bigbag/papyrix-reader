@@ -5,6 +5,7 @@
 #include <PowerPolicy.h>
 #include <TargetConfig.h>
 #include <TouchBackend.h>
+#include <driver/rtc_io.h>
 #include <esp_sleep.h>
 
 #include "hal/Power.h"
@@ -31,6 +32,12 @@ bool latchNeverDrops(int pin) {
     if (event.pin == pin && event.type == TestGpioEventType::DigitalWrite && event.value == LOW) return false;
   }
   return true;
+}
+bool powerIdleIsBiased() {
+  const auto& input = papyrix::board::HardwareIdentity::instance().profile().input;
+  const uint64_t pin = uint64_t{1} << input.power;
+  return input.activeHigh ? (testRtcPulldownMask & pin) && !(testRtcPullupMask & pin)
+                          : (testRtcPullupMask & pin) && !(testRtcPulldownMask & pin);
 }
 bool pullsDisabled(int pin) {
   for (size_t index = 0; index < testGpioEventCount; ++index) {
@@ -69,6 +76,12 @@ bool checkBoard(papyrix::board::BoardId boardId) {
   runner.expectEq(ESP_FAIL, hal::enterClockDeepSleep(12345678), "Power wake setup failure remains visible");
   runner.expectTrue(testSleepTimerUs == 0 && testSleepGpioMask == 0, "failed setup removes wake sources");
   testSleepPowerError = ESP_OK;
+#if !PAPYRIX_TARGET_XTEINK_C3
+  testRtcPullError = ESP_FAIL;
+  runner.expectEq(ESP_FAIL, hal::enterClockDeepSleep(12345678), "RTC bias failure prevents unarmed standby");
+  runner.expectTrue(testSleepTimerUs == 0 && testSleepGpioMask == 0, "RTC bias failure removes wake sources");
+  testRtcPullError = ESP_OK;
+#endif
 #if PAPYRIX_CAP_TOUCH
   touchStops = false;
   runner.expectEq(ESP_ERR_INVALID_STATE, hal::enterClockDeepSleep(12345678), "live touch ownership prevents rail shutdown");
@@ -96,6 +109,7 @@ bool checkBoard(papyrix::board::BoardId boardId) {
   }
   testDeepSleepHook = sleepEntry;
   testResetGpioEvents();
+  testRtcPullupMask = testRtcPulldownMask = 0;
   bool entered = false;
   try {
     hal::enterClockDeepSleep(12345678);
@@ -107,8 +121,12 @@ bool checkBoard(papyrix::board::BoardId boardId) {
                   "successful entry also arms the declared Power pin");
   runner.expectFalse(pullsDisabled(profile.input.power), "Clock sleep preserves the Power button bias");
   runner.expectTrue(pullsDisabled(2), "Clock sleep still disables unused input pulls");
+#if !PAPYRIX_TARGET_XTEINK_C3
+  runner.expectTrue(powerIdleIsBiased(), "Clock EXT1 input has a defined released level in the RTC domain");
+#endif
   testResetGpioEvents();
   entered = false;
+  testRtcPullupMask = testRtcPulldownMask = 0;
   try {
     hal::enterDeepSleepWithHardwareShutdown(false);
   } catch (const SleepEntered&) {
@@ -117,6 +135,11 @@ bool checkBoard(papyrix::board::BoardId boardId) {
   runner.expectTrue(entered, "ordinary sleep reaches the SDK sleep entry");
   runner.expectFalse(pullsDisabled(profile.input.power), "ordinary sleep preserves the Power button bias");
   runner.expectTrue(pullsDisabled(2), "ordinary sleep still disables unused input pulls");
+#if !PAPYRIX_TARGET_XTEINK_C3
+  runner.expectTrue(powerIdleIsBiased(), "ordinary sleep EXT1 input has a defined released level in the RTC domain");
+#else
+  runner.expectTrue(testRtcPullupMask == 0 && testRtcPulldownMask == 0, "C3 keeps its GPIO wake path");
+#endif
   testDeepSleepHook = nullptr;
   esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
 
