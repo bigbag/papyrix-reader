@@ -194,12 +194,21 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "freetype-py", specifier = ">=2.5.1" },
-    { name = "platformio", specifier = ">=6.1.19" },
+    { name = "platformio", specifier = ">=6.2.0" },
+]
+
+[[package]]
+name = "pip"
+version = "26.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/53/c7/f8d9e2e0e7c1ed8a22a10eeb3b5bf7860bc07d8446c7a978a882c5c8214b/pip-26.3.tar.gz", hash = "sha256:6c36ae7da8695be67e3cd9f7d87919667ced53f57ce2ede75d89b5912ed2bc4c", size = 1934348, upload-time = "2026-11-02T20:34:27.738Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/07/25/ee8c38ae72d66b844ce8eb9711ba905dba21ca1a8a0c960057c41cd23337/pip-26.3-py3-none-any.whl", hash = "sha256:f3b60b20ffaadd4415ed7957212a38ac63fa4c5fa375bd0f4a797777940fad13", size = 1950951, upload-time = "2026-11-02T20:34:25.728Z" },
 ]
 
 [[package]]
 name = "platformio"
-version = "6.1.19"
+version = "6.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ajsonrpc" },
@@ -208,6 +217,7 @@ dependencies = [
     { name = "click" },
     { name = "colorama" },
     { name = "marshmallow" },
+    { name = "pip" },
     { name = "pyelftools" },
     { name = "pyserial" },
     { name = "requests" },
@@ -217,9 +227,9 @@ dependencies = [
     { name = "uvicorn" },
     { name = "wsproto" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3d/a8/e5a87ead3e0c25c054fa9dbfcc5e3ad3bca5b830f691fea820ca618fcc3e/platformio-6.1.19.tar.gz", hash = "sha256:7b53eaa36fcba554411b669eab845626da7c4b90fa6aaee9fe9f1875d82f5f54", size = 240844, upload-time = "2026-02-04T13:40:59.523Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6d/97/b81e15f7ca42a8f9623b25d8962df31d34ddec006c033cad7b04a9819e29/platformio-6.2.0.tar.gz", hash = "sha256:880ea06734908b3d6c0a96598ca7be572c2b6755585784aa63a201bbdfb8c59d", size = 240130, upload-time = "2026-09-05T19:57:09.792Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cf/15/ecb78457241aef59977cafe52b521ed99c7f42e78016d55bbaa953a2b6ae/platformio-6.1.19-py3-none-any.whl", hash = "sha256:4f93b00cf2759035d76ebece4840a3274096f7343ee5bba56cbc0bc3ce2eb6f5", size = 421133, upload-time = "2026-02-04T13:40:56.306Z" },
+    { url = "https://files.pythonhosted.org/packages/bf/98/6c5cc249129c72b076ca238a435c48b48568d866c12890e01ee50fb8f322/platformio-6.2.0-py3-none-any.whl", hash = "sha256:c3de675539f90cbd51466dd326f2fb64c7b83a54c7229b6c30c55865a85eddc2", size = 418578, upload-time = "2026-09-05T19:57:08.569Z" },
 ]
 
 [[package]]

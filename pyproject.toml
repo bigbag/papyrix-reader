@@ -6,5 +6,5 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "freetype-py>=2.5.1",
-    "platformio>=6.1.19",
+    "platformio>=6.2.0",
 ]

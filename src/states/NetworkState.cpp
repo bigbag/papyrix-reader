@@ -4,6 +4,7 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <WiFi.h>
 
 #include <new>
 
@@ -221,9 +222,20 @@ void NetworkState::handleTap(Core& core, const Event& event) {
 }
 
 StateTransition NetworkState::update(Core& core) {
-  // Handle server client processing if running
   if (server_ && currentScreen_ == NetworkScreen::ServerRunning) {
-    server_->handleClient();
+    const bool linkUp = core.wifi.isAPMode() || WiFi.status() == WL_CONNECTED;
+    if (!linkUp) {
+      if (server_->isRunning()) {
+        LOG_ERR(TAG, "WiFi connection lost");
+        server_->stop();
+        serverView_.setStopped();
+        needsRender_ = true;
+      }
+    } else if (!server_->isRunning()) {
+      startWebServer(core);
+    } else {
+      server_->handleClient();
+    }
   }
 
   // Check for deferred scan retry
@@ -1097,6 +1109,11 @@ void NetworkState::startWebServer(Core& core) {
   }
 
   server_->begin();
+  if (!server_->isRunning()) {
+    LOG_ERR(TAG, "Failed to start web server");
+    goBack_ = true;
+    return;
+  }
 
   // Set up server view
   char ip[16];

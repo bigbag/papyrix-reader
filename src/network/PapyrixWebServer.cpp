@@ -14,6 +14,7 @@
 #include "../config.h"
 #include "../content/RecentBooksStore.h"
 #include "../ui/ImageFileView.h"
+#include "RequestWebServer.h"
 #include "WebFileNameValidation.h"
 #include "html/AppPageHtml.generated.h"
 
@@ -110,7 +111,7 @@ void PapyrixWebServer::begin() {
 
   LOG_INF(TAG, "Creating server on port %d (free heap: %d)", port_, ESP.getFreeHeap());
 
-  server_.reset(new WebServer(port_));
+  server_.reset(new RequestWebServer(port_));
   if (!server_) {
     LOG_ERR(TAG, "Failed to create WebServer");
     return;
@@ -200,6 +201,8 @@ void PapyrixWebServer::handleFileListData() {
     return;
   }
 
+  // Combine small chunks to keep RAM available for WiFi buffers.
+  server_->client().setNoDelay(false);
   server_->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server_->send(200, "application/json", "");
   server_->sendContent("[");

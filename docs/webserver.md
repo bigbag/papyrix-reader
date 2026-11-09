@@ -310,6 +310,24 @@ The Firmware tab manages firmware update files for the device.
 - **Maximum Upload Size:** Limited by available SD card space
 - **Supported File Formats:** `.epub`, `.fb2`, `.html`, `.htm`, `.xtc`, `.xtch`, `.xtg`, `.xth`, `.txt`, `.text`, `.md`, `.markdown` (books); `.jpg`, `.jpeg`, `.png`, `.bmp` (images); `.epdfont` (fonts); `.theme` (themes)
 - **Browser Compatibility:** All modern browsers (Chrome, Firefox, Safari, Edge)
+- **Memory use:** Directory listings use buffered TCP writes to reduce memory use during page loads. Server shutdown releases query and form arguments.
+- **HTTP request limits:** The server rejects oversized request targets with HTTP 414 and oversized header lines with HTTP 431. It rejects incomplete or continuously slow header lines with HTTP 408. These header deadlines do not limit the total upload time.
+
+The firmware uses Arduino-ESP32 3.3.12. Build it with PlatformIO Core 6.2.0 or later. Run `uv sync` to install the project requirements.
+
+Run the read-only request regression while WiFi Transfer is active:
+
+```bash
+python3 test/scripts/WebServerSmoke.py --host <reader-ip>
+```
+
+On Linux, add concurrent page, status, and directory requests with an ICMP check:
+
+```bash
+python3 test/scripts/WebServerSmoke.py --host <reader-ip> --load-rounds 120
+```
+
+Run this check with files on the SD card. It requires `ping`. It fails on HTTP errors, invalid responses, a restart, or five consecutive missing ping replies. It does not write files to the reader.
 
 ---
 
