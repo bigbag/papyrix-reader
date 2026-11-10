@@ -371,7 +371,7 @@ void buttonBar(Renderer& r, const Theme& t, const ButtonBar& buttons) {
 }
 @APP_MENU_VIEW@;
 @SETTINGS_HIT@;
-@SETTINGS_HIT_TEST@
+@SETTINGS_LAYOUT@;
 }
 @MINI_APP_BUTTON@
 @HANDLE_APP_BUTTONS@
@@ -1247,7 +1247,7 @@ def main():
     replacements = {
         "APP_MENU_VIEW": block(app_menu_view, "struct AppMenuView"),
         "SETTINGS_HIT": block(settings_view, "struct SettingsListHit"),
-        "SETTINGS_HIT_TEST": block(settings_view, "inline SettingsListHit settingsListHitTest("),
+        "SETTINGS_LAYOUT": block(settings_view, "struct SettingsListLayout"),
         "RESUME_CLOCK": block(launcher, "void AppLauncherState::resumeClock("),
         "LAUNCHER_UPDATE": block(launcher, "StateTransition AppLauncherState::update("),
         "STANDBY_RESULT": block(power_header, "enum class StandbyResult"),

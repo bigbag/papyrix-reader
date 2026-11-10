@@ -94,7 +94,15 @@ int main(int argc, char** argv) {
       send(papyrix::Event::tap(
           {100, static_cast<int16_t>(60 + index * (THEME.itemHeight + THEME.itemSpacing) + THEME.itemHeight / 2)}));
     };
+    auto deviceRow = [&](int index) {
+      ui::DeviceSettingsView device;
+      device.visibleCount += PAPYRIX_TARGET_MURPHY_M4 ? 1 : 0;
+      const auto layout = device.layout();
+      const int pitch = layout.rowHeight(THEME, renderer.getScreenHeight());
+      send(papyrix::Event::tap({100, static_cast<int16_t>(layout.rowY(index, pitch) + pitch / 2)}));
+    };
     row(0);
+    press(papyrix::Button::Up);
     press(papyrix::Button::Up);
     if (!renderDir.empty()) captureNext = renderDir / std::to_string(orientation) / "reader.pbm";
     state.render(core);
@@ -108,6 +116,7 @@ int main(int argc, char** argv) {
     state.enter(core);
     row(0);
     press(papyrix::Button::Up);
+    press(papyrix::Button::Up);
     press(papyrix::Button::Right);
     press(papyrix::Button::Back);
     state.exit(core);
@@ -117,12 +126,15 @@ int main(int argc, char** argv) {
     THEME_MANAGER.mutableCurrent().itemHeight = 40;
     state.enter(core);
     row(0);
-    const int16_t lastRowY = renderer.getScreenHeight() == 480 ? 400 : 440;
-    send(papyrix::Event::tap({100, lastRowY}));
+    ui::ReaderSettingsView reader;
+    reader.visibleCount = ui::ReaderSettingsView::SETTING_COUNT;
+    const auto readerLayout = reader.layout();
+    const int pitch = readerLayout.rowHeight(THEME, renderer.getScreenHeight());
+    send(papyrix::Event::tap({100, static_cast<int16_t>(readerLayout.rowY(8, pitch) + pitch / 2)}));
     if (!renderDir.empty()) captureNext = renderDir / std::to_string(orientation) / "reader-custom.pbm";
     state.render(core);
     press(papyrix::Button::Right);
-    runner.expectTrue(core.settings.holdChapterSwitch == 1, "custom theme last Reader row accepts touch");
+    runner.expectTrue(core.settings.holdChapterSwitch == 1, "custom theme chapter hold row accepts touch");
     press(papyrix::Button::Right);
     state.exit(core);
     THEME_MANAGER.mutableCurrent() = getBuiltinLightTheme();
@@ -133,14 +145,14 @@ int main(int argc, char** argv) {
     const auto originalFront = core.settings.frontButtonLayout;
     const auto originalSide = core.settings.sideButtonLayout;
     auto editLayouts = [&] {
-      row(1);
+      deviceRow(1);
       press(papyrix::Button::Right);
-      row(2);
+      deviceRow(2);
       press(papyrix::Button::Right);
     };
     editLayouts();
 #endif
-    row(8);
+    deviceRow(PAPYRIX_TARGET_MURPHY_M4 ? 4 : 8);
     if (!renderDir.empty()) captureNext = renderDir / std::to_string(orientation) / "device.pbm";
     state.render(core);
 #if PAPYRIX_TARGET_MURPHY_M4
@@ -157,7 +169,7 @@ int main(int argc, char** argv) {
         "No cancellation preserves unrelated pending button layouts");
     row(2);
     editLayouts();
-    row(8);
+    deviceRow(4);
     press(papyrix::Button::Right);
     press(papyrix::Button::Back);
     runner.expectTrue(Preferences::putCalls == 0 && ESP.restartCount == 0, "Back cancels without changing NVS");
@@ -167,7 +179,7 @@ int main(int argc, char** argv) {
         "Back cancellation preserves unrelated pending button layouts");
     row(2);
     editLayouts();
-    row(8);
+    deviceRow(4);
     press(papyrix::Button::Right);
     press(papyrix::Button::Up);
     Preferences::failPut = true;
@@ -183,10 +195,10 @@ int main(int argc, char** argv) {
         "batch save failure preserves unrelated pending button layouts");
     row(2);
     editLayouts();
-    row(6);
+    deviceRow(7);
     press(papyrix::Button::Right);
     const auto expectedSleep = core.settings.autoSleepMinutes;
-    row(8);
+    deviceRow(4);
     const auto putsBeforeSdFailure = Preferences::putCalls;
     SdMan.setOpenFileForWriteFailCount(1);
     press(papyrix::Button::Right);

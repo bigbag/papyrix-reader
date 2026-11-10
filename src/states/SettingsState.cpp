@@ -96,23 +96,26 @@ void SettingsState::handleTap(Core& core, const Event& event) {
   const int width = renderer_.getScreenWidth();
   const int height = renderer_.getScreenHeight();
   int rowHeight = THEME.itemHeight + THEME.itemSpacing;
-  if (currentScreen_ == SettingsScreen::Reader) {
-    rowHeight = readerView_.rowHeight(THEME, height);
-  } else if (currentScreen_ == SettingsScreen::Screen) {
-    rowHeight = screenView_.rowHeight(THEME, height);
-  }
   const bool frontLrbc = core.settings.frontButtonLayout == Settings::FrontLRBC;
   int rowCount = 0;
   if (currentScreen_ == SettingsScreen::Menu) rowCount = ui::SettingsMenuView::ITEM_COUNT;
-  if (currentScreen_ == SettingsScreen::Reader) rowCount = readerView_.visibleCount;
-  if (currentScreen_ == SettingsScreen::Screen) rowCount = screenView_.visibleCount();
-  if (currentScreen_ == SettingsScreen::Device) rowCount = deviceView_.visibleCount;
   if (currentScreen_ == SettingsScreen::Cleanup) rowCount = ui::CleanupMenuView::ITEM_COUNT;
+  ui::SettingsListLayout layout{rowCount};
+  if (currentScreen_ == SettingsScreen::Reader) {
+    layout = readerView_.layout();
+  } else if (currentScreen_ == SettingsScreen::Screen) {
+    layout = screenView_.layout();
+  } else if (currentScreen_ == SettingsScreen::Device) {
+    layout = deviceView_.layout();
+  }
+  if (currentScreen_ == SettingsScreen::Reader || currentScreen_ == SettingsScreen::Screen ||
+      currentScreen_ == SettingsScreen::Device) {
+    rowHeight = layout.rowHeight(THEME, height);
+  }
 
   if (currentScreen_ == SettingsScreen::SleepImages) {
-    const auto hit =
-        ui::settingsListHitTest({event.touch.x, event.touch.y}, width, height, sleepImageView_.rowHeight(THEME, height),
-                                static_cast<int>(sleepImageView_.page.count), frontLrbc);
+    const auto hit = ui::SettingsListLayout{static_cast<int>(sleepImageView_.page.count)}.hitTest(
+        {event.touch.x, event.touch.y}, width, height, sleepImageView_.rowHeight(THEME, height), frontLrbc);
     if (hit.type == ui::SettingsListHit::Type::Row) {
       sleepImageView_.selected = static_cast<size_t>(hit.index);
       selectSleepImage(core);
@@ -145,8 +148,7 @@ void SettingsState::handleTap(Core& core, const Event& event) {
     return;
   }
 
-  const auto hit =
-      ui::settingsListHitTest({event.touch.x, event.touch.y}, width, height, rowHeight, rowCount, frontLrbc);
+  const auto hit = layout.hitTest({event.touch.x, event.touch.y}, width, height, rowHeight, frontLrbc);
   if (hit.type == ui::SettingsListHit::Type::Row) {
     if (currentScreen_ == SettingsScreen::Menu) menuView_.selected = static_cast<int8_t>(hit.index);
     if (currentScreen_ == SettingsScreen::Reader) readerView_.selected = static_cast<int8_t>(hit.index);

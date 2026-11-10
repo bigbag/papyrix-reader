@@ -325,9 +325,9 @@ static void renderMenu(Core& core) {
 }
 
 static bool onMenuTap(Core& core, int16_t x, int16_t y) {
-  const auto hit = ui::settingsListHitTest({x, y}, renderer.getScreenWidth(), renderer.getScreenHeight(),
-                                           THEME.itemHeight + THEME.itemSpacing, MENU_ITEM_COUNT,
-                                           core.settings.frontButtonLayout == Settings::FrontLRBC);
+  const auto hit = ui::SettingsListLayout{MENU_ITEM_COUNT}.hitTest(
+      {x, y}, renderer.getScreenWidth(), renderer.getScreenHeight(), THEME.itemHeight + THEME.itemSpacing,
+      core.settings.frontButtonLayout == Settings::FrontLRBC);
   if (hit.type != ui::SettingsListHit::Type::Row) return false;
   state.menuSelected = static_cast<int8_t>(hit.index);
   state.interactionStartedMs = millis();

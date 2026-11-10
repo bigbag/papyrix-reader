@@ -192,16 +192,27 @@ void render(const GfxRenderer& r, const Theme& t, const SystemInfoView& v) {
   r.displayBuffer();
 }
 
+static void settingsGroupSeparator(const GfxRenderer& r, const Theme& t, const SettingsListLayout& layout, int row,
+                                   int rowHeight) {
+  if (!layout.startsGroup(row)) return;
+  const int y = layout.rowY(row, rowHeight) - SettingsListLayout::GROUP_GAP / 2;
+  const int end = r.getScreenWidth() - t.screenMarginSide;
+  for (int x = t.screenMarginSide; x < end; x += 7) {
+    r.fillRect(x, y, std::min(3, end - x), 1, t.primaryTextBlack);
+  }
+}
+
 void render(const GfxRenderer& r, const Theme& t, const ReaderSettingsView& v) {
   r.clearScreen(t.backgroundColor);
 
   title(r, t, t.screenMarginTop, tr(READER_SETTINGS));
 
-  const int startY = SettingsListHit::LIST_START_Y;
-  const int rowHeight = v.rowHeight(t, r.getScreenHeight());
+  const auto layout = v.layout();
+  const int rowHeight = layout.rowHeight(t, r.getScreenHeight());
   const int itemHeight = std::min<int>(t.itemHeight, rowHeight);
   for (int i = 0; i < v.visibleCount; i++) {
-    const int y = startY + i * rowHeight;
+    settingsGroupSeparator(r, t, layout, i, rowHeight);
+    const int y = layout.rowY(i, rowHeight);
     const int index = v.settingIndex(i);
     const auto& def = ReaderSettingsView::DEFS[index];
 
@@ -217,12 +228,13 @@ void render(const GfxRenderer& r, const Theme& t, const ReaderSettingsView& v) {
 void render(const GfxRenderer& r, const Theme& t, const ScreenSettingsView& v) {
   r.clearScreen(t.backgroundColor);
   title(r, t, t.screenMarginTop, tr(SCREEN_SETTINGS));
-  const int startY = SettingsListHit::LIST_START_Y;
-  const int rowHeight = v.rowHeight(t, r.getScreenHeight());
+  const auto layout = v.layout();
+  const int rowHeight = layout.rowHeight(t, r.getScreenHeight());
   const int itemHeight = std::min<int>(t.itemHeight, rowHeight);
   for (int i = 0; i < v.visibleCount(); i++) {
+    settingsGroupSeparator(r, t, layout, i, rowHeight);
     const int index = v.settingIndex(i);
-    const int y = startY + i * rowHeight;
+    const int y = layout.rowY(i, rowHeight);
     const auto& def = ScreenSettingsView::DEFS[index];
     if (index == 1 || index == 2) {
       char value[8];
@@ -271,13 +283,16 @@ void render(const GfxRenderer& r, const Theme& t, const DeviceSettingsView& v) {
 
   title(r, t, t.screenMarginTop, tr(DEVICE_SETTINGS));
 
-  const int startY = SettingsListHit::LIST_START_Y;
-  menuItem(r, t, startY, tr(WIFI), v.selected == 0);
-  for (int i = 1; i < v.visibleCount; i++) {
+  const auto layout = v.layout();
+  const int rowHeight = layout.rowHeight(t, r.getScreenHeight());
+  const int itemHeight = std::min<int>(t.itemHeight, rowHeight);
+  for (int i = 0; i < v.visibleCount; i++) {
+    settingsGroupSeparator(r, t, layout, i, rowHeight);
     const int index = v.settingIndex(i);
-    const int y = startY + i * (t.itemHeight + t.itemSpacing);
-    enumValue(r, t, y, DeviceSettingsView::DEFS[index].label, v.getCurrentValueStr(index), i == v.selected,
-              t.itemHeight);
+    const int y = layout.rowY(i, rowHeight);
+    const char* label = index < 0 ? tr(WIFI) : DeviceSettingsView::DEFS[index].label;
+    const char* value = index < 0 ? "" : v.getCurrentValueStr(index);
+    enumValue(r, t, y, label, value, i == v.selected, itemHeight);
   }
 
   ButtonBar btns{tr(BACK), v.selected == 0 ? tr(OPEN) : "", v.selected == 0 ? "" : "<", v.selected == 0 ? "" : ">"};

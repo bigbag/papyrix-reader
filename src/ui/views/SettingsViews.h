@@ -22,21 +22,52 @@ struct SettingsListHit {
   int index = -1;
 };
 
-inline SettingsListHit settingsListHitTest(touch::Point point, int16_t screenWidth, int16_t screenHeight,
-                                           int16_t rowHeight, int rowCount, bool frontLrbc = false) {
-  const int action = touch::semanticButtonBarIndex(point, screenWidth, screenHeight, frontLrbc);
-  if (action >= 0) {
-    constexpr SettingsListHit::Type actions[] = {SettingsListHit::Type::Back, SettingsListHit::Type::Open,
-                                                 SettingsListHit::Type::Previous, SettingsListHit::Type::Next};
-    return {actions[action], -1};
+struct SettingsListLayout {
+  static constexpr int GROUP_GAP = 8;
+  int rowCount;
+  int groupStarts[3] = {};
+
+  bool startsGroup(int row) const {
+    for (const int start : groupStarts) {
+      if (start > 0 && row == start) return true;
+    }
+    return false;
   }
-  const int row = touch::rowAt(
-      point,
-      {0, SettingsListHit::LIST_START_Y, screenWidth,
-       static_cast<int16_t>(screenHeight - SettingsListHit::LIST_START_Y - SettingsListHit::LIST_BOTTOM_MARGIN)},
-      rowHeight, rowCount);
-  return row < 0 ? SettingsListHit{} : SettingsListHit{SettingsListHit::Type::Row, row};
-}
+
+  int rowY(int row, int rowHeight) const {
+    int y = SettingsListHit::LIST_START_Y + row * rowHeight;
+    for (const int start : groupStarts) {
+      if (start > 0 && row >= start) y += GROUP_GAP;
+    }
+    return y;
+  }
+
+  int rowHeight(const Theme& theme, int screenHeight) const {
+    if (rowCount <= 0) return 0;
+    const int gaps = rowY(rowCount - 1, 0) - SettingsListHit::LIST_START_Y;
+    const int available = screenHeight - SettingsListHit::LIST_START_Y - SettingsListHit::LIST_BOTTOM_MARGIN - gaps;
+    return std::max(1, std::min(theme.itemHeight + theme.itemSpacing, available / rowCount));
+  }
+
+  SettingsListHit hitTest(touch::Point point, int16_t screenWidth, int16_t screenHeight, int rowHeight,
+                          bool frontLrbc = false) const {
+    const int action = touch::semanticButtonBarIndex(point, screenWidth, screenHeight, frontLrbc);
+    if (action >= 0) {
+      constexpr SettingsListHit::Type actions[] = {SettingsListHit::Type::Back, SettingsListHit::Type::Open,
+                                                   SettingsListHit::Type::Previous, SettingsListHit::Type::Next};
+      return {actions[action], -1};
+    }
+    const touch::Rect list{
+        0, SettingsListHit::LIST_START_Y, screenWidth,
+        static_cast<int16_t>(screenHeight - SettingsListHit::LIST_START_Y - SettingsListHit::LIST_BOTTOM_MARGIN)};
+    if (!list.contains(point) || rowHeight <= 0) return {};
+    for (int row = 0; row < rowCount; ++row) {
+      const int y = rowY(row, rowHeight);
+      if (point.y >= y && point.y < y + rowHeight) return {SettingsListHit::Type::Row, row};
+    }
+    return {};
+  }
+};
 
 // ============================================================================
 // SettingsMenuView - Main settings category selection
@@ -165,11 +196,11 @@ struct ReaderSettingsView {
   int8_t visibleCount = SETTING_COUNT - 1;
   bool needsRender = true;
 
-  int settingIndex(int row) const { return row + (visibleCount < SETTING_COUNT && row >= 7 ? 1 : 0); }
-  int rowHeight(const Theme& theme, int screenHeight) const {
-    const int available = screenHeight - SettingsListHit::LIST_START_Y - SettingsListHit::LIST_BOTTOM_MARGIN;
-    return std::max(1, std::min(theme.itemHeight + theme.itemSpacing, available / visibleCount));
+  int settingIndex(int row) const {
+    static constexpr uint8_t order[] = {0, 1, 2, 3, 4, 5, 6, 7, 9, 8};
+    return order[row + (visibleCount < SETTING_COUNT && row >= 7 ? 1 : 0)];
   }
+  SettingsListLayout layout() const { return {visibleCount, {5, 7}}; }
 
   void moveUp() {
     selected = (selected == 0) ? visibleCount - 1 : selected - 1;
@@ -228,11 +259,13 @@ struct ScreenSettingsView {
   int visibleCount() const {
     return SETTING_COUNT - (frontLightAvailable ? 0 : 4) - (values[9] == papyrix::Settings::SleepCustom ? 0 : 1);
   }
-  int settingIndex(int row) const { return row + (!frontLightAvailable && row >= 1 ? 4 : 0); }
+  int settingIndex(int row) const {
+    static constexpr uint8_t order[] = {0, 5, 6, 1, 2, 3, 4, 7, 8, 9, 10};
+    return order[row + (!frontLightAvailable && row >= 3 ? 4 : 0)];
+  }
   bool sleepImageSelected() const { return settingIndex(selected) == SLEEP_IMAGE_SETTING; }
-  int rowHeight(const Theme& theme, int screenHeight) const {
-    const int available = screenHeight - SettingsListHit::LIST_START_Y - SettingsListHit::LIST_BOTTOM_MARGIN;
-    return std::max(1, std::min(theme.itemHeight + theme.itemSpacing, available / visibleCount()));
+  SettingsListLayout layout() const {
+    return {visibleCount(), {3, frontLightAvailable ? 7 : 5, frontLightAvailable ? 9 : 0}};
   }
   bool lightSelected() const {
     const int index = settingIndex(selected);
@@ -315,7 +348,11 @@ struct DeviceSettingsView {
   int8_t selected = 0;
   int8_t visibleCount = SETTING_COUNT;
   bool needsRender = true;
-  int settingIndex(int row) const { return row - 1; }
+  int settingIndex(int row) const {
+    static constexpr int8_t order[] = {-1, 0, 1, 2, BATCH_SETTING, 3, 4, 5, 6};
+    return order[row + (visibleCount == SETTING_COUNT && row >= 4 ? 1 : 0)];
+  }
+  SettingsListLayout layout() const { return {visibleCount, {1, visibleCount == SETTING_COUNT ? 4 : 5}}; }
 
   void moveUp() {
     selected = (selected == 0) ? visibleCount - 1 : selected - 1;

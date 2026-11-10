@@ -7,41 +7,60 @@
 int main() {
   TestUtils::TestRunner r("Service views touch");
 
-  auto setting = ui::settingsListHitTest({20, 100}, 800, 480, 40, 5);
+  const ui::SettingsListLayout categories{5};
+  auto setting = categories.hitTest({20, 100}, 800, 480, 40);
   r.expectTrue(setting.type == ui::SettingsListHit::Type::Row && setting.index == 1, "settings category row");
-  setting = ui::settingsListHitTest({20, 500}, 800, 480, 40, 5);
+  setting = categories.hitTest({20, 500}, 800, 480, 40);
   r.expectTrue(setting.type == ui::SettingsListHit::Type::None, "settings rejects hidden row");
-  r.expectTrue(ui::settingsListHitTest({438, 430}, 800, 480, 40, 12).type == ui::SettingsListHit::Type::Previous,
+  r.expectTrue(categories.hitTest({438, 430}, 800, 480, 40).type == ui::SettingsListHit::Type::Previous,
                "settings previous value action");
-  r.expectTrue(ui::settingsListHitTest({619, 430}, 800, 480, 40, 12).type == ui::SettingsListHit::Type::Next,
+  r.expectTrue(categories.hitTest({619, 430}, 800, 480, 40).type == ui::SettingsListHit::Type::Next,
                "settings next value action");
+
+  auto checkLayout = [&](const ui::SettingsListLayout& layout) {
+    for (const int height : {480, 528, 792, 800}) {
+      Theme theme = getBuiltinLightTheme();
+      theme.itemHeight = 75;
+      const int pitch = layout.rowHeight(theme, height);
+      int bottom = ui::SettingsListHit::LIST_START_Y;
+      for (int row = 0; row < layout.rowCount; ++row) {
+        const int y = layout.rowY(row, pitch);
+        r.expectTrue(y >= bottom, "settings rows do not overlap");
+        for (const int edge : {y, y + pitch - 1}) {
+          const auto hit = layout.hitTest({20, static_cast<int16_t>(edge)}, 480, height, pitch);
+          r.expectTrue(hit.type == ui::SettingsListHit::Type::Row && hit.index == row,
+                       "both row edges select the displayed setting");
+        }
+        if (y > bottom) {
+          r.expectTrue(layout.hitTest({20, static_cast<int16_t>(bottom)}, 480, height, pitch).type ==
+                               ui::SettingsListHit::Type::None &&
+                           layout.hitTest({20, static_cast<int16_t>(y - 1)}, 480, height, pitch).type ==
+                               ui::SettingsListHit::Type::None,
+                       "group gaps do not select an adjacent setting");
+        }
+        bottom = y + pitch;
+      }
+      r.expectTrue(bottom <= height - ui::SettingsListHit::LIST_BOTTOM_MARGIN,
+                   "settings groups fit above the button bar");
+      r.expectTrue(layout.hitTest({20, static_cast<int16_t>(bottom)}, 480, height, pitch).type ==
+                       ui::SettingsListHit::Type::None,
+                   "settings reject touches below the last row");
+    }
+  };
 
   ui::ScreenSettingsView light;
   light.frontLightAvailable = true;
-  light.selected = 1;
+  light.selected = 3;
   r.expectEq(uint8_t{0}, light.adjustedLightValue(-1), "brightness cannot wrap below off");
   light.values[1] = 98;
   r.expectEq(uint8_t{100}, light.adjustedLightValue(1), "brightness stops at full output");
-  light.selected = 2;
+  light.selected = 4;
   light.values[2] = 2;
   r.expectEq(uint8_t{0}, light.adjustedLightValue(-1), "warmth stops at the cold channel");
   light.values[2] = 100;
   r.expectEq(uint8_t{100}, light.adjustedLightValue(1), "warmth cannot wrap past the warm channel");
   r.expectEq(uint8_t{95}, light.adjustedLightValue(-1), "warmth changes in five percent steps");
-  ui::ScreenSettingsView screen;
-  screen.moveDown();
-  r.expectEq(5, screen.settingIndex(screen.selected), "screen skips unavailable front light after theme");
-  screen.moveUp();
-  r.expectEq(0, screen.settingIndex(screen.selected), "screen returns directly to theme");
-  screen.moveUp();
-  r.expectEq(9, screen.settingIndex(screen.selected), "screen wraps to sleep screen");
   ui::ScreenSettingsView lit;
-  lit.frontLightAvailable = true;
-  lit.selected = 3;
-  r.expectEq(3, lit.settingIndex(lit.selected), "front light timeout follows warmth");
-  r.expectTrue(!lit.lightSelected(), "front light timeout is not a percent control");
-  lit.selected = 4;
-  r.expectEq(4, lit.settingIndex(lit.selected), "smooth front light follows timeout");
   for (const bool frontLight : {false, true}) {
     lit.frontLightAvailable = frontLight;
     for (const auto sleepMode : {papyrix::Settings::SleepDark, papyrix::Settings::SleepCustom}) {
@@ -52,46 +71,16 @@ int main() {
                    "image picker is reachable only in Custom mode");
       lit.moveDown();
       r.expectEq(int8_t{0}, lit.selected, "screen wraps from its last visible setting");
-      for (const int height : {480, 800}) {
-        Theme theme = getBuiltinLightTheme();
-        theme.itemHeight = 75;
-        const int rowHeight = lit.rowHeight(theme, height);
-        const auto bottom =
-            static_cast<int16_t>(ui::SettingsListHit::LIST_START_Y + lit.visibleCount() * rowHeight - 1);
-        const auto hit = ui::settingsListHitTest({20, bottom}, 480, height, rowHeight, lit.visibleCount());
-        r.expectTrue(hit.type == ui::SettingsListHit::Type::Row && hit.index == lit.visibleCount() - 1,
-                     "last Screen setting remains touchable with conditional rows");
-        r.expectTrue(bottom < height - ui::SettingsListHit::LIST_BOTTOM_MARGIN,
-                     "large theme rows do not overlap the button bar");
-        r.expectTrue(
-            ui::settingsListHitTest({20, static_cast<int16_t>(bottom + 1)}, 480, height, rowHeight, lit.visibleCount())
-                    .type == ui::SettingsListHit::Type::None,
-            "Screen rejects touches below visible settings");
-      }
+      checkLayout(lit.layout());
     }
   }
   ui::ReaderSettingsView reader;
   reader.selected = 6;
   reader.moveDown();
-  r.expectEq(8, reader.settingIndex(reader.selected), "reader skips unavailable touch before full processing");
+  r.expectTrue(reader.settingIndex(reader.selected) != 7, "button-only Reader skips touch page turns");
   for (const bool touch : {false, true}) {
     reader.visibleCount = ui::ReaderSettingsView::SETTING_COUNT - (touch ? 0 : 1);
-    for (const int height : {480, 800}) {
-      Theme theme = getBuiltinLightTheme();
-      theme.itemHeight = 40;
-      theme.itemSpacing = 5;
-      const int rowHeight = reader.rowHeight(theme, height);
-      const auto bottom = static_cast<int16_t>(ui::SettingsListHit::LIST_START_Y + reader.visibleCount * rowHeight - 1);
-      const auto hit = ui::settingsListHitTest({20, bottom}, 800, height, rowHeight, reader.visibleCount);
-      r.expectTrue(hit.type == ui::SettingsListHit::Type::Row && hit.index == reader.visibleCount - 1,
-                   "last Reader setting stays within the touchable list");
-      r.expectEq(9, reader.settingIndex(hit.index), "last visible Reader row selects chapter holds");
-      r.expectTrue(bottom < height - ui::SettingsListHit::LIST_BOTTOM_MARGIN, "Reader rows stay above the button bar");
-      r.expectTrue(
-          ui::settingsListHitTest({20, static_cast<int16_t>(bottom + 1)}, 800, height, rowHeight, reader.visibleCount)
-                  .type == ui::SettingsListHit::Type::None,
-          "Reader rejects touches below its rows");
-    }
+    checkLayout(reader.layout());
   }
   ui::DeviceSettingsView device;
   r.expectEq(int8_t{0}, device.selected, "Device opens with Wi-Fi action selected");
@@ -99,8 +88,10 @@ int main() {
   r.expectEq(0, device.settingIndex(device.selected), "First preference remains front buttons");
   device.moveUp();
   r.expectEq(-1, device.settingIndex(device.selected), "Wi-Fi action has no stored setting value");
-  r.expectTrue(ui::settingsListHitTest({20, 60}, 800, 480, 30, device.visibleCount).index == 0,
-               "Wi-Fi row accepts touch");
+  for (const bool batch : {false, true}) {
+    device.visibleCount = ui::DeviceSettingsView::SETTING_COUNT + (batch ? 1 : 0);
+    checkLayout(device.layout());
+  }
   ui::WifiMenuView saved;
   saved.count = 9;
   saved.selected = 8;

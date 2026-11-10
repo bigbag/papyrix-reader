@@ -128,9 +128,10 @@ int main(int argc, char** argv) {
 
       ui::ScreenSettingsView screen;
       screen.values[9] = papyrix::Settings::SleepCustom;
-      const int rowHeight = screen.rowHeight(THEME, renderer.getScreenHeight());
+      const auto settingsLayout = screen.layout();
+      const int rowHeight = settingsLayout.rowHeight(THEME, renderer.getScreenHeight());
       send(papyrix::Event::tap(
-          {100, static_cast<int16_t>(60 + (screen.visibleCount() - 1) * rowHeight + rowHeight / 2)}));
+          {100, static_cast<int16_t>(settingsLayout.rowY(screen.visibleCount() - 1, rowHeight) + rowHeight / 2)}));
       ui::SleepImageView picker;
       const int imageRowHeight = picker.rowHeight(THEME, renderer.getScreenHeight());
       send(papyrix::Event::tap({100, static_cast<int16_t>(60 + imageRowHeight / 2)}));

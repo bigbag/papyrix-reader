@@ -210,6 +210,8 @@ After the connection, your X4 starts a web server. See the [webserver docs](webs
 
 The Settings screen has six categories in the same order on all supported devices. Reader, Screen, and Device are separate entries on the same level. Missing translations use the English fallback. Use the [locale examples](examples/locale/) for translated labels.
 
+Reader, Screen, and Device settings use dashed lines between related groups. Unsupported settings stay hidden. Use **Up** and **Down** to move between settings. Group separators are not selectable.
+
 #### Reader
 
 Text and reading settings, in menu order:
@@ -263,6 +265,12 @@ Text and reading settings, in menu order:
   - X3, X4, and X4 v2 Classic hide this setting.
   - Physical buttons stay active.
 
+- **Hold to change chapter** (default: OFF)
+  - Press or hold a page button to turn one page when you release it.
+  - Enable this setting to change chapters with a held page button.
+  - This setting starts off after an upgrade from an older version.
+  - Menu controls, power-button actions, and cache preparation do not change.
+
 - **Full Book Process** (default: OFF)
   - When this is on, the device indexes all pages of the book before you start reading
   - Shows a progress bar during indexing. Press **Back** to cancel and go back to the file list
@@ -272,15 +280,6 @@ Text and reading settings, in menu order:
   - Opening any book needs at least 20 MB free space on the SD card, with this setting on or off and for all formats
   - Below 20 MB the device shows a warning and does not open the book
 
-
-
-
-- **Hold to change chapter** (default: OFF)
-  - Press or hold a page button to turn one page when you release it.
-  - Enable this setting to change chapters with a held page button.
-  - This setting starts off after an upgrade from an older version.
-  - Menu controls, power-button actions, and cache preparation do not change.
-
 #### Screen
 
 Display settings, in menu order:
@@ -289,6 +288,15 @@ Display settings, in menu order:
   - Select from available themes (light, dark, or custom themes from the SD card)
   - Themes control colors, layout, and fonts
   - See [Customization Guide](customization.md) to make custom themes
+
+- **Reading Orientation** (default: Portrait)
+  - Options: Portrait, Landscape CW, Inverted, Landscape CCW
+  - Screen orientation for reading
+
+- **Text Anti-Aliasing** (default: OFF)
+  - Set grayscale text rendering to on for smoother font edges
+  - Operates with builtin fonts and custom fonts converted with `--2bit`
+  - Set to off for faster page turns and to remove the short "thick text" flash during transitions
 
 - **Brightness** (X4 Pro and M4)
   - Adjust front-light brightness from 0 to 100 percent in steps of 5.
@@ -314,15 +322,6 @@ Display settings, in menu order:
   - Very low brightness can change in steps.
 
 These options apply in both Reader mode and UI mode. X3, X4, X4 v2 Classic, and Sticky hide all four front-light settings.
-
-- **Reading Orientation** (default: Portrait)
-  - Options: Portrait, Landscape CW, Inverted, Landscape CCW
-  - Screen orientation for reading
-
-- **Text Anti-Aliasing** (default: OFF)
-  - Set grayscale text rendering to on for smoother font edges
-  - Operates with builtin fonts and custom fonts converted with `--2bit`
-  - Set to off for faster page turns and to remove the short "thick text" flash during transitions
 
 - **Pages Per Refresh** (default: 15)
   - Options: 1, 5, 10, 15, 30
@@ -371,6 +370,13 @@ Controls and device behavior, in menu order:
   - **Page Turn:** Short press goes to the next page while you read (useful for one-handed reading)
   - **Bookmark:** Short press bookmarks the current page while you read (shows a short notification)
 
+- **Hardware batch** (M4 only, default: Batch 2)
+  - Select the batch that matches the device.
+  - The same choice controls touch calibration and the display temperature preset.
+  - Confirm saves pending PapyriX settings, saves the batch, and restarts.
+  - Cancel keeps the current batch and other pending settings.
+  - If either save fails, an error appears and the device does not restart or apply the batch.
+  - See the [M4 batch contract](murphy-m4-specifications.md#hardware-batches).
 
 - **Startup Behavior** (default: Last Document)
   - Options: Last Document, Home
@@ -391,14 +397,6 @@ Controls and device behavior, in menu order:
   - **ON:** If you delete a file from the Files screen, the device moves it to `/trash`. You can restore it or delete it permanently.
   - **OFF:** If you delete a file from the Files screen, the device removes it permanently. Recovery is not available.
   - Folders are always deleted permanently with all their contents, for all values of this setting.
-
-- **Hardware batch** (M4 only, default: Batch 2)
-  - Select the batch that matches the device.
-  - The same choice controls touch calibration and the display temperature preset.
-  - Confirm saves pending PapyriX settings, saves the batch, and restarts.
-  - Cancel keeps the current batch and other pending settings.
-  - If either save fails, an error appears and the device does not restart or apply the batch.
-  - See the [M4 batch contract](murphy-m4-specifications.md#hardware-batches).
 
 #### Cleanup
 
