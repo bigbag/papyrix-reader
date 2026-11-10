@@ -95,8 +95,12 @@ void SettingsState::exit(Core& core) {
 void SettingsState::handleTap(Core& core, const Event& event) {
   const int width = renderer_.getScreenWidth();
   const int height = renderer_.getScreenHeight();
-  const int rowHeight = currentScreen_ == SettingsScreen::Screen ? screenView_.rowHeight(THEME, height)
-                                                                 : THEME.itemHeight + THEME.itemSpacing;
+  int rowHeight = THEME.itemHeight + THEME.itemSpacing;
+  if (currentScreen_ == SettingsScreen::Reader) {
+    rowHeight = readerView_.rowHeight(THEME, height);
+  } else if (currentScreen_ == SettingsScreen::Screen) {
+    rowHeight = screenView_.rowHeight(THEME, height);
+  }
   const bool frontLrbc = core.settings.frontButtonLayout == Settings::FrontLRBC;
   int rowCount = 0;
   if (currentScreen_ == SettingsScreen::Menu) rowCount = ui::SettingsMenuView::ITEM_COUNT;
@@ -871,6 +875,7 @@ void SettingsState::loadReaderSettings() {
   readerView_.values[6] = settings.statusBar;
   readerView_.values[7] = settings.touchPageTurns;
   readerView_.values[8] = settings.fullBookProcess;
+  readerView_.values[9] = settings.holdChapterSwitch;
   readerView_.visibleCount =
       ui::ReaderSettingsView::SETTING_COUNT - (board::hasTouch(board::HardwareIdentity::instance().profile()) ? 0 : 1);
 }
@@ -888,6 +893,7 @@ void SettingsState::saveReaderSettings() {
     settings.touchPageTurns = readerView_.values[7];
   }
   settings.fullBookProcess = readerView_.values[8];
+  settings.holdChapterSwitch = readerView_.values[9];
 }
 
 void SettingsState::loadScreenSettings() {

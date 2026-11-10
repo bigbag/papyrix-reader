@@ -118,6 +118,7 @@ struct Settings {
   enum { StartupLastDocument, StartupHome };
   enum { PowerPageTurn, PowerBookmark, NextPrev };
   int shortPwrBtn = PowerPageTurn, touchPageTurns = 0, sideButtonLayout = 0;
+  int holdChapterSwitch = 0;
   uint32_t getPowerButtonDuration() const { return 400; }
   char lastBookPath[1024] = {};
   char pendingBookPath[1024] = {};

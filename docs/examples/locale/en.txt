@@ -79,6 +79,7 @@ FRONT_BUTTONS=Front Buttons
 SIDE_BUTTONS=Side Buttons
 FULL_BOOK_PROCESS=Full Book Process
 TOUCH_PAGE_TURNS=Touch page turns
+HOLD_CHAPTER_SWITCH=Hold to change chapter
 
 # Settings enum values
 ON=ON

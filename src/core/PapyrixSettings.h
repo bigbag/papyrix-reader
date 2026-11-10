@@ -94,6 +94,7 @@ struct Settings {
   uint8_t frontLightTimeout = 0;
   uint8_t smoothFrontLight = 0;
   char sleepImage[BufferSize::Utf8Filename] = "";
+  uint8_t holdChapterSwitch = 0;
 
   // Persistence (using hal::Storage wrapper)
   Result<void> load(hal::Storage& storage);

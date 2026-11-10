@@ -47,6 +47,7 @@ void ReaderSettingsView::initDefs() {
   DEFS[6] = {tr(STATUS_BAR), SettingType::Enum, statusBarValues, 4};
   DEFS[7] = {tr(TOUCH_PAGE_TURNS), SettingType::Toggle, nullptr, 0};
   DEFS[8] = {tr(FULL_BOOK_PROCESS), SettingType::Toggle, nullptr, 0};
+  DEFS[9] = {tr(HOLD_CHAPTER_SWITCH), SettingType::Toggle, nullptr, 0};
 }
 
 ScreenSettingsView::SettingDef ScreenSettingsView::DEFS[SETTING_COUNT] = {};
@@ -197,12 +198,14 @@ void render(const GfxRenderer& r, const Theme& t, const ReaderSettingsView& v) {
   title(r, t, t.screenMarginTop, tr(READER_SETTINGS));
 
   const int startY = SettingsListHit::LIST_START_Y;
+  const int rowHeight = v.rowHeight(t, r.getScreenHeight());
+  const int itemHeight = std::min<int>(t.itemHeight, rowHeight);
   for (int i = 0; i < v.visibleCount; i++) {
-    const int y = startY + i * (t.itemHeight + t.itemSpacing);
+    const int y = startY + i * rowHeight;
     const int index = v.settingIndex(i);
     const auto& def = ReaderSettingsView::DEFS[index];
 
-    enumValue(r, t, y, def.label, v.getCurrentValueStr(index), i == v.selected, t.itemHeight);
+    enumValue(r, t, y, def.label, v.getCurrentValueStr(index), i == v.selected, itemHeight);
   }
 
   ButtonBar btns{tr(BACK), "", "<", ">"};

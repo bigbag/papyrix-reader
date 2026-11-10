@@ -82,6 +82,7 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "Side Buttons",           // SIDE_BUTTONS
     "Full Book Process",      // FULL_BOOK_PROCESS
     "Touch page turns",        // TOUCH_PAGE_TURNS
+    "Hold to change chapter",  // HOLD_CHAPTER_SWITCH
 
     // Settings enum values
     "ON",                     // ON

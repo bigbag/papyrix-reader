@@ -2,22 +2,22 @@
 #include <GfxRenderer.h>
 #include <MurphyM4Batch.h>
 #include <Preferences.h>
-#include <TargetConfig.h>
 #include <SDCardManager.h>
-#include <builtinFonts/ui_12.h>
-#include <builtinFonts/ui_bold_12.h>
+#include <TargetConfig.h>
 #include <builtinFonts/reader_2b.h>
 #include <builtinFonts/reader_bold_2b.h>
+#include <builtinFonts/ui_12.h>
+#include <builtinFonts/ui_bold_12.h>
 
 #include <cassert>
 #include <filesystem>
 #include <fstream>
 
+#include "MurphyM4SettingsFixture.h"
+#include "ThemeManager.h"
 #include "core/Core.h"
 #include "states/SettingsState.h"
-#include "ThemeManager.h"
 #include "test_utils.h"
-#include "MurphyM4SettingsFixture.h"
 
 namespace {
 GfxRenderer* activeRenderer = nullptr;
@@ -35,8 +35,8 @@ void capture(const papyrix::hal::Display& display) {
   for (int y = 0; y < renderer.getScreenHeight(); ++y) {
     for (int x = 0; x < renderer.getScreenWidth(); ++x) {
       papyrix::board::PanelPoint panel{};
-      assert(papyrix::board::panelFromLogical(static_cast<papyrix::board::DisplayOrientation>(renderer.getOrientation()),
-                                            800, 480, x, y, panel));
+      assert(papyrix::board::panelFromLogical(
+          static_cast<papyrix::board::DisplayOrientation>(renderer.getOrientation()), 800, 480, x, y, panel));
       out << ((display.getFrameBuffer()[panel.y * 100 + panel.x / 8] & (0x80 >> (panel.x % 8))) ? 0 : 1) << ' ';
     }
     out << '\n';
@@ -51,7 +51,7 @@ void beforeRestart() {
   store.end();
   settingsLoadedBeforeRestart = settingsAtRestart.load(activeCore->storage).ok();
 }
-}
+}  // namespace
 
 int main(int argc, char** argv) {
   TestUtils::TestRunner runner("M4 settings transactions and real font layout");
@@ -91,9 +91,43 @@ int main(int argc, char** argv) {
     };
     auto press = [&](papyrix::Button button) { send(papyrix::Event::buttonPress(button)); };
     auto row = [&](int index) {
-      send(papyrix::Event::tap({100, static_cast<int16_t>(60 + index * (THEME.itemHeight + THEME.itemSpacing) +
-                                                       THEME.itemHeight / 2)}));
+      send(papyrix::Event::tap(
+          {100, static_cast<int16_t>(60 + index * (THEME.itemHeight + THEME.itemSpacing) + THEME.itemHeight / 2)}));
     };
+    row(0);
+    press(papyrix::Button::Up);
+    if (!renderDir.empty()) captureNext = renderDir / std::to_string(orientation) / "reader.pbm";
+    state.render(core);
+    press(papyrix::Button::Right);
+    press(papyrix::Button::Back);
+    runner.expectTrue(core.settings.holdChapterSwitch == 1, "Reader setting enables chapter holds");
+    state.exit(core);
+    papyrix::Settings reloaded;
+    runner.expectTrue(reloaded.load(core.storage).ok() && reloaded.holdChapterSwitch == 1,
+                      "chapter hold opt-in survives settings reload");
+    state.enter(core);
+    row(0);
+    press(papyrix::Button::Up);
+    press(papyrix::Button::Right);
+    press(papyrix::Button::Back);
+    state.exit(core);
+    runner.expectTrue(reloaded.load(core.storage).ok() && reloaded.holdChapterSwitch == 0,
+                      "Reader setting disables chapter holds again");
+#if PAPYRIX_TARGET_MURPHY_M4
+    THEME_MANAGER.mutableCurrent().itemHeight = 40;
+    state.enter(core);
+    row(0);
+    const int16_t lastRowY = renderer.getScreenHeight() == 480 ? 400 : 440;
+    send(papyrix::Event::tap({100, lastRowY}));
+    if (!renderDir.empty()) captureNext = renderDir / std::to_string(orientation) / "reader-custom.pbm";
+    state.render(core);
+    press(papyrix::Button::Right);
+    runner.expectTrue(core.settings.holdChapterSwitch == 1, "custom theme last Reader row accepts touch");
+    press(papyrix::Button::Right);
+    state.exit(core);
+    THEME_MANAGER.mutableCurrent() = getBuiltinLightTheme();
+#endif
+    state.enter(core);
     row(2);
 #if PAPYRIX_TARGET_MURPHY_M4
     const auto originalFront = core.settings.frontButtonLayout;
@@ -118,9 +152,9 @@ int main(int argc, char** argv) {
     press(papyrix::Button::Center);
     runner.expectTrue(Preferences::putCalls == 0 && ESP.restartCount == 0, "default No cancels the changed batch");
     press(papyrix::Button::Back);
-    runner.expectTrue(core.settings.frontButtonLayout != originalFront &&
-                          core.settings.sideButtonLayout != originalSide,
-                      "No cancellation preserves unrelated pending button layouts");
+    runner.expectTrue(
+        core.settings.frontButtonLayout != originalFront && core.settings.sideButtonLayout != originalSide,
+        "No cancellation preserves unrelated pending button layouts");
     row(2);
     editLayouts();
     row(8);
@@ -128,9 +162,9 @@ int main(int argc, char** argv) {
     press(papyrix::Button::Back);
     runner.expectTrue(Preferences::putCalls == 0 && ESP.restartCount == 0, "Back cancels without changing NVS");
     press(papyrix::Button::Back);
-    runner.expectTrue(core.settings.frontButtonLayout == originalFront &&
-                          core.settings.sideButtonLayout == originalSide,
-                      "Back cancellation preserves unrelated pending button layouts");
+    runner.expectTrue(
+        core.settings.frontButtonLayout == originalFront && core.settings.sideButtonLayout == originalSide,
+        "Back cancellation preserves unrelated pending button layouts");
     row(2);
     editLayouts();
     row(8);
@@ -144,9 +178,9 @@ int main(int argc, char** argv) {
     if (!renderDir.empty()) assert(captureNext.empty());
     Preferences::failPut = false;
     press(papyrix::Button::Back);
-    runner.expectTrue(core.settings.frontButtonLayout != originalFront &&
-                          core.settings.sideButtonLayout != originalSide,
-                      "batch save failure preserves unrelated pending button layouts");
+    runner.expectTrue(
+        core.settings.frontButtonLayout != originalFront && core.settings.sideButtonLayout != originalSide,
+        "batch save failure preserves unrelated pending button layouts");
     row(2);
     editLayouts();
     row(6);
@@ -160,9 +194,9 @@ int main(int argc, char** argv) {
     press(papyrix::Button::Center);
     runner.expectTrue(ESP.restartCount == 0 && Preferences::putCalls == putsBeforeSdFailure,
                       "settings storage failure blocks batch commit and restart");
-    runner.expectTrue(core.settings.frontButtonLayout != originalFront &&
-                          core.settings.sideButtonLayout != originalSide,
-                      "settings save failure does not remap active button input");
+    runner.expectTrue(
+        core.settings.frontButtonLayout != originalFront && core.settings.sideButtonLayout != originalSide,
+        "settings save failure does not remap active button input");
     press(papyrix::Button::Right);
     press(papyrix::Button::Up);
     press(papyrix::Button::Center);

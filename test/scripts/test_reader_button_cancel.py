@@ -45,6 +45,7 @@ namespace papyrix {
 struct Settings {
   enum { PowerPageTurn, PowerBookmark, NextPrev, FrontLRBC };
   int shortPwrBtn = PowerPageTurn, touchPageTurns = 0, sideButtonLayout = 0, frontButtonLayout = 0;
+  int holdChapterSwitch = 0;
   int getReaderFontId(const Theme&) const { return 0; }
   uint32_t getPowerButtonDuration() const { return 400; }
 };
@@ -119,6 +120,7 @@ int main() {
   bool passed = true;
   for (unsigned i = 0; i < 4; ++i) {
     Core core;
+    core.settings.holdChapterSwitch = 1;
     ReaderState state;
     now = 1000;
     assert(core.events.push(Event::buttonPress(Button::Power)));

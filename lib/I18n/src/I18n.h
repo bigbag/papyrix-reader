@@ -79,6 +79,7 @@ enum class StrId : uint16_t {
   STR_SIDE_BUTTONS,
   STR_FULL_BOOK_PROCESS,
   STR_TOUCH_PAGE_TURNS,
+  STR_HOLD_CHAPTER_SWITCH,
 
   // Settings enum values
   STR_ON,

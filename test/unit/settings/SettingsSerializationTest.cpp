@@ -176,6 +176,7 @@ int main() {
     expected.frontLightTimeout = 4;
     expected.smoothFrontLight = 1;
     strcpy(expected.sleepImage, "sunset.bmp");
+    expected.holdChapterSwitch = 1;
 
     FsFile file;
     file.setBuffer("");
@@ -202,7 +203,8 @@ int main() {
         decoded.fullBookProcess == expected.fullBookProcess && decoded.showRecents == expected.showRecents &&
         decoded.recycleBinEnabled == expected.recycleBinEnabled && decoded.touchPageTurns == expected.touchPageTurns &&
         decoded.frontLightTimeout == expected.frontLightTimeout &&
-        decoded.smoothFrontLight == expected.smoothFrontLight;
+        decoded.smoothFrontLight == expected.smoothFrontLight &&
+        decoded.holdChapterSwitch == expected.holdChapterSwitch;
     runner.expectTrue(scalarMatch, "full_settings_scalar_roundtrip");
     runner.expectTrue(memcmp(decoded.themeName, expected.themeName, sizeof(expected.themeName)) == 0,
                       "full_settings_theme_roundtrip");
@@ -216,6 +218,52 @@ int main() {
         memcmp(decoded.fileListSelectedName, expected.fileListSelectedName, sizeof(expected.fileListSelectedName)) == 0,
         "full_settings_selected_name_roundtrip");
     runner.expectEqual("sunset.bmp", decoded.sleepImage, "sleep_image_filename_roundtrip");
+  }
+
+  for (const uint8_t savedValue : {uint8_t(0), uint8_t(1), uint8_t(2), uint8_t(255)}) {
+    Settings saved;
+    saved.holdChapterSwitch = savedValue;
+    FsFile file;
+    file.setBuffer("");
+    runner.expectTrue(writeSettingsFile(file, saved), "chapter_hold_write");
+    file.seek(0);
+    Settings decoded;
+    expectStatus(runner, SettingsReadStatus::Ok, readSettingsFile(file, Settings{}, decoded), "chapter_hold_read");
+    runner.expectEq<uint8_t>(savedValue == 1 ? 1 : 0, decoded.holdChapterSwitch,
+                             "chapter_hold_accepts_only_valid_toggle_values");
+  }
+
+  {
+    Settings previous;
+    previous.fontSize = Settings::FontLarge;
+    previous.holdChapterSwitch = 1;
+    FsFile file;
+    file.setBuffer("");
+    runner.expectTrue(writeSettingsFile(file, previous), "v18_fixture_write");
+    file.seek(sizeof(kSettingsMagic));
+    serialization::writePod(file, uint8_t(18));
+    serialization::writePod(file, uint8_t(33));
+    const auto data = file.getBuffer();
+    file.setBuffer(data.substr(0, data.size() - sizeof(previous.holdChapterSwitch)));
+    Settings decoded;
+    expectStatus(runner, SettingsReadStatus::Ok, readSettingsFile(file, Settings{}, decoded), "v18_file_accepted");
+    runner.expectEq<uint8_t>(0, decoded.holdChapterSwitch, "upgrade_disables_chapter_hold");
+    runner.expectEq<uint8_t>(Settings::FontLarge, decoded.fontSize, "upgrade_preserves_existing_settings");
+  }
+
+  {
+    Settings saved;
+    saved.holdChapterSwitch = 1;
+    FsFile file;
+    file.setBuffer("");
+    runner.expectTrue(writeSettingsFile(file, saved), "chapter_hold_truncation_write");
+    const auto data = file.getBuffer();
+    file.setBuffer(data.substr(0, data.size() - 1));
+    Settings decoded;
+    decoded.holdChapterSwitch = 1;
+    expectStatus(runner, SettingsReadStatus::Truncated, readSettingsFile(file, Settings{}, decoded),
+                 "missing_declared_chapter_hold_rejected");
+    runner.expectEq<uint8_t>(1, decoded.holdChapterSwitch, "truncated_chapter_hold_preserves_output");
   }
 
   for (const auto* character : {u8"Ж", u8"ก"}) {
@@ -247,7 +295,7 @@ int main() {
     serialization::writePod(file, uint8_t(17));
     serialization::writePod(file, uint8_t(32));
     const auto data = file.getBuffer();
-    file.setBuffer(data.substr(0, data.size() - sizeof(previous.sleepImage)));
+    file.setBuffer(data.substr(0, data.size() - sizeof(previous.sleepImage) - sizeof(previous.holdChapterSwitch)));
 
     Settings defaults;
     strcpy(defaults.sleepImage, "previous-choice.bmp");
@@ -281,7 +329,7 @@ int main() {
     file.setBuffer("");
     runner.expectTrue(writeSettingsFile(file, saved), "sleep_image_truncation_fixture_write");
     const auto data = file.getBuffer();
-    file.setBuffer(data.substr(0, data.size() - drop));
+    file.setBuffer(data.substr(0, data.size() - sizeof(saved.holdChapterSwitch) - drop));
     Settings decoded;
     strcpy(decoded.sleepImage, "preserved.bmp");
     expectStatus(runner, SettingsReadStatus::Truncated, readSettingsFile(file, Settings{}, decoded),
@@ -336,7 +384,7 @@ int main() {
     file.setBuffer("");
     writeSettingsFile(file, pending);
     const auto data = file.getBuffer();
-    file.setBuffer(data.substr(0, data.size() - sizeof(pending.sleepImage) - 3));
+    file.setBuffer(data.substr(0, data.size() - sizeof(pending.sleepImage) - sizeof(pending.holdChapterSwitch) - 3));
     Settings decoded;
     strcpy(decoded.lastBookPath, "/good.epub");
     expectStatus(runner, SettingsReadStatus::Truncated, readSettingsFile(file, Settings{}, decoded),
@@ -417,7 +465,7 @@ int main() {
     serialization::writePod(file, uint8_t(16));
     serialization::writePod(file, uint8_t(30));
     const auto data = file.getBuffer();
-    file.setBuffer(data.substr(0, data.size() - sizeof(previous.sleepImage) - 2));
+    file.setBuffer(data.substr(0, data.size() - sizeof(previous.sleepImage) - sizeof(previous.holdChapterSwitch) - 2));
     Settings decoded;
     expectStatus(runner, SettingsReadStatus::Ok, readSettingsFile(file, Settings{}, decoded), "v16_file_accepted");
     runner.expectEq<uint8_t>(0, decoded.frontLightTimeout, "v16_front_light_timeout_defaults_off");
@@ -450,7 +498,8 @@ int main() {
     file.setBuffer("");
     runner.expectTrue(writeSettingsFile(file, complete), "front_light_truncation_write");
     const auto data = file.getBuffer();
-    file.setBuffer(data.substr(0, data.size() - sizeof(complete.sleepImage) - drop));
+    file.setBuffer(
+        data.substr(0, data.size() - sizeof(complete.sleepImage) - sizeof(complete.holdChapterSwitch) - drop));
     Settings decoded;
     decoded.orientation = 77;
     expectStatus(runner, SettingsReadStatus::Truncated, readSettingsFile(file, Settings{}, decoded),

@@ -47,7 +47,7 @@ ReaderButtonAction ReaderButtonDispatcher::processEvent(const Event& e, const ui
       }
 
     case EventType::ButtonRepeat:
-      if (!holdNavigated_) {
+      if (config.holdChapterSwitch && !holdNavigated_) {
         switch (e.button) {
           case Button::Right:
           case Button::Down:

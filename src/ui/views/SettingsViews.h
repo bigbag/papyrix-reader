@@ -154,7 +154,7 @@ struct ReaderSettingsView {
     uint8_t enumCount;
   };
 
-  static constexpr int SETTING_COUNT = 9;
+  static constexpr int SETTING_COUNT = 10;
   static SettingDef DEFS[SETTING_COUNT];
   static void initDefs();
 
@@ -166,6 +166,10 @@ struct ReaderSettingsView {
   bool needsRender = true;
 
   int settingIndex(int row) const { return row + (visibleCount < SETTING_COUNT && row >= 7 ? 1 : 0); }
+  int rowHeight(const Theme& theme, int screenHeight) const {
+    const int available = screenHeight - SettingsListHit::LIST_START_Y - SettingsListHit::LIST_BOTTOM_MARGIN;
+    return std::max(1, std::min(theme.itemHeight + theme.itemSpacing, available / visibleCount));
+  }
 
   void moveUp() {
     selected = (selected == 0) ? visibleCount - 1 : selected - 1;

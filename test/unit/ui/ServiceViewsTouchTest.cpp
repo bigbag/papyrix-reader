@@ -74,8 +74,25 @@ int main() {
   reader.selected = 6;
   reader.moveDown();
   r.expectEq(8, reader.settingIndex(reader.selected), "reader skips unavailable touch before full processing");
-  reader.moveDown();
-  r.expectEq(0, reader.settingIndex(reader.selected), "reader wraps after full processing");
+  for (const bool touch : {false, true}) {
+    reader.visibleCount = ui::ReaderSettingsView::SETTING_COUNT - (touch ? 0 : 1);
+    for (const int height : {480, 800}) {
+      Theme theme = getBuiltinLightTheme();
+      theme.itemHeight = 40;
+      theme.itemSpacing = 5;
+      const int rowHeight = reader.rowHeight(theme, height);
+      const auto bottom = static_cast<int16_t>(ui::SettingsListHit::LIST_START_Y + reader.visibleCount * rowHeight - 1);
+      const auto hit = ui::settingsListHitTest({20, bottom}, 800, height, rowHeight, reader.visibleCount);
+      r.expectTrue(hit.type == ui::SettingsListHit::Type::Row && hit.index == reader.visibleCount - 1,
+                   "last Reader setting stays within the touchable list");
+      r.expectEq(9, reader.settingIndex(hit.index), "last visible Reader row selects chapter holds");
+      r.expectTrue(bottom < height - ui::SettingsListHit::LIST_BOTTOM_MARGIN, "Reader rows stay above the button bar");
+      r.expectTrue(
+          ui::settingsListHitTest({20, static_cast<int16_t>(bottom + 1)}, 800, height, rowHeight, reader.visibleCount)
+                  .type == ui::SettingsListHit::Type::None,
+          "Reader rejects touches below its rows");
+    }
+  }
   ui::DeviceSettingsView device;
   r.expectEq(int8_t{0}, device.selected, "Device opens with Wi-Fi action selected");
   device.moveDown();

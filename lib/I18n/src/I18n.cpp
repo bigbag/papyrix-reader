@@ -82,6 +82,7 @@ static constexpr KeyMapping KEY_MAP[] = {
     {"SIDE_BUTTONS", StrId::STR_SIDE_BUTTONS},
     {"FULL_BOOK_PROCESS", StrId::STR_FULL_BOOK_PROCESS},
     {"TOUCH_PAGE_TURNS", StrId::STR_TOUCH_PAGE_TURNS},
+    {"HOLD_CHAPTER_SWITCH", StrId::STR_HOLD_CHAPTER_SWITCH},
     {"ON", StrId::STR_ON},
     {"OFF", StrId::STR_OFF},
     {"XSMALL", StrId::STR_XSMALL},

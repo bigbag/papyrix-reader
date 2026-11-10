@@ -1,6 +1,6 @@
-#include "test_utils.h"
-
 #include <cstdint>
+
+#include "test_utils.h"
 
 // ============================================================================
 // Reader-mode button dispatch through the PRODUCTION ReaderButtonDispatcher
@@ -40,23 +40,34 @@ Event release(Button b) { return Event::buttonRelease(b); }
 int main() {
   TestUtils::TestRunner runner("ReaderButtonDispatch");
 
+  for (const auto button : {Button::Right, Button::Down, Button::Left, Button::Up}) {
+    DispatchCase c;
+    const auto expected =
+        button == Button::Right || button == Button::Down ? ReaderButtonAction::Next : ReaderButtonAction::Prev;
+    for (int cycle = 0; cycle < 2; ++cycle) {
+      runner.expectEq(int(ReaderButtonAction::None), int(c.process(press(button))), "Page press waits for release");
+      for (int repeatIndex = 0; repeatIndex < 3; ++repeatIndex) {
+        runner.expectEq(int(ReaderButtonAction::None), int(c.process(repeat(button))),
+                        "Page hold does not navigate by default");
+      }
+      runner.expectEq(int(expected), int(c.process(release(button))), "Page hold turns one page on release");
+    }
+  }
+
   // ============================================
   // Short press: Release without prior Repeat
   // ============================================
   {
     DispatchCase c;
-    runner.expectEq(int(ReaderButtonAction::Next), int(c.process(release(Button::Right))),
-                    "Short press Right -> Next");
+    runner.expectEq(int(ReaderButtonAction::Next), int(c.process(release(Button::Right))), "Short press Right -> Next");
   }
   {
     DispatchCase c;
-    runner.expectEq(int(ReaderButtonAction::Next), int(c.process(release(Button::Down))),
-                    "Short press Down -> Next");
+    runner.expectEq(int(ReaderButtonAction::Next), int(c.process(release(Button::Down))), "Short press Down -> Next");
   }
   {
     DispatchCase c;
-    runner.expectEq(int(ReaderButtonAction::Prev), int(c.process(release(Button::Left))),
-                    "Short press Left -> Prev");
+    runner.expectEq(int(ReaderButtonAction::Prev), int(c.process(release(Button::Left))), "Short press Left -> Prev");
   }
   {
     DispatchCase c;
@@ -64,13 +75,11 @@ int main() {
   }
   {
     DispatchCase c;
-    runner.expectEq(int(ReaderButtonAction::None), int(c.process(press(Button::Right))),
-                    "Press alone (Right) -> None");
+    runner.expectEq(int(ReaderButtonAction::None), int(c.process(press(Button::Right))), "Press alone (Right) -> None");
   }
   {
     DispatchCase c;
-    runner.expectEq(int(ReaderButtonAction::None), int(c.process(press(Button::Left))),
-                    "Press alone (Left) -> None");
+    runner.expectEq(int(ReaderButtonAction::None), int(c.process(press(Button::Left))), "Press alone (Left) -> None");
   }
 
   // ============================================
@@ -78,21 +87,25 @@ int main() {
   // ============================================
   {
     DispatchCase c;
+    c.config.holdChapterSwitch = true;
     runner.expectEq(int(ReaderButtonAction::NextChapter), int(c.process(repeat(Button::Right))),
                     "Long press Right -> NextChapter");
   }
   {
     DispatchCase c;
+    c.config.holdChapterSwitch = true;
     runner.expectEq(int(ReaderButtonAction::NextChapter), int(c.process(repeat(Button::Down))),
                     "Long press Down -> NextChapter");
   }
   {
     DispatchCase c;
+    c.config.holdChapterSwitch = true;
     runner.expectEq(int(ReaderButtonAction::PrevChapter), int(c.process(repeat(Button::Left))),
                     "Long press Left -> PrevChapter");
   }
   {
     DispatchCase c;
+    c.config.holdChapterSwitch = true;
     runner.expectEq(int(ReaderButtonAction::PrevChapter), int(c.process(repeat(Button::Up))),
                     "Long press Up -> PrevChapter");
   }
@@ -102,12 +115,14 @@ int main() {
   // ============================================
   {
     DispatchCase c;
+    c.config.holdChapterSwitch = true;
     c.process(repeat(Button::Right));
     runner.expectEq(int(ReaderButtonAction::None), int(c.process(release(Button::Right))),
                     "Release after Repeat -> None (suppressed)");
   }
   {
     DispatchCase c;
+    c.config.holdChapterSwitch = true;
     c.process(repeat(Button::Left));
     runner.expectEq(int(ReaderButtonAction::None), int(c.process(release(Button::Left))),
                     "Release after Repeat (Left) -> None (suppressed)");
@@ -118,12 +133,11 @@ int main() {
   // ============================================
   {
     DispatchCase c;
+    c.config.holdChapterSwitch = true;
     runner.expectEq(int(ReaderButtonAction::NextChapter), int(c.process(repeat(Button::Right))),
                     "First repeat -> NextChapter");
-    runner.expectEq(int(ReaderButtonAction::None), int(c.process(repeat(Button::Right))),
-                    "Second repeat -> None");
-    runner.expectEq(int(ReaderButtonAction::None), int(c.process(repeat(Button::Right))),
-                    "Third repeat -> None");
+    runner.expectEq(int(ReaderButtonAction::None), int(c.process(repeat(Button::Right))), "Second repeat -> None");
+    runner.expectEq(int(ReaderButtonAction::None), int(c.process(repeat(Button::Right))), "Third repeat -> None");
   }
 
   // ============================================
@@ -131,6 +145,7 @@ int main() {
   // ============================================
   {
     DispatchCase c;
+    c.config.holdChapterSwitch = true;
     c.process(repeat(Button::Right));
     c.process(release(Button::Right));
     runner.expectEq(int(ReaderButtonAction::Next), int(c.process(release(Button::Right))),
@@ -142,6 +157,7 @@ int main() {
   // ============================================
   {
     DispatchCase c;
+    c.config.holdChapterSwitch = true;
     runner.expectEq(int(ReaderButtonAction::PrevChapter), int(c.process(repeat(Button::Left))),
                     "First long press -> PrevChapter");
     c.process(release(Button::Left));
@@ -151,6 +167,7 @@ int main() {
   }
   {
     DispatchCase c;
+    c.config.holdChapterSwitch = true;
     c.config.powerShortPageTurn = true;
     c.nowMs = 41;
     c.process(press(Button::Power));
@@ -168,8 +185,7 @@ int main() {
   // ============================================
   {
     DispatchCase c;
-    runner.expectEq(int(ReaderButtonAction::Menu), int(c.process(press(Button::Center))),
-                    "Center press -> Menu");
+    runner.expectEq(int(ReaderButtonAction::Menu), int(c.process(press(Button::Center))), "Center press -> Menu");
   }
   {
     DispatchCase c;

@@ -274,6 +274,13 @@ Text and reading settings, in menu order:
 
 
 
+
+- **Hold to change chapter** (default: OFF)
+  - Press or hold a page button to turn one page when you release it.
+  - Enable this setting to change chapters with a held page button.
+  - This setting starts off after an upgrade from an older version.
+  - Menu controls, power-button actions, and cache preparation do not change.
+
 #### Screen
 
 Display settings, in menu order:
@@ -662,14 +669,16 @@ Use the controls for your device. X3, X4, and X4 v2 Classic use buttons only. X4
 |---|---|---|
 | Previous page | Press **Left** or **Up** | Tap the left page zone or press **Up** |
 | Next page | Press **Right** or **Down** | Tap the right page zone or press **Down** |
-| Previous chapter | Hold **Left** or **Up**, then release | Hold **Up**, then release |
-| Next chapter | Hold **Right** or **Down**, then release | Hold **Down**, then release |
+| Previous chapter (setting ON) | Hold **Left** or **Up** | Hold **Up** |
+| Next chapter (setting ON) | Hold **Right** or **Down** | Hold **Down** |
 | Open Reader Menu | Press **Confirm** | Tap the center menu zone or the bottom-right **Confirm** corner |
 | Select a menu item | Use **Up/Down**, then press **Confirm** | Tap the item, or tap **Confirm** to select the highlighted item |
 | Dismiss Reader Menu | Press **Back** | Tap **Back** or another point outside the popup, except **Confirm** |
 | Close the book | Press **Back**, or select **Back** in Reader Menu | Tap the bottom-left **Back** corner while reading. X4 Pro also supports **Home**. |
 
 The table shows the default page-button layout. The side-button preference can reverse the page actions. See [Button and Touch Layout](#button-and-touch-layout) for the touch zones.
+
+**Hold to change chapter** is off by default in **Settings → Reader**. A held page button turns one page on release. Enable the setting to use the chapter shortcuts in the table. Normal page turns still cross chapter boundaries. Page buttons stay blocked while the reader prepares a missing page.
 
 X4 Pro also has a capacitive Home key. Release it to send the Back action. Sticky and Murphy M4 have no Home key, physical Back button, or physical Confirm button. Use the on-screen controls on these devices.
 

@@ -79,6 +79,7 @@ FRONT_BUTTONS=Botones frontales
 SIDE_BUTTONS=Botones laterales
 FULL_BOOK_PROCESS=Procesar libro
 TOUCH_PAGE_TURNS=Pasar páginas al tocar
+HOLD_CHAPTER_SWITCH=Cap. largo
 
 # Settings enum values
 ON=SÍ

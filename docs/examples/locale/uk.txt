@@ -78,7 +78,8 @@ SUNLIGHT_FADING_FIX=Антивицв.
 FRONT_BUTTONS=Передні
 SIDE_BUTTONS=Бічні
 FULL_BOOK_PROCESS=Обробка
-TOUCH_PAGE_TURNS=Горт. дотиком
+TOUCH_PAGE_TURNS=Дотик
+HOLD_CHAPTER_SWITCH=Утр. розділ
 
 # Settings enum values
 ON=УВІМК
@@ -307,4 +308,3 @@ GAME_LOAD_ERROR=Гру не відкрити
 GAME_CLEAR_ERROR=Не стерто
 GAME_DISCARD=Відкинути зміни
 GAME_KEEP_SAVE=Стара гра може лишитись
-GO_PASS=Пас

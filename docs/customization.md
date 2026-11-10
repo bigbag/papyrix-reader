@@ -116,6 +116,7 @@ Optional metadata for the theme:
   - Default: `0`
 
 The [Apps menu](user_guide.md#apps) reduces row height and spacing when needed to fit above the bottom actions.
+Reader and Screen settings also reduce row height to keep all settings above the bottom actions.
 
 Set the front and side button layouts in **Settings > Device**.
 

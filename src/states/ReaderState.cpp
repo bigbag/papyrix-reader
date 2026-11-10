@@ -1041,6 +1041,7 @@ StateTransition ReaderState::update(Core& core) {
                                     core.settings.shortPwrBtn == Settings::PowerBookmark,
                                     core.settings.getPowerButtonDuration()};
     buttonConfig.touchPageTurns = core.settings.touchPageTurns != 0;
+    buttonConfig.holdChapterSwitch = core.settings.holdChapterSwitch != 0;
     buttonConfig.reversePageZones = core.settings.sideButtonLayout == Settings::NextPrev;
     buttonConfig.logicalWidth = static_cast<int16_t>(renderer_.getScreenWidth());
     buttonConfig.logicalHeight = static_cast<int16_t>(renderer_.getScreenHeight());

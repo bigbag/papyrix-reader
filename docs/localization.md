@@ -61,7 +61,7 @@ The web interface shows the language name and file size. Delete the locale file 
 
 See `docs/examples/locale/` for examples (en, de, fr, es, uk).
 The English, German, Spanish, and French examples include every key.
-The Ukrainian example omits 19 `GO_*` keys to stay within the override buffer.
+The Ukrainian example omits 20 `GO_*` keys to stay within the override buffer.
 These keys use the compiled English text.
 
 Run `make test-tools` to check the examples.

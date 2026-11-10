@@ -79,6 +79,7 @@ FRONT_BUTTONS=Vordere Tasten
 SIDE_BUTTONS=Seitliche Tasten
 FULL_BOOK_PROCESS=Gesamtes Buch
 TOUCH_PAGE_TURNS=Blättern per Touch
+HOLD_CHAPTER_SWITCH=Kapitelwechsel halten
 
 # Settings enum values
 ON=AN

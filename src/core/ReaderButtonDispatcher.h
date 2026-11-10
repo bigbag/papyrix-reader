@@ -28,6 +28,7 @@ struct ReaderButtonConfig {
   bool reversePageZones = false;
   int16_t logicalWidth = 0;
   int16_t logicalHeight = 0;
+  bool holdChapterSwitch = false;
 };
 
 // Decision-only button dispatcher for ReaderState's non-overlay mode. Owns
