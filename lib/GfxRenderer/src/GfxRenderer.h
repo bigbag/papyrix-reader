@@ -89,7 +89,6 @@ class GfxRenderer {
   mutable uint8_t* bitmapOutputRow_ = nullptr;
   mutable uint8_t* bitmapRowBytes_ = nullptr;
   bool ensureBitmapRowBuffers() const;
-  void freeBitmapRowBuffers();
 
   // Word width cache: open-addressing flat hash table for O(1) lookup.
   // Key: FNV-1a hash of (fontId, text, style). Value: measured width in pixels.
@@ -132,6 +131,7 @@ class GfxRenderer {
  public:
   explicit GfxRenderer(papyrix::hal::Display& display) : display_(display), renderMode(BW), orientation(Portrait) {}
   ~GfxRenderer() { freeBitmapRowBuffers(); }
+  void freeBitmapRowBuffers();
 
   static constexpr int VIEWABLE_MARGIN_TOP = 9;
   static constexpr int VIEWABLE_MARGIN_RIGHT = 3;

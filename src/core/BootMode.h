@@ -8,8 +8,8 @@ namespace papyrix {
 
 // Boot modes for memory optimization
 enum class BootMode : uint8_t {
-  UI,     // Full UI mode: all states, all fonts, theme cache
-  READER  // Minimal reader mode: ReaderState only, single font size
+  UI,     // Library, settings, network, and apps
+  READER  // Reader, sleep, and error states with one reader font size
 };
 
 // Where to return when exiting reader mode

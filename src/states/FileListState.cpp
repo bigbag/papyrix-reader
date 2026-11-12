@@ -33,7 +33,6 @@ FileListState::FileListState(GfxRenderer& renderer)
     : renderer_(renderer),
       selectedIndex_(0),
       needsRender_(true),
-      hasSelection_(false),
       goRecent_(false),
       firstRender_(true),
       currentScreen_(Screen::Browse),
@@ -73,7 +72,6 @@ void FileListState::enter(Core& core) {
   }
 
   needsRender_ = true;
-  hasSelection_ = false;
   goRecent_ = false;
   firstRender_ = true;
   currentScreen_ = Screen::Browse;
@@ -570,11 +568,6 @@ StateTransition FileListState::update(Core& core) {
       default:
         break;
     }
-  }
-
-  if (hasSelection_) {
-    hasSelection_ = false;
-    return StateTransition::to(StateId::Reader);
   }
 
   if (goRecent_) {

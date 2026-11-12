@@ -62,6 +62,7 @@ class GfxRenderer {
   void begin() {}
   void insertFont(int fontId, EpdFontFamily font) { fontMap.emplace(fontId, font); }
   void clearWidthCache() {}
+  void freeBitmapRowBuffers() {}
   void setExternalFont(ExternalFont*) {}
   ExternalFont* getExternalFont() const { return nullptr; }
 

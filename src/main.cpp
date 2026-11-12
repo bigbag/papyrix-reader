@@ -21,9 +21,12 @@
 #include <builtinFonts/reader_xsmall_bold_2b.h>
 #include <builtinFonts/reader_xsmall_italic_2b.h>
 #include <builtinFonts/reader_xsmall_regular_2b.h>
+#include <esp_heap_caps.h>
 #include <esp_system.h>
 
 #include <algorithm>
+#include <memory>
+#include <new>
 
 #include "core/CrashDebug.h"
 // Medium font (16pt)
@@ -94,7 +97,6 @@ static papyrix::StartupState startupState;
 static papyrix::HomeState homeState(renderer);
 static papyrix::FileListState fileListState(renderer);
 static papyrix::RecentState recentState(renderer);
-static papyrix::ReaderState readerState(renderer);
 static papyrix::SettingsState settingsState(renderer);
 static papyrix::NetworkState networkState(renderer);
 static papyrix::CalibreSyncState calibreSyncState(renderer);
@@ -465,6 +467,8 @@ bool earlyInit() {
 // Initialize UI mode - full state registration, all resources
 void initUIMode(const papyrix::clock_app::ResumeRecord* clockResume = nullptr,
                 papyrix::clock_app::StandbyResult wakeResult = papyrix::clock_app::StandbyResult::Interactive) {
+  currentBootMode = papyrix::BootMode::UI;
+  papyrix::core.bootMode = currentBootMode;
   LOG_INF(TAG, "Initializing UI mode");
   LOG_DBG(TAG, "[UI mode] Free heap: %lu, Max block: %lu", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 
@@ -496,7 +500,6 @@ void initUIMode(const papyrix::clock_app::ResumeRecord* clockResume = nullptr,
   stateMachine.registerState(&homeState);
   stateMachine.registerState(&fileListState);
   stateMachine.registerState(&recentState);
-  stateMachine.registerState(&readerState);
   stateMachine.registerState(&settingsState);
   stateMachine.registerState(&networkState);
   stateMachine.registerState(&calibreSyncState);
@@ -566,10 +569,29 @@ void initUIMode(const papyrix::clock_app::ResumeRecord* clockResume = nullptr,
 void initReaderMode() {
   LOG_INF(TAG, "Initializing READER mode");
   LOG_DBG(TAG, "[READER mode] Free heap: %lu, Max block: %lu", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+  const auto& transition = papyrix::getTransition();
+  if (transition.bookPath[0] == '\0') {
+    LOG_ERR(TAG, "No book path in transition, falling back to UI");
+    initUIMode();
+    return;
+  }
+
+  static std::unique_ptr<papyrix::ReaderState> readerState;
+  if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) >= sizeof(papyrix::ReaderState)) {
+    readerState.reset(new (std::nothrow) papyrix::ReaderState(renderer));
+  }
+  if (!readerState) {
+    LOG_ERR(TAG, "Reader state allocation failed");
+    initUIMode();
+    snprintf(papyrix::core.buf.text, sizeof(papyrix::core.buf.text), "%s",
+             papyrix::errorToString(papyrix::Error::OutOfMemory));
+    stateMachine.init(papyrix::core, papyrix::StateId::Error);
+    stateMachine.update(papyrix::core);
+    return;
+  }
 
   // Detect content type early to decide if we need custom fonts
   // XTC/XTCH files contain pre-rendered bitmaps and don't need fonts for page rendering
-  const auto& transition = papyrix::getTransition();
   papyrix::ContentType contentType = papyrix::detectContentType(transition.bookPath);
   bool needsCustomFonts = (contentType != papyrix::ContentType::Xtc);
 
@@ -588,7 +610,7 @@ void initReaderMode() {
   }
 
   // Register ONLY states needed for Reader mode
-  stateMachine.registerState(&readerState);
+  stateMachine.registerState(readerState.get());
   stateMachine.registerState(&sleepState);
   stateMachine.registerState(&errorState);
 
@@ -604,17 +626,9 @@ void initReaderMode() {
   mappedInputManager.setSettings(&papyrix::core.settings);
   ui::setFrontButtonLayout(papyrix::core.settings.frontButtonLayout);
 
-  if (transition.bookPath[0] != '\0') {
-    // Copy path to shared buffer for ReaderState to consume
-    strncpy(papyrix::core.buf.path, transition.bookPath, sizeof(papyrix::core.buf.path) - 1);
-    papyrix::core.buf.path[sizeof(papyrix::core.buf.path) - 1] = '\0';
-    LOG_INF(TAG, "Opening book: %s", papyrix::core.buf.path);
-  } else {
-    // No book path - fall back to UI mode to avoid boot loop
-    LOG_ERR(TAG, "No book path in transition, falling back to UI");
-    initUIMode();
-    return;
-  }
+  strncpy(papyrix::core.buf.path, transition.bookPath, sizeof(papyrix::core.buf.path) - 1);
+  papyrix::core.buf.path[sizeof(papyrix::core.buf.path) - 1] = '\0';
+  LOG_INF(TAG, "Opening book: %s", papyrix::core.buf.path);
 
   stateMachine.init(papyrix::core, papyrix::StateId::Reader);
 

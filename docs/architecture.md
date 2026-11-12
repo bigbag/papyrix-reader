@@ -20,7 +20,11 @@ BoardSupport and controller drivers
 
 `src/core/StateMachine` manages screen transitions. Each state implements `enter()`, `update()`, `exit()`, and `render()`. States own their data. View functions render that data without owning screen state. `StateTransition::to(StateId)` requests a transition.
 
+`NetworkState` stops input processing when it selects the next state. It clears queued input before the next state starts. It keeps the WiFi connection active for an app or `CalibreSync`.
+
 UI mode provides library management, settings, and network functions. Reader mode provides book rendering with lower memory use. The device restarts when it changes boot modes. Persistent state records the book and reading position.
+
+Reader mode allocates `ReaderState` after it checks the book path and the largest free heap block. UI mode does not reserve this memory. If allocation fails, the device starts UI mode and shows an out-of-memory error.
 
 The reader records the resume target after a successful page render. If the settings save fails, it retries after the next successful render. It adds the book to recent books after the save succeeds. A pending open uses a separate path. If the reader restarts before it saves the resume target, the next boot returns to the UI. The previous resume target remains available.
 

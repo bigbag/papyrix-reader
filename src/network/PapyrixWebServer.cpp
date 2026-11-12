@@ -8,6 +8,8 @@
 #include <Utf8Nfc.h>
 #include <WiFi.h>
 
+#include <cstring>
+#include <new>
 #include <string_view>
 
 #include "../IniParser.h"
@@ -111,7 +113,7 @@ void PapyrixWebServer::begin() {
 
   LOG_INF(TAG, "Creating server on port %d (free heap: %d)", port_, ESP.getFreeHeap());
 
-  server_.reset(new RequestWebServer(port_));
+  server_.reset(new (std::nothrow) RequestWebServer(port_));
   if (!server_) {
     LOG_ERR(TAG, "Failed to create WebServer");
     return;
@@ -216,28 +218,26 @@ void PapyrixWebServer::handleFileListData() {
 
     // Skip hidden items
     if (name[0] != '.' && !FsHelpers::isHiddenFsItem(name)) {
+      // A borrowed scalar needs no JSON heap allocation.
       JsonDocument doc;
-      doc["name"] = name;
-      doc["isDirectory"] = file.isDirectory();
-
-      if (file.isDirectory()) {
-        doc["size"] = 0;
-        doc["isEpub"] = false;
-      } else {
-        doc["size"] = file.size();
-        doc["isEpub"] = FsHelpers::isEpubFile(name);
+      doc.set(JsonString(name, true));
+      char output[sizeof(name) * 2 + 96];
+      const size_t prefixLength = seenFirst ? 9 : 8;
+      memcpy(output, seenFirst ? ",{\"name\":" : "{\"name\":", prefixLength);
+      const size_t written = prefixLength + serializeJson(doc, output + prefixLength, sizeof(output) - prefixLength);
+      const bool isDirectory = file.isDirectory();
+      const int suffixLength =
+          snprintf(output + written, sizeof(output) - written, ",\"isDirectory\":%s,\"size\":%llu,\"isEpub\":%s}",
+                   isDirectory ? "true" : "false", static_cast<unsigned long long>(isDirectory ? 0 : file.size()),
+                   !isDirectory && FsHelpers::isEpubFile(name) ? "true" : "false");
+      if (suffixLength < 0 || static_cast<size_t>(suffixLength) >= sizeof(output) - written) {
+        file.close();
+        root.close();
+        server_->client().stop();
+        return;
       }
-
-      char output[512];
-      size_t written = serializeJson(doc, output, sizeof(output));
-      if (written < sizeof(output)) {
-        if (seenFirst) {
-          server_->sendContent(",");
-        } else {
-          seenFirst = true;
-        }
-        server_->sendContent(output);
-      }
+      server_->sendContent(output, written + static_cast<size_t>(suffixLength));
+      seenFirst = true;
     }
 
     file.close();

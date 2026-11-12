@@ -4,8 +4,6 @@
 // PrinterApp::saveFramebufferAsBmp builds it must read back as white where
 // bits are set and black where they are clear.
 
-#include "test_utils.h"
-
 #include <Bitmap.h>
 #include <GfxRenderer.h>
 #include <SDCardManager.h>
@@ -14,6 +12,8 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
+
+#include "test_utils.h"
 
 namespace {
 
@@ -196,12 +196,13 @@ int main() {
     runner.expectTrue(!logicalWhite(4, 0), "viewer: top neighbor stays black");
     // The initial pass and a re-render after a black clear must match byte
     // for byte: the reconstruction becomes the refresh baseline.
-    std::vector<uint8_t> first(renderer.getFrameBuffer(),
-                               renderer.getFrameBuffer() + display.getBufferSize());
+    std::vector<uint8_t> first(renderer.getFrameBuffer(), renderer.getFrameBuffer() + display.getBufferSize());
+    renderer.freeBitmapRowBuffers();
+    renderer.freeBitmapRowBuffers();
     renderer.clearScreen(0x00);
     renderer.drawBitmapOnWhite(bmp, 4, 1, 16, 2);
     runner.expectTrue(memcmp(first.data(), renderer.getFrameBuffer(), first.size()) == 0,
-                      "viewer: re-render is byte-identical");
+                      "viewer: re-render after buffer release is byte-identical");
     // Oversized limits must not whiten past the image: a 16x2 image with
     // larger limits keeps the surrounding black.
     renderer.clearScreen(0x00);

@@ -25,6 +25,8 @@ class WifiRadio {
   bool isInitialized() const { return initialized_; }
   bool isConnected() const { return connected_; }
 
+  Result<void> startConnect(const char* ssid, const char* password);
+  bool pollConnect();
   Result<void> connect(const char* ssid, const char* password, uint32_t timeoutMs, bool (*abort)());
   void disconnect();
 

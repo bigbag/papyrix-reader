@@ -153,7 +153,7 @@ class ErrorState {
 };
 @ERROR_RENDER@
 }
-int startupState, homeState, fileListState, recentState, readerState, settingsState;
+int startupState, homeState, fileListState, recentState, settingsState;
 int networkState, calibreSyncState, sleepState, errorState;
 struct {
   int resumes = 0;

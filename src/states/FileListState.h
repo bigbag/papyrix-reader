@@ -67,7 +67,6 @@ class FileListState : public State {
 
   size_t selectedIndex_;
   bool needsRender_;
-  bool hasSelection_;
   bool goRecent_;     // Return to Recent state (parent of Files)
   bool firstRender_;  // Use HALF_REFRESH on first render to clear ghosting
   Screen currentScreen_;

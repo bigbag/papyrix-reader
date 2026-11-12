@@ -109,7 +109,7 @@ struct Result {
   bool okValue = true;
   bool ok() const { return okValue; }
 };
-enum class Error { None, InvalidOperation, Timeout };
+enum class Error { None, InvalidOperation, Timeout, NetworkFailed };
 Result Ok() { return {}; }
 Result ErrVoid(Error) { return {0, false}; }
 #undef TRY
@@ -117,14 +117,15 @@ Result ErrVoid(Error) { return {0, false}; }
 bool radioConnectFails = false, cancelPower = false;
 uint32_t radioDelayMs = 0, cancelAtMs = 0;
 int radioConnects = 0;
-constexpr int WL_CONNECTED = 1, WIFI_PS_NONE = 0;
-void esp_wifi_set_ps(int) {}
+constexpr int WL_CONNECTED = 1, WL_CONNECT_FAILED = 4, WIFI_PS_NONE = 0, WIFI_OFF = 0;
+int esp_wifi_set_ps(int) { return 0; }
 struct WifiBoundary {
   bool started = false;
   uint32_t startedAt = 0;
   void persistent(bool) {}
   void disconnect(bool = false, bool = false) { started = false; }
-  void begin(const char*, const char*) { ++radioConnects; started = true; startedAt = millis(); }
+  int getMode() const { return started ? 1 : WIFI_OFF; }
+  int begin(const char*, const char*) { ++radioConnects; started = true; startedAt = millis(); return 0; }
   int status() const {
     return started && !radioConnectFails && static_cast<uint32_t>(millis() - startedAt) >= radioDelayMs ? WL_CONNECTED : 0;
   }
@@ -180,11 +181,11 @@ struct WifiRadio {
   bool isConnected() const { return connected_; }
   bool isInitialized() const { return initialized_; }
   Result init() { initialized_ = true; delay(100); return {}; }
-  void stopAP() { apMode_ = false; }
+  @WIFI_START_CONNECT@
+  @WIFI_POLL_CONNECT@
   @WIFI_CONNECT@
   void shutdown() {
-    connected_ = false;
-    initialized_ = false;
+    connected_ = initialized_ = apMode_ = false;
     WiFi.disconnect();
   }
 };
@@ -1269,6 +1270,10 @@ def main():
         "BUTTON_BOUNDS": block(elements, "touch::Rect buttonBarButtonBounds("),
         "DRAW_BUTTON_BAR": block(elements, "static void drawButtonBar("),
         "WIFI_SESSION": block(wifi, "class WifiSession final") + ";",
+        "WIFI_START_CONNECT": block(wifi_source, "Result<void> WifiRadio::startConnect(").replace(
+            "Result<void> WifiRadio::startConnect(", "Result startConnect(", 1),
+        "WIFI_POLL_CONNECT": block(wifi_source, "bool WifiRadio::pollConnect(").replace(
+            "bool WifiRadio::pollConnect(", "bool pollConnect(", 1),
         "WIFI_CONNECT": block(wifi_source, "Result<void> WifiRadio::connect(").replace(
             "Result<void> WifiRadio::connect(", "Result connect(", 1),
         "NEXT_SYNC": block(power_source, "int64_t nextSyncUtc("),

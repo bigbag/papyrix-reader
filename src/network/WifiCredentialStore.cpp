@@ -106,48 +106,38 @@ bool WifiCredentialStore::loadFromFile() {
   }
 
   int countByte = file.read();
-  if (countByte < 0) {
-    LOG_ERR(TAG, "Failed to read count");
+  if (countByte < 0 || countByte > MAX_NETWORKS) {
+    LOG_ERR(TAG, "Invalid credential count: %d", countByte);
     file.close();
     return false;
   }
+
+  WifiCredential loaded[MAX_NETWORKS] = {};
+  for (int i = 0; i < countByte; i++) {
+    const int ssidLen = file.read();
+    if (ssidLen <= 0 || ssidLen > 32 || file.read(reinterpret_cast<uint8_t*>(loaded[i].ssid), ssidLen) != ssidLen ||
+        memchr(loaded[i].ssid, '\0', ssidLen)) {
+      LOG_ERR(TAG, "Invalid SSID data for credential %d", i);
+      file.close();
+      return false;
+    }
+
+    const int pwdLen = file.read();
+    if (pwdLen < 0 || pwdLen > 64 || file.read(reinterpret_cast<uint8_t*>(loaded[i].password), pwdLen) != pwdLen) {
+      LOG_ERR(TAG, "Invalid password data for credential %d", i);
+      file.close();
+      return false;
+    }
+    obfuscate(loaded[i].password, pwdLen);
+    if (memchr(loaded[i].password, '\0', pwdLen)) {
+      LOG_ERR(TAG, "Invalid password bytes for credential %d", i);
+      file.close();
+      return false;
+    }
+  }
+
+  memcpy(credentials_, loaded, countByte * sizeof(WifiCredential));
   count_ = static_cast<uint8_t>(countByte);
-  if (count_ > MAX_NETWORKS) {
-    count_ = MAX_NETWORKS;
-  }
-
-  for (int i = 0; i < count_; i++) {
-    // Read SSID length
-    int ssidLenByte = file.read();
-    if (ssidLenByte < 0) {
-      LOG_ERR(TAG, "Failed to read SSID length for credential %d", i);
-      count_ = i;
-      break;
-    }
-    uint8_t ssidLen = static_cast<uint8_t>(ssidLenByte);
-    if (ssidLen > 32) ssidLen = 32;
-
-    // Read SSID data
-    int ssidRead = file.read(reinterpret_cast<uint8_t*>(credentials_[i].ssid), ssidLen);
-    if (ssidRead < 0) ssidRead = 0;
-    credentials_[i].ssid[ssidRead] = '\0';
-
-    // Read password length
-    int pwdLenByte = file.read();
-    if (pwdLenByte < 0) {
-      LOG_ERR(TAG, "Failed to read password length for credential %d", i);
-      count_ = i;
-      break;
-    }
-    uint8_t pwdLen = static_cast<uint8_t>(pwdLenByte);
-    if (pwdLen > 64) pwdLen = 64;
-
-    // Read and deobfuscate password
-    int pwdRead = file.read(reinterpret_cast<uint8_t*>(credentials_[i].password), pwdLen);
-    if (pwdRead < 0) pwdRead = 0;
-    credentials_[i].password[pwdRead] = '\0';
-    obfuscate(credentials_[i].password, pwdRead);
-  }
 
   file.close();
   LOG_INF(TAG, "Loaded %d credentials", count_);

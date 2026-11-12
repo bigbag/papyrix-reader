@@ -69,6 +69,9 @@ class NetworkState : public State {
   StateId returnState_ = StateId::AppLauncher;
   uint8_t scanRetryCount_ = 0;
   uint32_t scanRetryAt_ = 0;
+  uint32_t connectStartedAt_ = 0;
+  int8_t autoConnectIndex_ = -1;
+  bool connectionStarted_ = false;
   static constexpr uint8_t MAX_SCAN_RETRIES = 2;
 
   // Screen handlers
@@ -90,6 +93,7 @@ class NetworkState : public State {
   void refreshSavedNetworks();
   void startEdit(const char* ssid);
   void connectToNetwork(Core& core, const char* ssid, const char* password);
+  void updateConnection(Core& core);
   void tryAutoConnect(Core& core);
   void startHotspot(Core& core);
   void startWebServer(Core& core);

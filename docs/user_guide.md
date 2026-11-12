@@ -200,6 +200,10 @@ When you go into the screen, the device asks you to select a network mode:
 * **Join Network:** Scan for available WiFi networks. Enter a password when required. The device uses a saved password if one exists.
 * **Create Hotspot:** The device makes its own WiFi network. You can connect to it from your computer or phone.
 
+The hotspot uses a 20 MHz channel. This limit does not apply when the reader joins a router.
+
+Press **Back** (**Cancel**) during "Connecting..." to stop the attempt. **Recent** returns to network mode selection. Each saved network has a 15-second connection limit.
+
 ![On-screen Keyboard](images/keyboard.jpg)
 
 After the connection, your X4 starts a web server. See the [webserver docs](webserver.md) for how to connect and upload files.

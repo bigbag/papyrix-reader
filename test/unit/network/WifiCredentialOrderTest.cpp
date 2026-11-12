@@ -1,6 +1,9 @@
 #include <SDCardManager.h>
 
+#include <cassert>
 #include <cstring>
+#include <string>
+#include <vector>
 
 #include "config.h"
 #include "network/WifiCredentialStore.h"
@@ -55,6 +58,50 @@ int main() {
   SdMan.setRenameResult(true);
   runner.expectTrue(store.loadFromFile(), "Failed forget keeps credential file readable");
   runner.expectTrue(store.findCredential("First") != nullptr, "Failed forget does not erase stored password");
+
+  auto record = [](const std::string& ssid, const std::string& password) {
+    constexpr char key[] = {'P', 'a', 'p', 'y', 'r', 'i', 'x'};
+    std::string data(1, static_cast<char>(ssid.size()));
+    data += ssid;
+    data.push_back(static_cast<char>(password.size()));
+    for (size_t i = 0; i < password.size(); ++i) data.push_back(password[i] ^ key[i % sizeof(key)]);
+    return data;
+  };
+  const std::string valid = std::string("\1\1", 2) + record("Keep", "pass");
+  const std::vector<std::string> damaged = {
+      {},
+      std::string("\1", 1),
+      std::string("\2\0", 2),
+      std::string({1, 9}),
+      std::string("\1\1", 2),
+      std::string("\1\1\0", 3),
+      std::string("\1\1", 2) + record(std::string(33, 'S'), "pass"),
+      std::string("\1\1\4Ke", 5),
+      valid.substr(0, 7),
+      std::string("\1\1", 2) + record("Keep", std::string(65, 'P')),
+      valid.substr(0, valid.size() - 1),
+      std::string("\1\2", 2) + record("Other", "changed"),
+      std::string("\1\1", 2) + record(std::string("A\0B", 3), "pass"),
+      std::string("\1\1", 2) + record("Keep", std::string("a\0b", 3)),
+  };
+  for (const auto& data : damaged) {
+    SdMan.registerFile(PAPYRIX_WIFI_FILE, valid);
+    assert(store.loadFromFile());
+    SdMan.registerFile(PAPYRIX_WIFI_FILE, data);
+    runner.expectFalse(store.loadFromFile(), "Reject damaged credential file");
+    const auto* kept = store.findCredential("Keep");
+    runner.expectTrue(store.getCount() == 1 && kept && strcmp(kept->password, "pass") == 0,
+                      "Failed load preserves the last complete credentials");
+  }
+  const std::string maxSsid(32, 'S');
+  const std::string maxPassword(64, 'P');
+  SdMan.registerFile(PAPYRIX_WIFI_FILE, std::string("\1\2", 2) + record(maxSsid, maxPassword) + record("Open", ""));
+  runner.expectTrue(store.loadFromFile(), "Legacy boundary-length credentials and open networks load");
+  const auto* maximum = store.findCredential(maxSsid.c_str());
+  const auto* open = store.findCredential("Open");
+  runner.expectTrue(store.getCount() == 2 && maximum && strcmp(maximum->password, maxPassword.c_str()) == 0 && open &&
+                        open->password[0] == '\0',
+                    "Valid version 1 credentials keep their complete bytes");
 
   runner.printSummary();
   return runner.allPassed() ? 0 : 1;

@@ -62,7 +62,9 @@ If the network needs a password:
 
 ### Connection Process
 
-The device shows "Connecting..." while it makes the connection. This usually takes 5-10 seconds.
+The device shows "Connecting..." while it makes the connection. Each network has a 15-second limit. Press **Back** (**Cancel**) to stop the attempt.
+
+If you cancel **Recent**, the device returns to network mode selection. If you cancel a connection from **Saved networks**, the device returns to that network's actions. A failed or cancelled attempt stops the radio before another connection starts.
 
 ### Saving Credentials
 
@@ -72,6 +74,8 @@ In **Apps > File Transfer**, the device asks you to save the password for a new 
 - Select **No** to connect with no save
 
 In **Settings > Device > WiFi**, the device saves a new password after a successful connection. Use **Saved networks > Add network** to save a password without connecting.
+
+The credential file format does not change. Valid credentials from older firmware remain usable. The device rejects incomplete records and lengths above the supported limits. A failed load does not overwrite the file or replace the last complete credentials in memory.
 
 ---
 
@@ -286,10 +290,15 @@ The Firmware tab manages firmware update files for the device.
 
 **Solutions:**
 
-1. When connection fails, the device asks you to "Forget Network".
-2. Select **Yes** to remove the saved password.
-3. Connect again and enter the password again.
-4. Select to save the new password.
+1. Open **Settings > Device > WiFi > Saved networks**.
+2. Select the network and edit its password, or forget the network.
+3. Connect again with the correct password.
+
+### WiFi Connection Errors
+
+Serial logs report startup failures, rejected connection attempts, and connection timeouts. They do not include passwords.
+
+Internal Disk usage measures storage, not the RAM that WiFi needs.
 
 ---
 
@@ -307,19 +316,26 @@ The Firmware tab manages firmware update files for the device.
 
 - **Supported WiFi:** 2.4GHz networks (802.11 b/g/n)
 - **Web Server Port:** 80 (HTTP)
+- **Connection queue:** The listener uses the SDK accept-queue capacity. The server handles one request at a time.
 - **Maximum Upload Size:** Limited by available SD card space
 - **Supported File Formats:** `.epub`, `.fb2`, `.html`, `.htm`, `.xtc`, `.xtch`, `.xtg`, `.xth`, `.txt`, `.text`, `.md`, `.markdown` (books); `.jpg`, `.jpeg`, `.png`, `.bmp` (images); `.epdfont` (fonts); `.theme` (themes)
 - **Browser Compatibility:** All modern browsers (Chrome, Firefox, Safari, Edge)
-- **Memory use:** Directory listings use buffered TCP writes to reduce memory use during page loads. Server shutdown releases query and form arguments.
-- **HTTP request limits:** The server rejects oversized request targets with HTTP 414 and oversized header lines with HTTP 431. It rejects incomplete or continuously slow header lines with HTTP 408. These header deadlines do not limit the total upload time.
+- **Memory use:** Network entry releases bitmap row buffers and the theme cache. Directory listings encode each entry in a fixed buffer without JSON heap allocations. Buffered TCP writes reduce memory use during page loads. Server shutdown releases query and form arguments.
+- **Allocation limits:** The server checks allocation of its two owned server objects. SDK constructors and route registration can still fail if RAM is exhausted. SDK receive buffers can also fail under load.
+- **HTTP request limits:** Protocol lines have a 4096-byte limit. Oversized request lines return HTTP 414. Oversized HTTP header lines return HTTP 431. Each line has a 5-second deadline. The request line and all HTTP headers share a 10-second deadline. An incomplete request returns HTTP 408. These deadlines do not limit the total file upload time.
+- **Argument limits:** The parser accepts the first 256 query arguments. It ignores additional arguments. Multipart forms accept up to 32 arguments. Each non-file field has a 16384-byte limit. Multipart headers and non-file fields share a 10-second deadline. The deadline restarts after each file payload. Invalid multipart data closes the connection.
 
-The firmware uses Arduino-ESP32 3.3.12. Build it with PlatformIO Core 6.2.0 or later. Run `uv sync` to install the project requirements.
+The platform pin in `platformio.ini` selects the Arduino-ESP32 version. Build with PlatformIO Core 6.2.0 or later. Run `uv sync` to install the project requirements.
+
+`scripts/patch_webserver.py` applies a [WebServer parser backport](https://github.com/espressif/arduino-esp32/commit/5cdf8975ae8d9e35888b724b01a444d22406424e) to Arduino-ESP32 3.3.7. It compiles a generated source file in each environment's build directory. A SCons object emitter selects this source after compiler setup. It does not change the installed SDK or the WiFi stack. The build rejects an unknown parser source. Review the backport before you change the SDK version.
 
 Run the read-only request regression while WiFi Transfer is active:
 
 ```bash
 python3 test/scripts/WebServerSmoke.py --host <reader-ip>
 ```
+
+The multipart checks require connection closure without an HTTP response.
 
 On Linux, add concurrent page, status, and directory requests with an ICMP check:
 
@@ -328,6 +344,18 @@ python3 test/scripts/WebServerSmoke.py --host <reader-ip> --load-rounds 120
 ```
 
 Run this check with files on the SD card. It requires `ping`. It fails on HTTP errors, invalid responses, a restart, or five consecutive missing ping replies. It does not write files to the reader.
+
+On a load failure, the check reports the round, elapsed time, and ping output. Invalid JSON responses include the response body. These logs can contain filenames.
+
+To check a file upload that takes more than 10 seconds:
+
+```bash
+python3 test/scripts/WebServerSmoke.py --host <reader-ip> --upload-check
+```
+
+This option writes a uniquely named 64 KB test file. It checks the downloaded bytes and file metadata. It attempts deletion even if directory listing fails. The check keeps an earlier failure and reports any cleanup error as a warning. A cleanup error fails an otherwise successful check. The default check does not create files.
+
+Run `pio pkg install -e default` before the host parser and build regressions. The build regression compiles a consumer through normal and pinned Windows dispatchers. It fails if parser substitution does not enforce the fixture's limit. Run `make test-tools` to execute the regressions.
 
 ---
 

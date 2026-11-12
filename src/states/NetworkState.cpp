@@ -44,6 +44,8 @@ NetworkState::~NetworkState() {
 
 void NetworkState::enter(Core& core) {
   LOG_INF(TAG, "Entering");
+  renderer_.freeBitmapRowBuffers();
+  THEME_MANAGER.clearCache();
 
   currentScreen_ = NetworkScreen::ModeSelect;
   modeView_.selected = 0;
@@ -56,6 +58,8 @@ void NetworkState::enter(Core& core) {
   goApp_ = false;
   scanRetryCount_ = 0;
   scanRetryAt_ = 0;
+  autoConnectIndex_ = -1;
+  connectionStarted_ = false;
   selectedSSID_[0] = '\0';
   connectingFromSaved_ = false;
   editOriginalSSID_[0] = '\0';
@@ -281,7 +285,7 @@ StateTransition NetworkState::update(Core& core) {
   }
 
   Event e;
-  while (core.events.pop(e)) {
+  while (!goBack_ && !goCalibreSync_ && !goApp_ && core.events.pop(e)) {
     if (e.type == EventType::Tap) {
       handleTap(core, e);
       continue;
@@ -333,6 +337,9 @@ StateTransition NetworkState::update(Core& core) {
         break;
     }
   }
+
+  updateConnection(core);
+  if (goBack_ || goCalibreSync_ || goApp_) core.events.clear();
 
   if (goBack_) {
     goBack_ = false;
@@ -809,15 +816,20 @@ void NetworkState::handlePasswordEntry(Core& core, Button button) {
 void NetworkState::handleConnecting(Core& core, Button button) {
   if (button == Button::Back) {
     if (connectingView_.buttons.isActive(0)) {
-      if (connectingView_.status == ui::WifiConnectingView::Status::Failed ||
-          connectingView_.status == ui::WifiConnectingView::Status::Connected) {
+      core.wifi.shutdown();
+      connectionStarted_ = false;
+      if (autoConnectIndex_ >= 0) {
+        autoConnectIndex_ = -1;
+        currentScreen_ = NetworkScreen::ModeSelect;
+        modeView_.needsRender = true;
+      } else {
         currentScreen_ = connectingFromSaved_ ? NetworkScreen::SavedActions : NetworkScreen::WifiList;
         if (connectingFromSaved_)
           actionsMenu_.needsRender = true;
         else
           wifiListView_.needsRender = true;
-        needsRender_ = true;
       }
+      needsRender_ = true;
     }
   } else if (button == Button::Center) {
     if (connectingView_.buttons.isActive(1)) {
@@ -969,87 +981,66 @@ void NetworkState::startWifiScan(Core& core) {
 }
 
 void NetworkState::connectToNetwork(Core& core, const char* ssid, const char* password) {
-  LOG_INF(TAG, "Connecting to: %s", ssid);
-
   connectingView_.setSsid(ssid);
+  snprintf(selectedSSID_, sizeof(selectedSSID_), "%s", connectingView_.ssid);
   connectingView_.setConnecting();
   currentScreen_ = NetworkScreen::Connecting;
   needsRender_ = true;
-
-  // Render the connecting screen before blocking connect
   ui::render(renderer_, THEME, connectingView_);
+  connectStartedAt_ = millis();
+  connectionStarted_ = core.wifi.startConnect(ssid, password).ok();
+}
 
-  auto result = core.wifi.connect(ssid, password, 15000, nullptr);
+void NetworkState::updateConnection(Core& core) {
+  if (currentScreen_ != NetworkScreen::Connecting ||
+      connectingView_.status != ui::WifiConnectingView::Status::Connecting)
+    return;
 
-  if (result.ok()) {
-    char ip[46];  // INET6_ADDRSTRLEN = 46 for IPv6 addresses
-    core.wifi.getIpAddress(ip, sizeof(ip));
-    connectingView_.setConnected(ip);
-    LOG_INF(TAG, "Connected, IP: %s", ip);
-    if (WIFI_STORE.hasSavedCredential(selectedSSID_)) {
-      if (!WIFI_STORE.promoteCredential(selectedSSID_)) LOG_ERR(TAG, "Could not save connected network priority");
-      if (connectingFromSaved_) savedMenu_.selected = 0;
+  if (!connectionStarted_ || static_cast<uint32_t>(millis() - connectStartedAt_) >= 15000) {
+    LOG_ERR(TAG, "Connection failed: %s (%s)", selectedSSID_, connectionStarted_ ? "timeout" : "startup");
+    core.wifi.shutdown();
+    connectionStarted_ = false;
+    if (autoConnectIndex_ >= 0) {
+      ++autoConnectIndex_;
+      if (autoConnectIndex_ < WIFI_STORE.getCount()) {
+        const auto& credential = WIFI_STORE.getCredentials()[autoConnectIndex_];
+        connectToNetwork(core, credential.ssid, credential.password);
+        return;
+      }
+      autoConnectIndex_ = -1;
+      currentScreen_ = NetworkScreen::ModeSelect;
+      modeView_.selected = modeView_.itemCount - 2;
+      modeView_.needsRender = true;
+    } else {
+      connectingView_.setFailed(tr(CONNECTION_FAILED));
     }
-  } else {
-    connectingView_.setFailed(tr(CONNECTION_FAILED));
-    LOG_ERR(TAG, "Connection failed");
+    needsRender_ = true;
+    return;
   }
 
+  if (!core.wifi.pollConnect()) return;
+  connectionStarted_ = false;
+  char ip[16];
+  core.wifi.getIpAddress(ip, sizeof(ip));
+  connectingView_.setConnected(ip);
+  if (WIFI_STORE.hasSavedCredential(selectedSSID_)) {
+    if (!WIFI_STORE.promoteCredential(selectedSSID_)) LOG_ERR(TAG, "Could not save connected network priority");
+    if (connectingFromSaved_) savedMenu_.selected = 0;
+  }
   needsRender_ = true;
+  if (autoConnectIndex_ >= 0) {
+    autoConnectIndex_ = -1;
+    handleConnecting(core, Button::Center);
+  }
 }
 
 void NetworkState::tryAutoConnect(Core& core) {
-  LOG_INF(TAG, "Auto-connect: trying %d saved credentials", WIFI_STORE.getCount());
+  if (WIFI_STORE.getCount() == 0) return;
   passwordJustEntered_ = false;
-
-  const auto* creds = WIFI_STORE.getCredentials();
-  int count = WIFI_STORE.getCount();
-
-  for (int i = 0; i < count; i++) {
-    LOG_INF(TAG, "Auto-connect: trying %s", creds[i].ssid);
-
-    connectingView_.setSsid(creds[i].ssid);
-    connectingView_.setConnecting();
-    currentScreen_ = NetworkScreen::Connecting;
-
-    ui::render(renderer_, THEME, connectingView_);
-
-    auto result = core.wifi.connect(creds[i].ssid, creds[i].password, 15000, nullptr);
-
-    if (result.ok()) {
-      char ip[46];
-      core.wifi.getIpAddress(ip, sizeof(ip));
-      connectingView_.setConnected(ip);
-      LOG_INF(TAG, "Auto-connected to %s, IP: %s", creds[i].ssid, ip);
-
-      strncpy(selectedSSID_, creds[i].ssid, sizeof(selectedSSID_) - 1);
-      selectedSSID_[sizeof(selectedSSID_) - 1] = '\0';
-      if (!WIFI_STORE.promoteCredential(selectedSSID_)) LOG_ERR(TAG, "Could not save connected network priority");
-
-      // Route to the correct next screen based on why NetworkState was entered
-      if (core.pendingSync == SyncMode::CalibreWireless) {
-        goCalibreSync_ = true;
-      } else if (core.pendingSync == SyncMode::NtpSync) {
-        goApp_ = true;
-      } else if (core.pendingSync == SyncMode::PrinterSetup) {
-        goApp_ = true;
-      } else if (core.pendingSync == SyncMode::LocalsendSetup) {
-        goApp_ = true;
-      } else {
-        startWebServer(core);
-      }
-      return;
-    }
-
-    LOG_INF(TAG, "Auto-connect failed: %s", creds[i].ssid);
-    core.wifi.shutdown();
-  }
-
-  LOG_INF(TAG, "Auto-connect: all credentials failed, falling back to ModeSelect");
-  currentScreen_ = NetworkScreen::ModeSelect;
-  modeView_.selected = modeView_.itemCount - 2;
-  modeView_.needsRender = true;
-  needsRender_ = true;
+  connectingFromSaved_ = false;
+  autoConnectIndex_ = 0;
+  const auto& credential = WIFI_STORE.getCredentials()[0];
+  connectToNetwork(core, credential.ssid, credential.password);
 }
 
 void NetworkState::startHotspot(Core& core) {
@@ -1100,7 +1091,7 @@ void NetworkState::startWebServer(Core& core) {
   }
 
   if (!server_) {
-    server_.reset(new PapyrixWebServer());
+    server_.reset(new (std::nothrow) PapyrixWebServer());
     if (!server_) {
       LOG_ERR(TAG, "Failed to allocate web server");
       goBack_ = true;

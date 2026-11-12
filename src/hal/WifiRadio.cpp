@@ -23,6 +23,7 @@ bool isBlankSsid(const char* ssid) {
   }
   return true;
 }
+
 }  // namespace
 
 Result<void> WifiRadio::init() {
@@ -30,9 +31,13 @@ Result<void> WifiRadio::init() {
     return Ok();
   }
 
-  WiFi.mode(WIFI_STA);
-  delay(100);         // Allow WiFi task to fully start
-  WiFi.scanDelete();  // Clear stale scan state from prior session
+  if (!WiFi.mode(WIFI_STA)) {
+    LOG_ERR(TAG, "Could not enable STA mode");
+    shutdown();
+    return ErrVoid(Error::NetworkFailed);
+  }
+  delay(100);
+  WiFi.scanDelete();
 
   initialized_ = true;
   connected_ = false;
@@ -43,20 +48,42 @@ Result<void> WifiRadio::init() {
 }
 
 void WifiRadio::shutdown() {
-  if (connected_) {
-    disconnect();
+  if (WiFi.getMode() != WIFI_OFF && !WiFi.mode(WIFI_OFF)) {
+    initialized_ = true;
+    LOG_ERR(TAG, "Could not stop WiFi");
+    return;
   }
+  WiFi.scanDelete();
+  initialized_ = false;
+  connected_ = false;
+  apMode_ = false;
+  scanInProgress_ = false;
+  LOG_INF(TAG, "WiFi shut down");
+}
 
-  if (apMode_) {
-    stopAP();
+Result<void> WifiRadio::startConnect(const char* ssid, const char* password) {
+  shutdown();
+  if (WiFi.getMode() != WIFI_OFF) return ErrVoid(Error::NetworkFailed);
+  WiFi.persistent(false);
+  TRY(init());
+  LOG_INF(TAG, "Connecting to %s...", ssid);
+  if (WiFi.begin(ssid, password) == WL_CONNECT_FAILED) {
+    LOG_ERR(TAG, "SDK rejected STA connection");
+    shutdown();
+    return ErrVoid(Error::NetworkFailed);
   }
+  return Ok();
+}
 
-  if (initialized_) {
-    WiFi.mode(WIFI_OFF);
-    initialized_ = false;
-    scanInProgress_ = false;
-    LOG_INF(TAG, "WiFi shut down");
+bool WifiRadio::pollConnect() {
+  if (!initialized_ || apMode_ || WiFi.status() != WL_CONNECTED) return false;
+  if (!connected_) {
+    const auto result = esp_wifi_set_ps(WIFI_PS_NONE);
+    if (result != 0) LOG_ERR(TAG, "Could not disable modem sleep: %d", result);
+    connected_ = true;
+    LOG_INF(TAG, "Connected, IP: %s", WiFi.localIP().toString().c_str());
   }
+  return true;
 }
 
 Result<void> WifiRadio::connect(const char* ssid, const char* password, uint32_t timeoutMs, bool (*abort)()) {
@@ -66,34 +93,23 @@ Result<void> WifiRadio::connect(const char* ssid, const char* password, uint32_t
     return millis() - startMs >= timeoutMs ? Error::Timeout : Error::None;
   };
   if (const auto error = deadline(); error != Error::None) return ErrVoid(error);
-  if (apMode_) stopAP();
-  if (!initialized_) {
-    TRY(init());
-  }
-  if (const auto error = deadline(); error != Error::None) return ErrVoid(error);
-
-  LOG_INF(TAG, "Connecting to %s...", ssid);
-  WiFi.persistent(false);
-  WiFi.disconnect(true, true);
-  connected_ = false;
-  delay(std::min<uint32_t>(100, timeoutMs - std::min<uint32_t>(timeoutMs, millis() - startMs)));
-  if (const auto error = deadline(); error != Error::None) return ErrVoid(error);
-  WiFi.begin(ssid, password);
+  TRY(startConnect(ssid, password));
 
   for (;;) {
-    if (const auto error = deadline(); error != Error::None) return ErrVoid(error);
-    if (WiFi.status() == WL_CONNECTED) break;
+    if (const auto error = deadline(); error != Error::None) {
+      LOG_INF(TAG, "STA connection stopped: %s", error == Error::Timeout ? "timeout" : "cancelled");
+      shutdown();
+      return ErrVoid(error);
+    }
+    if (pollConnect()) break;
     delay(std::min<uint32_t>(20, timeoutMs - std::min<uint32_t>(timeoutMs, millis() - startMs)));
   }
-  esp_wifi_set_ps(WIFI_PS_NONE);
-  connected_ = true;
-  LOG_INF(TAG, "Connected, IP: %s", WiFi.localIP().toString().c_str());
   return Ok();
 }
 
 void WifiRadio::disconnect() {
-  if (connected_) {
-    WiFi.disconnect();
+  if (initialized_ && !apMode_) {
+    if (!WiFi.disconnect()) LOG_ERR(TAG, "Could not disconnect STA");
     uint32_t start = millis();
     while (WiFi.status() == WL_CONNECTED && millis() - start < 3000) {
       delay(10);
@@ -226,13 +242,21 @@ int WifiRadio::getScanResults(WifiNetwork* out, int maxCount) {
 }
 
 Result<void> WifiRadio::startAP(const char* ssid, const char* password) {
-  if (connected_) {
-    disconnect();
-  }
-
+  shutdown();
+  if (WiFi.getMode() != WIFI_OFF) return ErrVoid(Error::NetworkFailed);
+  WiFi.persistent(false);
   LOG_INF(TAG, "Starting AP: %s", ssid);
-
-  WiFi.mode(WIFI_AP);
+  if (!WiFi.mode(WIFI_AP)) {
+    LOG_ERR(TAG, "Could not enable AP mode");
+    shutdown();
+    return ErrVoid(Error::NetworkFailed);
+  }
+  const auto bandwidthResult = esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT20);
+  if (bandwidthResult != 0) {
+    LOG_ERR(TAG, "Could not set AP bandwidth to HT20: %d", bandwidthResult);
+    shutdown();
+    return ErrVoid(Error::NetworkFailed);
+  }
 
   bool success;
   if (password && strlen(password) >= 8) {
@@ -243,6 +267,7 @@ Result<void> WifiRadio::startAP(const char* ssid, const char* password) {
 
   if (!success) {
     LOG_ERR(TAG, "Failed to start AP");
+    shutdown();
     return ErrVoid(Error::IOError);
   }
 
@@ -254,9 +279,7 @@ Result<void> WifiRadio::startAP(const char* ssid, const char* password) {
 
 void WifiRadio::stopAP() {
   if (apMode_) {
-    WiFi.softAPdisconnect(true);
-    apMode_ = false;
-    LOG_INF(TAG, "AP stopped");
+    shutdown();
   }
 }
 

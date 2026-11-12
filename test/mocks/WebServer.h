@@ -4,6 +4,13 @@
 
 #include <cstddef>
 
+constexpr int CONFIG_LWIP_TCP_ACCEPTMBOX_SIZE = 6;
+
+class NetworkServer {
+ public:
+  explicit NetworkServer(int = 80, uint8_t = 4) {}
+};
+
 class WebServer {
  public:
   explicit WebServer(int = 80) {}
@@ -12,6 +19,8 @@ class WebServer {
   inline static size_t liveRequestArguments = 0;
 
  protected:
+  NetworkServer _server;
+
   struct RequestArgument {
     String key;
     String value;
@@ -21,7 +30,7 @@ class WebServer {
     ~RequestArgument() { --liveRequestArguments; }
   };
 
-  // Arduino-ESP32 3.3.12 does not release these arrays in its destructor.
+  // The SDK destructor does not free these arrays.
   RequestArgument* _currentArgs = nullptr;
   RequestArgument* _postArgs = nullptr;
 };

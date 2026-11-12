@@ -1940,6 +1940,13 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${TEST_HELPERS}
     )
     target_include_directories(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/Ipp/src)
+  elseif(TEST_NAME STREQUAL "WifiRadioTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/src/hal/WifiRadio.cpp
+      ${TEST_HELPERS}
+    )
+    target_include_directories(${TEST_NAME} BEFORE PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit/hal/wifi_mocks)
   elseif(TEST_NAME STREQUAL "WifiCredentialOrderTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
@@ -1947,7 +1954,8 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${TEST_HELPERS}
     )
     target_include_directories(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/SDCardManager/include)
-  elseif(TEST_NAME STREQUAL "MurphyM4BatchSettingsTest" OR TEST_NAME STREQUAL "SleepImageSettingsTest")
+  elseif(TEST_NAME STREQUAL "MurphyM4BatchSettingsTest" OR TEST_NAME STREQUAL "SleepImageSettingsTest" OR
+         TEST_NAME STREQUAL "NetworkConnectionTest")
     set(SETTINGS_UI_TARGETS ${TEST_NAME})
     if(TEST_NAME STREQUAL "MurphyM4BatchSettingsTest")
       list(APPEND SETTINGS_UI_TARGETS MurphyM4BatchSettingsNonM4Test)
@@ -2004,6 +2012,15 @@ foreach(TEST_SRC ${TEST_SOURCES})
       target_compile_definitions(MurphyM4BatchSettingsNonM4Test PRIVATE PAPYRIX_TARGET_XTEINK_C3=1)
     else()
       target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_XTEINK_C3=1)
+    endif()
+    if(TEST_NAME STREQUAL "NetworkConnectionTest")
+      target_sources(${TEST_NAME} PRIVATE
+        ${PROJECT_ROOT}/src/states/NetworkState.cpp
+        ${PROJECT_ROOT}/src/hal/WifiRadio.cpp
+        ${PROJECT_ROOT}/src/network/WifiCredentialStore.cpp
+        ${PROJECT_ROOT}/src/ui/views/NetworkViews.cpp
+        ${PROJECT_ROOT}/src/ui/views/UtilityViews.cpp)
+      target_include_directories(${TEST_NAME} BEFORE PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit/hal/wifi_mocks)
     endif()
     continue()
   elseif(TEST_NAME STREQUAL "SdFreeSpaceTest")
