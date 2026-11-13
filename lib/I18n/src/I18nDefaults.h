@@ -311,6 +311,10 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "Cannot clear save",               // GAME_CLEAR_ERROR
     "Discard changes",                 // GAME_DISCARD
     "Old save may remain",             // GAME_KEEP_SAVE
+    "Save and exit",                   // SAVE_EXIT
+    "Hold Confirm for menu",           // HOLD_CONFIRM_MENU
+    "Undo",                            // UNDO
+    "Next",                            // NEXT
     "Place",                           // GO_PLACE
     "Pass",                            // GO_PASS
     "Resign",                          // GO_RESIGN
@@ -320,23 +324,28 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "Cannot choose a move",            // GO_THINK_ERROR
     "Not enough memory",               // GO_MEMORY_ERROR
     "Stopping",                        // GO_STOPPING
-    "Save and exit",                   // GO_SAVE_EXIT
     "Black",                           // GO_BLACK
     "White",                           // GO_WHITE
     "Turn",                            // GO_TURN
     "Thinking",                        // GO_THINKING
     "Last move: pass",                 // GO_LAST_PASS
     "Tap a point, then Place",         // GO_TOUCH_HINT
-    "Hold Confirm for menu",           // GO_BUTTON_HINT
     "Komi",                            // GO_KOMI
     "wins",                            // GO_WINS
     "Draw",                            // GO_DRAW
     "Lights Out",                       // LIGHTS_OUT
     "Toggle",                           // LIGHTS_OUT_TOGGLE
     "Moves",                            // GAME_MOVES
-    "Hold Confirm for menu",            // LIGHTS_OUT_BUTTON_HINT
     "Tap a cell, then Toggle",           // LIGHTS_OUT_TOUCH_HINT
     "All lights are off!",              // LIGHTS_OUT_SOLVED
+    "Sokoban",                         // SOKOBAN
+    "Level",                           // SOKOBAN_LEVEL
+    "Pushes",                          // SOKOBAN_PUSHES
+    "Restart level",                   // SOKOBAN_RESTART
+    "Choose level",                    // SOKOBAN_LEVELS
+    "All boxes are on targets!",       // SOKOBAN_SOLVED
+    "Confirm: Undo. Hold: Menu",        // SOKOBAN_BUTTON_HINT
+    "Push boxes onto the targets",     // SOKOBAN_TOUCH_HINT
 };
 // clang-format on
 

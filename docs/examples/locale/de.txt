@@ -1,4 +1,4 @@
-# Deutsch - vollständige Referenz für PapyriX-Übersetzungen
+# German translation example for PapyriX. Missing keys use English.
 # Kopiere diese Datei nach /.papyrix/locale.txt auf deine SD-Karte
 # und übersetze die Werte (rechte Seite von =)
 _language_name=Deutsch
@@ -324,7 +324,7 @@ GO_THINK_ERROR=Kein Zug wählbar
 GO_MEMORY_ERROR=Nicht genug Speicher
 GO_LAST_PASS=Letzter Zug: Passen
 GO_TOUCH_HINT=Punkt antippen, dann Setzen
-GO_BUTTON_HINT=Bestätigen halten für Menü
+HOLD_CONFIRM_MENU=Bestätigen halten für Menü
 GO_RESIGN_CONFIRM=Aufgeben?
-GO_SAVE_EXIT=Speichern und Ende
+SAVE_EXIT=Speichern und Ende
 GO_STOPPING=Stoppt

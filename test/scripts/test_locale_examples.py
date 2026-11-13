@@ -9,9 +9,10 @@ import LocaleExamplesTest as validator
 
 
 def main():
-    expected = {"GO_PLAY", "LIGHTS_OUT", "GAME_MOVES", "TITLE", "LANDSCAPE_CW", "LANDSCAPE_CCW"}
-    base = ("GO_PLAY=Go\nLIGHTS_OUT=Lights Out\nGAME_MOVES=Moves\nTITLE=Title\n"
-            "LANDSCAPE_CW=Right\nLANDSCAPE_CCW=Left\n")
+    expected = {"GO_PLAY", "LIGHTS_OUT", "GAME_MOVES", "SOKOBAN", "TITLE", "LANDSCAPE_CW", "LANDSCAPE_CCW",
+                "HOLD_CONFIRM_MENU", "SAVE_EXIT", "UNDO", "NEXT"}
+    base = ("GO_PLAY=Go\nLIGHTS_OUT=Lights Out\nGAME_MOVES=Moves\nSOKOBAN=Sokoban\nTITLE=Title\n"
+            "LANDSCAPE_CW=Right\nLANDSCAPE_CCW=Left\nHOLD_CONFIRM_MENU=Hold\nSAVE_EXIT=Save\nUNDO=Undo\nNEXT=Next\n")
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
 
@@ -28,9 +29,14 @@ def main():
 
         check("fr.txt", base.replace("GO_PLAY=Go\n", ""), 0, "PASS:")
         check("en.txt", base.replace("GO_PLAY=Go\n", ""), 1, "missing: GO_PLAY")
-        check("fr.txt", base.replace("LIGHTS_OUT=Lights Out\n", "").replace("GAME_MOVES=Moves\n", ""), 0, "PASS:")
+        check("fr.txt", base.replace("LIGHTS_OUT=Lights Out\n", "").replace("GAME_MOVES=Moves\n", "")
+              .replace("SOKOBAN=Sokoban\n", ""), 0, "PASS:")
         check("en.txt", base.replace("LIGHTS_OUT=Lights Out\n", ""), 1, "missing: LIGHTS_OUT")
         check("fr.txt", base.replace("TITLE=Title\n", ""), 1, "missing: TITLE")
+        shared = {"HOLD_CONFIRM_MENU", "SAVE_EXIT", "UNDO", "NEXT"}
+        content = "\n".join(line for line in base.splitlines() if line.split("=", 1)[0] not in shared) + "\n"
+        check("fr.txt", content, 0, "PASS:")
+        check("en.txt", content, 1, "missing:")
         check("fr.txt", base + "UNKNOWN=value\n", 1, "unexpected: UNKNOWN")
         check("fr.txt", base.replace("LANDSCAPE_CCW=Left", "LANDSCAPE_CCW=Right"),
               1, "must have distinct labels")

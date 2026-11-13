@@ -99,5 +99,8 @@ INACTIVE_APP(go_app)
 #ifndef TEST_LIGHTS_OUT_APP
 INACTIVE_APP(lightsout_app)
 #endif
+#ifndef TEST_SOKOBAN_APP
+INACTIVE_APP(sokoban_app)
+#endif
 #undef INACTIVE_APP
 }  // namespace papyrix

@@ -140,7 +140,7 @@ int menu(const char** labels, Command* commands) {
   if (!finished() && !whiteTurn()) add(tr(GO_PASS), Command::Pass);
   if (!finished()) add(tr(GO_RESIGN), Command::Resign);
   add(tr(GAME_NEW), Command::New);
-  add(tr(GO_SAVE_EXIT), Command::Exit);
+  add(tr(SAVE_EXIT), Command::Exit);
   return count;
 }
 

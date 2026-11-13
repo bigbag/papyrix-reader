@@ -1,5 +1,12 @@
 
 
+## Unreleased
+
+*  Add 12 Papwick Sokoban levels and a cat hero.
+*  Use square Sokoban cells without stretching the board.
+*  Keep old Sokoban saves until the user confirms a replacement.
+
+
 ## v1.37.2 (2026-11-12)
 
 *  Add chapter jumps on hold. Issue #174 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]

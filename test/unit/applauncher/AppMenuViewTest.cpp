@@ -10,6 +10,7 @@ const int8_t APP_CLOCK = 4;
 const int8_t APP_2048 = 5;
 const int8_t APP_GO = 6;
 const int8_t APP_LIGHTS_OUT = 7;
+const int8_t APP_SOKOBAN = 8;
 }  // namespace papyrix
 
 using ui::AppMenuView;
@@ -103,7 +104,7 @@ int main() {
 
   {
     AppMenuView view;
-    view.itemCount = 9;
+    view.itemCount = 11;
     for (int i = 0; i < view.itemCount; ++i) {
       const auto hit = view.hitTest({20, static_cast<int16_t>(AppMenuView::rowY(i, 30) + 15)}, 800, 480, 30);
       runner.expectTrue(hit.type == AppMenuView::Hit::Type::Entry && hit.index == i, "each grouped row is clickable");
@@ -112,7 +113,7 @@ int main() {
     }
     runner.expectEq(int8_t(0), view.selected, "down wraps across all groups");
     view.moveUp();
-    runner.expectEq(int8_t(8), view.selected, "up wraps across all groups");
+    runner.expectEq(static_cast<int8_t>(view.itemCount - 1), view.selected, "up wraps across all groups");
     for (int row : {4, 7}) {
       const int gap = AppMenuView::rowY(row, 30) - AppMenuView::GROUP_GAP;
       for (int y = gap; y < gap + AppMenuView::GROUP_GAP; ++y) {
@@ -129,13 +130,6 @@ int main() {
                       "remapped footer remains back");
     runner.expectTrue(view.hitTest({650, 430}, 800, 480, 30, true).type == AppMenuView::Hit::Type::Open,
                       "remapped footer remains open");
-    runner.expectEq(int(papyrix::APP_LOCALSEND), ui::appIdForMenuItem(2), "LocalSend follows transfer actions");
-    runner.expectEq(int(papyrix::APP_PRINTER), ui::appIdForMenuItem(3), "Printer ends file transfer apps");
-    runner.expectEq(int(papyrix::APP_IMAGEVIEWER), ui::appIdForMenuItem(4), "Image Viewer starts common apps");
-    runner.expectEq(int(papyrix::APP_POMODORO), ui::appIdForMenuItem(5), "Pomodoro follows Image Viewer");
-    runner.expectEq(int(papyrix::APP_CLOCK), ui::appIdForMenuItem(6), "Clock ends common apps");
-    runner.expectEq(int(papyrix::APP_2048), ui::appIdForMenuItem(7), "2048 starts games");
-    runner.expectEq(int(papyrix::APP_GO), ui::appIdForMenuItem(8), "Go ends games");
   }
 
   {

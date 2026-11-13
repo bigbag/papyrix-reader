@@ -1,4 +1,4 @@
-# Français - référence complète pour les traductions PapyriX
+# French translation example for PapyriX. Missing keys use English.
 # Copiez ce fichier dans /.papyrix/locale.txt sur votre carte SD
 # et traduisez les valeurs (partie droite du =)
 _language_name=Français
@@ -317,14 +317,14 @@ GO_REPETITION=Position répétée
 GO_THINK_ERROR=Choix du coup impossible
 GO_MEMORY_ERROR=Mémoire insuffisante
 GO_STOPPING=Arrêt
-GO_SAVE_EXIT=Sauver et quitter
+SAVE_EXIT=Sauver et quitter
 GO_BLACK=Noir
 GO_WHITE=Blanc
 GO_TURN=Tour
 GO_THINKING=Réflexion
 GO_LAST_PASS=Dernier coup : passe
 GO_TOUCH_HINT=Touchez un point puis Poser
-GO_BUTTON_HINT=Maintenez Confirmer pour le menu
+HOLD_CONFIRM_MENU=Maintenez Confirmer pour le menu
 GO_KOMI=Komi
 GO_WINS=gagne
 GO_DRAW=Nul

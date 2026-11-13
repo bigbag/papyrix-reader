@@ -22,5 +22,6 @@ extern const int8_t APP_POMODORO;
 extern const int8_t APP_2048;
 extern const int8_t APP_GO;
 extern const int8_t APP_LIGHTS_OUT;
+extern const int8_t APP_SOKOBAN;
 
 }  // namespace papyrix

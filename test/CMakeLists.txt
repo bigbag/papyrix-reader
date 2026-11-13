@@ -1117,7 +1117,8 @@ foreach(TEST_SRC ${TEST_SOURCES})
          TEST_NAME STREQUAL "ReaderTouchRenderingTest" OR TEST_NAME STREQUAL "ClockFrameTest" OR
          TEST_NAME STREQUAL "Game2048ViewTest" OR TEST_NAME STREQUAL "Game2048AppTest" OR
          TEST_NAME STREQUAL "GoAppTest" OR TEST_NAME STREQUAL "LightsOutViewTest" OR
-         TEST_NAME STREQUAL "LightsOutAppTest")
+         TEST_NAME STREQUAL "LightsOutAppTest" OR TEST_NAME STREQUAL "SokobanViewTest" OR
+         TEST_NAME STREQUAL "SokobanAppTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
       ${PROJECT_ROOT}/lib/GfxRenderer/src/GfxRenderer.cpp
@@ -1134,7 +1135,8 @@ foreach(TEST_SRC ${TEST_SOURCES})
     if(TEST_NAME STREQUAL "BitmapTurnCacheTest" OR TEST_NAME STREQUAL "ReaderTouchRenderingTest" OR
        TEST_NAME STREQUAL "ClockFrameTest" OR TEST_NAME STREQUAL "Game2048ViewTest" OR
        TEST_NAME STREQUAL "Game2048AppTest" OR TEST_NAME STREQUAL "GoAppTest" OR
-       TEST_NAME STREQUAL "LightsOutViewTest" OR TEST_NAME STREQUAL "LightsOutAppTest")
+       TEST_NAME STREQUAL "LightsOutViewTest" OR TEST_NAME STREQUAL "LightsOutAppTest" OR
+       TEST_NAME STREQUAL "SokobanViewTest" OR TEST_NAME STREQUAL "SokobanAppTest")
       target_sources(${TEST_NAME} PRIVATE
         ${PROJECT_ROOT}/lib/RenderTypes/src/BitmapTurnCache.cpp
         ${PROJECT_ROOT}/lib/RenderTypes/src/blocks/ImageBlock.cpp
@@ -1174,7 +1176,8 @@ foreach(TEST_SRC ${TEST_SOURCES})
     endif()
     if(TEST_NAME STREQUAL "Game2048ViewTest" OR TEST_NAME STREQUAL "Game2048AppTest" OR
        TEST_NAME STREQUAL "GoAppTest" OR TEST_NAME STREQUAL "LightsOutViewTest" OR
-       TEST_NAME STREQUAL "LightsOutAppTest")
+       TEST_NAME STREQUAL "LightsOutAppTest" OR TEST_NAME STREQUAL "SokobanViewTest" OR
+       TEST_NAME STREQUAL "SokobanAppTest")
       target_sources(${TEST_NAME} PRIVATE
         ${PROJECT_ROOT}/src/ui/Elements.cpp
         ${PROJECT_ROOT}/src/ui/TouchLayout.cpp
@@ -1188,6 +1191,10 @@ foreach(TEST_SRC ${TEST_SOURCES})
       target_sources(${TEST_NAME} PRIVATE
         ${PROJECT_ROOT}/src/apps/LightsOut.cpp
         ${PROJECT_ROOT}/src/ui/views/LightsOutView.cpp)
+    endif()
+    if(TEST_NAME STREQUAL "SokobanViewTest" OR TEST_NAME STREQUAL "SokobanAppTest")
+      target_sources(${TEST_NAME} PRIVATE
+        ${PROJECT_ROOT}/src/ui/views/SokobanView.cpp)
     endif()
     if(TEST_NAME STREQUAL "Game2048AppTest")
       target_compile_definitions(${TEST_NAME} PRIVATE TEST_GAME2048_APP=1 F_CPU=240000000L)
@@ -1249,6 +1256,31 @@ foreach(TEST_SRC ${TEST_SOURCES})
         ${PROJECT_ROOT}/src/apps/MiniAppInput.cpp
         ${PROJECT_ROOT}/src/apps/LightsOutApp.cpp
         ${PROJECT_ROOT}/src/apps/LightsOutStore.cpp
+        ${PROJECT_ROOT}/src/states/AppLauncherState.cpp
+        ${PROJECT_ROOT}/src/ui/views/AppLauncherViews.cpp
+        ${PROJECT_ROOT}/src/ui/WrappedText.cpp
+        ${PROJECT_ROOT}/src/hal/Input.cpp
+        ${PROJECT_ROOT}/src/hal/Cpu.cpp
+        ${PROJECT_ROOT}/src/MappedInputManager.cpp
+        ${PROJECT_ROOT}/lib/InputManager/src/InputManager.cpp
+        ${PROJECT_ROOT}/lib/AsyncTask/src/BackgroundTask.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/X4ProBoard.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp)
+      target_include_directories(${TEST_NAME} PRIVATE
+        ${PROJECT_ROOT}/lib/InputManager/include
+        $<TARGET_PROPERTY:ContentHandleThumbnailTest,INCLUDE_DIRECTORIES>)
+    endif()
+    if(TEST_NAME STREQUAL "SokobanAppTest")
+      target_compile_definitions(${TEST_NAME} PRIVATE TEST_SOKOBAN_APP=1 F_CPU=240000000L)
+      target_sources(${TEST_NAME} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/common/game2048_platform.cpp
+        ${PROJECT_ROOT}/src/apps/AppRegistry.cpp
+        ${PROJECT_ROOT}/src/apps/MiniAppInput.cpp
+        ${PROJECT_ROOT}/src/apps/Sokoban.cpp
+        ${PROJECT_ROOT}/src/apps/SokobanLevels.cpp
+        ${PROJECT_ROOT}/src/apps/SokobanApp.cpp
+        ${PROJECT_ROOT}/src/apps/SokobanStore.cpp
         ${PROJECT_ROOT}/src/states/AppLauncherState.cpp
         ${PROJECT_ROOT}/src/ui/views/AppLauncherViews.cpp
         ${PROJECT_ROOT}/src/ui/WrappedText.cpp
@@ -1725,6 +1757,15 @@ foreach(TEST_SRC ${TEST_SOURCES})
     add_executable(${TEST_NAME} ${TEST_SRC}
       ${PROJECT_ROOT}/src/apps/LightsOut.cpp
       ${PROJECT_ROOT}/src/apps/LightsOutStore.cpp ${TEST_HELPERS})
+  elseif(TEST_NAME STREQUAL "SokobanTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/src/apps/Sokoban.cpp
+      ${PROJECT_ROOT}/src/apps/SokobanLevels.cpp ${TEST_HELPERS})
+  elseif(TEST_NAME STREQUAL "SokobanStoreTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/src/apps/Sokoban.cpp
+      ${PROJECT_ROOT}/src/apps/SokobanLevels.cpp
+      ${PROJECT_ROOT}/src/apps/SokobanStore.cpp ${TEST_HELPERS})
   elseif(TEST_NAME STREQUAL "ClockSettingsTest")
     add_executable(${TEST_NAME} ${TEST_SRC}
       ${PROJECT_ROOT}/src/apps/ClockSettings.cpp ${TEST_HELPERS})

@@ -24,7 +24,7 @@ SETTINGS=Parametres
 LOADING=Chargement...
 ```
 
-- Keys match the StrId enum names exactly (case-sensitive).
+- Keys use the StrId enum names without the `STR_` prefix (case-sensitive).
 - Missing keys use the compiled English text.
 - The loader ignores unknown keys without a message.
 - The loader reserves keys that start with `_` for metadata.
@@ -32,6 +32,7 @@ LOADING=Chargement...
 - UTF-8 encoding.
 - Maximum line length: 255 UTF-8 bytes for the full `KEY=value` line, without its line ending. The loader cuts longer lines.
 - Override buffer: 4608 bytes for all translated strings.
+- Key names are stored in Flash. Only values use the RAM override buffer.
 - Count the UTF-8 bytes of all non-metadata values and one terminating null byte per value. Keep this total at 4608 bytes or less. Values that do not fit keep their English defaults without a message.
 - Standard button-bar labels have 94 pixels for text. Their width depends on the font, not only the character count. Check the rendered labels.
 
@@ -61,13 +62,13 @@ The web interface shows the language name and file size. Delete the locale file 
 
 See `docs/examples/locale/` for examples (en, de, fr, es, uk).
 The English example includes every key.
-The German, Spanish, French, and Ukrainian examples omit the six new Lights Out keys to stay within the override buffer.
-The Ukrainian example also omits 20 `GO_*` keys.
+The other examples omit `LIGHTS_OUT*`, `GAME_MOVES`, `SOKOBAN*`, `UNDO`, and `NEXT` keys to stay within the override buffer.
+The Ukrainian example also omits 18 `GO_*` keys, `HOLD_CONFIRM_MENU`, and `SAVE_EXIT`.
 Omitted keys use the compiled English text.
 
 Run `make test-tools` to check the examples.
 The validator requires every key in the English example.
-Other examples can omit `GO_*`, `LIGHTS_OUT*`, and `GAME_MOVES` keys.
+Other examples can omit `GO_*`, `LIGHTS_OUT*`, `SOKOBAN*`, `GAME_MOVES`, `HOLD_CONFIRM_MENU`, `SAVE_EXIT`, `UNDO`, and `NEXT`.
 It rejects unknown keys and data above the override buffer limit.
 It also requires different labels for the two landscape orientations.
 It does not check the 255-byte line limit or rendered label width.
@@ -75,6 +76,9 @@ It does not check the 255-byte line limit or rendered label width.
 ## String keys reference
 
 See `lib/I18n/src/I18nDefaults.h` for the full list of all string keys and their English defaults.
+
+Use shared keys for controls with the same meaning. `GAME_*` keys are shared across games.
+Common app keys include `SAVE_EXIT`, `HOLD_CONFIRM_MENU`, `UNDO`, and `NEXT`.
 
 Format strings (keys that start with `FMT_`) contain `%s` or `%d` placeholders. You must keep these placeholders in translations:
 

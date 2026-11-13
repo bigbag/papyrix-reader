@@ -58,7 +58,7 @@ void renderLightsOut(const GfxRenderer& r, const Theme& theme, const papyrix::li
   r.drawCenteredText(theme.smallFontId, layout.hintY,
                      won        ? tr(LIGHTS_OUT_SOLVED)
                      : hasTouch ? tr(LIGHTS_OUT_TOUCH_HINT)
-                                : tr(LIGHTS_OUT_BUTTON_HINT),
+                                : tr(HOLD_CONFIRM_MENU),
                      theme.primaryTextBlack);
   if (hasTouch) {
     const touch::Rect controls[] = {layout.back, layout.menu, layout.toggle};
