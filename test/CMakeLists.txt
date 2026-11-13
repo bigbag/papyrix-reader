@@ -1116,7 +1116,8 @@ foreach(TEST_SRC ${TEST_SOURCES})
   elseif(TEST_NAME STREQUAL "BmpPolarityRoundTripTest" OR TEST_NAME STREQUAL "BitmapTurnCacheTest" OR
          TEST_NAME STREQUAL "ReaderTouchRenderingTest" OR TEST_NAME STREQUAL "ClockFrameTest" OR
          TEST_NAME STREQUAL "Game2048ViewTest" OR TEST_NAME STREQUAL "Game2048AppTest" OR
-         TEST_NAME STREQUAL "GoAppTest")
+         TEST_NAME STREQUAL "GoAppTest" OR TEST_NAME STREQUAL "LightsOutViewTest" OR
+         TEST_NAME STREQUAL "LightsOutAppTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
       ${PROJECT_ROOT}/lib/GfxRenderer/src/GfxRenderer.cpp
@@ -1132,7 +1133,8 @@ foreach(TEST_SRC ${TEST_SOURCES})
     )
     if(TEST_NAME STREQUAL "BitmapTurnCacheTest" OR TEST_NAME STREQUAL "ReaderTouchRenderingTest" OR
        TEST_NAME STREQUAL "ClockFrameTest" OR TEST_NAME STREQUAL "Game2048ViewTest" OR
-       TEST_NAME STREQUAL "Game2048AppTest" OR TEST_NAME STREQUAL "GoAppTest")
+       TEST_NAME STREQUAL "Game2048AppTest" OR TEST_NAME STREQUAL "GoAppTest" OR
+       TEST_NAME STREQUAL "LightsOutViewTest" OR TEST_NAME STREQUAL "LightsOutAppTest")
       target_sources(${TEST_NAME} PRIVATE
         ${PROJECT_ROOT}/lib/RenderTypes/src/BitmapTurnCache.cpp
         ${PROJECT_ROOT}/lib/RenderTypes/src/blocks/ImageBlock.cpp
@@ -1171,7 +1173,8 @@ foreach(TEST_SRC ${TEST_SOURCES})
       target_include_directories(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/I18n/src)
     endif()
     if(TEST_NAME STREQUAL "Game2048ViewTest" OR TEST_NAME STREQUAL "Game2048AppTest" OR
-       TEST_NAME STREQUAL "GoAppTest")
+       TEST_NAME STREQUAL "GoAppTest" OR TEST_NAME STREQUAL "LightsOutViewTest" OR
+       TEST_NAME STREQUAL "LightsOutAppTest")
       target_sources(${TEST_NAME} PRIVATE
         ${PROJECT_ROOT}/src/ui/Elements.cpp
         ${PROJECT_ROOT}/src/ui/TouchLayout.cpp
@@ -1181,8 +1184,13 @@ foreach(TEST_SRC ${TEST_SOURCES})
     if(TEST_NAME STREQUAL "Game2048ViewTest" OR TEST_NAME STREQUAL "Game2048AppTest")
       target_sources(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/src/ui/views/Game2048View.cpp)
     endif()
+    if(TEST_NAME STREQUAL "LightsOutViewTest" OR TEST_NAME STREQUAL "LightsOutAppTest")
+      target_sources(${TEST_NAME} PRIVATE
+        ${PROJECT_ROOT}/src/apps/LightsOut.cpp
+        ${PROJECT_ROOT}/src/ui/views/LightsOutView.cpp)
+    endif()
     if(TEST_NAME STREQUAL "Game2048AppTest")
-      target_compile_definitions(${TEST_NAME} PRIVATE F_CPU=240000000L)
+      target_compile_definitions(${TEST_NAME} PRIVATE TEST_GAME2048_APP=1 F_CPU=240000000L)
       target_sources(${TEST_NAME} PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/common/game2048_platform.cpp
         ${PROJECT_ROOT}/src/apps/AppRegistry.cpp
@@ -1230,6 +1238,29 @@ foreach(TEST_SRC ${TEST_SOURCES})
         ${PROJECT_ROOT}/lib/uzlib/src/crc32.c)
       target_include_directories(${TEST_NAME} PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/unit/go
+        ${PROJECT_ROOT}/lib/InputManager/include
+        $<TARGET_PROPERTY:ContentHandleThumbnailTest,INCLUDE_DIRECTORIES>)
+    endif()
+    if(TEST_NAME STREQUAL "LightsOutAppTest")
+      target_compile_definitions(${TEST_NAME} PRIVATE TEST_LIGHTS_OUT_APP=1 F_CPU=240000000L)
+      target_sources(${TEST_NAME} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/common/game2048_platform.cpp
+        ${PROJECT_ROOT}/src/apps/AppRegistry.cpp
+        ${PROJECT_ROOT}/src/apps/MiniAppInput.cpp
+        ${PROJECT_ROOT}/src/apps/LightsOutApp.cpp
+        ${PROJECT_ROOT}/src/apps/LightsOutStore.cpp
+        ${PROJECT_ROOT}/src/states/AppLauncherState.cpp
+        ${PROJECT_ROOT}/src/ui/views/AppLauncherViews.cpp
+        ${PROJECT_ROOT}/src/ui/WrappedText.cpp
+        ${PROJECT_ROOT}/src/hal/Input.cpp
+        ${PROJECT_ROOT}/src/hal/Cpu.cpp
+        ${PROJECT_ROOT}/src/MappedInputManager.cpp
+        ${PROJECT_ROOT}/lib/InputManager/src/InputManager.cpp
+        ${PROJECT_ROOT}/lib/AsyncTask/src/BackgroundTask.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/X4ProBoard.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/HardwareIdentity.cpp
+        ${PROJECT_ROOT}/lib/BoardSupport/src/BoardProfiles.cpp)
+      target_include_directories(${TEST_NAME} PRIVATE
         ${PROJECT_ROOT}/lib/InputManager/include
         $<TARGET_PROPERTY:ContentHandleThumbnailTest,INCLUDE_DIRECTORIES>)
     endif()
@@ -1687,6 +1718,13 @@ foreach(TEST_SRC ${TEST_SOURCES})
     add_executable(${TEST_NAME} ${TEST_SRC}
       ${PROJECT_ROOT}/src/apps/Game2048.cpp
       ${PROJECT_ROOT}/src/apps/Game2048Store.cpp ${TEST_HELPERS})
+  elseif(TEST_NAME STREQUAL "LightsOutTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/src/apps/LightsOut.cpp ${TEST_HELPERS})
+  elseif(TEST_NAME STREQUAL "LightsOutStoreTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/src/apps/LightsOut.cpp
+      ${PROJECT_ROOT}/src/apps/LightsOutStore.cpp ${TEST_HELPERS})
   elseif(TEST_NAME STREQUAL "ClockSettingsTest")
     add_executable(${TEST_NAME} ${TEST_SRC}
       ${PROJECT_ROOT}/src/apps/ClockSettings.cpp ${TEST_HELPERS})
@@ -2050,7 +2088,8 @@ foreach(TEST_SRC ${TEST_SOURCES})
     foreach(GAME_TARGET STICKY MURPHY_M4)
       set(GAME_TEST Game2048App${GAME_TARGET}Test)
       add_executable(${GAME_TEST} ${GAME_SOURCES})
-      target_compile_definitions(${GAME_TEST} PRIVATE PAPYRIX_TARGET_${GAME_TARGET}=1 F_CPU=240000000L)
+      target_compile_definitions(${GAME_TEST} PRIVATE
+        PAPYRIX_TARGET_${GAME_TARGET}=1 TEST_GAME2048_APP=1 F_CPU=240000000L)
       target_include_directories(${GAME_TEST} BEFORE PRIVATE $<TARGET_PROPERTY:${TEST_NAME},INCLUDE_DIRECTORIES>)
       target_compile_options(${GAME_TEST} PRIVATE $<TARGET_PROPERTY:${TEST_NAME},COMPILE_OPTIONS>)
       target_link_options(${GAME_TEST} PRIVATE $<TARGET_PROPERTY:${TEST_NAME},LINK_OPTIONS>)

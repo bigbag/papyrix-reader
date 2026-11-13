@@ -307,6 +307,12 @@ static constexpr KeyMapping KEY_MAP[] = {
     {"GO_KOMI", StrId::STR_GO_KOMI},
     {"GO_WINS", StrId::STR_GO_WINS},
     {"GO_DRAW", StrId::STR_GO_DRAW},
+    {"LIGHTS_OUT", StrId::STR_LIGHTS_OUT},
+    {"LIGHTS_OUT_TOGGLE", StrId::STR_LIGHTS_OUT_TOGGLE},
+    {"GAME_MOVES", StrId::STR_GAME_MOVES},
+    {"LIGHTS_OUT_BUTTON_HINT", StrId::STR_LIGHTS_OUT_BUTTON_HINT},
+    {"LIGHTS_OUT_TOUCH_HINT", StrId::STR_LIGHTS_OUT_TOUCH_HINT},
+    {"LIGHTS_OUT_SOLVED", StrId::STR_LIGHTS_OUT_SOLVED},
 };
 // clang-format on
 

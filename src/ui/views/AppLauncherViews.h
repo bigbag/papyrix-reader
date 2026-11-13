@@ -71,9 +71,9 @@ struct AppMenuView {
 };
 
 inline int appIdForMenuItem(int index) {
-  static const int8_t order[] = {papyrix::APP_LOCALSEND, papyrix::APP_PRINTER, papyrix::APP_IMAGEVIEWER,
-                                 papyrix::APP_POMODORO,  papyrix::APP_CLOCK,   papyrix::APP_2048,
-                                 papyrix::APP_GO};
+  static const int8_t order[] = {papyrix::APP_LOCALSEND, papyrix::APP_PRINTER,   papyrix::APP_IMAGEVIEWER,
+                                 papyrix::APP_POMODORO,  papyrix::APP_CLOCK,     papyrix::APP_2048,
+                                 papyrix::APP_GO,        papyrix::APP_LIGHTS_OUT};
   return order[index - AppMenuView::EXTRA_COUNT];
 }
 

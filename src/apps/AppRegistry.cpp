@@ -2,6 +2,7 @@
 #include "Game2048App.h"
 #include "GoApp.h"
 #include "ImageViewerApp.h"
+#include "LightsOutApp.h"
 #include "LocalsendApp.h"
 #include "MiniApp.h"
 #include "PomodoroApp.h"
@@ -24,6 +25,8 @@ const MiniApp APPS[] = {
      game2048_app::exit, game2048_app::prepareExit, false, true},
     {"Go", go_app::enter, go_app::update, go_app::handleEvent, go_app::render, go_app::exit, go_app::prepareExit, false,
      true},
+    {"Lights Out", lightsout_app::enter, lightsout_app::update, lightsout_app::handleEvent, lightsout_app::render,
+     lightsout_app::exit, lightsout_app::prepareExit, false, true},
 };
 const uint8_t APP_COUNT = sizeof(APPS) / sizeof(APPS[0]);
 const int8_t APP_IMAGEVIEWER = 0;
@@ -33,5 +36,6 @@ const int8_t APP_POMODORO = 3;
 const int8_t APP_CLOCK = 4;
 const int8_t APP_2048 = 5;
 const int8_t APP_GO = 6;
+const int8_t APP_LIGHTS_OUT = 7;
 
 }  // namespace papyrix

@@ -90,10 +90,14 @@ INACTIVE_APP(imageviewer_app)
 INACTIVE_APP(printer_app)
 INACTIVE_APP(localsend_app)
 INACTIVE_APP(pomodoro_app)
-#ifdef TEST_GO_APP
+#ifndef TEST_GAME2048_APP
 INACTIVE_APP(game2048_app)
-#else
+#endif
+#ifndef TEST_GO_APP
 INACTIVE_APP(go_app)
+#endif
+#ifndef TEST_LIGHTS_OUT_APP
+INACTIVE_APP(lightsout_app)
 #endif
 #undef INACTIVE_APP
 }  // namespace papyrix

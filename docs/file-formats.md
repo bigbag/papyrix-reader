@@ -589,3 +589,23 @@ The temporary file must pass write, sync, and close checks before publication.
 A failed publication retains the previous complete game.
 Loading can recover a valid backup when the main file is invalid or absent.
 Replacement does not guarantee recovery from a physical power loss during SD writes.
+
+## Lights Out Game
+
+`/.papyrix/apps/lightsout.bin` stores one 5 by 5 game in 14 bytes.
+Multi-byte integers use little-endian order.
+
+| Offset | Bytes | Field |
+|---|---|---|
+| 0 | 4 | Magic: `PXLO` |
+| 4 | 1 | Format version: `1` |
+| 5 | 4 | Lights: bits 0 through 24 in row-major order; upper bits are zero |
+| 9 | 4 | Move count; stops at `0xffffffff` |
+| 13 | 1 | Cursor: cell 0 through 24 in row-major order |
+
+A set bit marks a light that is on. A zero board marks a solved game.
+Loading checks the size, magic, version, unused bits, and cursor.
+It retains solved games.
+Writes use `lightsout.bin.tmp` and `lightsout.bin.bak` through `CheckedFile.h`.
+Loading can recover a valid backup when the main file is invalid or absent.
+The app does not save each move. Exit and sleep save the current state.

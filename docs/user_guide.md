@@ -96,7 +96,7 @@ Apps lists three groups in this order:
 
 1. File transfer: **WiFi Transfer**, **Calibre Sync**, **LocalSend**, **Printer**.
 2. Common apps: **Image Viewer**, **Pomodoro**, **Clock**.
-3. Games: **2048**, **Go**.
+3. Games: **2048**, **Go**, **Lights Out**.
 
 Two dashed lines separate the groups. Direction buttons select apps, not separator lines. Taps on the separator lines do nothing.
 
@@ -660,6 +660,24 @@ If a move cannot be saved, **Retry** tries the same move again. **Cancel** retai
 If the opponent cannot start, select **Retry**. Go keeps the saved position. You can also press **Back** to leave Go or put the device to sleep.
 
 If a stop takes too long, **Cancel** keeps the game open. When the board is active, Go resumes White's turn after the old task stops.
+
+### 3.14 Lights Out
+
+Open **Apps → Lights Out**. Turn off every cell on the 5 by 5 board. Filled cells are on. Empty cells are off.
+
+A move changes the selected cell and its neighbours above, below, left, and right. Every new board has a solution.
+
+On button-only devices, use the direction buttons to move the cursor. The cursor stops at board edges. Press and release **Confirm** to toggle the selected cell. Hold Confirm to open the menu without a move. A held direction button moves the cursor.
+
+On touch devices, tap a cell to select it. Tap **Toggle** to make the move. The bottom row provides **Back**, **Menu**, and **Toggle**. Swipes do nothing.
+
+**Back** saves the game and returns to Apps. **Menu** or a held Confirm opens **Resume**, **New game**, and **Save and exit**. Back closes the menu. New game requires confirmation before it removes the previous save.
+
+The device saves the board, cursor, and move count on exit or sleep. Moves stay in RAM until then. A solved board stays solved when you open it again. After a win, Confirm or the **New game** touch button asks to start another game.
+
+The game uses the configured Auto Sleep timeout. If saving fails, **Retry** completes the requested exit or sleep. **Cancel** keeps the current game open. **Discard changes** leaves the previous save unchanged. A sudden power loss can lose moves since the last save.
+
+Lights Out requests fast screen refreshes, including on entry. The display driver can require a stronger refresh after startup or display recovery.
 
 ---
 

@@ -9,6 +9,7 @@ const int8_t APP_POMODORO = 3;
 const int8_t APP_CLOCK = 4;
 const int8_t APP_2048 = 5;
 const int8_t APP_GO = 6;
+const int8_t APP_LIGHTS_OUT = 7;
 }  // namespace papyrix
 
 using ui::AppMenuView;
@@ -156,14 +157,14 @@ int main() {
                           "oversized landscape row is reachable");
       }
       for (int y : {356, 363, 586, 593}) {
-        runner.expectTrue(view.hitTest({20, static_cast<int16_t>(y)}, 480, 800, pitch).type ==
-                              AppMenuView::Hit::Type::None,
-                          "portrait divider is not clickable");
+        runner.expectTrue(
+            view.hitTest({20, static_cast<int16_t>(y)}, 480, 800, pitch).type == AppMenuView::Hit::Type::None,
+            "portrait divider is not clickable");
       }
       for (int y : {216, 223, 341, 348}) {
-        runner.expectTrue(view.hitTest({20, static_cast<int16_t>(y)}, 800, 480, pitch).type ==
-                              AppMenuView::Hit::Type::None,
-                          "landscape divider is not clickable");
+        runner.expectTrue(
+            view.hitTest({20, static_cast<int16_t>(y)}, 800, 480, pitch).type == AppMenuView::Hit::Type::None,
+            "landscape divider is not clickable");
       }
       runner.expectTrue(view.hitTest({20, 756}, 480, 800, pitch).type == AppMenuView::Hit::Type::Back,
                         "portrait footer remains back");

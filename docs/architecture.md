@@ -120,11 +120,13 @@ The launcher restores active CPU speed before app event handling. An exit action
 
 `prepareExit` checks an exit before cleanup. `Blocked` retains the exit destination for retry or discard. `OpenMenu` opens editable settings and cancels that destination. A pending exit prevents idle sleep.
 
-`CheckedFile.h` checks temporary writes, sync, and close before publication. It retains the previous file through a backup rename. Clock, 2048, and Go keep their own file formats, validation, and load rules.
+`CheckedFile.h` checks temporary writes, sync, and close before publication. It retains the previous file through a backup rename. Clock, 2048, Go, and Lights Out keep their own file formats, validation, and load rules.
 
 Clock keeps board-specific standby and recovery in the firmware. After hardware recovery invalidates an app context, `Host::abandon` clears host state without calling the app exit callback.
 
 `lib/GoGame` provides the 9 by 9 Tromp–Taylor rules and a bounded Monte Carlo opponent. `GoStore` keeps the full position history on the SD card. `GoApp` runs the opponent through `lib/AsyncTask`. The task reads an immutable position. Only the main thread commits a move.
+
+`LightsOut` stores the 5 by 5 board in 25 bits. It generates solvable boards through legal toggles. `LightsOutApp` saves the board, cursor, and move count on exit or sleep through `LightsOutStore`.
 
 ## Background Work
 

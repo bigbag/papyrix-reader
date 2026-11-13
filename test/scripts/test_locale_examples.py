@@ -9,8 +9,9 @@ import LocaleExamplesTest as validator
 
 
 def main():
-    expected = {"GO_PLAY", "TITLE", "LANDSCAPE_CW", "LANDSCAPE_CCW"}
-    base = "GO_PLAY=Go\nTITLE=Title\nLANDSCAPE_CW=Right\nLANDSCAPE_CCW=Left\n"
+    expected = {"GO_PLAY", "LIGHTS_OUT", "GAME_MOVES", "TITLE", "LANDSCAPE_CW", "LANDSCAPE_CCW"}
+    base = ("GO_PLAY=Go\nLIGHTS_OUT=Lights Out\nGAME_MOVES=Moves\nTITLE=Title\n"
+            "LANDSCAPE_CW=Right\nLANDSCAPE_CCW=Left\n")
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
 
@@ -27,6 +28,8 @@ def main():
 
         check("fr.txt", base.replace("GO_PLAY=Go\n", ""), 0, "PASS:")
         check("en.txt", base.replace("GO_PLAY=Go\n", ""), 1, "missing: GO_PLAY")
+        check("fr.txt", base.replace("LIGHTS_OUT=Lights Out\n", "").replace("GAME_MOVES=Moves\n", ""), 0, "PASS:")
+        check("en.txt", base.replace("LIGHTS_OUT=Lights Out\n", ""), 1, "missing: LIGHTS_OUT")
         check("fr.txt", base.replace("TITLE=Title\n", ""), 1, "missing: TITLE")
         check("fr.txt", base + "UNKNOWN=value\n", 1, "unexpected: UNKNOWN")
         check("fr.txt", base.replace("LANDSCAPE_CCW=Left", "LANDSCAPE_CCW=Right"),

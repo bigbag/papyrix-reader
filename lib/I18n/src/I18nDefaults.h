@@ -331,6 +331,12 @@ static constexpr const char* DEFAULTS[static_cast<int>(StrId::STR__COUNT)] = {
     "Komi",                            // GO_KOMI
     "wins",                            // GO_WINS
     "Draw",                            // GO_DRAW
+    "Lights Out",                       // LIGHTS_OUT
+    "Toggle",                           // LIGHTS_OUT_TOGGLE
+    "Moves",                            // GAME_MOVES
+    "Hold Confirm for menu",            // LIGHTS_OUT_BUTTON_HINT
+    "Tap a cell, then Toggle",           // LIGHTS_OUT_TOUCH_HINT
+    "All lights are off!",              // LIGHTS_OUT_SOLVED
 };
 // clang-format on
 

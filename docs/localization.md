@@ -60,13 +60,14 @@ The translation table excludes keys that start with `_`.
 The web interface shows the language name and file size. Delete the locale file to restore English.
 
 See `docs/examples/locale/` for examples (en, de, fr, es, uk).
-The English, German, Spanish, and French examples include every key.
-The Ukrainian example omits 20 `GO_*` keys to stay within the override buffer.
-These keys use the compiled English text.
+The English example includes every key.
+The German, Spanish, French, and Ukrainian examples omit the six new Lights Out keys to stay within the override buffer.
+The Ukrainian example also omits 20 `GO_*` keys.
+Omitted keys use the compiled English text.
 
 Run `make test-tools` to check the examples.
 The validator requires every key in the English example.
-Other examples can omit `GO_*` keys.
+Other examples can omit `GO_*`, `LIGHTS_OUT*`, and `GAME_MOVES` keys.
 It rejects unknown keys and data above the override buffer limit.
 It also requires different labels for the two landscape orientations.
 It does not check the 255-byte line limit or rendered label width.

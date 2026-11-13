@@ -35,7 +35,10 @@ def main() -> int:
     failed = False
     for locale in sorted(LOCALE_DIR.glob("*.txt")):
         actual, used, values = locale_data(locale)
-        missing = sorted(key for key in expected - actual if locale.name == "en.txt" or not key.startswith("GO_"))
+        missing = sorted(
+            key for key in expected - actual
+            if locale.name == "en.txt" or not (key.startswith(("GO_", "LIGHTS_OUT")) or key == "GAME_MOVES")
+        )
         unexpected = sorted(actual - expected)
         capacity_exceeded = used > BUFFER_SIZE
         orientation_ambiguous = (
