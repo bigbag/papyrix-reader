@@ -105,7 +105,7 @@ void renderGo(const GfxRenderer& r, const Theme& theme, const gogame::Position& 
   const char* hint = notice && *notice ? notice
                      : position.outcome != gogame::Outcome::Playing
                          ? (position.lastMove == gogame::kPass ? tr(GO_LAST_PASS) : tr(GAME_OVER))
-                         : (hasTouch ? tr(GO_TOUCH_HINT) : tr(GO_BUTTON_HINT));
+                         : (hasTouch ? tr(GO_TOUCH_HINT) : tr(HOLD_CONFIRM_MENU));
   r.drawCenteredText(theme.smallFontId, layout.hintY, hint, theme.primaryTextBlack);
   if (hasTouch) {
     const touch::Rect controls[] = {layout.back, layout.menu, layout.place};

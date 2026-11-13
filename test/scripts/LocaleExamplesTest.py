@@ -37,7 +37,10 @@ def main() -> int:
         actual, used, values = locale_data(locale)
         missing = sorted(
             key for key in expected - actual
-            if locale.name == "en.txt" or not (key.startswith(("GO_", "LIGHTS_OUT")) or key == "GAME_MOVES")
+            if locale.name == "en.txt" or not (
+                key.startswith(("GO_", "LIGHTS_OUT", "SOKOBAN"))
+                or key in {"GAME_MOVES", "HOLD_CONFIRM_MENU", "SAVE_EXIT", "UNDO", "NEXT"}
+            )
         )
         unexpected = sorted(actual - expected)
         capacity_exceeded = used > BUFFER_SIZE

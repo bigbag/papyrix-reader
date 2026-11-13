@@ -7,6 +7,7 @@
 #include "MiniApp.h"
 #include "PomodoroApp.h"
 #include "PrinterApp.h"
+#include "SokobanApp.h"
 
 namespace papyrix {
 
@@ -27,6 +28,8 @@ const MiniApp APPS[] = {
      true},
     {"Lights Out", lightsout_app::enter, lightsout_app::update, lightsout_app::handleEvent, lightsout_app::render,
      lightsout_app::exit, lightsout_app::prepareExit, false, true},
+    {"Sokoban", sokoban_app::enter, sokoban_app::update, sokoban_app::handleEvent, sokoban_app::render,
+     sokoban_app::exit, sokoban_app::prepareExit, false, true},
 };
 const uint8_t APP_COUNT = sizeof(APPS) / sizeof(APPS[0]);
 const int8_t APP_IMAGEVIEWER = 0;
@@ -37,5 +40,6 @@ const int8_t APP_CLOCK = 4;
 const int8_t APP_2048 = 5;
 const int8_t APP_GO = 6;
 const int8_t APP_LIGHTS_OUT = 7;
+const int8_t APP_SOKOBAN = 8;
 
 }  // namespace papyrix

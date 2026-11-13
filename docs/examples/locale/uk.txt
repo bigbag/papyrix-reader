@@ -1,4 +1,4 @@
-# Українська - повна довідка для перекладів PapyriX
+# Ukrainian translation example for PapyriX. Missing keys use English.
 # Скопіюйте цей файл у /.papyrix/locale.txt на SD-картку
 # і перекладіть значення (права частина від =)
 _language_name=Українська

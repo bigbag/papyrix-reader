@@ -96,7 +96,7 @@ Apps lists three groups in this order:
 
 1. File transfer: **WiFi Transfer**, **Calibre Sync**, **LocalSend**, **Printer**.
 2. Common apps: **Image Viewer**, **Pomodoro**, **Clock**.
-3. Games: **2048**, **Go**, **Lights Out**.
+3. Games: **2048**, **Go**, **Lights Out**, **Sokoban**.
 
 Two dashed lines separate the groups. Direction buttons select apps, not separator lines. Taps on the separator lines do nothing.
 
@@ -678,6 +678,30 @@ The device saves the board, cursor, and move count on exit or sleep. Moves stay 
 The game uses the configured Auto Sleep timeout. If saving fails, **Retry** completes the requested exit or sleep. **Cancel** keeps the current game open. **Discard changes** leaves the previous save unchanged. A sudden power loss can lose moves since the last save.
 
 Lights Out requests fast screen refreshes, including on entry. The display driver can require a stronger refresh after startup or display recovery.
+
+### 3.15 Sokoban
+
+Open **Apps → Sokoban**. Push every box onto a target. You can push one box at a time. You cannot pull boxes or push through walls. A box with an X is not on a target. A box with a small square is on a target.
+
+The board is centered in the available area. It uses up to two thirds of the screen height. Boxes and the player keep their proportions.
+
+The game includes 12 original levels under the project MIT license. All levels are available through **Choose level**.
+
+On button-only devices, press a direction button to move one cell. Held buttons and swipes do not make extra moves. Press and release **Confirm** to undo. Hold Confirm to open the menu without undo.
+
+On touch devices, use the four arrow buttons. Tap **Undo** to reverse a move. Tap **Menu** to open the menu. **Back** saves the game and returns to Apps on all devices.
+
+The menu provides **Resume**, **Undo**, **Restart level**, **Choose level**, and **Save and exit**. Back closes the menu. Restart and changing an unfinished level require confirmation. No is selected by default.
+
+The level picker shows four levels per page. Select **&lt;** or **&gt;** to change pages. Use the direction buttons and Confirm, or tap a row.
+
+After a win, direction controls do not move the player. Confirm or **Next** starts the next level. After level 12, this action opens the level picker. Use **Undo** in the menu to reverse the winning move.
+
+The device saves the current level, position, move count, push count, and up to 128 undo moves on exit or sleep. Undo history survives reopening the app. Moves stay in RAM until a save. A sudden power loss can lose progress since the last save.
+
+Sokoban uses the configured Auto Sleep timeout. If saving fails, **Retry** completes the requested exit or sleep. **Cancel** retains the current game. **Discard changes** leaves without saving the latest moves. An unreadable save stays unchanged until you confirm its replacement.
+
+Sokoban requests fast screen refreshes, including on entry. The display driver can require a stronger refresh after startup or display recovery.
 
 ---
 

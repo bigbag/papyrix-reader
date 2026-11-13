@@ -57,9 +57,9 @@ int main() {
     return result;
   };
 
+  core.pendingAppId = APP_LIGHTS_OUT;
   launcher.enter(core);
-  send(Event::buttonPress(Button::Up));
-  confirm();
+  launcher.render(core);
   runner.expectEq(int(hal::Display::FAST_REFRESH), int(core.display.lastRefreshMode),
                   "opening a fresh game avoids a full black-white refresh cycle");
   const auto fresh = snapshot();

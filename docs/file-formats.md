@@ -609,3 +609,39 @@ It retains solved games.
 Writes use `lightsout.bin.tmp` and `lightsout.bin.bak` through `CheckedFile.h`.
 Loading can recover a valid backup when the main file is invalid or absent.
 The app does not save each move. Exit and sleep save the current state.
+
+## Sokoban Game
+
+`/.papyrix/apps/sokoban.bin` stores one game in 410 bytes.
+Multi-byte integers use little-endian order.
+Level indices refer to the 12 built-in levels.
+Cell indices use the selected level width and row-major order.
+
+| Offset | Bytes | Field |
+|---|---|---|
+| 0 | 4 | Magic: `PXSK` |
+| 4 | 1 | Format version: `1` |
+| 5 | 1 | Level: `0` through `11` |
+| 6 | 1 | Player cell |
+| 7 | 1 | Box count: `1` through `8`; matches the selected level |
+| 8 | 8 | Box cells; the box count selects the active entries |
+| 16 | 4 | Move count; stops at `0xffffffff` |
+| 20 | 4 | Push count; stops at `0xffffffff` |
+| 24 | 1 | Undo count: `0` through `128` |
+| 25 | 1 | Next circular undo slot: `0` through `127` |
+| 26 | 384 | 128 undo entries; three bytes each |
+
+Each undo entry stores the previous player cell, the pushed box index, and flags.
+Box index `255` marks a move without a push.
+Flag bit 0 records an increase in the move count.
+Flag bit 1 records an increase in the push count.
+The remaining flag bits are zero.
+Undo decreases a counter only when the move increases it.
+
+Loading checks the record size, magic, version, positions, counters, and circular buffer bounds.
+It reverses every active undo entry to check the saved history.
+Failed loading leaves the caller's game unchanged.
+Writes use `sokoban.bin.tmp` and `sokoban.bin.bak` through `CheckedFile.h`.
+Loading can recover a valid backup when the main file is invalid or absent.
+Exit and sleep save the game.
+Ordinary moves do not write to the SD card.

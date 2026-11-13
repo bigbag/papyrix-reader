@@ -1,4 +1,4 @@
-# Español - referencia completa para traducciones de PapyriX
+# Spanish translation example for PapyriX. Missing keys use English.
 # Copia este archivo a /.papyrix/locale.txt en tu tarjeta SD
 # y traduce los valores (parte derecha del =)
 _language_name=Español
@@ -321,10 +321,10 @@ GO_DRAW=Empate
 GO_OCCUPIED=Punto ocupado
 GO_REPETITION=Posición repetida
 GO_RESIGN_CONFIRM=¿Rendirse?
-GO_SAVE_EXIT=Guardar y salir
+SAVE_EXIT=Guardar y salir
 GO_STOPPING=Deteniendo
 GO_THINK_ERROR=Sin jugada
 GO_MEMORY_ERROR=Memoria insuficiente
 GO_LAST_PASS=Última jugada: pasar
 GO_TOUCH_HINT=Toca un punto y luego Colocar
-GO_BUTTON_HINT=Mantén Confirmar para el menú
+HOLD_CONFIRM_MENU=Mantén Confirmar para el menú

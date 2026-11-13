@@ -92,7 +92,7 @@ int options(const char** labels, const char*& title) {
   } else {
     labels[0] = tr(GAME_RESUME);
     labels[1] = tr(GAME_NEW);
-    labels[2] = tr(GO_SAVE_EXIT);
+    labels[2] = tr(SAVE_EXIT);
   }
   return 3;
 }
