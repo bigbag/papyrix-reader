@@ -1,5 +1,37 @@
 
 
+## v1.37.2 (2026-11-12)
+
+*  Add chapter jumps on hold. Issue #174 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add settings groups with dashed separators [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Correct WiFi transfer connections and HTTP parsing. Issue #177 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.37.1 (2026-11-09)
+
+*  Correct WiFi transfer stalls and memory leaks. Issue #177 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.37.0 (2026-11-07)
+
+*  Fix docs [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  main: Move mini-app lifecycle into a shared library [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  feature/go-9x9: Add offline 9x9 Go against the device [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Correct RTC pulls for S3 power-button wake [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Update version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
+## v1.36.0 (2026-11-01)
+
+*  Update changelog [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add Clock power modes on all supported boards [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add a sleep image picker with saved selection. Issue #157 [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  feat: Add 2048 game with touch controls and resume [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
 ## v1.35.0 (2026-10-27)
 
 *  Add front-light controls and tap dismiss to Reader Menu [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
