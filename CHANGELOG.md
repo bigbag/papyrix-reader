@@ -1,10 +1,11 @@
 
 
-## Unreleased
+## v1.38.0 (2026-11-15)
 
-*  Add 12 Papwick Sokoban levels and a cat hero.
-*  Use square Sokoban cells without stretching the board.
-*  Keep old Sokoban saves until the user confirms a replacement.
+*  Update changelog [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  main: Add Lights Out with saved games [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Add Sokoban game [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
 
 
 ## v1.37.2 (2026-11-12)
