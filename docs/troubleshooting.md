@@ -10,7 +10,7 @@ Use the firmware file for the device:
 
 Pro, Classic, Sticky, and M4 images are not interchangeable. A wrong-target image can drive incorrect GPIOs and damage hardware. Use the [firmware recovery procedure](#firmware-recovery) to install the correct image. Do not erase the chip or factory NVS. Classic uses factory NVS data for panel selection.
 
-For Sticky first installation, use the [complete install bundle](sticky-specifications.md#installation). Sticky support is implemented, not device-tested.
+For Sticky, see [installation and recovery](sticky-specifications.md#installation). If startup stops at `lfs_fs_grow_` after first installation, run `make install-sticky`. This clears internal LittleFS.
 
 For M4 first installation, use the [M4 guide](murphy-m4-specifications.md#installation). M4 support is **Implemented, not device-tested**. Do not erase or write before model/batch, flash/layout, security checks, and private verified flash/SD backups. No physical operation or stock-restoration procedure is verified for M4.
 

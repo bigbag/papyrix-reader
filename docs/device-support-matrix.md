@@ -19,7 +19,7 @@
   - PlatformIO environments: `sticky`, `release_sticky`
   - MCU: ESP32-S3
   - Device: reTerminal Sticky
-  - Status: implemented, not device-tested
+  - Status: USB installation, startup, and basic touch verified on one SSD1677 device
 
 - **Checker target: `murphy_m4`**
   - PlatformIO environments: `murphy_m4`, `release_murphy_m4`
@@ -180,9 +180,7 @@ See the [Classic specifications](x4-classic-specifications.md) for pins, panel s
 
 ## Sticky
 
-Sticky uses a separate image, SPI storage, two I2C controllers, and two panel variants. It retains the existing PapyriX applications and reader functions. It has no front light or native USB storage. Its app-update validator rejects duplicate, malformed, and wrong-board PapyriX tags before erase. First installation uses the complete bundle, not an app image at offset zero.
-
-The bundle replaces stock firmware and can erase device data. Stock recovery and all physical behavior remain unverified.
+Use `make install-sticky` or the complete install bundle for first installation. Both clear internal LittleFS. Use the app-only image or `make flash-sticky` only to update PapyriX.
 
 See the [Sticky specifications](sticky-specifications.md) for pins, waveforms, installation, and verification limits.
 

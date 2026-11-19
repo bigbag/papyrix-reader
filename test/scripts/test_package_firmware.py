@@ -7,11 +7,15 @@ import tempfile
 import zipfile
 from hashlib import md5, sha256
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("package_firmware", ROOT / "scripts/package_firmware.py")
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
+upload_spec = importlib.util.spec_from_file_location("sticky_upload", ROOT / "scripts/sticky_upload.py")
+sticky_upload = importlib.util.module_from_spec(upload_spec)
+upload_spec.loader.exec_module(sticky_upload)
 
 PARTITIONS = [
     ("nvs", 1, 2, 0x9000, 0x5000),
@@ -56,6 +60,33 @@ def partition_table(entries=PARTITIONS, checksum=True):
     return table.ljust(0xC00, b"\xFF")
 
 
+def check_sticky_update_preflight(directory):
+    partitions = directory / "partitions.bin"
+    partitions.write_bytes(partition_table())
+    stock = partition_table([
+        (label, kind, subtype, offset, 0x930000 if label == "spiffs" else size)
+        for label, kind, subtype, offset, size in PARTITIONS
+    ])
+
+    esptool = str(directory / "PlatformIO Tools" / "esptool")
+
+    def read_flash(command, *, check):
+        assert command[0] == esptool
+        assert check and command[-4:-1] == ["read-flash", "0x8000", str(len(partition_table()))]
+        Path(command[-1]).write_bytes(device_table)
+
+    with patch.object(sticky_upload.subprocess, "run", side_effect=read_flash):
+        device_table = partition_table()
+        sticky_upload.check_partition_table(f'"{esptool}"', "/dev/ttyACM0", partitions)
+        for device_table in (stock, b""):
+            try:
+                sticky_upload.check_partition_table(esptool, "/dev/ttyACM0", partitions)
+            except RuntimeError as error:
+                assert "make install-sticky" in str(error)
+            else:
+                raise AssertionError("incompatible Sticky partition table passed upload preflight")
+
+
 def expect_rejection(action, case):
     try:
         action()
@@ -66,6 +97,7 @@ def expect_rejection(action, case):
 
 with tempfile.TemporaryDirectory() as directory:
     root = Path(directory)
+    check_sticky_update_preflight(root)
     (root / "lib/BoardSupport/include").mkdir(parents=True)
     (root / "lib/BoardSupport/include/HardwareIdentity.h").write_text(
         "inline constexpr uint8_t kProfileSchemaVersion = 7;\n", encoding="utf-8")
@@ -120,7 +152,13 @@ with tempfile.TemporaryDirectory() as directory:
         assert manifest["flashFrequency"] == "80m" and manifest["new_install_prompt_erase"] is True
         assert manifest["builds"][0]["chipFamily"] == "ESP32-S3"
         parts = sorted(manifest["builds"][0]["parts"], key=lambda part: part["offset"])
-        assert {part["offset"] for part in parts} == {0, 0x8000, 0xE000, 0x10000}
+        offsets = {0, 0x8000, 0xE000, 0x10000}
+        if key == "sticky":
+            offsets.add(0xC90000)
+            blank, = (part for part in parts if part["offset"] == 0xC90000)
+            assert blank["size"] == 0x360000
+            assert (install.parent / blank["path"]).read_bytes() == b"\xFF" * 0x360000
+        assert {part["offset"] for part in parts} == offsets
         for part in parts:
             assert not Path(part["path"]).is_absolute() and ".." not in Path(part["path"]).parts
             data = (install.parent / part["path"]).read_bytes()
@@ -210,6 +248,14 @@ with tempfile.TemporaryDirectory() as directory:
             expect_rejection(lambda: module.write_install_package(root, output, artifact), f"{key}: {fault}")
             assert archive.read_bytes() == before, f"{key}: rejected input must not replace the valid ZIP"
         restore()
+        if key == "sticky":
+            overlap = build / "overlap-littlefs.bin"
+            overlap.write_bytes(b"\x00")
+            changed = copy.deepcopy(inputs)
+            changed["parts"].append({"path": str(overlap), "offset": 0xC91000})
+            inputs_path.write_text(json.dumps(changed))
+            expect_rejection(lambda: module.write_install_package(root, output, artifact), "Sticky LittleFS overlap")
+
         edge = build / "boundary.bin"
         edge.write_bytes(b"X")
         edge_inputs = copy.deepcopy(inputs)

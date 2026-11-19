@@ -124,7 +124,7 @@ def write_install_package(root: Path, output: Path, artifact: dict) -> Path:
                 or offset + size > config["flash_bytes"]):
             raise RuntimeError(f"invalid {config['display_name']} flash part: {source}")
         name = filename if source.name == "firmware.bin" else source.name
-        if (name in payloads or name == "manifest.json" or name in INSTALL_LICENSES
+        if (name in payloads or name in {"manifest.json", "littlefs-blank.bin"} or name in INSTALL_LICENSES
                 or (name == filename and size > 0x640000)):
             raise RuntimeError(f"reserved, duplicate, or oversized {config['display_name']} flash part: {name}")
         data = source.read_bytes()
@@ -135,9 +135,6 @@ def write_install_package(root: Path, output: Path, artifact: dict) -> Path:
     required = {"bootloader.bin", "partitions.bin", "boot_app0.bin", filename}
     if not required.issubset(by_name):
         raise RuntimeError(f"{config['display_name']} install requires bootloader, partitions, OTA data, and app")
-    for first, second in zip(parts, parts[1:]):
-        if first["offset"] + first["size"] > second["offset"]:
-            raise RuntimeError(f"{config['display_name']} flash parts overlap")
 
     table = payloads["partitions.bin"]
     partitions = {}
@@ -218,6 +215,17 @@ def write_install_package(root: Path, output: Path, artifact: dict) -> Path:
         raise RuntimeError(f"{config['display_name']} app hash mismatch")
     if matches != 1:
         raise RuntimeError(f"{config['display_name']} app requires exactly one matching board tag")
+
+    if config["board_key"] == "sticky":
+        _, _, offset, size = partitions["spiffs"]
+        name = "littlefs-blank.bin"
+        data = b"\xFF" * size
+        payloads[name] = data
+        parts.append({"path": name, "offset": offset, "size": size, "sha256": hashlib.sha256(data).hexdigest()})
+        parts.sort(key=lambda part: part["offset"])
+    for first, second in zip(parts, parts[1:]):
+        if first["offset"] + first["size"] > second["offset"]:
+            raise RuntimeError(f"{config['display_name']} flash parts overlap")
 
     version, _, _ = load_release_contract(root)
     manifest = {

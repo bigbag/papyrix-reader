@@ -36,7 +36,7 @@ This project is **not affiliated with Xteink**. It is a community project.
   - Panel: 800×480 SSD1677, UC8179, or UC8279
 
 - **[Seeed reTerminal Sticky](docs/sticky-specifications.md)**
-  - Status: implemented, not device-tested
+  - Status: USB installation, startup, and touch verified on one SSD1677 device
   - App update: `papyrix-sticky.bin`
   - First installation: `papyrix-sticky-install.zip`
   - Panel: 800×480 SSD1677 or SSD2677
@@ -148,7 +148,7 @@ CJK filenames are not supported. See [filename rules](docs/webserver.md#unicode-
 
 Use the image listed for your device under [Supported devices](#supported-devices).
 
-For first installation, follow the [Sticky procedure](docs/sticky-specifications.md#installation) or the [Murphy M4 procedure](docs/murphy-m4-specifications.md#installation). It replaces stock firmware and can erase device data. Save full-flash and SD backups first. Stock restoration remains unverified.
+For first installation, follow the [Sticky guide](docs/sticky-specifications.md#installation) or the [Murphy M4 guide](docs/murphy-m4-specifications.md#installation). Switching firmware can delete internal data.
 
 For M4, confirm the model, hardware batch, flash/layout, and security state before any write. Keep a private, verified 16 MiB flash backup and a separate SD backup. No M4 device is available for physical checks.
 
@@ -253,7 +253,7 @@ make package
 
 ### Flashing your device
 
-For Sticky, use the [complete first-install bundle](docs/sticky-specifications.md#installation). Sticky uses the CH343P UART0 serial port, not native USB-Serial/JTAG.
+On Sticky, use `make install-sticky` for the first installation. Use `make flash-sticky` to update an existing PapyriX installation without clearing LittleFS. See [installation and recovery](docs/sticky-specifications.md#installation).
 
 For M4, use its [first-install guide](docs/murphy-m4-specifications.md#installation). M4 uses native USB-Serial/JTAG, not the Sticky UART bridge.
 

@@ -21,6 +21,7 @@ constexpr int WL_DISCONNECTED = 6;
 constexpr int WIFI_SCAN_RUNNING = -1;
 constexpr int WIFI_SCAN_FAILED = -2;
 constexpr int WIFI_AUTH_OPEN = 0;
+constexpr int WIFI_AUTH_WPA2_PSK = 3;
 using wl_status_t = int;
 
 struct TestIpAddress {
@@ -39,6 +40,7 @@ struct TestWifi {
   wl_status_t linkStatus = WL_DISCONNECTED;
   int16_t scanCount = 0;
   const char* scannedSsid = "fixture";
+  int scannedEncryption = WIFI_AUTH_OPEN;
   std::vector<std::string> attemptedSsids;
 
   void reset() { *this = TestWifi{}; }
@@ -75,7 +77,7 @@ struct TestWifi {
   int16_t scanComplete() const { return scanCount; }
   String SSID(int) const { return String(scannedSsid); }
   int RSSI(int = 0) const { return -45; }
-  int encryptionType(int) const { return WIFI_AUTH_OPEN; }
+  int encryptionType(int) const { return scannedEncryption; }
   bool softAP(const char*, const char* = nullptr) { return mode(WIFI_AP) && !failAP; }
   bool softAPdisconnect(bool off) { return !off || mode(WIFI_OFF); }
   TestIpAddress localIP() const { return {}; }

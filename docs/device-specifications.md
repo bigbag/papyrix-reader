@@ -49,7 +49,7 @@ See the [device support matrix](device-support-matrix.md) for build targets and 
 - `papyrix-sticky.bin` uses the fixed Sticky board profile.
 - `papyrix-murphy-m4.bin` uses the fixed M4 profile.
 
-The standard partition table starts app0 at `0x10000`. The partition layout uses 16 MB. Sticky has 32 MB of physical flash. The Xteink targets have 16 MB of physical flash. Sticky first installation requires the [complete install bundle](sticky-specifications.md#installation).
+The partition layout uses 16 MB and starts app0 at `0x10000`. Sticky has 32 MB of flash. The Xteink targets have 16 MB of flash. See the [Sticky installation guide](sticky-specifications.md#installation).
 
 M4 first installation requires its [complete install bundle](murphy-m4-specifications.md#installation). Its app-only image does not migrate stock partitions.
 

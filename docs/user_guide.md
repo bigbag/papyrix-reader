@@ -14,7 +14,7 @@ Use the firmware file for the device:
 
 X3, the original X4, and X4 v2 Classic have no touch input. X4 Pro, Sticky, and Murphy M4 have touch input. X4 Pro and M4 have a front light. Pro, Classic, Sticky, and M4 firmware images are not interchangeable.
 
-Sticky and M4 support is implemented, not device-tested. Use the [complete Sticky install bundle](sticky-specifications.md#installation) for first installation. Use the [complete M4 install bundle](murphy-m4-specifications.md#installation) for M4 first installation.
+For first installation, follow the [Sticky guide](sticky-specifications.md#installation) or the [Murphy M4 guide](murphy-m4-specifications.md#installation).
 
 ### Button and Touch Layout
 
@@ -416,7 +416,7 @@ Maintenance actions for the device:
 
 Use this procedure only to update an existing compatible PapyriX installation. Select the app image for the correct board and partition layout.
 
-For first installation, use the [Sticky bundle](sticky-specifications.md#installation) or [M4 bundle](murphy-m4-specifications.md#installation), as applicable. See [update compatibility](device-support-matrix.md#firmware-update-compatibility) for validation limits.
+See [update compatibility](device-support-matrix.md#firmware-update-compatibility) for validation limits.
 
 > **Do not switch off the device during an update.**
 > **Do not remove the SD card during an update.**

@@ -167,20 +167,34 @@ void NetworkState::handleTap(Core& core, const Event& event) {
       currentScreen_ == NetworkScreen::EditPassword) {
     const auto hit =
         keyboardView_.hitTest({event.touch.x, event.touch.y}, width, height, THEME.screenMarginSide, frontLrbc);
-    if (hit.type == ui::KeyboardView::Hit::Type::Key) {
-      keyboardView_.keyboard.cursorY = static_cast<int8_t>(hit.row);
-      keyboardView_.keyboard.cursorX =
-          static_cast<int8_t>(hit.row == 0 ? (hit.column <= 2 ? 1 : (hit.column <= 6 ? 4 : 8)) : hit.column);
-    } else if (hit.type != ui::KeyboardView::Hit::Type::Back) {
-      return;
+    using HitType = ui::KeyboardView::Hit::Type;
+    button = Button::Center;
+    switch (hit.type) {
+      case HitType::Key:
+        keyboardView_.keyboard.cursorY = static_cast<int8_t>(hit.row);
+        keyboardView_.keyboard.cursorX =
+            static_cast<int8_t>(hit.row == 0 ? (hit.column <= 2 ? 1 : (hit.column <= 6 ? 4 : 8)) : hit.column);
+        break;
+      case HitType::Select:
+        break;
+      case HitType::Back:
+        button = Button::Back;
+        break;
+      case HitType::MoveLeft:
+        button = Button::Left;
+        break;
+      case HitType::MoveRight:
+        button = Button::Right;
+        break;
+      case HitType::None:
+        return;
     }
-    const Button pressed = hit.type == ui::KeyboardView::Hit::Type::Back ? Button::Back : Button::Center;
     if (currentScreen_ == NetworkScreen::EditSsid)
-      handleEditSsid(core, pressed);
+      handleEditSsid(core, button);
     else if (currentScreen_ == NetworkScreen::EditPassword)
-      handleEditPassword(core, pressed);
+      handleEditPassword(core, button);
     else
-      handlePasswordEntry(core, pressed);
+      handlePasswordEntry(core, button);
     return;
   }
 

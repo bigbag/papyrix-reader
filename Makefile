@@ -1,8 +1,8 @@
 # Makefile for PapyriX Reader firmware
 # Wraps PlatformIO commands for convenience
 
-.PHONY: all build build-release release package upload upload-release flash flash-release flash-xteink-c3 flash-x4pro flash-x4c \
-        clean format check monitor size erase build-fs upload-fs sleep-screen gh-release changelog help \
+.PHONY: all build build-release release package upload upload-release flash flash-release flash-xteink-c3 flash-x4pro flash-x4c flash-sticky \
+        install-sticky clean format check monitor size erase build-fs upload-fs sleep-screen gh-release changelog help \
         test test-build test-run test-tools test-clean fontconvert-bin reader-test
 
 # Prefer the project environment when it provides PlatformIO.
@@ -38,8 +38,14 @@ flash-x4pro: ## Build and flash release firmware for X4 Pro
 
 flash-x4c: ## Build and flash release firmware for X4 Classic
 	@port="$${PLATFORMIO_UPLOAD_PORT:-}"; \
-	if [ -z "$$port" ]; then port=$$(python3 scripts/select_usb_jtag_port.py) || exit 1; fi; \
+	if [ -z "$$port" ]; then port=$$(python3 scripts/select_usb_upload_port.py x4c) || exit 1; fi; \
 	pio run -e release_x4c --target upload --upload-port "$$port"
+
+flash-sticky: ## Build and reflash Sticky with the PapyriX layout
+	pio run -e release_sticky --target upload
+
+install-sticky: ## Install PapyriX on Sticky from stock and clear internal LittleFS
+	python3 scripts/install_sticky.py
 
 # Aliases
 upload-release: flash-xteink-c3 ## Alias for flash-xteink-c3 (X3/X4)
@@ -181,7 +187,7 @@ test-tools: ## Host-tool tests (packaging, HTML, clock simulators)
 	@python3 test/scripts/test_webserver_bounds.py
 	@python3 test/scripts/test_webserver_build.py
 	@python3 test/scripts/test_webserver_smoke.py
-	@python3 scripts/test_select_usb_jtag_port.py
+	@python3 scripts/test_select_usb_upload_port.py
 	@python3 scripts/test_capture_serial.py
 
 test-clean: ## Clean test build artifacts

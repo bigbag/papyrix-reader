@@ -2,26 +2,9 @@
 
 ## Support status
 
-**Implemented, not device-tested.** No Sticky device is available for this port. Host tests, firmware builds, and package checks do not prove physical operation. Both SSD1677 and SSD2677 paths are included.
+One SSD1677 device passes USB installation, startup, SD access, and Wi-Fi keyboard touch checks. The SSD2677 panel and stock recovery are not verified on hardware.
 
-The port uses the existing PapyriX states, views, content providers, applications, and UI/Reader reboot model. It does not require Seeedash sources, accounts, or private services. The port does not add stock applications.
-
-## Stock firmware comparison
-
-Existing functions use PapyriX formats and interfaces. They do not provide exact stock-firmware compatibility.
-
-| Function | PapyriX support or required addition |
-|---|---|
-| Clock, images, slideshow, themes, fonts, and sleep images | Existing PapyriX functions |
-| Notes and Todo | New mini-apps, SD persistence, and editing controls |
-| Timed reminders | New scheduling, time-zone, timer-wake, and missed-reminder policies |
-| Auto-rotation and temperature/humidity display | New IMU and SHT40 backends with corresponding UI |
-| Weather | A selected data provider, bounded requests, cached data, and error handling |
-| Sound and voice | New buzzer/audio backends and a selected speech engine or service |
-| AI services | A separate client and an explicit credential policy |
-| Phone input | Existing web file upload; text/task editing needs new controls |
-
-These additions are outside the device port. Any speech service needs an explicit credential and audio-retention policy. Full offline speech on ESP32-S3 remains unverified.
+Sticky has no front light, native USB storage, BLE, or swipe navigation in PapyriX.
 
 ## Build target
 
@@ -43,7 +26,7 @@ pio run -e release_sticky
 make package
 ```
 
-The current partition table uses the lower 16 MB of physical flash. It keeps two app slots of `0x640000` bytes at `0x10000` and `0x650000`. The unused upper 16 MB does not increase the app-slot limit. The port does not change settings serialization. Profile-specific cache roots prevent reuse of pages from another board or panel.
+The partition table uses the lower 16 MB of flash. The two app slots start at `0x10000` and `0x650000`. Each slot has `0x640000` bytes.
 
 ## Hardware connections
 
@@ -63,87 +46,67 @@ The current partition table uses the lower 16 MB of physical flash. It keeps two
 | USB supply | GPIO9 ADC; equal 5.1 kΩ divider resistors |
 | UART0 | TX43, RX44; 115200 baud |
 
-Touch uses its own I2C controller. Gauge and RTC reads do not stop the touch controller. The gauge uses `designCapacityMah=0` and does not run X3 calibration writes. RTC tests cover voltage loss, date/weekday order, and time repair.
+Touch uses a separate I2C controller. The gauge keeps its factory configuration.
 
-Power shutdown retains both latches and charger enable. It disables the display, touch, SD, and microphone rails after the display sleep handshake. Wake remains Power-button-only. The Power/AI button uses the existing short-Power preferences. It is not a second Confirm button.
-
-Touch supplies the existing menu, Confirm, Back, and reader-zone actions. Sticky has no capacitive Home key.
+Shutdown keeps the power latches and charger enabled. It switches off the display, touch, SD, and microphone rails. Use Power/AI to wake Sticky. Use touch for Confirm, Back, and the reader controls.
 
 ## Display behavior
 
-Startup sends the upstream `0x70` probe and samples BUSY. Revision `0x07` selects SSD2677. Other stable readings use the upstream BUSY-polarity heuristic. Logs identify a heuristic selection. Unstable readings leave the panel unresolved and block display initialization.
+Startup reads the panel identity with command `0x70` and samples BUSY. Identity `0x07` selects SSD2677. Other stable readings use BUSY polarity. Unstable readings block display initialization. The probe does not change SD MISO.
 
-This heuristic cannot prove that a panel is present in every failure condition. Display probing and recovery preserve the SD MISO connection.
+SSD1677 uses the Sticky grayscale waveform. SSD2677 uses full and fast monochrome refresh and absolute grayscale. Fast refresh needs a valid reference image. If the reference is missing, the driver uses a full refresh. SSD2677 refreshes the full frame.
 
-SSD1677 uses the Sticky booster, border, grayscale LUT, and power sequence. It does not use the original X4 gray-return waveform. SSD2677 supports full and fast monochrome refresh, absolute gray planes, and the existing AA overlay masks. A missing or failed monochrome baseline promotes Fast to Full. Failed gray copies cannot refresh stale planes.
-
-Both controllers report a failed power-off handshake instead of claiming deep sleep. SSD2677 window requests use the existing whole-frame S3 behavior.
-
-SSD2677 uses fixed room-temperature OTP selections: Full `0xEE`, Fast `0x19`, and absolute gray `0xFA`. Its upstream AA LUT comes from a different panel and is also used by the reference Sticky driver. The port does not add automatic temperature compensation. Temperature response, gray levels, ghosting, and long-term panel behavior require physical checks.
+SSD2677 uses fixed OTP settings: full `0xEE`, fast `0x19`, and absolute grayscale `0xFA`. It does not adjust them for temperature.
 
 ## USB supply detection
 
-Sticky does not infer external power from battery charge current. It reads calibrated ADC millivolts on GPIO9 with 11 dB attenuation and the shared ADC mutex. The threshold is 2000 mV at the ADC, or approximately 4.0 V at the connector. A nominal 5 V supply produces approximately 2500 mV at the ADC. The threshold uses the schematic's divider ratio.
-
-It is not a hardware calibration. A full battery can report no charging current while USB power remains connected.
+Sticky measures USB voltage with the ADC on GPIO9. The threshold is 2000 mV at the ADC, about 4.0 V at the connector. This value comes from the schematic, not hardware measurements.
 
 ## Installation
 
-**A complete installation replaces stock firmware and can erase device data.** Save a full 32 MB flash backup and an SD-card backup before installation. Flash backups can contain credentials. Keep them private. A backup and a factory download do not guarantee recovery. Do not change eFuses or security settings for this port.
+**Switching firmware can delete settings and other data in internal flash.** The USB installer does not erase the SD card. To keep the data, save a private 32 MB flash backup and a separate SD backup. Do not change eFuses or security settings.
 
-`make package` writes these Sticky outputs:
+### Install from source
 
-- `dist/papyrix-sticky.bin`: app-only image for an existing compatible PapyriX installation.
-- `dist/sticky-install/manifest.json`: complete first-install manifest.
-- `dist/papyrix-sticky-install.zip`: manifest and all first-install parts.
-
-The install manifest records SHA-256, size, and offset for each part. The bundle also contains the applicable FreeInk and CrossMux MIT notices. The build records the actual upload inputs. Packaging does not copy upstream firmware binaries. Packaging checks partition bounds, part overlap, app size, image integrity, and board identity.
-
-The current builder records flash mode `dio`, frequency `80m`, and flash size `32MB`. The Arduino build uses QSPI flash with octal PSRAM. Its esptool image/upload mode is `dio`.
-
-For the current generated bundle, run from `dist/sticky-install` and replace `PORT` with the confirmed Sticky serial port:
+Connect Sticky with a USB-C data cable. Close any serial monitor. Install `esptool` and run:
 
 ```sh
-esptool --chip esp32s3 --port PORT write-flash --flash-size 32MB --flash-mode dio --flash-freq 80m \
-  0x0 bootloader.bin 0x8000 partitions.bin 0xe000 boot_app0.bin 0x10000 papyrix-sticky.bin
+make install-sticky
 ```
 
-Check the generated manifest before using these offsets with a different build. Never write the app-only image at `0x0`. Use a USB-C data cable and the CH343P serial port. No flash, erase, or recovery operation runs during this implementation. See [Seeed's development guide](https://www.seeedstudio.com/sticky/docs/en/device-guide/esp-basics/) for connection guidance.
+Confirm the device and type `install`. The installer writes the bootloader, partition table, OTA data, and app. It clears internal LittleFS, not the whole chip.
+
+Keep USB connected until the write check and reset finish. If the screen stays asleep, hold Power/AI for half a second.
+
+Both USB targets select the only port with ID `1A86:55D3`. The ID identifies the USB bridge, not the board. Disconnect other devices with the same bridge or set `PLATFORMIO_UPLOAD_PORT` to the confirmed Sticky port. The targets reject ports with a different ID. On Linux, use a `/dev/serial/by-id/` path when available.
+
+### Install from a bundle
+
+Download and extract `papyrix-sticky-install.zip`, or build it with `make package`. Use the part list and offsets in `manifest.json`. Run this command from the extracted folder. Replace `PORT` with the confirmed Sticky port.
+
+```sh
+esptool --chip esp32s3 --port PORT --baud 460800 write-flash --flash-size 32MB --flash-mode dio --flash-freq 80m \
+  0x0 bootloader.bin 0x8000 partitions.bin 0xe000 boot_app0.bin 0x10000 papyrix-sticky.bin 0xc90000 littlefs-blank.bin
+```
+
+Never write the app-only image at `0x0`.
 
 ## Updates and recovery
 
-For normal SD updates, place the app-only image at `/firmware.bin` and use Settings > Firmware Update. Web upload stores that same file. The browser does not flash or validate it. The emergency `/force_update.bin` path uses the same on-device validator. Validation checks MCU, structure, checksum/hash, and partition size before erase.
+For an SD update, copy `papyrix-sticky.bin` to the SD card as `/firmware.bin`. Open **Settings → Firmware Update**. Use the Sticky image only. See [firmware update compatibility](device-support-matrix.md#firmware-update-compatibility) for validation limits.
 
-It also checks PapyriX board tags when present.
+For a USB update, run `make flash-sticky`. It checks the partition table before it writes. It does not clear LittleFS. If it rejects a stock partition table, use `make install-sticky`.
 
-Compatibility classes are `xteink_c3`, `x4pro`, `x4c`, `sticky`, and `murphy_m4`. The Sticky tag is `PAPYRIX-BOARD-V1:sticky;`. A matching MCU is not enough for another board's image. Malformed, duplicate, and incompatible PapyriX tags are rejected. This helps prevent wrong-board updates when a PapyriX tag is present.
+### Return to stock firmware
 
-It does not authenticate firmware. Compatible third-party and older images do not need a PapyriX tag. Without this tag, the updater cannot verify the board within the same MCU family. A first installation still requires the correct board image and confirmed hardware. Stock restoration remains unverified.
+1. Connect Sticky with a USB-C data cable. Close any serial monitor.
+2. Open [Seeed's official firmware installer](https://www.seeedstudio.com/sticky/playground/official-firmware/) in desktop Chrome or Edge.
+3. Select **Sticky official firmware**. If available, select **Erase flash + flash**.
+4. Click **Connect & flash** and select the confirmed Sticky port. Keep USB connected until installation finishes.
 
-## Verification
-
-Host tests cover panel selection, controller commands, gray transitions, and allocation failures. They also cover shared SPI pins, touch/buttons, I2C bus separation, RTC, and power policy. Other tests cover full-battery USB detection, memory pressure, update rejection, and install packaging. Recovery coverage includes SD teardown, rail restoration, SD remount, and a display refresh on both controllers. The actual desktop reader tool passes HTML/EPUB block boundaries, FB2 batched resume, and CSS emphasis scenarios.
-
-All five release environments build. The real package command passes all five target-isolation checks. The generated Sticky parts, hashes, board tag, chip ID, partition table, and archive contents match their build inputs. `make test` and `make test-tools` pass.
-
-The shared Clock application remains in the compiled registry.
-
-Physical checks remain unavailable for both panel variants and touch calibration. Radio transfers and SD-card compatibility require a device. Charging current, sleep current, rail timing, and the USB threshold require measurements. RTC retention, initial flashing, and stock recovery also remain unverified. The port does not advertise a front light, native USB storage, BLE, or swipe navigation.
-
-## Source revisions
-
-| Reference | Revision |
-|---|---|
-| FreeInk hardware and display code | [`683fe03009fdd03c725015d167da5362b01911c1`](https://github.com/Free-Ink/freeink-sdk/tree/683fe03009fdd03c725015d167da5362b01911c1) |
-| CrossPoint integration reference | [`5d18bee7f3b8212e5d602adbad7b2e3462d8abc8`](https://github.com/crosspoint-reader/crosspoint-reader/tree/5d18bee7f3b8212e5d602adbad7b2e3462d8abc8) |
-| CrossMux power and board-tag reference | [`eaf5c73a71aaa03e372b6bc274923c2cc621a033`](https://github.com/0x1abin/crossmux/tree/eaf5c73a71aaa03e372b6bc274923c2cc621a033) |
-| Playground registry | [`ee3d931e46bbb0c94d8a39e9937edc685a39391b`](https://github.com/Seeed-Projects/reterminal-sticky-playground-registry/tree/ee3d931e46bbb0c94d8a39e9937edc685a39391b) |
-
-The supplied checkouts use different SDK revisions. The CrossMux SDK gitlink is `9aa7e95e02c6374a23a562c883eb302552ff24f1`. The M4 port uses that later revision. The Sticky references above keep their own pinned revisions. Applicable FreeInk and CrossMux MIT notices remain with the adapted code.
+**Stock recovery does not restore settings or Seeedash pairing.** Do not use the PapyriX SD updater to restore stock firmware.
 
 ## References
 
 - [Seeed hardware overview](https://www.seeedstudio.com/sticky/docs/en/device-guide/hardware-overview/)
-- [Seeed schematic, revision 01](https://files.seeedstudio.com/wiki/reterminal_sticky/res/reTerminal_Sticky_Schematic_diagram_260609.pdf)
-- [Stock Quick Start](https://www.seeedstudio.com/sticky/docs/en/quick-start/)
-- [Stock release notes](https://www.seeedstudio.com/sticky/docs/en/quick-start/release-notes/)
+- [Seeed schematic](https://files.seeedstudio.com/wiki/reterminal_sticky/res/reTerminal_Sticky_Schematic_diagram_260609.pdf)

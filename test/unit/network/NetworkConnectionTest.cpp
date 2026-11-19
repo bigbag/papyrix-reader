@@ -166,6 +166,51 @@ int main(int argc, char** argv) {
     state.exit(core);
     runner.expectEq(WIFI_OFF, WiFi.getMode(), "leaving WiFi setup releases the radio");
   }
+  for (const uint8_t layout : {papyrix::Settings::FrontBCLR, papyrix::Settings::FrontLRBC}) {
+    prepare(SyncMode::WifiSetup);
+    WiFi.scanCount = 1;
+    WiFi.scannedSsid = "Secured";
+    WiFi.scannedEncryption = WIFI_AUTH_WPA2_PSK;
+    const auto previousLayout = core.settings.frontButtonLayout;
+    core.settings.frontButtonLayout = layout;
+    ui::setFrontButtonLayout(layout);
+    papyrix::NetworkState state(renderer);
+    state.enter(core);
+    press(state, Button::Down);
+    press(state, Button::Down);
+    press(state, Button::Center);
+    press(state, Button::Center);
+    const bool lrbc = layout == papyrix::Settings::FrontLRBC;
+    capture(state, lrbc ? "password-lrbc.pbm" : "password-bclr.pbm");
+
+    const auto tap = [&](ui::touch::Rect bounds) {
+      assert(core.events.push(papyrix::Event::tap(
+          {int16_t(bounds.x + bounds.width / 2), int16_t(bounds.y + bounds.height / 2)})));
+      state.update(core);
+    };
+    const auto tapKey = [&](int row, int column) {
+      tap(ui::KeyboardView{}.keyBounds(row, column, renderer.getScreenWidth(), THEME.screenMarginSide));
+    };
+    const auto left = ui::buttonBarButtonBounds(renderer, lrbc ? 0 : 2);
+    const auto right = ui::buttonBarButtonBounds(renderer, lrbc ? 1 : 3);
+    const auto select = ui::buttonBarButtonBounds(renderer, lrbc ? 3 : 1);
+    tapKey(1, 1);
+    tap(left);
+    tap(select);
+    tap(right);
+    tap(right);
+    tap(select);
+    tapKey(0, 8);
+    press(state, Button::Center);
+    const auto* credential = store.findCredential("Secured");
+    runner.expectTrue(credential && std::string(credential->password) == "bac",
+                      lrbc ? "LRBC keyboard footer enters the selected characters"
+                           : "BCLR keyboard footer enters the selected characters");
+
+    state.exit(core);
+    core.settings.frontButtonLayout = previousLayout;
+    ui::setFrontButtonLayout(previousLayout);
+  }
   for (const auto purpose : {SyncMode::CalibreWireless, SyncMode::PrinterSetup}) {
     prepare(purpose);
     WiFi.scanCount = 1;

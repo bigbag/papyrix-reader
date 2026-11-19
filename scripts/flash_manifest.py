@@ -20,5 +20,5 @@ def write_flash_manifest(source, target, env):
     output.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-# Record current inputs even when the app binary does not change.
 env.AddPostAction("buildprog", write_flash_manifest)
+env.AlwaysBuild("buildprog")

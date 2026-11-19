@@ -36,7 +36,7 @@ Cancelling full-book indexing restarts the device in UI mode. It keeps the retur
 
 Rendering checks panel grayscale support before it writes grayscale planes. Classic preserves the factory battery calibration. Sticky supports SSD1677 and SSD2677 panels. Its probe uses FreeInk identity reads and BUSY polarity. It rejects unstable observations. An unresolved Sticky panel does not receive display commands.
 
-Sticky uses SPI SD. Touch uses one I2C controller. The gauge and RTC share the other I2C controller. Its gauge preserves factory configuration. Sticky support is implemented, not device-tested.
+Sticky uses SPI SD. Touch uses one I2C controller. The gauge and RTC share the other I2C controller. The gauge keeps its factory configuration.
 
 M4 selects SSD1677 without a display probe. Its four-bit SDMMC transport uses all six data/clock/command pins. FT6336U-compatible touch and RX8010 share one persistent native I2C1 bus. Each device uses its own clock rate. The display stops touch acquisition before it changes shared reset GPIO7. Both subsystems load one hardware-batch selection at boot.
 

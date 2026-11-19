@@ -93,7 +93,7 @@ void render(const GfxRenderer& r, const Theme& t, const ConfirmView& v);
 
 struct KeyboardView {
   struct Hit {
-    enum class Type : uint8_t { None, Key, Back };
+    enum class Type : uint8_t { None, Key, Back, Select, MoveLeft, MoveRight };
     Type type = Type::None;
     int row = -1;
     int column = -1;
@@ -194,8 +194,15 @@ struct KeyboardView {
 
   Hit hitTest(touch::Point point, int16_t screenWidth, int16_t screenHeight, int16_t screenMarginSide,
               bool frontLrbc = false) const {
-    if (touch::semanticButtonBarIndex(point, screenWidth, screenHeight, frontLrbc) == 0) {
-      return {Hit::Type::Back, -1, -1};
+    switch (touch::semanticButtonBarIndex(point, screenWidth, screenHeight, frontLrbc)) {
+      case 0:
+        return {Hit::Type::Back};
+      case 1:
+        return {Hit::Type::Select};
+      case 2:
+        return {Hit::Type::MoveLeft};
+      case 3:
+        return {Hit::Type::MoveRight};
     }
     for (int row = 0; row < KeyboardState::NUM_ROWS; ++row) {
       for (int column = 0; column < KeyboardState::KEYS_PER_ROW; ++column) {

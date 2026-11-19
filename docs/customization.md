@@ -432,7 +432,7 @@ See [sleep screen setup](user_guide.md#37-sleep-screen) for SD locations, image 
 
 ## Firmware Updates
 
-Use the correct app image for the board and partition layout. Do not remove power or the SD card during the update. See the [normal update procedure](user_guide.md#firmware-update) and [update compatibility](device-support-matrix.md#firmware-update-compatibility). For first installation, use the [Sticky bundle](sticky-specifications.md#installation) or [M4 bundle](murphy-m4-specifications.md#installation), as applicable.
+See the [firmware update guide](user_guide.md#firmware-update) and [update compatibility](device-support-matrix.md#firmware-update-compatibility).
 
 ### Emergency Recovery
 
