@@ -1,5 +1,12 @@
 
 
+## v1.38.1 (2026-11-19)
+
+*  Update CHANGELOG [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  main: Add USB installation and update commands for Sticky [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+*  Bump version [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
+
+
 ## v1.38.0 (2026-11-15)
 
 *  Update changelog [[Pavel Liashkov](mailto:pavel.liashkov@protonmail.com)]
