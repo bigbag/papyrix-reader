@@ -1,3 +1,4 @@
+#include <Arduino.h>
 #include <HardwareIdentity.h>
 #include <RtcBackend.h>
 #include <Wire.h>
@@ -10,11 +11,18 @@ int main() {
   TestUtils::TestRunner runner("Sticky independent peripherals");
   Wire.reset();
   Wire1.reset();
-  Wire.begin(3, 2, 100000);
   Wire.setPresent(0x5D, true);
   Wire.setWideAddress(0x5D);
+  static bool resetAfterBus = false;
+  testSetDigitalWriteHook([](int pin, int value) {
+    if (pin == 41 && value == LOW) {
+      resetAfterBus = Wire.sdaPin() == 3 && Wire.sclPin() == 2 && Wire.frequency() == 400000;
+    }
+  });
   papyrix::board::TouchBackend touch;
   runner.expectTrue(touch.begin(papyrix::board::bootProfile()), "Sticky touch initializes");
+  testSetDigitalWriteHook(nullptr);
+  runner.expectTrue(resetAfterBus, "Sticky starts the 400 kHz touch bus before controller reset");
   Wire1.setPresent(0x55, true);
   Wire1.setRegister16(0x55, 0x2C, 73);
   Wire1.setRegister16(0x55, 0x08, 3890);

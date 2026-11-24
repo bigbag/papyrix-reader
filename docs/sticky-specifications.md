@@ -2,7 +2,7 @@
 
 ## Support status
 
-One SSD1677 device passes USB installation, startup, SD access, and Wi-Fi keyboard touch checks. The SSD2677 panel and stock recovery are not verified on hardware.
+One SSD1677 device passes USB installation, startup, SD access, Wi-Fi keyboard input, and touch checks with USB connected. The SSD2677 panel and stock recovery are not verified on hardware.
 
 Sticky has no front light, native USB storage, BLE, or swipe navigation in PapyriX.
 
@@ -35,7 +35,7 @@ The partition table uses the lower 16 MB of flash. The two app slots start at `0
 | Display SPI | SCK13, MOSI14, CS15, DC16, reset17, BUSY18; 10 MHz |
 | Display rail | GPIO47, active-high |
 | SD SPI | Shared SCK13/MOSI14, MISO12, CS8; rail10, detect11 |
-| GT911 touch | Wire: SDA3, SCL2, IRQ21, reset41, rail42 active-high; address `0x5D`, alternate `0x14` |
+| GT911 touch | Wire: SDA3, SCL2, IRQ21, reset41, rail42 active-high; 400 kHz; address `0x5D`, alternate `0x14` |
 | Sensor bus | Wire1: SDA1, SCL0, 400 kHz |
 | BQ27220 | Sensor bus, address `0x55`; factory configuration remains unchanged |
 | PCF8563 | Sensor bus, address `0x51`; RTC stores UTC |
@@ -46,7 +46,7 @@ The partition table uses the lower 16 MB of flash. The two app slots start at `0
 | USB supply | GPIO9 ADC; equal 5.1 kΩ divider resistors |
 | UART0 | TX43, RX44; 115200 baud |
 
-Touch uses a separate I2C controller. The gauge keeps its factory configuration.
+Startup configures the touch bus before it resets the GT911. The gauge uses a separate I2C controller and keeps its factory configuration.
 
 Shutdown keeps the power latches and charger enabled. It switches off the display, touch, SD, and microphone rails. In ordinary sleep, GPIO17 stays low while display power is off. Press Power/AI to wake Sticky. Use touch for Confirm, Back, and the reader controls.
 

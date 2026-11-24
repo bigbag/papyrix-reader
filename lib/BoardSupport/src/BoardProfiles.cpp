@@ -103,7 +103,7 @@ constexpr BoardProfile kStickyProfile = {
     {800, 480, 13, 14, 15, 16, 17, 18, 47, 10000000, false},
     {InputStyle::DigitalButtons, kPinUnused, kPinUnused, kPinUnused, kPinUnused, kPinUnused, kPinUnused, 5, 6, 4,
      false},
-    {TouchController::Gt911, 3, 2, 21, 41, 0x5D, 42, true, true, true, true, false, 0, 799, 0, 479, 100000, 0x14, true},
+    {TouchController::Gt911, 3, 2, 21, 41, 0x5D, 42, true, true, true, true, false, 0, 799, 0, 479, 400000, 0x14, true},
     {StorageTransport::Spi, 8, 12, kPinUnused, kPinUnused, kPinUnused, 10, true},
     {BatteryBackend::Bq27220, kPinUnused, 1, 0, 0x55, kPinUnused, false, 400000, nullptr, 0, 1},
     {RtcType::Pcf8563, 1, 0, 400000, 0x51, 1},

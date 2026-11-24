@@ -75,6 +75,10 @@ void enableTouch(const TouchConfig& touch) {
   return;
 #endif
   delay(50);
+#if PAPYRIX_TARGET_STICKY
+  Wire.begin(touch.sda, touch.scl, touch.i2cHz);
+  Wire.setTimeOut(10);
+#endif
   if (touch.irq == kPinUnused || touch.rst == kPinUnused) return;
   gpio_hold_dis(static_cast<gpio_num_t>(touch.rst));
   gpio_hold_dis(static_cast<gpio_num_t>(touch.irq));
@@ -301,8 +305,10 @@ bool TouchBackend::beginGt911() {
     delay(50);
   };
 
+#if !PAPYRIX_TARGET_STICKY
   Wire.begin(config_.sda, config_.scl, config_.i2cHz);
   Wire.setTimeOut(10);
+#endif
   if (probe()) return true;
   reset(HIGH);
   return probe();
