@@ -43,7 +43,8 @@ static void prepareSleepPins(const BoardProfile& profile, bool externalPower, bo
         gpio_hold_en(static_cast<gpio_num_t>(pin));
       }
     } else {
-      holdOutput(profile.display.rst, true);
+      // A high reset signal can supply power to the unpowered Sticky panel.
+      holdOutput(profile.display.rst, profile.id != BoardId::Sticky);
     }
     holdOutput(profile.power.latchPin, profile.power.latchActiveHigh);
     holdOutput(profile.power.latchPin2, profile.power.latchActiveHigh);

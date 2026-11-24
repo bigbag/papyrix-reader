@@ -48,7 +48,7 @@ The partition table uses the lower 16 MB of flash. The two app slots start at `0
 
 Touch uses a separate I2C controller. The gauge keeps its factory configuration.
 
-Shutdown keeps the power latches and charger enabled. It switches off the display, touch, SD, and microphone rails. Use Power/AI to wake Sticky. Use touch for Confirm, Back, and the reader controls.
+Shutdown keeps the power latches and charger enabled. It switches off the display, touch, SD, and microphone rails. In ordinary sleep, GPIO17 stays low while display power is off. Press Power/AI to wake Sticky. Use touch for Confirm, Back, and the reader controls.
 
 ## Display behavior
 

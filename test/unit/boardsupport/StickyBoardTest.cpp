@@ -40,6 +40,7 @@ int main() {
   prepareDeepSleepPins(profile, false);
   runner.expectTrue(wrote(45, HIGH) && held(45) && wrote(46, HIGH) && held(46), "sleep retains both latches");
   runner.expectTrue(wrote(10, LOW) && wrote(42, LOW) && wrote(47, LOW), "sleep removes peripheral power");
+  runner.expectTrue(wrote(17, LOW) && held(17) && !wrote(17, HIGH), "sleep holds display reset low with panel power off");
   runner.expectFalse(event(TestGpioEventType::PinMode, -1, INPUT), "unused SDMMC pins never reach GPIO");
   runner.expectTrue(wrote(39, LOW) && held(39), "sleep preserves charging");
   testResetGpioEvents();
